@@ -1,0 +1,233 @@
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
+import { ErrorCode, EzError } from "@ezapply/protocol";
+import type { Logger } from "../logger.js";
+import { run, which } from "../util/proc.js";
+import type { Workspace } from "../workspace/workspace.js";
+import type { PageSizeName } from "./pdf/pages.js";
+import {
+  type MergeInput,
+  type MergeOptions,
+  openInDefaultApp,
+  pdfCompress,
+  pdfFromImages,
+  pdfInfo,
+  pdfMerge,
+  pdfRender,
+  pdfText,
+  writeAtomic,
+} from "./pdf/toolkit.js";
+import { ENGINES, type EngineId, resolveEngine } from "./tex/engines.js";
+import { parseTexLog, type TexDiagnostic } from "./tex/log.js";
+
+/** Where each kind of operation may read from and write to (workspace-relative). */
+const ROOTS = {
+  texSource: ["postings", "templates"],
+  pdfRead: ["postings", "templates", "library"],
+  pdfWrite: ["postings", "library"],
+  images: ["postings", "library"],
+  open: ["postings", "templates", "library"],
+} as const;
+
+const HISTORY_KEEP = 30;
+
+export interface CompileResult {
+  ok: boolean;
+  engine: EngineId;
+  pdf?: string;
+  pages?: number;
+  pageLimit?: number;
+  pageLimitExceeded?: boolean;
+  diagnostics: TexDiagnostic[];
+  logPath: string;
+  durationMs: number;
+  snapshot?: string;
+  hint?: string;
+}
+
+export class DocumentsService {
+  constructor(
+    private readonly ws: Workspace,
+    private readonly log: Logger,
+  ) {}
+
+  /**
+   * Compile a .tex file next to itself. Aux files go to <dir>/.build/<name>/, the PDF is copied to
+   * <dir>/<name>.pdf, and a successful build is snapshotted into <dir>/.history/.
+   */
+  async compile(input: string, opts: { maxPages?: number } = {}): Promise<CompileResult> {
+    const texPath = this.ws.resolveAllowed(input, ROOTS.texSource);
+    if (extname(texPath).toLowerCase() !== ".tex") {
+      throw new EzError(ErrorCode.BadRequest, `Not a .tex file: ${input}`);
+    }
+    await stat(texPath).catch(() => {
+      throw new EzError(ErrorCode.NotFound, `File not found: ${texPath}`);
+    });
+    const config = await this.ws.readConfig();
+    const engine = await resolveEngine(config.tex.engine);
+    if (!engine) throw noEngine(config.tex.engine);
+
+    const name = basename(texPath, extname(texPath));
+    const dir = dirname(texPath);
+    const outDir = join(dir, ".build", name);
+    await mkdir(outDir, { recursive: true });
+    await rm(join(outDir, `${name}.pdf`), { force: true });
+
+    const started = Date.now();
+    const engineRun = await engine.compile({
+      texPath,
+      outDir,
+      searchPaths: [this.ws.path("templates", "resume"), this.ws.path("templates", "cover")],
+      timeoutMs: config.tex.timeoutSeconds * 1000,
+      latexmkFlags: config.tex.latexmkFlags,
+    });
+    const durationMs = Date.now() - started;
+    const diagnostics = parseTexLog(engineRun.logText);
+    const logPath = join(outDir, `${name}.log`);
+    const built = await stat(engineRun.pdfPath).then(
+      () => true,
+      () => false,
+    );
+    const failed = engineRun.timedOut || engineRun.exitCode !== 0 || !built;
+    this.log.info({ engine: engine.id, name, ok: !failed, durationMs }, "tex compile");
+
+    if (failed) {
+      const hint = engineRun.timedOut
+        ? `Compilation exceeded ${config.tex.timeoutSeconds}s. Look for an infinite loop or a package prompting for input.`
+        : diagnostics.some((d) => d.severity === "error")
+          ? "Fix the first error (errors cascade), then recompile."
+          : `The engine produced no PDF and no parsable error. Output tail:\n${engineRun.output.slice(-1500)}`;
+      return { ok: false, engine: engine.id, diagnostics, logPath, durationMs, hint };
+    }
+
+    const pdf = join(dir, `${name}.pdf`);
+    await writeAtomic(pdf, new Uint8Array(await readFile(engineRun.pdfPath)));
+    const pages = (await pdfInfo(pdf)).pages;
+    const pageLimit = opts.maxPages ?? (/resume|cv/i.test(name) ? config.resume.pageLimit : undefined);
+    const pageLimitExceeded = pageLimit !== undefined && pages > pageLimit;
+    const snapshot = await this.snapshot(dir, [texPath, pdf]);
+
+    return {
+      ok: true,
+      engine: engine.id,
+      pdf,
+      pages,
+      ...(pageLimit !== undefined ? { pageLimit, pageLimitExceeded } : {}),
+      diagnostics,
+      logPath,
+      durationMs,
+      snapshot,
+      ...(pageLimitExceeded
+        ? {
+            hint: `The document is ${pages} pages; the limit is ${pageLimit}. Tighten wording or drop the weakest content. Do not shrink fonts or margins.`,
+          }
+        : {}),
+    };
+  }
+
+  /** latexdiff old vs new, compiled to <new>-diff.pdf. */
+  async diff(oldInput: string, newInput: string): Promise<CompileResult & { diffTex: string }> {
+    const oldTex = this.ws.resolveAllowed(oldInput, ROOTS.texSource);
+    const newTex = this.ws.resolveAllowed(newInput, ROOTS.texSource);
+    if (!which("latexdiff")) {
+      throw new EzError(
+        ErrorCode.NotFound,
+        "latexdiff is not installed.",
+        "Install it with the TeX distribution's package manager (it needs Perl). Meanwhile, describe the changes in chat.",
+      );
+    }
+    const r = await run("latexdiff", ["--flatten", oldTex, newTex], {
+      cwd: dirname(newTex),
+      timeoutMs: 60_000,
+      maxOutputBytes: 8 * 1024 * 1024,
+    });
+    if (r.exitCode !== 0) {
+      throw new EzError(ErrorCode.Internal, `latexdiff failed: ${r.stderr.slice(-1000)}`);
+    }
+    const diffTex = join(dirname(newTex), `${basename(newTex, ".tex")}-diff.tex`);
+    await writeFile(diffTex, r.stdout, "utf8");
+    const result = await this.compile(diffTex, { maxPages: 99 });
+    return { ...result, diffTex };
+  }
+
+  pdfPath(input: string, purpose: "read" | "write" | "images" | "open"): string {
+    const roots = {
+      read: ROOTS.pdfRead,
+      write: ROOTS.pdfWrite,
+      images: ROOTS.images,
+      open: ROOTS.open,
+    }[purpose];
+    return this.ws.resolveAllowed(input, roots);
+  }
+
+  async info(input: string) {
+    return pdfInfo(this.pdfPath(input, "read"));
+  }
+
+  async text(input: string, pages?: string) {
+    return pdfText(this.pdfPath(input, "read"), pages);
+  }
+
+  /** Render a page to PNG and keep a copy in <dir>/.previews/ for the user. */
+  async render(input: string, page: number, scale: number): Promise<{ png: Buffer; savedTo: string }> {
+    const path = this.pdfPath(input, "read");
+    const png = await pdfRender(path, page, scale);
+    const savedTo = join(dirname(path), ".previews", `${basename(path, ".pdf")}-p${page}.png`);
+    await mkdir(dirname(savedTo), { recursive: true });
+    await writeFile(savedTo, png);
+    return { png, savedTo };
+  }
+
+  async merge(inputs: MergeInput[], output: string, opts: MergeOptions) {
+    const resolved = inputs.map((i) => ({ ...i, path: this.pdfPath(i.path, "read") }));
+    const out = this.pdfPath(output, "write");
+    if (extname(out).toLowerCase() !== ".pdf") throw new EzError(ErrorCode.BadRequest, "Output must end in .pdf");
+    const result = await pdfMerge(resolved, out, opts);
+    const snapshot = await this.snapshot(dirname(out), [out]);
+    return { ...result, snapshot };
+  }
+
+  async fromImages(images: string[], output: string, pageSize: PageSizeName) {
+    return pdfFromImages(
+      images.map((i) => this.pdfPath(i, "images")),
+      this.pdfPath(output, "write"),
+      pageSize,
+    );
+  }
+
+  async compress(input: string, output: string | undefined, targetBytes: number | undefined) {
+    const src = this.pdfPath(input, "read");
+    const dest = this.pdfPath(output ?? input, "write");
+    const target = targetBytes ?? (await this.ws.readConfig()).pdf.defaultMaxBytes;
+    return pdfCompress(src, dest, target);
+  }
+
+  async open(input: string): Promise<{ opened: string }> {
+    const path = this.pdfPath(input, "open");
+    await openInDefaultApp(path);
+    return { opened: path };
+  }
+
+  /** Copy files into <dir>/.history/<timestamp>/ and prune old snapshots. */
+  private async snapshot(dir: string, files: string[]): Promise<string> {
+    const id = new Date().toISOString().replace(/[:.]/g, "-");
+    const target = join(dir, ".history", id);
+    await mkdir(target, { recursive: true });
+    for (const f of files) await copyFile(f, join(target, basename(f)));
+    const all = (await readdir(join(dir, ".history"))).sort();
+    for (const old of all.slice(0, Math.max(0, all.length - HISTORY_KEEP))) {
+      await rm(join(dir, ".history", old), { recursive: true, force: true });
+    }
+    return join(".history", id);
+  }
+}
+
+function noEngine(configured: EngineId | "auto"): EzError {
+  const looked = configured === "auto" ? Object.keys(ENGINES).join(", ") : configured;
+  return new EzError(
+    ErrorCode.NotFound,
+    `No usable TeX engine found (looked for: ${looked}).`,
+    "Install MiKTeX (winget install MiKTeX.MiKTeX) or TeX Live, then restart the ezapply daemon so it sees the new PATH. " +
+      'If a specific engine is configured in ezapply.config.json, set tex.engine to "auto".',
+  );
+}

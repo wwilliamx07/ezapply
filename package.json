@@ -1,0 +1,30 @@
+{
+  "name": "ezapply",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/protocol",
+    "packages/companion",
+    "packages/cli",
+    "packages/extension"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -b packages/protocol packages/companion packages/cli && npm run build -w @ezapply/extension",
+    "typecheck": "tsc -b packages/protocol packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/extension",
+    "test": "npm run build && vitest run",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "ezapply": "node packages/cli/dist/main.js",
+    "recon:workday": "node scripts/workday-recon.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^24.13.6",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

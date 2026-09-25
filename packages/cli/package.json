@@ -1,0 +1,17 @@
+{
+  "name": "@ezapply/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "bin": {
+    "ezapply": "./dist/main.js"
+  },
+  "dependencies": {
+    "@ezapply/companion": "0.1.0",
+    "@ezapply/protocol": "0.1.0"
+  }
+}
