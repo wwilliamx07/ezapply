@@ -105,7 +105,7 @@ export class PostingsService {
       throw new EzError(
         ErrorCode.NoActivePosting,
         "No active posting.",
-        "Ask the user to open the job posting in Chrome and click the ezapply toolbar button (Set posting), or activate a previous one with posting_activate.",
+        "Ask the user to open the job posting in their browser and click the ezapply toolbar button (Set posting), or activate a previous one with posting_activate.",
       );
     }
     return id;

@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/test/fixtures/live", "!plan.md", "!project.txt"]
+    "includes": ["**", "!**/dist", "!**/dist-firefox", "!**/test/fixtures/live", "!plan.md", "!project.txt"]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
   "linter": { "enabled": true, "rules": { "preset": "recommended" } },

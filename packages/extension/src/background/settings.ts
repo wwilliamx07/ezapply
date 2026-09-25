@@ -1,4 +1,5 @@
 import type { CapturePayload } from "@ezapply/protocol";
+import { ext } from "../ext.js";
 
 export const DEFAULT_PORT = 17373;
 
@@ -14,34 +15,34 @@ export type ConnState =
   | { state: "disconnected"; reason: string }
   | { state: "error"; message: string; hint?: string };
 
-/** Typed wrapper over chrome.storage.local. */
+/** Typed wrapper over ext.storage.local. */
 export const store = {
   async settings(): Promise<Settings | null> {
-    const { port, pairingToken } = await chrome.storage.local.get(["port", "pairingToken"]);
+    const { port, pairingToken } = await ext.storage.local.get(["port", "pairingToken"]);
     if (typeof pairingToken !== "string" || !pairingToken) return null;
     return { port: typeof port === "number" ? port : DEFAULT_PORT, pairingToken };
   },
   async setConnState(s: ConnState): Promise<void> {
-    await chrome.storage.local.set({ connState: s });
+    await ext.storage.local.set({ connState: s });
   },
   async connState(): Promise<ConnState> {
-    const { connState } = await chrome.storage.local.get("connState");
+    const { connState } = await ext.storage.local.get("connState");
     return (connState as ConnState | undefined) ?? { state: "unconfigured" };
   },
   /** Only the most recent capture waits for the companion; older ones are superseded. */
   async setPendingCapture(p: CapturePayload | null): Promise<void> {
-    if (p) await chrome.storage.local.set({ pendingCapture: p });
-    else await chrome.storage.local.remove("pendingCapture");
+    if (p) await ext.storage.local.set({ pendingCapture: p });
+    else await ext.storage.local.remove("pendingCapture");
   },
   async pendingCapture(): Promise<CapturePayload | null> {
-    const { pendingCapture } = await chrome.storage.local.get("pendingCapture");
+    const { pendingCapture } = await ext.storage.local.get("pendingCapture");
     return (pendingCapture as CapturePayload | undefined) ?? null;
   },
   async setActiveLabel(label: string | null): Promise<void> {
-    await chrome.storage.local.set({ activeLabel: label });
+    await ext.storage.local.set({ activeLabel: label });
   },
   async activeLabel(): Promise<string | null> {
-    const { activeLabel } = await chrome.storage.local.get("activeLabel");
+    const { activeLabel } = await ext.storage.local.get("activeLabel");
     return typeof activeLabel === "string" ? activeLabel : null;
   },
 };

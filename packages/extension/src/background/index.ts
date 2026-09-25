@@ -1,6 +1,7 @@
 import { type CapturePayload, detectSite, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 import { capturePage } from "../capture/capture.js";
+import { ext } from "../ext.js";
 import { flashBadge, renderBadge } from "./badge.js";
 import { CompanionConnection } from "./connection.js";
 import { formHandlers } from "./forms.js";
@@ -14,9 +15,9 @@ const RECONNECT_ALARM = "ezapply-reconnect";
 const connection = new CompanionConnection(
   {
     "browser.status": async () => {
-      const tabs = await chrome.tabs.query({});
+      const tabs = await ext.tabs.query({});
       return {
-        extensionVersion: chrome.runtime.getManifest().version,
+        extensionVersion: ext.runtime.getManifest().version,
         tabs: tabs
           .filter((t) => t.id !== undefined && t.url)
           .map((t) => ({
@@ -31,7 +32,7 @@ const connection = new CompanionConnection(
     },
     ...formHandlers,
   },
-  chrome.runtime.getManifest().version,
+  ext.runtime.getManifest().version,
 );
 
 connection.onState((s) => {
@@ -41,7 +42,7 @@ connection.onState((s) => {
 
 // ---- Set posting -----------------------------------------------------------------------------
 
-chrome.action.onClicked.addListener((tab) => {
+ext.action.onClicked.addListener((tab) => {
   void setPosting(tab);
 });
 
@@ -52,7 +53,7 @@ async function setPosting(tab: chrome.tabs.Tab): Promise<void> {
   }
   let payload: CapturePayload;
   try {
-    const [injection] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: capturePage });
+    const [injection] = await ext.scripting.executeScript({ target: { tabId: tab.id }, func: capturePage });
     if (!injection?.result) throw new Error("The page returned nothing");
     payload = { ...injection.result, capturedAt: new Date().toISOString(), tabId: tab.id };
   } catch (err) {
@@ -89,22 +90,22 @@ async function flushPendingCapture(): Promise<void> {
 
 // ---- Lifecycle -------------------------------------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(async (details) => {
-  await chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });
-  if (details.reason === "install") await chrome.runtime.openOptionsPage();
+ext.runtime.onInstalled.addListener(async (details) => {
+  await ext.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });
+  if (details.reason === "install") await ext.runtime.openOptionsPage();
   void connection.ensureConnected();
 });
 
-chrome.runtime.onStartup.addListener(() => {
+ext.runtime.onStartup.addListener(() => {
   void connection.ensureConnected();
 });
 
 // Wakes the worker periodically so it reconnects after the companion starts or Chrome idles it.
-chrome.alarms.onAlarm.addListener((alarm) => {
+ext.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RECONNECT_ALARM) void connection.ensureConnected();
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
+ext.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.port || changes.pairingToken)) void connection.reconnect();
 });
 

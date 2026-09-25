@@ -1,4 +1,5 @@
 import { detectSite, ErrorCode, type ExtensionApi, EzError, type Handlers } from "@ezapply/protocol";
+import { ext } from "../ext.js";
 
 type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
 
@@ -7,21 +8,21 @@ const ADAPTER_FILE = "workday-main.js";
 /** Pick the tab to act on: explicit id, else the focused window's active Workday tab, else the most recent one. */
 async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
   if (tabId !== undefined) {
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const tab = await ext.tabs.get(tabId).catch(() => null);
     if (!tab)
       throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
     return tab;
   }
-  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const [active] = await ext.tabs.query({ active: true, lastFocusedWindow: true });
   if (active?.url && detectSite(active.url) === "workday") return active;
-  const workday = (await chrome.tabs.query({}))
+  const workday = (await ext.tabs.query({}))
     .filter((t) => t.url && detectSite(t.url) === "workday")
     .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
   if (workday[0]) return workday[0];
   throw new EzError(
     ErrorCode.NotFound,
     "No Workday tab is open.",
-    "Ask the user to open the application (click Apply on the posting) in Chrome.",
+    "Ask the user to open the application (click Apply on the posting) in the browser.",
   );
 }
 
@@ -36,10 +37,22 @@ function requireWorkday(tab: chrome.tabs.Tab): number {
   return tab.id;
 }
 
+/** Firefox lets the user withhold or revoke host permissions, which would make injection fail. */
+async function requireSiteAccess(tabId: number): Promise<void> {
+  const { url } = await ext.tabs.get(tabId);
+  if (!url || (await ext.permissions.contains({ origins: [`${new URL(url).origin}/*`] }))) return;
+  throw new EzError(
+    ErrorCode.BadRequest,
+    "The extension does not have access to Workday sites.",
+    "Ask the user to open the ezapply extension options and click Grant site access.",
+  );
+}
+
 /** Inject the adapter (idempotent) and call one of its methods in the page's MAIN world. */
 async function callAdapter<T>(tabId: number, method: string, args: unknown[]): Promise<T> {
-  await chrome.scripting.executeScript({ target: { tabId }, files: [ADAPTER_FILE], world: "MAIN" });
-  const [res] = await chrome.scripting.executeScript({
+  await requireSiteAccess(tabId);
+  await ext.scripting.executeScript({ target: { tabId }, files: [ADAPTER_FILE], world: "MAIN" });
+  const [res] = await ext.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
     args: [method, args],
@@ -88,7 +101,7 @@ export const formHandlers: FormHandlers = {
         "Ask the user to switch to that tab.",
       );
     }
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     return { tabId: tab.id, pngBase64: dataUrl.replace(/^data:image\/png;base64,/, "") };
   },
 };

@@ -5,7 +5,7 @@ import { FormMethods } from "./forms.js";
 import { CapturePayload, CaptureResult } from "./postings.js";
 
 /**
- * Wire protocol between the Chrome extension and the companion (WebSocket, JSON text frames).
+ * Wire protocol between the browser extension and the companion (WebSocket, JSON text frames).
  *
  * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema.
  * Both sides refuse to talk across versions and tell the user which side to update.

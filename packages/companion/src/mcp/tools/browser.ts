@@ -8,7 +8,7 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
     {
       title: "Browser status",
       description:
-        "Check whether the Chrome extension is connected and list open tabs (with which ones are Workday). " +
+        "Check whether the browser extension is connected and list open tabs (with which ones are Workday). " +
         "Call this first when a browser action fails, and relay the returned hint to the user.",
       annotations: { readOnlyHint: true },
     },
@@ -21,7 +21,7 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
           extension: bridge,
           activePostingId,
           hint: bridge.paired
-            ? "Extension not connected. Ask the user to open Chrome; it reconnects automatically. If the badge stays grey, reload the extension."
+            ? "Extension not connected. Ask the user to open their browser; it reconnects automatically. If the badge stays grey, reload the extension."
             : "Extension not paired. Ask the user to run `ezapply pair` and paste the code into the extension options page.",
         };
       }

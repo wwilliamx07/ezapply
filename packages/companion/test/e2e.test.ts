@@ -21,6 +21,7 @@ import { type CompanionHandle, startCompanion } from "../src/main.js";
 
 const EXT_A = "a".repeat(32);
 const EXT_B = "b".repeat(32);
+const FIREFOX_UUID = "0f8e3c2a-5b1d-4c6e-9a7f-2d4b6e8a1c3f";
 const PAIRING = "ABCD-EFGH-JKLM-NPQR";
 const MCP_TOKEN = "t".repeat(43);
 
@@ -105,10 +106,10 @@ function fakeForm() {
   };
 }
 
-/** A stand-in for the Chrome extension speaking the real bridge protocol. */
-function fakeExtension(opts: { id?: string; token?: string; protocolVersion?: number } = {}) {
+/** A stand-in for the browser extension speaking the real bridge protocol. */
+function fakeExtension(opts: { id?: string; origin?: string; token?: string; protocolVersion?: number } = {}) {
   const ws = new WebSocket(`ws://127.0.0.1:${handle.port}/bridge`, {
-    origin: `chrome-extension://${opts.id ?? EXT_A}`,
+    origin: opts.origin ?? `chrome-extension://${opts.id ?? EXT_A}`,
   });
   sockets.push(ws);
   const send = (m: BridgeMessage) => ws.send(JSON.stringify(m));
@@ -220,6 +221,14 @@ describe("extension bridge", () => {
     expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: true });
     expect(saved?.pairedExtensionId).toBe(EXT_A);
     expect(await fakeExtension({ id: EXT_B }).outcome).toMatchObject({ welcomed: false, error: "403" });
+  });
+
+  it("pairs a Firefox extension by its install UUID", async () => {
+    expect(await fakeExtension({ origin: `moz-extension://${FIREFOX_UUID}` }).outcome).toMatchObject({
+      welcomed: true,
+    });
+    expect(saved?.pairedExtensionId).toBe(FIREFOX_UUID);
+    expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: false, error: "403" });
   });
 });
 

@@ -25,7 +25,9 @@ import {
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
 import { initWorkspace } from "./workspace-init.js";
 
-const EXTENSION_DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "extension", "dist");
+const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "extension");
+const EXTENSION_DIST = join(EXTENSION_DIR, "dist");
+const FIREFOX_MANIFEST = join(EXTENSION_DIR, "dist-firefox", "manifest.json");
 
 const USAGE = `ezapply ${COMPANION_VERSION}
 
@@ -87,7 +89,8 @@ async function cmdInit(args: string[]): Promise<number> {
     "",
     "Next steps:",
     "  1. Start the companion:   ezapply daemon   (leave it running)",
-    `  2. Load the extension:    chrome://extensions → Developer mode → Load unpacked → ${EXTENSION_DIST}`,
+    `  2. Load the extension:    Chrome: chrome://extensions → Developer mode → Load unpacked → ${EXTENSION_DIST}`,
+    `                            Firefox: about:debugging → This Firefox → Load Temporary Add-on → ${FIREFOX_MANIFEST}`,
     `  3. Pair it:               extension options → port ${config.port}, code ${config.pairingToken}`,
     `  4. Run Claude Code in:    ${config.workspace}`,
     "",
@@ -187,7 +190,7 @@ async function cmdDoctor(): Promise<number> {
       add(
         "extension",
         health.extensionConnected,
-        health.extensionConnected ? "connected" : "not connected (open Chrome / pair)",
+        health.extensionConnected ? "connected" : "not connected (open the browser / pair)",
       );
     }
     add("extension paired", Boolean(config.pairedExtensionId), config.pairedExtensionId ?? "not yet (ezapply pair)");

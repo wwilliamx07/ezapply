@@ -49,8 +49,8 @@ interface Connection {
 }
 
 /**
- * WebSocket endpoint for the Chrome extension. One live connection at a time; a new
- * authenticated connection replaces the old one (e.g. after the service worker restarts).
+ * WebSocket endpoint for the browser extension (Chrome or Firefox). One live connection at a time; a new
+ * authenticated connection replaces the old one (e.g. after the background worker restarts).
  */
 export class ExtensionBridge {
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
@@ -82,9 +82,9 @@ export class ExtensionBridge {
       return Promise.reject(
         new EzError(
           ErrorCode.ExtensionDisconnected,
-          "The Chrome extension is not connected.",
+          "The browser extension is not connected.",
           this.pairedExtensionId
-            ? "Ask the user to open Chrome (the extension reconnects automatically). If it stays grey, reload the extension."
+            ? "Ask the user to open their browser (the extension reconnects automatically). If it stays grey, reload the extension."
             : "The extension has not been paired yet. Ask the user to run `ezapply pair` and paste the code into the extension options page.",
         ),
       );
@@ -221,8 +221,14 @@ export class ExtensionBridge {
   }
 }
 
+/**
+ * Chrome: `chrome-extension://<32 a–p>` (the extension id). Firefox: `moz-extension://<uuid>`, a
+ * per-profile install UUID that stays fixed across reloads because the manifest pins a gecko id.
+ */
 function extensionIdFromOrigin(origin: string | undefined): string | null {
-  const m = origin?.match(/^chrome-extension:\/\/([a-p]{32})$/);
+  const m =
+    origin?.match(/^chrome-extension:\/\/([a-p]{32})$/) ??
+    origin?.match(/^moz-extension:\/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
   return m?.[1] ?? null;
 }
 

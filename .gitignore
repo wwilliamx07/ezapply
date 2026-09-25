@@ -4,3 +4,4 @@ dist/
 coverage/
 .env
 recon-out/
+dist-firefox/

@@ -16,7 +16,7 @@ export const DaemonConfig = z.object({
   mcpToken: z.string().min(32),
   /** Token the user pastes into the extension options page once. */
   pairingToken: z.string().min(16),
-  /** Chrome extension id pinned on first successful pairing. */
+  /** Extension id pinned on first successful pairing (Chrome extension id or Firefox install UUID). */
   pairedExtensionId: z.string().optional(),
   /** Absolute path of the workspace (ezapply-home). */
   workspace: z.string(),

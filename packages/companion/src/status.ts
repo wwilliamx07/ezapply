@@ -32,7 +32,7 @@ export async function workspaceStatus(
     bridge.connected
       ? "connected"
       : bridge.paired
-        ? "paired but not connected (open Chrome)"
+        ? "paired but not connected (open the browser)"
         : "not paired (ezapply pair)",
   );
 

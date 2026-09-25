@@ -1,3 +1,4 @@
+import { ext } from "../ext.js";
 import { type ConnState, store } from "./settings.js";
 
 const GREEN = "#16a34a";
@@ -36,21 +37,21 @@ export async function renderBadge(conn?: ConnState): Promise<void> {
       break;
   }
   if (flashTimer === undefined) {
-    await chrome.action.setBadgeText({ text: pending ? "…" : " " });
-    await chrome.action.setBadgeBackgroundColor({ color: pending ? AMBER : color });
+    await ext.action.setBadgeText({ text: pending ? "…" : " " });
+    await ext.action.setBadgeBackgroundColor({ color: pending ? AMBER : color });
   }
   const lines = ["ezapply: Set posting", status];
   if (pending) lines.push("A capture is waiting to be sent.");
   if (active) lines.push(`Active: ${active}`);
-  await chrome.action.setTitle({ title: lines.join("\n") });
+  await ext.action.setTitle({ title: lines.join("\n") });
 }
 
 /** Briefly show a result symbol, then return to the resting badge. */
 export async function flashBadge(kind: "ok" | "error", message?: string): Promise<void> {
   if (flashTimer !== undefined) clearTimeout(flashTimer);
-  await chrome.action.setBadgeText({ text: kind === "ok" ? "✓" : "!" });
-  await chrome.action.setBadgeBackgroundColor({ color: kind === "ok" ? GREEN : RED });
-  if (message) await chrome.action.setTitle({ title: `ezapply: ${message}` });
+  await ext.action.setBadgeText({ text: kind === "ok" ? "✓" : "!" });
+  await ext.action.setBadgeBackgroundColor({ color: kind === "ok" ? GREEN : RED });
+  if (message) await ext.action.setTitle({ title: `ezapply: ${message}` });
   flashTimer = setTimeout(
     () => {
       flashTimer = undefined;

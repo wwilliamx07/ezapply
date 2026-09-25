@@ -12,9 +12,12 @@ import {
   type ResultOf,
   RpcPeer,
 } from "@ezapply/protocol";
+import { ext, isFirefox } from "../ext.js";
 import { type ConnState, store } from "./settings.js";
 
-const KEEPALIVE_MS = 20_000; // MV3 keeps the worker alive while WebSocket traffic flows at least every 30s
+// Chrome keeps the MV3 service worker alive while WebSocket traffic flows at least every 30s.
+// Firefox's event page ignores socket traffic and idles out after 30s without an extension event.
+const KEEPALIVE_MS = 20_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /**
@@ -103,7 +106,11 @@ export class CompanionConnection {
             handlers: this.handlers,
             idPrefix: "e",
           });
-          this.keepalive = setInterval(() => send({ kind: "ping", t: Date.now() }), KEEPALIVE_MS);
+          this.keepalive = setInterval(() => {
+            send({ kind: "ping", t: Date.now() });
+            // The write fires storage.onChanged back into this page, which resets Firefox's idle timer.
+            if (isFirefox) void ext.storage.session.set({ keepalive: Date.now() });
+          }, KEEPALIVE_MS);
           await this.setState({ state: "connected", companionVersion: msg.companionVersion });
           return;
         case "reject":
