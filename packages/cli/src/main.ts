@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
+  agentFileStatus,
   appDir,
   COMPANION_VERSION,
   createLogger,
@@ -253,6 +254,8 @@ async function cmdDoctor(): Promise<number> {
     } catch (e) {
       add("workspace", false, `${config.workspace}: ${(e as Error).message} (run ezapply init)`);
     }
+    const agent = await agentFileStatus(config.workspace);
+    add("agent file", agent.done, agent.detail);
     const health = await fetchHealth(config);
     add(
       "daemon",

@@ -6,7 +6,8 @@ description: Combine application documents (cover letter, resume, transcript, po
 # Single-PDF bundle
 
 1. **Decide that a bundle is needed.** Signals:
-   - the posting says so ("combine into one PDF", "single document")
+   - the posting says so ("combine into one PDF", "single document"); check `## Application requirements`
+     in `notes.md`
    - the form has only one file field but needs several documents
    - the user asks
 
@@ -19,7 +20,7 @@ description: Combine application documents (cover letter, resume, transcript, po
    "unofficial transcript, first page"), use `pages`.
 4. **Merge:** use `pdf_merge` with a label per section ("Cover Letter", "Resume", "Transcript"),
    `normalize: "auto"`, title "<Name>: Application for <Role>" and author = the user's name. Output
-   `postings/<id>/<Last>_<First>_<Company>_Application.pdf`.
+   `postings/<id>/<Last>_<First>_<Company>_Application.pdf`, unless the posting specifies a file name.
 5. **Check:**
    - `pdf_info`: page count, and a single page size.
    - The resume section is still exactly one page (from the merge `sections`).

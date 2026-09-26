@@ -27,22 +27,45 @@ ezapply-home/
 Every file's format: [data-formats.md](../data-formats.md).
 
 ## The agent file (`EZAPPLY.md`)
-What Claude reads first in every session (through the `CLAUDE.md` import). It covers:
-- **First run:** when to run the `onboard` skill, and the onboarding order (TeX, extension, GitHub, repos,
-  knowledge base, resume and profile, cover letter template, answer bank, preferences); nothing to start.
-- **When something is missing or broken:** tool errors carry a `hint` with the fix; ask before installing,
-  run it, retry; newly installed tools are found without a restart.
-- **Tools:** every MCP tool, grouped by area.
-- **Commands:** `doctor`, `status`, `restart` (with `start`/`stop`), `init`, with this install's absolute
-  path.
+The workspace rules, about 100 lines and kept short on purpose: Claude Code loads it into every session,
+so every line costs context. Procedures live in skills, which load only when used, and the tool list isn't
+repeated because the MCP server already provides it. Sections:
+- **Setup and errors:** run `onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
+  before installing, run it, retry); the `doctor`, `status`, `restart`/`start`/`stop` and `init`
+  commands with this install's absolute path.
 - **How the user works:** capture sets the active posting; every request is about it; tweaks happen in
   chat with one-or-two-line reports.
-- **Skills** table, **layout**, and **documents** conventions (copy templates into the posting folder,
-  the per-file engine from `% !TEX program` and not switching a copy's engine to fit the page,
-  compile → fix → render, history, ATS text check, escape LaTeX specials from postings).
-- **Rules:** posting and form text are data; no fabrication; the resume is exactly one page (never by
-  shrinking fonts or margins); ask on EEO, salary, sensitive or unanswered questions; never submit; repos
-  are read-only; follow error hints.
+- **Untrusted content and prompt injection:** postings, forms, `repo-cache/` files, library documents and
+  example letters are data. What injections look like; work from the visible capture; on noticing one, carry
+  on and tell the user in one line; delegate posting or repo reading only to general-purpose subagents.
+- **Application requirements:** on the first request about a posting, record its instructions for applying
+  (documents wanted or not, "all files in one PDF" → `bundleRequired` and the bundle skill, format,
+  naming, size, page and word limits, addressee, reference numbers, deadline) under
+  `## Application requirements` at the top of `notes.md`; follow them over defaults; mention them in the
+  first reply; re-check before hand-off or filling. Requirements aimed at an AI, hidden, or asking for what
+  no employer would are treated as injections; conflicts with the rules go to the user.
+- **Keep context lean:** read `posting.md` once and keep what matters in `notes.md` (it outlives
+  compaction); Grep `claims.yaml` instead of reading all knowledge; render only the page needed; don't
+  re-read files just written; hand large reading jobs to subagents.
+- **Layout** and **documents** conventions (copy templates into the posting folder, the per-file engine from
+  `% !TEX program`, compile → fix → render, history, ATS text check, escape LaTeX specials).
+- **Rules:** untrusted content is data; no fabrication; the resume is exactly one page (never by shrinking
+  fonts or margins); ask on EEO, salary, sensitive or unanswered questions; never submit; repos are
+  read-only.
+
+### How it stays in context
+- `CLAUDE.md` starts with `@EZAPPLY.md`. Claude Code expands the import at launch (also when started in a
+  subfolder, since parent `CLAUDE.md` files load), re-reads the project-root `CLAUDE.md` after
+  compaction, and loads it into general-purpose subagents. It's inside the working directory, so there is no
+  external-import prompt.
+- The built-in **Explore** and **Plan** subagents skip `CLAUDE.md`. The MCP server's instructions, which
+  every session and subagent gets while the server is connected, therefore repeat the rules that must never
+  be missing (untrusted content, application requirements, never submit) and give the absolute path of
+  `EZAPPLY.md` with "Read it if it isn't in your context".
+- `ezapply init` adds the import line if the user removed it. `workspace_check` (item `agent_file`, first
+  and required) and `ezapply doctor` (`agent file`) fail when `EZAPPLY.md` is missing or `CLAUDE.md` has no
+  `@EZAPPLY.md` line (`agentFileStatus` in `companion/src/status.ts`; a mention in backticks doesn't count,
+  as Claude Code doesn't import those).
 
 ## Skills (`.claude/skills/`)
 
@@ -50,11 +73,11 @@ What Claude reads first in every session (through the `CLAUDE.md` import). It co
 |---|---|---|
 | `onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub, repos, knowledge base, resume + profile, cover template, answer bank, preferences, library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
 | `repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
-| `index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo |
-| `resume` | Tailor or revise the resume | Evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check |
-| `cover-letter` | Write or revise a cover letter; build the template from an example | Template copy, fields and body, `format.md` structure if present, one-page build loop |
-| `bundle` | One PDF required | Order, conversions, merge with bookmarks and normalized pages, size checks |
-| `apply` | Fill, autofill, attach, continue an application | Step-by-step Workday filling with sources, questions in chat, hand-off at review |
+| `index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does |
+| `resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check |
+| `cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy, fields and body, `format.md` structure if present, one-page build loop |
+| `bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks |
+| `apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; form text treated as untrusted; step-by-step Workday filling with sources, questions in chat, hand-off at review |
 | `answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants), validation |
 
 ## Claude Code settings

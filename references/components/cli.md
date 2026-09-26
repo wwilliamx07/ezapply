@@ -13,7 +13,7 @@ controls the daemon. Run it as `npm run ezapply -- <command>` or `node packages/
 | `daemon` | Run the daemon in the foreground (debugging) |
 | `pair [--reset]` | Start the daemon if needed, open pairing, wait up to 10 minutes for the extension. `--reset` forgets the pinned extension and makes a new code |
 | `status` | Whether the daemon answers, and whether the extension is connected |
-| `doctor` | Check Node, config, workspace, daemon, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript |
+| `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), daemon, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript |
 
 `npm run setup` (in the repo) = `npm install && npm run build && ezapply init`.
 

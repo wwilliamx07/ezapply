@@ -57,7 +57,7 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | `companion/test/github.test.ts` | Against a mock GitHub: app manifest → install → OAuth login, paginated repo listing, callbacks without an issued state rejected, token refresh |
 | `companion/test/repos.test.ts` | With real git: read-only clone, first sync = index everything, changes since the last index, contributions, claims check, malformed repo names |
 | `companion/test/version.test.ts` | `COMPANION_VERSION` equals the package version |
-| `cli/test/workspace-init.test.ts` | `.mcp.json` stdio entry without a token, `EZAPPLY.md` command paths, default cover template install and no-overwrite |
+| `cli/test/workspace-init.test.ts` | `.mcp.json` stdio entry without a token, `EZAPPLY.md` command paths and sections, the `CLAUDE.md` import and `agentFileStatus`, default cover template install and no-overwrite |
 | `cli/test/mcp-relay.test.ts` | The relay starts the daemon on first use, relays requests and notifications, reports an unreachable daemon |
 | `extension/test/workday.test.ts` | Adapter extraction, every filler, next/refusals, submit guard, against a behavioural fixture (jsdom) |
 | `extension/test/workday-live.test.ts` | Page detection on live snapshots (posting, start-choice, sign-in) |
@@ -86,14 +86,18 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, on `
 
 ## How to…
 - **Add an MCP tool:** service method → register in the right `mcp/tools/*.ts` with a precise description
-  (Claude reads it) → test in `e2e.test.ts` or the service's test → add to `EZAPPLY.md`'s tool table, to
-  skills that should use it, and to [mcp-tools.md](mcp-tools.md).
+  (Claude reads it) → test in `e2e.test.ts` or the service's test → add it to skills that should use it,
+  and to [mcp-tools.md](mcp-tools.md). Don't list it in `EZAPPLY.md`: the MCP server already gives Claude
+  the tool list.
 - **Add a bridge method:** schema in `protocol/src/forms.ts` (or `bridge.ts`) → add to `ExtensionApi` /
   `CompanionApi` → implement the handler on the serving side (type errors until you do) → decide whether
   it's additive or needs a `PROTOCOL_VERSION` bump.
 - **Change a stored format:** bump its `schemaVersion`, add a migration run by `ezapply init`, update
   [data-formats.md](data-formats.md).
 - **Change a skill or `EZAPPLY.md`:** edit `packages/cli/templates/`; users get it with `ezapply init`.
+  `EZAPPLY.md` is in every session's context: keep it near 100 lines, add only rules that apply to every
+  task, and put procedures in skills. Rules that must hold even without it (Explore/Plan subagents) also go
+  in the MCP server instructions (`mcp/server.ts`).
 - **Add a job site:** a new adapter folder beside `workday/` exposing the same API, site detection in
   `protocol/src/browser.ts`, routing in `extension/src/background/forms.ts`, host permissions in the
   manifest.

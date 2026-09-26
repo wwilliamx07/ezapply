@@ -12,7 +12,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 3. It prints: `cd` into the workspace, run `claude`, say "set me up".
 
 **In Claude Code** (driven by `EZAPPLY.md` and the `onboard` skill; resumable, skips what's done):
-1. `workspace_check` returns the checklist: `tex`, `extension`, `github_login`, `repos_selected`,
+1. `workspace_check` returns the checklist: `agent_file`, `tex`, `extension`, `github_login`, `repos_selected`,
    `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank` (required), and
    `preferences`, `library` (optional). `nextStep` is the first required item not done.
 2. **TeX:** if missing, the item's detail carries the install command for this OS. Claude asks, runs it,
@@ -66,7 +66,10 @@ a code typed on the options page still works for non-default ports.
 
 ## 4. Tailoring the resume ("tailor my resume")
 The `resume` skill:
-1. `posting_active` → read `posting.md`; correct company or role with `posting_update_meta`.
+1. `posting_active` → read `posting.md`; correct company or role with `posting_update_meta`. If
+   `notes.md` has no `## Application requirements`, write it (documents wanted, single PDF → `bundleRequired`,
+   format, naming, limits, addressee, deadline) and mention them to the user. Every later skill (cover
+   letter, bundle, apply) follows it. Any request about a posting does this first, per `EZAPPLY.md`.
 2. Read the profile, preferences and template; copy the template's main file to
    `postings/<id>/resume.tex` if it isn't there (it keeps the template's `% !TEX program` comment, so it
    builds with the same engine); set status `drafting`.
@@ -84,7 +87,7 @@ Copy the template to `postings/<id>/cover.tex`, fill the per-letter fields, writ
 `format.md` says otherwise), compile to one page, render, report.
 
 ## 6. Bundle ("put them in one PDF")
-The `bundle` skill: record `bundleRequired`, order (posting's order, else cover → resume → extras),
+The `bundle` skill (also triggered by "all files in one PDF" in the recorded requirements): record `bundleRequired`, order (posting's order, else cover → resume → extras),
 convert scans with `pdf_from_images`, `pdf_merge` with a bookmark per section and page sizes normalized,
 check with `pdf_info` (and that the resume section is still one page), `pdf_compress` if over the limit
 (form limit, else 5 MB).

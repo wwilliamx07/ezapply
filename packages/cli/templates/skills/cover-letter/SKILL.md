@@ -7,6 +7,9 @@ description: Write or revise a cover letter for the active job posting using the
 
 ## Inputs
 - `posting_active` → `posting.md`. Note the company, the role, and what the team or product actually does.
+- `## Application requirements` in `postings/<id>/notes.md` (write it first if missing, see EZAPPLY.md):
+  word or page limits, who to address, reference numbers, questions the letter must answer, whether a
+  letter is wanted at all.
 - `profile/preferences.md` for tone, emphasis and things never to mention. `profile/profile.yaml`.
 - `postings/<id>/notes.md` if the resume skill already produced the evidence map. Otherwise do a quick
   version: the top requirements and the matching claims from `knowledge/*/claims.yaml`.

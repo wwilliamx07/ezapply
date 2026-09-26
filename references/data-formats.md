@@ -68,7 +68,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `capture/visible.txt` | daemon | `document.body.innerText` |
 | `capture/jsonld.json` | daemon | array of the page's JSON-LD blocks (strings) |
 | `posting.md` | daemon | cleaned description with a header (role, company, location, requisition, URL) |
-| `notes.md` | Claude | requirements, key terms, evidence map, gaps |
+| `notes.md` | Claude | starts with `## Application requirements` (the posting's instructions for applying), then job requirements, key terms, evidence map, gaps |
 | `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, daemon | tailored documents and bundles |
 | `form-log.jsonl` | daemon | autofill audit trail (below) |
 | `.build/<name>/` | daemon | TeX aux files and logs |

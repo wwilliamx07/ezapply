@@ -1,4 +1,5 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { resolveEngine } from "./documents/tex/engines.js";
 import type { Services } from "./services.js";
 import { installHint } from "./util/install-hints.js";
@@ -12,6 +13,23 @@ export interface ChecklistItem {
 }
 
 /**
+ * Whether Claude Code loads the workspace rules: EZAPPLY.md exists and the workspace CLAUDE.md imports it
+ * (Claude Code expands `@EZAPPLY.md` at launch and again after compaction).
+ */
+export async function agentFileStatus(root: string): Promise<{ done: boolean; detail: string }> {
+  const read = (f: string) => readFile(join(root, f), "utf8").catch(() => null);
+  const [agent, claude] = await Promise.all([read("EZAPPLY.md"), read("CLAUDE.md")]);
+  if (agent === null) return { done: false, detail: "EZAPPLY.md is missing: run `ezapply init`" };
+  if (claude === null || !/^@EZAPPLY\.md[ \t]*$/m.test(claude)) {
+    return {
+      done: false,
+      detail: "CLAUDE.md does not import EZAPPLY.md: add a line `@EZAPPLY.md` at its top (or run `ezapply init`)",
+    };
+  }
+  return { done: true, detail: "EZAPPLY.md imported by CLAUDE.md" };
+}
+
+/**
  * Onboarding / readiness checklist, in the order the onboard skill walks through it.
  * Each item is cheap to compute so Claude can call this freely.
  */
@@ -21,6 +39,9 @@ export async function workspaceStatus(
   const items: ChecklistItem[] = [];
   const add = (step: string, done: boolean, detail: string, required = true) =>
     items.push({ step, done, detail, required });
+
+  const agent = await agentFileStatus(s.workspace.root);
+  add("agent_file", agent.done, agent.detail);
 
   const config = await s.workspace.readConfig();
   const engine = await resolveEngine(config.tex.engine);

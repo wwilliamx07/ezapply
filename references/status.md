@@ -11,11 +11,12 @@ As of 2026-09-26.
 | GitHub and repos | Per-user GitHub App via manifest, OAuth login, keychain tokens with refresh, repo listing and selection, hardened read-only cache |
 | Knowledge base | `index-repo` skill, `claims.yaml` with `claims_check`, contributions, incremental re-index |
 | Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates, default cover letter, cover from an example; readiness checklist |
-| Document skills | `resume`, `cover-letter`, `bundle` |
+| Document skills | `resume`, `cover-letter`, `bundle`; application requirements recorded in `notes.md` and followed |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant |
 | Workday write path | All fillers, repeatables, next, page actions, screenshot, submit guard, `apply` skill; tested against a behavioural fixture |
 | Audit and status | `form-log.jsonl`, automatic status, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
+| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
 | Setup | `npm run setup` + agent-led onboarding, on-demand daemon, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real

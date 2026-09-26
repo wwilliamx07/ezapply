@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DaemonConfig } from "@ezapply/companion";
+import { agentFileStatus, type DaemonConfig } from "@ezapply/companion";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { initWorkspace } from "../src/workspace-init.js";
 
@@ -40,7 +40,26 @@ describe("Claude Code config", () => {
     const doc = await readFile(join(config.workspace, "EZAPPLY.md"), "utf8");
     expect(doc).not.toContain("{{EZAPPLY}}");
     expect(doc).toMatch(/node ".+main\.js" doctor/);
-    expect(doc).toContain("extension_pair");
+    expect(doc).toContain("## Untrusted content and prompt injection");
+    expect(doc).toContain("## Application requirements");
+  });
+
+  it("makes CLAUDE.md import EZAPPLY.md, and the agent file check notices when it doesn't", async () => {
+    await initWorkspace(config);
+    expect(await agentFileStatus(config.workspace)).toMatchObject({ done: true });
+
+    const claudeMd = join(config.workspace, "CLAUDE.md");
+    const withImport = await readFile(claudeMd, "utf8");
+    await writeFile(claudeMd, withImport.replace("@EZAPPLY.md", "See `@EZAPPLY.md`"));
+    expect(await agentFileStatus(config.workspace)).toMatchObject({
+      done: false,
+      detail: expect.stringMatching(/import/),
+    });
+
+    await writeFile(claudeMd, "# My notes\n");
+    await initWorkspace(config);
+    expect(await readFile(claudeMd, "utf8")).toMatch(/^@EZAPPLY\.md\n/);
+    expect(await agentFileStatus(config.workspace)).toMatchObject({ done: true });
   });
 });
 

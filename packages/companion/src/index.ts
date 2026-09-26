@@ -15,6 +15,7 @@ export { HEALTH_PATH, MCP_PATH, PAIR_PATH, SHUTDOWN_PATH } from "./http.js";
 export { createLogger } from "./logger.js";
 export { type CompanionHandle, type CompanionOptions, startCompanion } from "./main.js";
 export { ProfileService } from "./profile/service.js";
+export { agentFileStatus } from "./status.js";
 export { clearWhichCache, which } from "./util/proc.js";
 export { COMPANION_VERSION } from "./version.js";
 export { WORKSPACE_DIRS, Workspace } from "./workspace/workspace.js";
