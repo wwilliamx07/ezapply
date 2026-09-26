@@ -9,8 +9,13 @@ Onboarding is resumable. Always start with `workspace_check` and skip what is al
 the few steps that remain, then work through them in order. Keep each step conversational and short.
 
 ## 1. tex / extension
-If `tex` is not done, tell the user to run `ezapply doctor` and stop. If `extension` is not done, explain
-how to pair (`ezapply pair`, then paste into the extension options). Neither blocks the next steps.
+- **tex:** the item's `detail` has the install command for this OS. Say what it installs and roughly how
+  big it is, ask, then run it with your shell tool (it can take several minutes). Call `workspace_check`
+  again to confirm; no restart is needed.
+- **extension:** call `extension_pair`. Ask which browser they use, give them that browser's page, steps and
+  path, then call `extension_pair_wait`. If it times out, ask what they see, then wait again.
+
+Neither blocks the next steps. If the user wants to skip one, move on and come back to it later.
 
 ## 2. GitHub (`github_login`, then `repos`)
 1. Say what will happen before calling `github_login`: a browser page opens. The first time, GitHub asks
@@ -26,10 +31,13 @@ them in parallel with subagents (one repo each) and summarize when all finish.
 
 ## 4. Resume template and profile
 1. Ask for the folder that holds their LaTeX resume (absolute path). Call `template_import` with
-   `kind: "resume"`. If it reports ambiguity, ask which file is the main one.
+   `kind: "resume"`. If it reports ambiguity, ask which file is the main one. If the result has
+   `texProgram.added`, tell the user its `note`: the template is now marked to build with pdflatex.
 2. `tex_compile` the imported main file. Fix only environment problems (missing packages are installed
    automatically; font paths may need adjusting). Never change the content. Confirm it is one page and
-   `pdf_render` it.
+   `pdf_render` it. If it only builds under another engine than the one used (e.g. `Undefined control
+   sequence \pdfglyphtounicode` under XeLaTeX), add `% !TEX program = <engine>` as its first line rather
+   than editing the template.
 3. Read the resume source and write `profile/profile.yaml`: identity, contact, links, work history
    (YYYY-MM dates, `end: null` for current), education, skills, languages, certifications. Run
    `profile_check` until it is valid.
@@ -40,10 +48,15 @@ them in parallel with subagents (one repo each) and summarize when all finish.
    re-check.
 
 ## 5. Cover letter template
-If they have one in LaTeX, import it with `template_import kind: "cover"`. Otherwise create
-`templates/cover/cover.tex` matching the resume's class, fonts, colours and header, with placeholders
-(`\newcommand{\company}{}` etc.) and a plain one-page letter body. Then `template_set_main`, compile,
-render, and ask them to approve the look.
+`templates/cover/` starts with ezapply's default: a plain one-page letter. Ask which they want:
+1. **The default.** Fill its identity fields (`\myname`, `\mycontact`) from the profile. Offer to restyle
+   it to match the resume's fonts and header so the two look like a set.
+2. **Their own LaTeX template.** `template_import kind: "cover"` with the folder path. It replaces the
+   default without asking.
+3. **An example letter to copy the format from** (PDF, screenshot, or text; Word files exported to PDF).
+   Follow **Build from an example** in the cover-letter skill.
+
+Then compile, `pdf_render`, and ask them to approve the look.
 
 ## 6. Answer bank
 Call `answers_check`. Go through the unanswered questions in groups of 6–8. For each group list:

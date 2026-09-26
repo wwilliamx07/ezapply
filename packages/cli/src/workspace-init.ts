@@ -1,9 +1,10 @@
-import { copyFile, cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type DaemonConfig, defaultWorkspaceConfig, MCP_PATH, WORKSPACE_DIRS } from "@ezapply/companion";
+import { type DaemonConfig, defaultWorkspaceConfig, WORKSPACE_DIRS } from "@ezapply/companion";
 
 const TEMPLATES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "templates");
+const CLI_MAIN = resolve(dirname(fileURLToPath(import.meta.url)), "main.js");
 
 export interface InitReport {
   created: string[];
@@ -29,19 +30,18 @@ export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
   await migrateWorkspaceConfig(join(root, "ezapply.config.json"), report);
 
   // EZAPPLY.md is ours and always refreshed; CLAUDE.md belongs to the user and only imports it.
-  await copyFile(join(TEMPLATES, "workspace", "EZAPPLY.md"), join(root, "EZAPPLY.md"));
+  const agentDoc = await readFile(join(TEMPLATES, "workspace", "EZAPPLY.md"), "utf8");
+  await writeFile(join(root, "EZAPPLY.md"), agentDoc.replaceAll("{{EZAPPLY}}", `node "${CLI_MAIN}"`), "utf8");
   report.updated.push(join(root, "EZAPPLY.md"));
   await ensureClaudeMd(join(root, "CLAUDE.md"), report);
+  await installDefaultCoverTemplate(join(root, "templates", "cover"), report);
 
   await mergeJson(join(root, ".mcp.json"), report, (cur) => ({
     ...cur,
     mcpServers: {
       ...(cur.mcpServers as object | undefined),
-      ezapply: {
-        type: "http",
-        url: `http://${config.host}:${config.port}${MCP_PATH}`,
-        headers: { Authorization: `Bearer ${config.mcpToken}` },
-      },
+      // `ezapply mcp` starts the daemon if needed and relays to it, so there is no daemon to start by hand.
+      ezapply: { type: "stdio", command: process.execPath, args: [CLI_MAIN, "mcp"] },
     },
   }));
 
@@ -99,6 +99,17 @@ async function ensureClaudeMd(path: string, report: InitReport): Promise<void> {
   }
   await writeFile(path, `${IMPORT_LINE}\n\n${current}`, "utf8");
   report.updated.push(`${path} (added ${IMPORT_LINE} import)`);
+}
+
+/** A plain cover letter template so letters work out of the box. Never touches one the user already has. */
+async function installDefaultCoverTemplate(dest: string, report: InitReport): Promise<void> {
+  const existing = (await readdir(dest).catch(() => [] as string[])).filter((f) => !f.startsWith("."));
+  if (existing.length > 0) {
+    report.kept.push(dest);
+    return;
+  }
+  await cp(join(TEMPLATES, "cover"), dest, { recursive: true });
+  report.created.push(`${dest} (default cover letter template)`);
 }
 
 /** Upgrade untouched defaults written by older versions. Anything the user changed is left alone. */

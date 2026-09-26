@@ -42,10 +42,11 @@ function render(s: ConnState | undefined): void {
       status.textContent = s.hint ? `${s.message} ${s.hint}` : s.message;
       break;
     case "disconnected":
-      status.textContent = `Not connected: ${s.reason}. Is \`ezapply daemon\` running?`;
+      status.textContent = `Not connected: ${s.reason}. Open Claude Code in your ezapply workspace; it starts the companion.`;
       break;
     default:
-      status.textContent = "Not paired yet";
+      status.textContent =
+        "Not paired yet. Ask Claude in your ezapply workspace to pair the extension; it pairs by itself.";
   }
 }
 

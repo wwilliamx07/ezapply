@@ -14,7 +14,9 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
         "Compile a .tex file (under postings/ or templates/) to PDF next to it, with shell-escape disabled. Returns the PDF " +
         "path, page count, and errors/warnings with line numbers (overfull boxes, missing fonts or glyphs). Files named " +
         "*resume*/*cv* are checked against the configured page limit (default 1). Each successful build is snapshotted " +
-        `into .history/ beside the file so earlier versions can be restored. ${PATH_NOTE}`,
+        "into .history/ beside the file so earlier versions can be restored. The engine comes from a " +
+        "`% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in the file's first 20 lines, else from " +
+        `tex.engine in ezapply.config.json; the result says which (engine, engineFrom). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),
         maxPages: z.number().int().min(1).optional().describe("Override the page limit check for this document."),

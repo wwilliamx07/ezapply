@@ -13,7 +13,7 @@ import {
   RpcPeer,
 } from "@ezapply/protocol";
 import { ext, isFirefox } from "../ext.js";
-import { type ConnState, store } from "./settings.js";
+import { type ConnState, DEFAULT_PORT, type Settings, store } from "./settings.js";
 
 // Chrome keeps the MV3 service worker alive while WebSocket traffic flows at least every 30s.
 // Firefox's event page ignores socket traffic and idles out after 30s without an extension event.
@@ -31,6 +31,8 @@ export class CompanionConnection {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private backoff = 1_000;
   private connecting = false;
+  /** Settings the current socket was opened with; an empty token means "asking to pair". */
+  private active: Settings | null = null;
   private readonly listeners = new Set<(s: ConnState) => void>();
 
   constructor(
@@ -57,17 +59,20 @@ export class CompanionConnection {
     return this.peer.request(method, params, timeoutMs);
   }
 
-  /** Connect if not already connected or connecting. Safe to call often (alarms, startup, clicks). */
+  /**
+   * Connect if not already connected or connecting. Safe to call often (alarms, startup, clicks).
+   * Without a pairing code it asks the companion on the default port to pair; that only succeeds
+   * while pairing is open (extension_pair, or `ezapply pair`), and the alarm retries meanwhile.
+   */
   async ensureConnected(): Promise<void> {
     if (this.socket || this.connecting) return;
-    const settings = await store.settings();
-    if (!settings) {
-      await this.setState({ state: "unconfigured" });
-      return;
-    }
+    const stored = await store.settings();
+    const pairing = !stored;
+    const settings: Settings = stored ?? { port: DEFAULT_PORT, pairingToken: "" };
+    this.active = settings;
     this.connecting = true;
     clearTimeout(this.retry);
-    await this.setState({ state: "connecting" });
+    if (!pairing) await this.setState({ state: "connecting" });
 
     let ws: WebSocket;
     try {
@@ -111,6 +116,10 @@ export class CompanionConnection {
             // The write fires storage.onChanged back into this page, which resets Firefox's idle timer.
             if (isFirefox) void ext.storage.session.set({ keepalive: Date.now() });
           }, KEEPALIVE_MS);
+          if (msg.pairingToken) {
+            this.active = { port: settings.port, pairingToken: msg.pairingToken };
+            await store.saveSettings(this.active);
+          }
           await this.setState({ state: "connected", companionVersion: msg.companionVersion });
           return;
         case "reject":
@@ -132,6 +141,11 @@ export class CompanionConnection {
       this.socket = null;
       this.connecting = false;
 
+      // Not paired and pairing isn't open (or no companion yet): stay quiet; the alarm asks again.
+      if (pairing && !welcomed) {
+        await this.setState({ state: "unconfigured" });
+        return;
+      }
       // Auth and version problems won't fix themselves; wait for the user instead of hammering.
       if (ev.code === CloseCode.Unauthorized || ev.code === CloseCode.ProtocolMismatch) {
         const e = rejected ?? new EzError(ErrorCode.Unauthorized, "Rejected by companion");
@@ -145,6 +159,14 @@ export class CompanionConnection {
       });
       this.scheduleRetry();
     };
+  }
+
+  /** Reconnect when the stored settings differ from the live connection's (not after our own pairing save). */
+  async settingsChanged(): Promise<void> {
+    const s = await store.settings();
+    const a = this.active;
+    if (this.socket && a && s && a.port === s.port && a.pairingToken === s.pairingToken) return;
+    await this.reconnect();
   }
 
   /** Drop the connection and reconnect, e.g. after the user changes settings. */

@@ -106,7 +106,7 @@ ext.alarms.onAlarm.addListener((alarm) => {
 });
 
 ext.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes.port || changes.pairingToken)) void connection.reconnect();
+  if (area === "local" && (changes.port || changes.pairingToken)) void connection.settingsChanged();
 });
 
 void renderBadge();

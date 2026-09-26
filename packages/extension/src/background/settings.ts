@@ -22,6 +22,9 @@ export const store = {
     if (typeof pairingToken !== "string" || !pairingToken) return null;
     return { port: typeof port === "number" ? port : DEFAULT_PORT, pairingToken };
   },
+  async saveSettings(s: Settings): Promise<void> {
+    await ext.storage.local.set({ port: s.port, pairingToken: s.pairingToken });
+  },
   async setConnState(s: ConnState): Promise<void> {
     await ext.storage.local.set({ connState: s });
   },

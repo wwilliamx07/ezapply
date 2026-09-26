@@ -103,6 +103,28 @@ describe("template import", () => {
     const again = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
     expect(again.previous).toBeDefined();
     expect((await stat(again.previous as string)).isDirectory()).toBe(true);
+    expect(again.texProgram).toBeUndefined();
+  });
+
+  it("marks a pdfTeX-only main file for pdflatex, and keeps an existing comment", async () => {
+    const src = join(root, "jake");
+    await mkdir(src, { recursive: true });
+    const body =
+      "\\documentclass{article}\n\\input{glyphtounicode}\n\\pdfgentounicode=1\n\\begin{document}x\\end{document}\n";
+    await writeFile(join(src, "resume.tex"), body);
+    const r = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    expect(r.texProgram).toMatchObject({
+      engine: "pdflatex",
+      added: true,
+      note: expect.stringMatching(/glyphtounicode/),
+    });
+    expect(await readFile(r.main, "utf8")).toBe(`% !TEX program = pdflatex\n${body}`);
+    expect(await readFile(join(src, "resume.tex"), "utf8")).toBe(body); // the user's original is untouched
+
+    await writeFile(join(src, "resume.tex"), `% !TeX program = lualatex\n${body}`);
+    const again = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    expect(again.texProgram).toEqual({ engine: "lualatex", added: false });
+    expect(await readFile(again.main, "utf8")).toBe(`% !TeX program = lualatex\n${body}`);
   });
 
   it("asks for the main file when ambiguous", async () => {
@@ -121,5 +143,77 @@ describe("template import", () => {
     await expect(svc.importTemplate({ sourceDir: "relative/dir", kind: "resume" })).rejects.toMatchObject({
       code: "bad_request",
     });
+  });
+});
+
+describe("cover template: default and example", () => {
+  let ws: string;
+  let cover: ProfileService;
+
+  beforeAll(async () => {
+    ws = join(root, "cover-ws");
+    cover = new ProfileService(new Workspace(ws), createLogger({ toFile: false, level: "silent" }));
+    // What `ezapply init` installs.
+    await mkdir(join(ws, "templates/cover"), { recursive: true });
+    await writeFile(join(ws, "templates/cover/cover.tex"), "\\documentclass{article}");
+    await writeFile(
+      join(ws, "templates/cover/template.json"),
+      JSON.stringify({ schemaVersion: 1, main: "cover.tex", origin: "default" }),
+    );
+  });
+
+  it("records an example letter and keeps the previous one", async () => {
+    const pdf = join(root, "Example Letter.pdf");
+    await writeFile(pdf, "%PDF-1.4");
+    const r = await cover.importExample({ sourcePath: pdf });
+    expect(r).toMatchObject({ format: "pdf", path: join(ws, "templates/cover/example/Example Letter.pdf") });
+    expect(await cover.templateMeta("cover")).toMatchObject({
+      origin: "default",
+      example: "example/Example Letter.pdf",
+    });
+
+    const png = join(root, "letter.png");
+    await writeFile(png, "png");
+    const again = await cover.importExample({ sourcePath: png });
+    expect(again.format).toBe("image");
+    expect(again.previous).toBeDefined();
+    expect((await cover.templateMeta("cover"))?.example).toBe("example/letter.png");
+  });
+
+  it("asks for a PDF export of Word files and needs an absolute path", async () => {
+    const docx = join(root, "letter.docx");
+    await writeFile(docx, "PK");
+    await expect(cover.importExample({ sourcePath: docx })).rejects.toMatchObject({
+      code: "bad_request",
+      hint: expect.stringMatching(/PDF/),
+    });
+    await expect(cover.importExample({ sourcePath: "letter.pdf" })).rejects.toMatchObject({ code: "bad_request" });
+  });
+
+  it("marks a reworked default as custom, so importing over it then needs confirmation", async () => {
+    await cover.setTemplateMain("cover", "cover.tex");
+    expect(await cover.templateMeta("cover")).toMatchObject({ origin: "custom", example: "example/letter.png" });
+
+    const src = join(root, "my-cover");
+    await mkdir(src, { recursive: true });
+    await writeFile(join(src, "letter.tex"), "\\documentclass{article}\\begin{document}Hi\\end{document}");
+    await expect(cover.importTemplate({ sourceDir: src, kind: "cover" })).rejects.toMatchObject({
+      code: "bad_request",
+    });
+  });
+
+  it("replaces the untouched default without asking", async () => {
+    const fresh = join(root, "fresh-ws");
+    const svc2 = new ProfileService(new Workspace(fresh), createLogger({ toFile: false, level: "silent" }));
+    await mkdir(join(fresh, "templates/cover"), { recursive: true });
+    await writeFile(
+      join(fresh, "templates/cover/template.json"),
+      JSON.stringify({ schemaVersion: 1, main: "cover.tex", origin: "default" }),
+    );
+    await writeFile(join(fresh, "templates/cover/cover.tex"), "default");
+
+    const r = await svc2.importTemplate({ sourceDir: join(root, "my-cover"), kind: "cover" });
+    expect(r.previous).toBeDefined();
+    expect(await svc2.templateMeta("cover")).toMatchObject({ origin: "imported", main: "letter.tex" });
   });
 });

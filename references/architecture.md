@@ -1,0 +1,103 @@
+# Architecture
+
+## The parts
+
+```
+ ┌───────────────────────────┐  stdio (MCP)   ┌──────────────┐  HTTP, 127.0.0.1   ┌───────────────────────────────┐
+ │ Claude Code               │ ─────────────▶ │ ezapply mcp  │ ─────────────────▶ │ companion daemon              │
+ │ runs in ~/ezapply-home    │ ◀───────────── │ (relay; CLI) │ ◀───────────────── │  • MCP server (stateless)     │
+ │ reads EZAPPLY.md + skills │                └──────┬───────┘   starts it if     │  • extension bridge (WS)  ────┼──┐
+ └────────────┬──────────────┘                       └──────────  not running ──▶ │  • postings, documents,       │  │
+              │ Read / Write / Edit / Bash                                        │    profile, GitHub, repos     │  │
+              ▼                                                                   │  • /control, /github pages    │  │
+ ┌───────────────────────────┐        files (workspace-restricted)                └──────────────┬────────────────┘  │
+ │ workspace ~/ezapply-home  │ ◀───────────────────────────────────────────────────────────────── ┘                   │
+ └───────────────────────────┘                                                     HTTPS: GitHub API, git clone       │
+                                                                                                            WebSocket │
+                                           ┌────────────────────────────────────────────────────────────────────────┐ │
+                                           │ browser extension (Chrome MV3 / Firefox 128+ MV3)                      │◀┘
+                                           │  • toolbar button: Set posting (capture any page)                      │
+                                           │  • background: bridge client, pairing, routing, badge                 │
+                                           │  • Workday adapter, injected into the page's MAIN world on demand      │
+                                           └────────────────────────────────────────────────────────────────────────┘
+```
+
+| Part | Package | Runs as | Role |
+|---|---|---|---|
+| Protocol | `packages/protocol` | library | zod schemas and types shared by everything: bridge messages, RPC, forms, postings, errors |
+| Companion | `packages/companion` | background Node process | Serves the MCP tools, talks to the extension, owns all file and network work |
+| CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), relays MCP for Claude Code (`mcp`), controls the daemon |
+| Extension | `packages/extension` | browser extension | Captures postings; reads and fills Workday forms on the companion's behalf |
+| Workspace | created by `ezapply init` | folder of files | The user's data, the agent file `EZAPPLY.md`, skills, and Claude Code config |
+
+## Processes and lifecycle
+
+- **Claude Code** is started by the user in the workspace. Its `.mcp.json` runs `ezapply mcp` (via the
+  absolute path of the built CLI and Node) as a stdio MCP server.
+- **`ezapply mcp`** is a relay (see [components/cli.md](components/cli.md)). On start it checks the
+  daemon's `/health`; if nothing answers it spawns `ezapply daemon` detached, with no window, and waits up to
+  20 s for it. It then forwards each JSON-RPC line to the daemon over HTTP, concurrently, and writes each
+  answer back. If a request can't connect (the daemon died), it starts the daemon again and retries once.
+- **The companion daemon** listens on `127.0.0.1:<port>` (default 17373). One process serves HTTP (MCP,
+  control routes, GitHub pages) and the WebSocket bridge. It outlives Claude Code sessions, so the
+  extension stays connected. It stops on SIGINT/SIGTERM or `POST /control/shutdown` (`ezapply stop`). There
+  is no login item: Claude Code starts it when needed, and the extension queues captures until then. (A
+  login item would need different code on each OS, and on Windows a console program started at login
+  shows a window; Claude Code is the only consumer of the tools anyway.)
+- **The extension background** is a service worker in Chrome and an event page in Firefox. It connects
+  to the daemon, sends a ping every 20 s, and a 30 s alarm reconnects it whenever it's down. Firefox
+  unloads an idle event page after 30 s regardless of socket traffic, so there each ping also writes
+  `storage.session`, whose change event resets the idle timer.
+- **The Workday adapter** (`workday-main.js`) is injected into the page's own JavaScript context (MAIN
+  world) on each form call. Injection is idempotent: a second injection of the same version is a no-op.
+
+## Transports
+
+| Link | Transport | Auth | Notes |
+|---|---|---|---|
+| Claude Code → relay | MCP over stdio | none (a child process) | Newline-delimited JSON-RPC |
+| Relay → daemon | MCP Streamable HTTP, `POST /mcp` | Bearer `mcpToken` | Stateless: a new `McpServer` per request, JSON responses (no SSE). This works because no state lives in an MCP session: it's all in services and on disk |
+| CLI → daemon | `GET/POST /control/*`, `GET /health` | Bearer `mcpToken` (health is open) | Pairing window, shutdown |
+| Browser → daemon | `GET /github/*` pages | one-time state values | GitHub App creation and login callbacks |
+| Extension ↔ daemon | WebSocket `ws://127.0.0.1:<port>/bridge`, JSON text frames | Origin pinning + pairing code | Versioned handshake, then symmetric RPC ([protocol](components/protocol.md)) |
+| Daemon → GitHub | HTTPS REST API and `git` over HTTPS | user access token (per command, never stored in git config) | Read-only App permissions |
+
+Every HTTP request must be addressed to the bound loopback host (`Host` check against DNS rebinding).
+`/mcp` and `/control/*` refuse any request that carries an `Origin` header, which browsers always send
+cross-site. See [security.md](security.md).
+
+## Where state lives
+
+| Location | Holds | Owner |
+|---|---|---|
+| `~/.ezapply/daemon.json` (`EZAPPLY_APP_DIR` overrides the folder) | port, MCP token, pairing code, pinned extension id, workspace path | CLI `init`; daemon updates pairing |
+| `~/.ezapply/github-app.json` | the user's GitHub App (public parts) | daemon |
+| `~/.ezapply/logs/companion.log` | structured logs, personal data redacted | daemon |
+| OS keychain, service `ezapply` | GitHub App client secret, GitHub user token | daemon |
+| `~/ezapply-home/` | everything the user owns: profile, templates, knowledge, postings, library, repo cache | user, Claude, daemon |
+| extension `storage.local` | port, pairing code, connection state, pending capture, active posting label | extension |
+
+Formats of every file: [data-formats.md](data-formats.md).
+
+## Cross-cutting concerns
+
+- **Validation.** zod schemas validate every boundary: MCP tool inputs, bridge params and results (on the
+  receiving side), and every file read from disk.
+- **Errors.** One `EzError` type with a `code`, a `message` and an optional `hint` telling the caller how
+  to recover. MCP tools are wrapped (`tool()` / `rawTool()` in `mcp/result.ts`) so every failure reaches
+  Claude as `{ error: { code, message, hint } }` with `isError: true`; unexpected ones are logged with
+  their stack. Missing dependencies (TeX, git) get OS-specific install commands
+  (`util/install-hints.ts`).
+- **Finding installed tools.** `which()` caches hits only, and on Windows first appends the folders where
+  winget installs MiKTeX and Git, so a tool installed mid-session works without a restart.
+- **Versioning.** `PROTOCOL_VERSION` (currently 2) is checked at the bridge handshake; a mismatch is
+  refused with which side to update. Every stored format has a `schemaVersion`. `COMPANION_VERSION`
+  matches the package version (tested).
+- **Wiring.** Services are constructed once in `companion/src/main.ts` and passed explicitly (the
+  `Services` object); tools never construct services and there are no module-level singletons besides
+  pure caches.
+- **Path guards.** Every path Claude passes is resolved against the workspace and checked against the
+  folders that operation may touch (`Workspace.resolveAllowed`).
+- **Atomic writes.** JSON and generated files are written to a temp file and renamed.
+- **Logging.** pino to `~/.ezapply/logs/companion.log` and stderr, level from `EZAPPLY_LOG_LEVEL`, with page
+  content, form values and tokens redacted by field path.

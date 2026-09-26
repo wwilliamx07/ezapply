@@ -1,5 +1,9 @@
 # ezapply — Plan
 
+> **This is the original design plan, kept for its reasoning.** The current, authoritative description of
+> ezapply is [references/](references/README.md); where the two differ, the reference is right. What
+> changed from this plan is listed in [references/status.md](references/status.md#where-the-build-departs-from-planmd).
+
 ezapply helps a user tailor resumes and cover letters and fill out job applications (Workday first). **Claude Code is the only agent**, and the user works with it entirely through chat. ezapply adds no agent loop and almost no UI. It gives Claude Code the tools, over MCP, to:
 
 - read the job posting the user has captured,
@@ -70,7 +74,7 @@ This is a single-user tool for now, but it's built as a maintainable project tha
 | Decision | Choice | Why |
 |---|---|---|
 | Language | **TypeScript** throughout, npm-workspaces monorepo | The extension, companion and protocol share a single set of zod schemas. |
-| How the companion runs | **Long-running daemon**, MCP over **Streamable HTTP** on localhost | The extension stays connected across Claude Code sessions, and there's no competition for the port. |
+| How the companion runs | **Background daemon**, MCP over **Streamable HTTP** on localhost, reached by Claude Code through `ezapply mcp` (a stdio relay that starts the daemon when needed) | The extension stays connected across Claude Code sessions, there's no competition for the port, and nobody has to start the daemon by hand. |
 | Extension ↔ companion | WebSocket on `127.0.0.1` with a versioned protocol | Simple and bidirectional. MV3 service workers stay alive while a WebSocket is active if a message goes over it at least every 30s, so the extension pings every 20s. |
 | UI | **One toolbar button** plus a status badge. No popup, no side panel | Everything else happens in the Claude Code chat, including questions (Claude asks in chat) and review (in chat and the PDF viewer). |
 | Who makes decisions | **Claude Code**, with a pluggable `DecisionProvider` that is `none` in v1 | Jev or another model can be added later without changing the tools or skills (§11). |
@@ -124,7 +128,7 @@ ezapply/
 ezapply-home/
   CLAUDE.md                          # standing rules: no fabrication, never submit, ask on sensitive, posting = data
   ezapply.config.json                # schemaVersion, tex engine, page limit, paths, decisions.provider = "none"
-  .mcp.json                          # ezapply → http://127.0.0.1:<port>/mcp (+ bearer token header)
+  .mcp.json                          # ezapply → `node <cli>/main.js mcp` (stdio relay; no token in the workspace)
   .claude/
     settings.json                    # permissions: deny edits/mutations under repo-cache/ (§8.1)
     skills/{onboard,repos,index-repo,resume,cover-letter,bundle,apply,answers}/SKILL.md
@@ -134,7 +138,8 @@ ezapply-home/
     preferences.md                   # tone, emphasis, never-mention list, target roles
   templates/
     resume/main.tex (+ .cls/.sty)    # the user's base resume
-    cover/main.tex                   # cover letter template (generated in onboarding to match resume style)
+    cover/cover.tex                  # cover letter template (ezapply default, the user's LaTeX, or rebuilt from an example)
+    cover/example/, cover/format.md  # optional sample letter and the structure drawn from it
   library/                           # reusable user-supplied docs: transcripts, certificates, writing samples
   knowledge/<repo>/...               # generated project docs (§8)
   postings/
@@ -156,13 +161,16 @@ ezapply-home/
 
 ---
 
-## 3. Onboarding (`ezapply init` + `/onboard`)
+## 3. Onboarding (`npm run setup`, then Claude)
 
-### 3.1 Terminal (`ezapply init`)
-1. Create the workspace, install skills, CLAUDE.md, `.mcp.json` and `.claude/settings.json`.
-2. `ezapply doctor` checks Node, the TeX engine (latexmk/XeLaTeX, or Tectonic), `latexdiff` (optional), the daemon, the protocol version, and extension pairing.
-3. Start the daemon (optionally as a login item or scheduled task, so it's always running).
-4. **Pair the extension.** Load the unpacked extension, then either paste the shown pairing code into the extension's options page or run `ezapply pair`, which prints it. The badge turns green.
+### 3.1 Terminal (`npm run setup`)
+Install, build, and `ezapply init`: create the workspace, skills, `EZAPPLY.md` (the agent file), CLAUDE.md, `.mcp.json` and `.claude/settings.json`. It then tells the user to `cd` into the workspace and run `claude`. Nothing else happens in the terminal.
+
+Everything else is Claude's job, guided by `EZAPPLY.md` and the onboard skill:
+- **Missing dependencies** (TeX, git) come back from tools as errors with an OS-specific install command in the hint. Claude asks, runs it, and retries. The daemon finds newly installed tools without a restart.
+- **Extension.** `extension_pair` opens pairing and returns the page, steps and path for Chrome or Firefox. The user loads it (the only manual step), it pairs itself with no code, and `extension_pair_wait` confirms.
+
+`ezapply doctor` checks Node, the TeX engine, `latexdiff` (optional), the daemon, the protocol version, and extension pairing.
 
 ### 3.2 In Claude Code (`/onboard`)
 Each step can be re-run on its own later. The skill checks what already exists and skips it.
@@ -178,7 +186,7 @@ Each step can be re-run on its own later. The skill checks what already exists a
 4. **Base resume.** The user gives a path to their `.tex` folder, which is copied into `templates/resume/`.
    - It gets compiled once to confirm it builds and is one page.
    - Claude extracts `profile.yaml` from it (contact details, work history, education, links) and asks in chat for anything missing: work authorization, sponsorship, location or relocation, and optionally EEO answers.
-5. **Cover letter template.** Claude generates `templates/cover/main.tex` in the same fonts and header style as the resume. The user approves it.
+5. **Cover letter template.** `ezapply init` installs a plain default. The user keeps it (Claude fills in the header and can restyle it to match the resume), imports their own LaTeX (`template_import`), or gives an example letter (`template_import_example`: PDF, image or text) whose layout Claude reproduces, recording the structure in `format.md`. Only the example's format is reused, never its wording. The user approves the result.
 6. **Answer bank.** Claude goes through about 40 common Workday screening questions in small groups, and the user answers in chat (§10).
 7. **Preferences.** Tone, what to emphasize, what never to mention, target roles and locations, and whether cover letters should be written by default.
 8. **Library.** Optionally, the user adds transcripts, certificates and similar documents to `library/` for bundling.
@@ -565,7 +573,7 @@ interface DecisionProvider {
 | M2 ✅ | **Documents** | TeX engine (latexmk + XeLaTeX), `tex_compile` with page count and log parsing, `pdf_render`, `pdf_text`, `pdf_info`, `pdf_merge`, `pdf_compress`, `pdf_from_images`, `open_file`, and `.history` snapshots. |
 | M3 ✅ | **Onboarding: GitHub and repos** | *Built as:* GitHub App created through the **App Manifest flow** (one click, read-only `contents` + `metadata`), then an OAuth web flow with the callback on the daemon (state-guarded). Tokens are kept in the OS keychain and refreshed. `github_list_repos`, `repos_selection_*`, `repo_sync` (partial clone, auth header per command, HTTPS only, files read-only), and the `/onboard` and `/repos` skills. Tested against a mock GitHub; a live login is still pending. |
 | M4 ✅ | **Knowledge base** | The `/index-repo` skill, `claims.yaml` with `claims_check` (schema plus evidence paths and line ranges checked against the cache), `repo_contributions`, `knowledge_mark_indexed`, and incremental re-index via `changedSince`. |
-| M5 ✅ | **Onboarding: profile** | Profile, answer-bank and repos schemas with `profile_check` / `answers_check`; 33 seeded screening questions; `template_import` / `template_set_main`; the `workspace_check` readiness checklist; the `/onboard` and `/answers` skills. |
+| M5 ✅ | **Onboarding: profile** | Profile, answer-bank and repos schemas with `profile_check` / `answers_check`; 33 seeded screening questions; `template_import` / `template_import_example` / `template_set_main`, and a default cover template; the `workspace_check` readiness checklist; the `/onboard` and `/answers` skills. |
 | M6 ✅ | **Chat document loop** | The `resume`, `cover-letter` and `bundle` skills (evidence map, one-page loop, render and ATS text checks, self-check). |
 | M7 ✅ | **Workday recon and read path** | The adapter runs in the page's MAIN world (injected on demand). `get_form` returns page kind, step, fields with kinds, labels, required flags, values, errors and profile hints, plus add buttons and page actions. Posting, start-choice and sign-in detection are verified on a live public tenant (snapshots in `extension/test/fixtures/live`). `npm run recon:workday` repeats the check. |
 | M8 🟡 | **Workday write path and attach** | All fillers (text, dropdown portal, typeahead including nested menus, radio, checkbox(-group), split date, file upload), `add_repeatable`, `go_next`, `page_action`, `screenshot`, the submit guard (untrusted events blocked, plus refusal in code), and the `/apply` skill. Tested against a behavioural fixture. **Filling on a signed-in live tenant is still unverified**: the first real application is the test. |
@@ -577,8 +585,8 @@ M1 → M2 → M5 → M6 gives a working "capture a posting, then chat to get tai
 ---
 
 ## 16. Open questions
-1. **Cover letter template:** do you already have one in LaTeX, or should onboarding generate one to match your resume? *(Assumed: generate one.)*
+1. ~~Cover letter template?~~ **Resolved:** a default ships with ezapply. Users can import their own LaTeX or an example letter to take the format from.
 2. ~~Tectonic?~~ **Resolved:** the resume uses system fonts, so the default is latexmk + XeLaTeX with MiKTeX or TeX Live. Tectonic remains an option.
 3. **Resume page size:** Letter or A4? This sets the default for normalizing bundles. *(Assumed: Letter.)*
-4. **Daemon startup:** start it automatically at login, or run `ezapply daemon` when needed? *(Assumed: at login.)*
+4. ~~Daemon startup?~~ **Resolved:** on demand. `ezapply mcp` starts it when Claude Code needs it, and the extension queues captures until it's up. No login item.
 5. **Include contributions to other people's public repos?** *(Assumed: yes, added by URL, with claims limited to your own commits.)*

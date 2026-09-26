@@ -8,6 +8,58 @@ export type EngineId = (typeof ENGINE_IDS)[number];
 /** Preference order for engine "auto". pdflatex is excluded: it cannot load system fonts. */
 export const AUTO_ORDER: readonly EngineId[] = ["latexmk", "xelatex", "lualatex", "tectonic"];
 
+/**
+ * Engines a `% !TEX program = …` comment may name. latexmk is left out: it is a build driver, and the
+ * comment would not say which engine it should drive.
+ */
+export const PROGRAM_ENGINES: readonly EngineId[] = ["pdflatex", "xelatex", "lualatex", "tectonic"];
+
+/** TeXShop and TeXstudio read the magic comment from the first 20 lines only. */
+const PROGRAM_LINES = 20;
+// `% !TEX program = x` (TeXstudio, VS Code) and `% !TEX TS-program = x` (TeXShop), any case.
+const PROGRAM_RE = /^\s*%+\s*!\s*TeX\s+(?:TS-)?program\s*=\s*(.*?)\s*$/i;
+
+export interface TexProgram {
+  /** The value as written. */
+  value: string;
+  /** 1-based line number. */
+  line: number;
+  /** The engine it names, or null when the value is not one of PROGRAM_ENGINES. */
+  engine: EngineId | null;
+}
+
+/** The first `% !TEX program` comment in the first 20 lines of a .tex source, if any. */
+export function readTexProgram(source: string): TexProgram | null {
+  const lines = source.replace(/^﻿/, "").split(/\r?\n/, PROGRAM_LINES);
+  for (const [i, text] of lines.entries()) {
+    const m = PROGRAM_RE.exec(text);
+    if (!m) continue;
+    const value = m[1] ?? "";
+    const id = value.toLowerCase();
+    const engine = PROGRAM_ENGINES.find((e) => e === id) ?? null;
+    return { value, line: i + 1, engine };
+  }
+  return null;
+}
+
+/**
+ * The engine a source needs when it says nothing: pdflatex for sources that use pdfTeX-only commands
+ * (`\pdfgentounicode`, `glyphtounicode`) and don't load fontspec. Such templates fail under XeLaTeX, and
+ * even when guarded they get different font metrics there, which can change the page count.
+ */
+export function detectTexProgram(source: string): { engine: EngineId; reason: string } | null {
+  const pdftex = /\\pdfgentounicode|\\pdfglyphtounicode|\\input\s*\{?\s*glyphtounicode/.exec(source);
+  if (!pdftex || /\{fontspec\}|\\setmainfont/.test(source)) return null;
+  return { engine: "pdflatex", reason: `it uses the pdfTeX-only \`${pdftex[0]}\`` };
+}
+
+/** `source` with `% !TEX program = <engine>` as its first line (after any BOM), keeping its line endings. */
+export function withTexProgram(source: string, engine: EngineId): string {
+  const bom = source.startsWith("﻿") ? "﻿" : "";
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  return `${bom}% !TEX program = ${engine}${eol}${source.slice(bom.length)}`;
+}
+
 export interface CompileRequest {
   texPath: string;
   outDir: string;
@@ -82,14 +134,16 @@ class LatexmkEngine implements TexEngine {
   readonly id = "latexmk" as const;
   private ok: Promise<boolean> | undefined;
 
-  available(): Promise<boolean> {
-    // latexmk is a Perl script; being on PATH is not enough if Perl is missing.
-    this.ok ??= which("latexmk")
-      ? run("latexmk", ["-v"], { timeoutMs: 15_000 })
-          .then((r) => r.exitCode === 0)
-          .catch(() => false)
-      : Promise.resolve(false);
-    return this.ok;
+  async available(): Promise<boolean> {
+    if (!which("latexmk")) return false;
+    // latexmk is a Perl script; being on PATH is not enough if Perl is missing. Remember only success,
+    // so installing Perl or TeX later is picked up.
+    this.ok ??= run("latexmk", ["-v"], { timeoutMs: 15_000 })
+      .then((r) => r.exitCode === 0)
+      .catch(() => false);
+    const ok = await this.ok;
+    if (!ok) this.ok = undefined;
+    return ok;
   }
 
   async compile(req: CompileRequest): Promise<EngineRun> {

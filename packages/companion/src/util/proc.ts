@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 
 export interface RunResult {
   exitCode: number | null;
@@ -66,16 +68,39 @@ function killTree(pid: number | undefined): void {
   }
 }
 
-const whichCache = new Map<string, string | null>();
+const whichCache = new Map<string, string>();
 
-/** Absolute path of an executable on PATH, or null. Cached per process. */
+/**
+ * Absolute path of an executable on PATH, or null. Hits are cached per process; misses are not, so a
+ * tool the user installs while the daemon runs is found on the next call.
+ */
 export function which(bin: string): string | null {
   const cached = whichCache.get(bin);
   if (cached !== undefined) return cached;
+  addInstalledToolDirsToPath();
   const r = spawnSync(process.platform === "win32" ? "where" : "which", [bin], { encoding: "utf8", windowsHide: true });
   const found = r.status === 0 ? (r.stdout.split(/\r?\n/).find(Boolean) ?? null) : null;
-  whichCache.set(bin, found);
+  if (found) whichCache.set(bin, found);
   return found;
+}
+
+/**
+ * Windows installers (winget MiKTeX, Git) update PATH for new terminals only, never for a running
+ * process. Append their standard folders once they exist, so run() and which() find the tools.
+ */
+function addInstalledToolDirsToPath(): void {
+  if (process.platform !== "win32") return;
+  const local = process.env.LOCALAPPDATA;
+  const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
+  const dirs = [
+    ...(local ? [join(local, "Programs", "MiKTeX", "miktex", "bin", "x64")] : []),
+    join(programFiles, "MiKTeX", "miktex", "bin", "x64"),
+    join(programFiles, "Git", "cmd"),
+  ];
+  const parts = (process.env.PATH ?? "").split(delimiter);
+  const known = new Set(parts.map((p) => p.toLowerCase()));
+  const add = dirs.filter((d) => !known.has(d.toLowerCase()) && existsSync(d));
+  if (add.length > 0) process.env.PATH = [...parts, ...add].filter(Boolean).join(delimiter);
 }
 
 export function clearWhichCache(): void {

@@ -1,13 +1,21 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PDFDocument, PDFName, StandardFonts } from "@cantoo/pdf-lib";
 import { createCanvas } from "@napi-rs/canvas";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parsePageRanges } from "../src/documents/pdf/pages.js";
 import { pdfInfo, pdfText } from "../src/documents/pdf/toolkit.js";
 import { DocumentsService } from "../src/documents/service.js";
-import { resolveEngine } from "../src/documents/tex/engines.js";
+import {
+  detectTexProgram,
+  ENGINES,
+  type EngineRun,
+  readTexProgram,
+  resolveEngine,
+  withTexProgram,
+} from "../src/documents/tex/engines.js";
 import { createLogger } from "../src/logger.js";
 import { Workspace } from "../src/workspace/workspace.js";
 
@@ -134,6 +142,93 @@ describe("DocumentsService PDFs", () => {
   });
 });
 
+describe("TeX program comment", () => {
+  it("reads both spellings, any case, from the first 20 lines only", () => {
+    expect(readTexProgram("% !TEX program = pdflatex\n\\documentclass{article}")).toEqual({
+      value: "pdflatex",
+      line: 1,
+      engine: "pdflatex",
+    });
+    expect(readTexProgram("\uFEFF%!TeX TS-program = XeLaTeX\r\n")).toMatchObject({ line: 1, engine: "xelatex" });
+    expect(readTexProgram("%% comment\n  %  !tex  program=lualatex  \n")).toMatchObject({
+      line: 2,
+      engine: "lualatex",
+    });
+    expect(readTexProgram(`${"% filler\n".repeat(20)}% !TEX program = pdflatex\n`)).toBeNull();
+    expect(readTexProgram("\\documentclass{article} % !TEX program = pdflatex\n")).toBeNull();
+    expect(readTexProgram("% !TEX root = main.tex\n")).toBeNull();
+  });
+
+  it("keeps unknown values, options and latexmk without an engine", () => {
+    expect(readTexProgram("% !TEX program = latexmk\n")).toMatchObject({ value: "latexmk", engine: null });
+    expect(readTexProgram("% !TEX program = pdflatex --shell-escape\n")).toMatchObject({ engine: null });
+    expect(readTexProgram("% !TEX program = context\n")).toMatchObject({ engine: null });
+  });
+
+  it("detects pdfTeX-only sources and adds the comment", () => {
+    const jake = "\\documentclass{article}\n\\input{glyphtounicode}\n\\pdfgentounicode=1\n";
+    expect(detectTexProgram(jake)).toMatchObject({ engine: "pdflatex" });
+    expect(detectTexProgram(`${jake}\\usepackage{fontspec}\n`)).toBeNull();
+    expect(detectTexProgram("\\documentclass{article}\n\\usepackage[T1]{fontenc}\n")).toBeNull();
+    expect(withTexProgram("\uFEFFa\r\nb", "pdflatex")).toBe("\uFEFF% !TEX program = pdflatex\r\na\r\nb");
+    expect(readTexProgram(withTexProgram(jake, "pdflatex"))?.engine).toBe("pdflatex");
+  });
+});
+
+describe("tex_compile engine choice", () => {
+  const src = "\\documentclass{article}\\begin{document}x\\end{document}\n";
+  // Record which engine runs without running TeX: every engine "fails" without a PDF.
+  const ran: string[] = [];
+  beforeEach(() => {
+    ran.length = 0;
+    for (const e of Object.values(ENGINES)) {
+      vi.spyOn(e, "available").mockResolvedValue(true);
+      vi.spyOn(e, "compile").mockImplementation(async (req): Promise<EngineRun> => {
+        ran.push(e.id);
+        const pdfPath = join(req.outDir, "none.pdf");
+        return { engine: e.id, exitCode: 1, timedOut: false, logText: "", pdfPath, output: "" };
+      });
+    }
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(join(root, "ezapply.config.json"), { force: true });
+  });
+
+  it("prefers the comment, then tex.engine, then auto", async () => {
+    await mkdir(join(root, "postings/p3"), { recursive: true });
+    await writeFile(join(root, "postings/p3/a.tex"), `% !TEX program = pdflatex\n${src}`);
+    await writeFile(join(root, "postings/p3/b.tex"), src);
+    await writeFile(
+      join(root, "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, tex: { engine: "lualatex" } }),
+    );
+
+    expect(await docs.compile("postings/p3/a.tex")).toMatchObject({ engine: "pdflatex", engineFrom: "magic-comment" });
+    expect(await docs.compile("postings/p3/b.tex")).toMatchObject({ engine: "lualatex", engineFrom: "config" });
+    await rm(join(root, "ezapply.config.json"));
+    expect(await docs.compile("postings/p3/b.tex")).toMatchObject({ engine: "latexmk", engineFrom: "auto" });
+    expect(ran).toEqual(["pdflatex", "lualatex", "latexmk"]);
+  });
+
+  it("fails instead of falling back when the named engine is missing or unknown", async () => {
+    vi.spyOn(ENGINES.pdflatex, "available").mockResolvedValue(false);
+    await writeFile(join(root, "postings/p3/a.tex"), `% !TEX program = pdflatex\n${src}`);
+    await expect(docs.compile("postings/p3/a.tex")).rejects.toMatchObject({
+      code: "not_found",
+      message: expect.stringMatching(/pdflatex is not installed.*line 1 of a\.tex/),
+      hint: expect.stringMatching(/Don't change or remove the comment/),
+    });
+
+    await writeFile(join(root, "postings/p3/a.tex"), `% !TEX program = latexmk\n${src}`);
+    await expect(docs.compile("postings/p3/a.tex")).rejects.toMatchObject({
+      code: "bad_request",
+      hint: expect.stringMatching(/pdflatex, xelatex, lualatex, tectonic\. latexmk is a build driver/),
+    });
+    expect(ran).toEqual([]);
+  });
+});
+
 const engine = await resolveEngine("auto");
 
 describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`, () => {
@@ -162,6 +257,15 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     expect(bad.diagnostics[0]).toMatchObject({ severity: "error", line: 3 });
   }, 180_000);
 
+  it("compiles the shipped default cover letter template to one page", async () => {
+    const shipped = join(dirname(fileURLToPath(import.meta.url)), "../../cli/templates/cover/cover.tex");
+    await mkdir(join(root, "templates/cover"), { recursive: true });
+    await copyFile(shipped, join(root, "templates/cover/cover.tex"));
+    const res = await docs.compile("templates/cover/cover.tex");
+    expect(res).toMatchObject({ ok: true, pages: 1, engineFrom: "auto" });
+    expect(res.engine).not.toBe("pdflatex");
+  }, 180_000);
+
   it("never runs shell escape", async () => {
     await writeFile(
       join(root, "postings/p2/escape.tex"),
@@ -169,5 +273,36 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     );
     await docs.compile("postings/p2/escape.tex");
     await expect(stat(join(root, "postings/p2/pwned.txt"))).rejects.toThrow();
+  }, 180_000);
+});
+
+const hasPdflatex = await ENGINES.pdflatex.available();
+
+describe.skipIf(!hasPdflatex)("tex_compile with % !TEX program = pdflatex", () => {
+  it("builds a pdfTeX-only resume with pdflatex whatever tex.engine says", async () => {
+    await mkdir(join(root, "postings/p4"), { recursive: true });
+    await writeFile(
+      join(root, "postings/p4/resume.tex"),
+      [
+        "% !TEX program = pdflatex",
+        "\\documentclass[letterpaper,11pt]{article}",
+        "\\input{glyphtounicode}",
+        "\\pdfgentounicode=1",
+        "\\begin{document}",
+        "Jane Doe, resume.",
+        "\\end{document}",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(root, "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, tex: { engine: "xelatex" } }),
+    );
+    try {
+      const res = await docs.compile("postings/p4/resume.tex");
+      expect(res).toMatchObject({ ok: true, pages: 1, engine: "pdflatex", engineFrom: "magic-comment" });
+    } finally {
+      await rm(join(root, "ezapply.config.json"), { force: true });
+    }
   }, 180_000);
 });

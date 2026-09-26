@@ -1,0 +1,50 @@
+% ezapply default cover letter template (XeLaTeX, US Letter, one page).
+% Identity fields are filled once from profile/profile.yaml; the per-letter fields and the body are
+% filled for each posting. Replace this template any time: import your own LaTeX or an example letter.
+\documentclass[11pt]{article}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{fontspec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{parskip}
+\pagestyle{empty}
+
+% ---- Identity -------------------------------------------------------------------------------
+\newcommand{\myname}{Your Name}
+\newcommand{\mycontact}{City, ST \quad\textbar\quad you@example.com \quad\textbar\quad (555) 555-0100 \quad\textbar\quad linkedin.com/in/you}
+
+% ---- Per letter -----------------------------------------------------------------------------
+\newcommand{\letterdate}{\today}
+\newcommand{\addressee}{Hiring Manager}
+\newcommand{\company}{Company Name}
+\newcommand{\role}{Role Title}
+
+\begin{document}
+
+{\LARGE\bfseries \myname}\par
+\vspace{2pt}
+{\small \mycontact}\par
+\vspace{16pt}
+
+\letterdate
+
+\addressee\\
+\company
+
+\textbf{Re: \role}
+
+Dear \addressee,
+
+% BODY START
+Opening: the role and a concrete reason this company or team interests you.
+
+First evidence paragraph: one or two requirements, tied to something you built and how.
+
+Second evidence paragraph: another requirement, tied to a different project or role.
+
+Close: what you would bring, and that you would welcome a conversation.
+% BODY END
+
+Sincerely,\\[6pt]
+\myname
+
+\end{document}

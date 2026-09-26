@@ -52,6 +52,9 @@ const { minimum_chrome_version: _, background, ...rest } = manifest;
 const firefoxManifest = {
   ...rest,
   background: { scripts: [background.service_worker], type: background.type },
+  // Firefox's default MV3 policy includes upgrade-insecure-requests, which rewrites the companion's
+  // ws://127.0.0.1 socket to wss:// (it has no TLS). Replace it, and allow connections only to loopback.
+  content_security_policy: { extension_pages: "script-src 'self'; connect-src ws://127.0.0.1:*" },
   browser_specific_settings: {
     gecko: {
       id: "ezapply@ezapply.local",

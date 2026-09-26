@@ -134,24 +134,27 @@ function fakeExtension(opts: { id?: string; origin?: string; token?: string; pro
       ...fakeForm(),
     },
   });
-  const outcome = new Promise<{ welcomed: boolean; closeCode?: number; error?: string }>((resolve) => {
-    ws.on("open", () =>
-      send({
-        kind: "hello",
-        protocolVersion: opts.protocolVersion ?? PROTOCOL_VERSION,
-        extensionVersion: "9.9.9",
-        pairingToken: opts.token ?? PAIRING,
-      }),
-    );
-    ws.on("message", (data) => {
-      const msg = parseBridgeMessage(data.toString());
-      if (msg?.kind === "welcome") resolve({ welcomed: true });
-      else if (msg?.kind === "request" || msg?.kind === "response") void peer.handle(msg);
-    });
-    ws.on("close", (code) => resolve({ welcomed: false, closeCode: code }));
-    ws.on("unexpected-response", (_req, res) => resolve({ welcomed: false, error: String(res.statusCode) }));
-    ws.on("error", (err) => resolve({ welcomed: false, error: err.message }));
-  });
+  const outcome = new Promise<{ welcomed: boolean; pairingToken?: string; closeCode?: number; error?: string }>(
+    (resolve) => {
+      ws.on("open", () =>
+        send({
+          kind: "hello",
+          protocolVersion: opts.protocolVersion ?? PROTOCOL_VERSION,
+          extensionVersion: "9.9.9",
+          pairingToken: opts.token ?? PAIRING,
+        }),
+      );
+      ws.on("message", (data) => {
+        const msg = parseBridgeMessage(data.toString());
+        if (msg?.kind === "welcome")
+          resolve({ welcomed: true, ...(msg.pairingToken ? { pairingToken: msg.pairingToken } : {}) });
+        else if (msg?.kind === "request" || msg?.kind === "response") void peer.handle(msg);
+      });
+      ws.on("close", (code) => resolve({ welcomed: false, closeCode: code }));
+      ws.on("unexpected-response", (_req, res) => resolve({ welcomed: false, error: String(res.statusCode) }));
+      ws.on("error", (err) => resolve({ welcomed: false, error: err.message }));
+    },
+  );
   return { ws, peer, outcome };
 }
 
@@ -232,6 +235,80 @@ describe("extension bridge", () => {
   });
 });
 
+describe("pairing without a code", () => {
+  const control = (path: string, method: "GET" | "POST", body?: unknown) =>
+    fetch(`http://127.0.0.1:${handle.port}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${MCP_TOKEN}`, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  it("guards the control routes like MCP", async () => {
+    expect(await rawHttp("/control/pair", { "content-type": "application/json" })).toBe(401);
+    expect(await rawHttp("/control/shutdown", { "content-type": "application/json" })).toBe(401);
+    expect(
+      await rawHttp("/control/pair", { authorization: `Bearer ${MCP_TOKEN}`, origin: "https://evil.example" }),
+    ).toBe(403);
+  });
+
+  it("is refused until the CLI opens pairing, then pairs once and hands over the code", async () => {
+    expect(await fakeExtension({ token: "" }).outcome).toMatchObject({ welcomed: false, closeCode: 4001 });
+
+    const opened = await (await control("/control/pair", "POST", { seconds: 60 })).json();
+    expect(opened).toMatchObject({ connected: false, openUntil: expect.any(String) });
+
+    expect(await fakeExtension({ token: "" }).outcome).toEqual({ welcomed: true, pairingToken: PAIRING });
+    expect(saved?.pairedExtensionId).toBe(EXT_A);
+    expect(await (await control("/control/pair", "GET")).json()).toEqual({ pairedExtensionId: EXT_A, connected: true });
+
+    // The window closed with that pairing.
+    expect(await fakeExtension({ token: "" }).outcome).toMatchObject({ welcomed: false, closeCode: 4001 });
+  });
+
+  it("still pins: an open window doesn't let a different extension in", async () => {
+    expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: true });
+    await control("/control/pair", "POST", { seconds: 60 });
+    expect(await fakeExtension({ id: EXT_B, token: "" }).outcome).toMatchObject({ welcomed: false, error: "403" });
+  });
+
+  it("extension_pair opens pairing for Claude, and extension_pair_wait sees the connection", async () => {
+    const client = await mcpClient();
+    const pair = await callJson(client, "extension_pair");
+    expect(pair.data).toMatchObject({
+      connected: false,
+      chrome: { page: "chrome://extensions" },
+      firefox: { page: expect.stringContaining("about:debugging") },
+      hint: expect.stringMatching(/npm run setup/), // no extensionDir in this test: nothing built to load
+    });
+    expect(await fakeExtension({ token: "" }).outcome).toMatchObject({ welcomed: true, pairingToken: PAIRING });
+    expect((await callJson(client, "extension_pair_wait", { timeoutSeconds: 5 })).data).toMatchObject({
+      connected: true,
+    });
+    await client.close();
+  });
+
+  it("extension_pair with replace forgets the old extension and its code", async () => {
+    const old = fakeExtension({ id: EXT_A });
+    expect(await old.outcome).toMatchObject({ welcomed: true });
+    const closed = new Promise<number>((r) => old.ws.on("close", (code) => r(code)));
+
+    const client = await mcpClient();
+    await callJson(client, "extension_pair", { replace: true });
+    expect(await closed).toBe(4001);
+    expect(saved?.pairedExtensionId).toBeUndefined();
+    expect(saved?.pairingToken).not.toBe(PAIRING);
+
+    // The old code no longer works; a new extension pairs through the window and gets the new code.
+    expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: false, closeCode: 4001 });
+    expect(await fakeExtension({ id: EXT_B, token: "" }).outcome).toEqual({
+      welcomed: true,
+      pairingToken: saved?.pairingToken,
+    });
+    expect(saved?.pairedExtensionId).toBe(EXT_B);
+    await client.close();
+  });
+});
+
 describe("set posting → MCP", () => {
   it("reports no active posting before a capture", async () => {
     const client = await mcpClient();
@@ -302,7 +379,7 @@ describe("set posting → MCP", () => {
     const client = await mcpClient();
     const status = await callJson(client, "browser_status");
     expect(status.data.extension.connected).toBe(false);
-    expect(status.data.hint).toMatch(/ezapply pair/);
+    expect(status.data.hint).toMatch(/extension_pair/);
     await client.close();
   });
 });

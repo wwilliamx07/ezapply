@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { resolveEngine } from "./documents/tex/engines.js";
 import type { Services } from "./services.js";
+import { installHint } from "./util/install-hints.js";
 
 export interface ChecklistItem {
   step: string;
@@ -23,7 +24,7 @@ export async function workspaceStatus(
 
   const config = await s.workspace.readConfig();
   const engine = await resolveEngine(config.tex.engine);
-  add("tex", Boolean(engine), engine ? `engine: ${engine.id}` : "No TeX engine; run `ezapply doctor`.");
+  add("tex", Boolean(engine), engine ? `engine: ${engine.id}` : `No TeX engine. ${installHint("tex")}`);
 
   const bridge = s.bridge.status();
   add(
@@ -32,8 +33,8 @@ export async function workspaceStatus(
     bridge.connected
       ? "connected"
       : bridge.paired
-        ? "paired but not connected (open the browser)"
-        : "not paired (ezapply pair)",
+        ? "paired but not connected: ask the user to open the browser (reload the extension if the badge stays grey)"
+        : "not paired: call extension_pair",
   );
 
   const gh = await s.github.status();
@@ -72,7 +73,20 @@ export async function workspaceStatus(
   );
 
   const cover = await s.profile.templateMain("cover");
-  add("cover_template", cover !== null, cover ?? "not created");
+  const coverMeta = await s.profile.templateMeta("cover");
+  add(
+    "cover_template",
+    cover !== null,
+    !cover
+      ? "missing; run `ezapply init` to install the default"
+      : [
+          cover,
+          coverMeta?.origin === "default" ? "ezapply default" : undefined,
+          coverMeta?.example ? `layout from ${coverMeta.example}` : undefined,
+        ]
+          .filter(Boolean)
+          .join("; "),
+  );
 
   const answers = await s.profile.checkAnswers();
   add(

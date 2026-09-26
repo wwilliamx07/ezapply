@@ -2,6 +2,7 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs
 import { basename, dirname, extname, join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
+import { installHint } from "../util/install-hints.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
 import type { PageSizeName } from "./pdf/pages.js";
@@ -17,7 +18,15 @@ import {
   pdfText,
   writeAtomic,
 } from "./pdf/toolkit.js";
-import { ENGINES, type EngineId, resolveEngine } from "./tex/engines.js";
+import {
+  ENGINES,
+  type EngineId,
+  PROGRAM_ENGINES,
+  readTexProgram,
+  resolveEngine,
+  type TexEngine,
+  type TexProgram,
+} from "./tex/engines.js";
 import { parseTexLog, type TexDiagnostic } from "./tex/log.js";
 
 /** Where each kind of operation may read from and write to (workspace-relative). */
@@ -31,9 +40,13 @@ const ROOTS = {
 
 const HISTORY_KEEP = 30;
 
+/** Where the engine choice came from: the file's `% !TEX program` comment, `tex.engine`, or "auto". */
+export type EngineSource = "magic-comment" | "config" | "auto";
+
 export interface CompileResult {
   ok: boolean;
   engine: EngineId;
+  engineFrom: EngineSource;
   pdf?: string;
   pages?: number;
   pageLimit?: number;
@@ -64,8 +77,7 @@ export class DocumentsService {
       throw new EzError(ErrorCode.NotFound, `File not found: ${texPath}`);
     });
     const config = await this.ws.readConfig();
-    const engine = await resolveEngine(config.tex.engine);
-    if (!engine) throw noEngine(config.tex.engine);
+    const { engine, from: engineFrom } = await pickEngine(texPath, config.tex.engine);
 
     const name = basename(texPath, extname(texPath));
     const dir = dirname(texPath);
@@ -89,7 +101,7 @@ export class DocumentsService {
       () => false,
     );
     const failed = engineRun.timedOut || engineRun.exitCode !== 0 || !built;
-    this.log.info({ engine: engine.id, name, ok: !failed, durationMs }, "tex compile");
+    this.log.info({ engine: engine.id, engineFrom, name, ok: !failed, durationMs }, "tex compile");
 
     if (failed) {
       const hint = engineRun.timedOut
@@ -97,7 +109,7 @@ export class DocumentsService {
         : diagnostics.some((d) => d.severity === "error")
           ? "Fix the first error (errors cascade), then recompile."
           : `The engine produced no PDF and no parsable error. Output tail:\n${engineRun.output.slice(-1500)}`;
-      return { ok: false, engine: engine.id, diagnostics, logPath, durationMs, hint };
+      return { ok: false, engine: engine.id, engineFrom, diagnostics, logPath, durationMs, hint };
     }
 
     const pdf = join(dir, `${name}.pdf`);
@@ -110,6 +122,7 @@ export class DocumentsService {
     return {
       ok: true,
       engine: engine.id,
+      engineFrom,
       pdf,
       pages,
       ...(pageLimit !== undefined ? { pageLimit, pageLimitExceeded } : {}),
@@ -222,12 +235,53 @@ export class DocumentsService {
   }
 }
 
+/**
+ * The engine for one file: its `% !TEX program` comment, else tex.engine, else the first installed engine
+ * in AUTO_ORDER. A comment naming a missing or unknown engine is an error, never a fallback: another
+ * engine can change fonts and the page count.
+ */
+async function pickEngine(
+  texPath: string,
+  configured: EngineId | "auto",
+): Promise<{ engine: TexEngine; from: EngineSource }> {
+  const program = readTexProgram(await readFile(texPath, "utf8"));
+  if (program) {
+    if (!program.engine) throw unknownProgram(program, texPath);
+    const engine = ENGINES[program.engine];
+    if (!(await engine.available())) throw missingProgram(program, texPath);
+    return { engine, from: "magic-comment" };
+  }
+  const engine = await resolveEngine(configured);
+  if (!engine) throw noEngine(configured);
+  return { engine, from: configured === "auto" ? "auto" : "config" };
+}
+
+function unknownProgram(program: TexProgram, texPath: string): EzError {
+  const driver = program.value.toLowerCase() === "latexmk" ? " latexmk is a build driver, not an engine." : "";
+  return new EzError(
+    ErrorCode.BadRequest,
+    `Unknown TeX program "${program.value}" in the % !TEX program comment on line ${program.line} of ${basename(texPath)}.`,
+    `Name one of ${PROGRAM_ENGINES.join(", ")}.${driver} Or remove the comment to use tex.engine from ezapply.config.json.`,
+  );
+}
+
+function missingProgram(program: TexProgram, texPath: string): EzError {
+  const install =
+    program.engine === "tectonic"
+      ? "Ask the user to install Tectonic (https://tectonic-typesetting.github.io)."
+      : `MiKTeX and TeX Live both include ${program.engine}. ${installHint("tex")}`;
+  return new EzError(
+    ErrorCode.NotFound,
+    `${program.engine} is not installed (named by the % !TEX program comment on line ${program.line} of ${basename(texPath)}).`,
+    `${install} Don't change or remove the comment to build with another engine: fonts and the page count can change.`,
+  );
+}
+
 function noEngine(configured: EngineId | "auto"): EzError {
   const looked = configured === "auto" ? Object.keys(ENGINES).join(", ") : configured;
   return new EzError(
     ErrorCode.NotFound,
     `No usable TeX engine found (looked for: ${looked}).`,
-    "Install MiKTeX (winget install MiKTeX.MiKTeX) or TeX Live, then restart the ezapply daemon so it sees the new PATH. " +
-      'If a specific engine is configured in ezapply.config.json, set tex.engine to "auto".',
+    `${installHint("tex")} If a specific engine is configured in ezapply.config.json, set tex.engine to "auto".`,
   );
 }

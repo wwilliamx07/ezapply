@@ -12,9 +12,9 @@ export const DaemonConfig = z.object({
   schemaVersion: z.literal(1),
   host: z.literal("127.0.0.1"),
   port: z.number().int().min(1).max(65535),
-  /** Bearer token Claude Code sends to /mcp (written into the workspace .mcp.json). */
+  /** Bearer token for /mcp and /control, presented by `ezapply mcp` and the CLI. Never written into the workspace. */
   mcpToken: z.string().min(32),
-  /** Token the user pastes into the extension options page once. */
+  /** Code the extension presents; handed to it automatically while pairing is open (extension_pair). */
   pairingToken: z.string().min(16),
   /** Extension id pinned on first successful pairing (Chrome extension id or Firefox install UUID). */
   pairedExtensionId: z.string().optional(),

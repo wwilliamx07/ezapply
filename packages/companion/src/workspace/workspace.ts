@@ -4,7 +4,7 @@ import { ErrorCode, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 import { type WorkspaceConfig, WorkspaceConfig as WorkspaceConfigSchema } from "../config/workspace.js";
 
-/** Top-level folders of a workspace. Keep in sync with the layout in plan.md §2.3. */
+/** Top-level folders of a workspace. Keep in sync with references/components/workspace.md. */
 export const WORKSPACE_DIRS = [
   "profile",
   "templates/resume",

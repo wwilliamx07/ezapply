@@ -12,6 +12,7 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "setup": "npm install && npm run build && node packages/cli/dist/main.js init",
     "build": "tsc -b packages/protocol packages/companion packages/cli && npm run build -w @ezapply/extension",
     "typecheck": "tsc -b packages/protocol packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/extension",
     "test": "npm run build && vitest run",

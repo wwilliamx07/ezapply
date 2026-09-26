@@ -9,18 +9,25 @@ import type { Services } from "./services.js";
 
 export const MCP_PATH = "/mcp";
 export const HEALTH_PATH = "/health";
+export const PAIR_PATH = "/control/pair";
+export const SHUTDOWN_PATH = "/control/shutdown";
+
+const MAX_PAIRING_WINDOW_MS = 30 * 60_000;
 
 export interface HttpOptions {
   services: Services;
   bridge: ExtensionBridge;
   mcpToken: string;
   log: Logger;
+  /** Called after answering POST /control/shutdown. */
+  onShutdown?: () => void;
 }
 
 /**
  * One loopback HTTP server hosts three things:
  *   GET  /health  — unauthenticated liveness probe (no user data)
  *   POST /mcp     — MCP Streamable HTTP, stateless, bearer-token protected
+ *   /control/*    — CLI controls (pairing window, shutdown), bearer-token protected
  *   WS   /bridge  — extension connection (see bridge/server.ts)
  */
 export function createHttpServer(opts: HttpOptions): Server {
@@ -61,13 +68,31 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     return;
   }
 
-  if (path !== MCP_PATH) return sendJson(res, 404, { error: "not found" });
+  if (path !== MCP_PATH && path !== PAIR_PATH && path !== SHUTDOWN_PATH) {
+    return sendJson(res, 404, { error: "not found" });
+  }
 
   // Browsers always send Origin on cross-site requests; MCP clients do not. Refuse browser traffic.
   if (req.headers.origin) return sendJson(res, 403, { error: "browser requests are not allowed" });
   if (!bearerOk(req.headers.authorization, opts.mcpToken)) {
-    return sendJson(res, 401, { error: "unauthorized", hint: "Check the Authorization header in .mcp.json" });
+    return sendJson(res, 401, { error: "unauthorized", hint: "The token is mcpToken in ~/.ezapply/daemon.json" });
   }
+
+  if (path === PAIR_PATH) {
+    if (req.method === "GET") return sendJson(res, 200, opts.bridge.pairingStatus());
+    if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+    const body = (await readJsonBody(req)) as { seconds?: unknown } | null;
+    const seconds = typeof body?.seconds === "number" && body.seconds > 0 ? body.seconds : 600;
+    return sendJson(res, 200, opts.bridge.openPairing(Math.min(seconds * 1000, MAX_PAIRING_WINDOW_MS)));
+  }
+  if (path === SHUTDOWN_PATH) {
+    if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+    opts.log.info("http: shutdown requested");
+    sendJson(res, 200, { ok: true });
+    res.on("finish", () => opts.onShutdown?.());
+    return;
+  }
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
@@ -96,6 +121,19 @@ function bearerOk(header: string | undefined, token: string): boolean {
   const a = Buffer.from(m[1]);
   const b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 64 * 1024) return null;
+  }
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

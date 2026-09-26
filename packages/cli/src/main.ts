@@ -11,9 +11,9 @@ import {
   type DaemonConfig,
   DEFAULT_PORT,
   daemonConfigPath,
-  HEALTH_PATH,
   KeyringStore,
   loadDaemonConfig,
+  MCP_PATH,
   newPairingToken,
   newToken,
   resolveEngine,
@@ -23,20 +23,24 @@ import {
   which,
 } from "@ezapply/companion";
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
-import { initWorkspace } from "./workspace-init.js";
+import { ensureDaemon, fetchHealth, openPairing, pairingStatus, stopDaemon, waitFor } from "./daemonctl.js";
+import { runMcpRelay } from "./mcp-relay.js";
+import { type InitReport, initWorkspace } from "./workspace-init.js";
 
-const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "extension");
-const EXTENSION_DIST = join(EXTENSION_DIR, "dist");
-const FIREFOX_MANIFEST = join(EXTENSION_DIR, "dist-firefox", "manifest.json");
+const CLI_MAIN = fileURLToPath(import.meta.url);
+const EXTENSION_DIR = resolve(dirname(CLI_MAIN), "..", "..", "extension");
+const PAIR_WAIT_SECONDS = 10 * 60;
 
 const USAGE = `ezapply ${COMPANION_VERSION}
 
 Usage:
-  ezapply init [--workspace <dir>] [--port <n>]   Create or refresh the workspace and local config
-  ezapply daemon                                  Run the companion (MCP server + extension bridge)
-  ezapply pair [--reset]                          Show the extension pairing code (--reset: new code, unpin extension)
-  ezapply status                                  Check whether the daemon is running
-  ezapply doctor                                  Diagnose the whole setup
+  ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
+  ezapply start | stop | restart                     Run the daemon in the background / stop it / restart it
+  ezapply daemon                                     Run the daemon in the foreground (for debugging)
+  ezapply pair [--reset]                             Pair the browser extension (--reset: forget the paired one)
+  ezapply status                                     Check whether the daemon is running
+  ezapply doctor                                     Diagnose the whole setup
+  ezapply mcp                                        MCP server on stdio (Claude Code runs this)
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -44,6 +48,12 @@ async function main(argv: string[]): Promise<number> {
   switch (command) {
     case "init":
       return cmdInit(rest);
+    case "start":
+      return cmdStart(false);
+    case "restart":
+      return cmdStart(true);
+    case "stop":
+      return cmdStop();
     case "daemon":
       return cmdDaemon();
     case "pair":
@@ -52,6 +62,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdStatus();
     case "doctor":
       return cmdDoctor();
+    case "mcp":
+      return cmdMcp();
     case undefined:
     case "help":
     case "--help":
@@ -64,21 +76,28 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-async function cmdInit(args: string[]): Promise<number> {
-  const { values } = parseArgs({ args, options: { workspace: { type: "string" }, port: { type: "string" } } });
+/** Write ~/.ezapply/daemon.json (keeping tokens and pairing) and create or refresh the workspace. */
+async function initConfig(opts: { workspace?: string; port?: string }): Promise<{
+  config: DaemonConfig;
+  report: InitReport;
+}> {
   const existing = await loadDaemonConfig();
   const config: DaemonConfig = {
     schemaVersion: 1,
     host: "127.0.0.1",
-    port: values.port ? Number(values.port) : (existing?.port ?? DEFAULT_PORT),
+    port: opts.port ? Number(opts.port) : (existing?.port ?? DEFAULT_PORT),
     mcpToken: existing?.mcpToken ?? newToken(),
     pairingToken: existing?.pairingToken ?? newPairingToken(),
     ...(existing?.pairedExtensionId ? { pairedExtensionId: existing.pairedExtensionId } : {}),
-    workspace: resolve(values.workspace ?? existing?.workspace ?? join(homedir(), "ezapply-home")),
+    workspace: resolve(opts.workspace ?? existing?.workspace ?? join(homedir(), "ezapply-home")),
   };
   await saveDaemonConfig(config);
-  const report = await initWorkspace(config);
+  return { config, report: await initWorkspace(config) };
+}
 
+async function cmdInit(args: string[]): Promise<number> {
+  const { values } = parseArgs({ args, options: { workspace: { type: "string" }, port: { type: "string" } } });
+  const { config, report } = await initConfig(values);
   const out = [
     `Workspace: ${config.workspace}`,
     ...report.created.map((p) => `  created  ${p}`),
@@ -87,24 +106,50 @@ async function cmdInit(args: string[]): Promise<number> {
     "",
     `Config:    ${daemonConfigPath()}`,
     "",
-    "Next steps:",
-    "  1. Start the companion:   ezapply daemon   (leave it running)",
-    `  2. Load the extension:    Chrome: chrome://extensions → Developer mode → Load unpacked → ${EXTENSION_DIST}`,
-    `                            Firefox: about:debugging → This Firefox → Load Temporary Add-on → ${FIREFOX_MANIFEST}`,
-    `  3. Pair it:               extension options → port ${config.port}, code ${config.pairingToken}`,
-    `  4. Run Claude Code in:    ${config.workspace}`,
+    "Next:",
+    `  cd "${config.workspace}"`,
+    "  claude",
+    'Then say "set me up". Claude checks what\'s missing (TeX, the browser extension, GitHub, your resume)',
+    "and walks you through it. If the daemon was running an older build: ezapply restart",
     "",
   ];
   process.stdout.write(out.join("\n"));
   return 0;
 }
 
+async function cmdStart(restart: boolean): Promise<number> {
+  const config = await requireConfig();
+  const { started, health } = await ensureDaemon(config, { cliMain: CLI_MAIN, restart });
+  process.stdout.write(
+    started
+      ? `Daemon v${health.version} ${restart ? "restarted" : "started"} in the background on port ${config.port}.\n`
+      : `Daemon v${health.version} is already running on port ${config.port}.\n`,
+  );
+  return 0;
+}
+
+async function cmdStop(): Promise<number> {
+  const config = await requireConfig();
+  process.stdout.write((await stopDaemon(config)) ? "Daemon stopped.\n" : "Daemon was not running.\n");
+  return 0;
+}
+
 async function cmdDaemon(): Promise<number> {
   const config = await requireConfig();
   const log = createLogger();
-  let handle: Awaited<ReturnType<typeof startCompanion>>;
+  let handle: Awaited<ReturnType<typeof startCompanion>> | undefined;
+  const shutdown = async () => {
+    log.info("shutting down");
+    await handle?.close();
+    process.exit(0);
+  };
   try {
-    handle = await startCompanion({ config, log });
+    handle = await startCompanion({
+      config,
+      log,
+      extensionDir: EXTENSION_DIR,
+      onShutdownRequest: () => void shutdown(),
+    });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
       process.stderr.write(`Port ${config.port} is in use. Is the daemon already running? Try: ezapply status\n`);
@@ -112,14 +157,30 @@ async function cmdDaemon(): Promise<number> {
     }
     throw err;
   }
-  const shutdown = async () => {
-    log.info("shutting down");
-    await handle.close();
-    process.exit(0);
-  };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   return new Promise<number>(() => {}); // run until signalled
+}
+
+/** Claude Code's MCP server: relay stdio to the daemon, starting it when needed. Nothing else may use stdout. */
+async function cmdMcp(): Promise<number> {
+  const config = await loadDaemonConfig();
+  if (!config) {
+    process.stderr.write("ezapply is not set up yet. In the ezapply repo run: npm run setup\n");
+    return 1;
+  }
+  const ensure = async () => {
+    await ensureDaemon(config, { cliMain: CLI_MAIN });
+  };
+  await ensure().catch((err: Error) => process.stderr.write(`${err.message}\n`));
+  await runMcpRelay({
+    input: process.stdin,
+    output: process.stdout,
+    url: `http://${config.host}:${config.port}${MCP_PATH}`,
+    token: config.mcpToken,
+    ensureDaemon: ensure,
+  });
+  return 0;
 }
 
 async function cmdPair(args: string[]): Promise<number> {
@@ -129,25 +190,42 @@ async function cmdPair(args: string[]): Promise<number> {
     const { pairedExtensionId: _, ...rest } = config;
     config = { ...rest, pairingToken: newPairingToken() };
     await saveDaemonConfig(config);
-    process.stdout.write("New pairing code generated and extension unpinned. Restart the daemon to apply.\n");
+    process.stdout.write("Forgot the paired extension and made a new pairing code.\n");
   }
+  await ensureDaemon(config, { cliMain: CLI_MAIN, restart: values.reset === true });
+
+  if ((await pairingStatus(config)).connected) {
+    process.stdout.write(`Paired and connected (${config.pairedExtensionId ?? "extension"}).\n`);
+    return 0;
+  }
+  await openPairing(config, PAIR_WAIT_SECONDS);
   process.stdout.write(
     [
-      `Pairing code: ${config.pairingToken}`,
-      `Port:         ${config.port}`,
-      `Pinned:       ${config.pairedExtensionId ?? "(not yet paired)"}`,
-      "Paste these into the ezapply extension's options page.",
+      "Pairing is open. Open the browser with the ezapply extension loaded: it pairs by itself.",
+      `(Using another port? Enter port ${config.port} and code ${config.pairingToken} in the extension options.)`,
+      ...(config.pairedExtensionId
+        ? [`Only the paired extension (${config.pairedExtensionId}) can connect; for a new copy use --reset.`]
+        : []),
+      "Waiting… (Ctrl+C to stop)",
       "",
     ].join("\n"),
   );
-  return 0;
+  const ok = await waitFor(
+    async () => ((await pairingStatus(config).catch(() => null))?.connected ? true : null),
+    PAIR_WAIT_SECONDS * 1000,
+    1000,
+  );
+  process.stdout.write(
+    ok ? "Paired and connected.\n" : "Timed out. Run `ezapply pair` again when the extension is loaded.\n",
+  );
+  return ok ? 0 : 1;
 }
 
 async function cmdStatus(): Promise<number> {
   const config = await requireConfig();
   const health = await fetchHealth(config);
   if (!health) {
-    process.stdout.write(`Daemon not reachable on ${config.host}:${config.port}. Start it with: ezapply daemon\n`);
+    process.stdout.write(`Daemon not reachable on ${config.host}:${config.port}. Start it with: ezapply start\n`);
     return 1;
   }
   process.stdout.write(
@@ -179,7 +257,7 @@ async function cmdDoctor(): Promise<number> {
     add(
       "daemon",
       Boolean(health),
-      health ? `v${health.version} on port ${config.port}` : "not running (ezapply daemon)",
+      health ? `v${health.version} on port ${config.port}` : "not running (ezapply start)",
     );
     if (health) {
       add(
@@ -225,7 +303,7 @@ async function cmdDoctor(): Promise<number> {
     Boolean(engine),
     engine
       ? `${engine.id}${configured === "auto" ? " (auto)" : ""} at ${which(engine.id) ?? "?"}`
-      : `none usable for "${configured}" (install MiKTeX: winget install MiKTeX.MiKTeX, then restart the daemon)`,
+      : `none usable for "${configured}" (install MiKTeX: winget install MiKTeX.MiKTeX, then ezapply restart)`,
   );
   const optional = (name: string, bins: string[], why: string) => {
     const found = bins.map((b) => which(b)).find(Boolean);
@@ -246,21 +324,6 @@ async function requireConfig(): Promise<DaemonConfig> {
     process.exit(1);
   }
   return config;
-}
-
-async function fetchHealth(
-  config: DaemonConfig,
-): Promise<{ version: string; protocolVersion: number; extensionConnected: boolean } | null> {
-  try {
-    const res = await fetch(`http://${config.host}:${config.port}${HEALTH_PATH}`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return res.ok
-      ? ((await res.json()) as { version: string; protocolVersion: number; extensionConnected: boolean })
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 main(process.argv.slice(2)).then(

@@ -8,5 +8,11 @@
     "lib": ["es2023", "dom", "dom.iterable"],
     "types": ["node"]
   },
-  "include": ["packages/protocol/test", "packages/companion/test", "packages/extension/test", "vitest.config.ts"]
+  "include": [
+    "packages/protocol/test",
+    "packages/companion/test",
+    "packages/cli/test",
+    "packages/extension/test",
+    "vitest.config.ts"
+  ]
 }

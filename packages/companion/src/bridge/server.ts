@@ -28,6 +28,8 @@ export interface BridgeOptions {
   /** Extension id pinned at first pairing; connections from any other id are refused. */
   pairedExtensionId: string | undefined;
   onPaired: (extensionId: string) => Promise<void>;
+  /** Persist a forgotten pin and the new pairing code that replaces the old one. */
+  onForgotten: (pairingToken: string) => Promise<void>;
   handlers: Handlers<typeof CompanionApi>;
   log: Logger;
 }
@@ -38,6 +40,13 @@ export interface BridgeStatus {
   extensionVersion?: string;
   connectedAt?: string;
   paired: boolean;
+}
+
+export interface PairingStatus {
+  /** Until when an unpaired extension may pair without the code (ISO time), if open. */
+  openUntil?: string;
+  pairedExtensionId?: string;
+  connected: boolean;
 }
 
 interface Connection {
@@ -56,9 +65,12 @@ export class ExtensionBridge {
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
   private conn: Connection | null = null;
   private pairedExtensionId: string | undefined;
+  private pairingToken: string;
+  private pairingOpenUntil = 0;
 
   constructor(private readonly opts: BridgeOptions) {
     this.pairedExtensionId = opts.pairedExtensionId;
+    this.pairingToken = opts.pairingToken;
   }
 
   status(): BridgeStatus {
@@ -70,6 +82,41 @@ export class ExtensionBridge {
       extensionId: this.conn.extensionId,
       extensionVersion: this.conn.extensionVersion,
       connectedAt: this.conn.connectedAt,
+    };
+  }
+
+  /**
+   * Let the next extension that connects without a code pair and receive it. Opened by the CLI with the
+   * MCP token (setup, pair); closes after one pairing or when the time runs out. Pinning still applies.
+   */
+  openPairing(ms: number): PairingStatus {
+    this.pairingOpenUntil = Date.now() + ms;
+    this.opts.log.info({ seconds: Math.round(ms / 1000) }, "bridge: pairing window open");
+    return this.pairingStatus();
+  }
+
+  /**
+   * Unpin the paired extension (e.g. switching browsers) and replace the pairing code, so the old
+   * extension can't simply reconnect with the code it holds. The next one pairs through the window.
+   */
+  async forgetPaired(newPairingToken: string): Promise<void> {
+    this.pairedExtensionId = undefined;
+    this.pairingToken = newPairingToken;
+    await this.opts.onForgotten(newPairingToken);
+    // Drop it now rather than on the close event, so callers immediately see no connection.
+    const old = this.conn;
+    this.conn = null;
+    old?.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "The extension was unpaired."));
+    old?.socket.close(CloseCode.Unauthorized, "unpaired");
+    this.opts.log.info("bridge: paired extension forgotten");
+  }
+
+  pairingStatus(): PairingStatus {
+    const open = this.pairingOpenUntil > Date.now();
+    return {
+      ...(open ? { openUntil: new Date(this.pairingOpenUntil).toISOString() } : {}),
+      ...(this.pairedExtensionId ? { pairedExtensionId: this.pairedExtensionId } : {}),
+      connected: this.conn !== null,
     };
   }
 
@@ -85,7 +132,7 @@ export class ExtensionBridge {
           "The browser extension is not connected.",
           this.pairedExtensionId
             ? "Ask the user to open their browser (the extension reconnects automatically). If it stays grey, reload the extension."
-            : "The extension has not been paired yet. Ask the user to run `ezapply pair` and paste the code into the extension options page.",
+            : "The extension has not been paired yet. Call extension_pair.",
         ),
       );
     }
@@ -150,20 +197,37 @@ export class ExtensionBridge {
           );
           return;
         }
-        if (!tokensEqual(msg.pairingToken, this.opts.pairingToken)) {
+        const viaWindow = msg.pairingToken === "" && this.pairingOpenUntil > Date.now();
+        if (!viaWindow && !tokensEqual(msg.pairingToken, this.pairingToken)) {
           reject(
             CloseCode.Unauthorized,
-            new EzError(ErrorCode.Unauthorized, "Wrong pairing code.", "Run `ezapply pair` and paste the code again."),
+            msg.pairingToken === ""
+              ? new EzError(
+                  ErrorCode.Unauthorized,
+                  "Not paired yet.",
+                  "Ask Claude in your ezapply workspace to pair the extension.",
+                )
+              : new EzError(
+                  ErrorCode.Unauthorized,
+                  "This extension is no longer paired.",
+                  "Ask Claude in your ezapply workspace to pair the extension again.",
+                ),
           );
           return;
         }
+        if (viaWindow) this.pairingOpenUntil = 0;
         if (!this.pairedExtensionId) {
           await this.opts.onPaired(extensionId);
           this.pairedExtensionId = extensionId;
           log.info("bridge: extension paired");
         }
         conn = this.adopt(socket, extensionId, msg.extensionVersion, send);
-        send({ kind: "welcome", protocolVersion: PROTOCOL_VERSION, companionVersion: this.opts.companionVersion });
+        send({
+          kind: "welcome",
+          protocolVersion: PROTOCOL_VERSION,
+          companionVersion: this.opts.companionVersion,
+          ...(viaWindow ? { pairingToken: this.pairingToken } : {}),
+        });
         log.info({ extensionVersion: msg.extensionVersion }, "bridge: extension connected");
         return;
       }

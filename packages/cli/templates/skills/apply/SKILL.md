@@ -15,7 +15,7 @@ for workarounds; the user presses Submit.
    or the bundle if `bundleRequired`. Make sure they're compiled and current.
 3. `get_form`. Handle the page kind:
    - `posting`: `page_action apply`, then `get_form`.
-   - `auth`: tell the user to sign in or create the account in Chrome and tell you when done. Never fill
+   - `auth`: tell the user to sign in or create the account in their browser and tell you when done. Never fill
      passwords or account forms.
    - `start-choice`: `page_action apply_manually`, unless the user prefers `use_last_application`.
    - `review`: go to **Hand-off**.
@@ -58,7 +58,7 @@ Stop. In one message, give:
 - every answer that came from the user or from your judgment, flagged for a second look
 - anything you could not fill
 
-Then ask the user to review everything in Chrome and press **Submit** themselves. Afterwards, if they tell
+Then ask the user to review everything in their browser and press **Submit** themselves. Afterwards, if they tell
 you they submitted, run `get_form` once so the confirmation page is recorded.
 
 ## Resuming

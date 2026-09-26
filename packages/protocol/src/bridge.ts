@@ -24,6 +24,7 @@ export const HelloMessage = z.object({
   kind: z.literal("hello"),
   protocolVersion: z.number().int(),
   extensionVersion: z.string(),
+  /** Empty when the extension isn't paired yet and asks to pair (only accepted while pairing is open). */
   pairingToken: z.string(),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
@@ -32,6 +33,8 @@ export const WelcomeMessage = z.object({
   kind: z.literal("welcome"),
   protocolVersion: z.number().int(),
   companionVersion: z.string(),
+  /** Sent when the extension paired without a code, for it to store and present from then on. */
+  pairingToken: z.string().optional(),
 });
 export type WelcomeMessage = z.infer<typeof WelcomeMessage>;
 

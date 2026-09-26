@@ -26,7 +26,7 @@ export async function renderBadge(conn?: ConnState): Promise<void> {
       break;
     case "unconfigured":
       color = AMBER;
-      status = "Not paired: open the extension options";
+      status = "Not paired: ask Claude to pair the extension";
       break;
     case "error":
       color = RED;

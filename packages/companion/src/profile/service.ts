@@ -1,8 +1,9 @@
-import { cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, join, relative } from "node:path";
+import { copyFile, cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, relative } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { parseDocument, stringify } from "yaml";
 import type { z } from "zod";
+import { detectTexProgram, readTexProgram, withTexProgram } from "../documents/tex/engines.js";
 import type { Logger } from "../logger.js";
 import { readJson, type Workspace, writeJsonAtomic } from "../workspace/workspace.js";
 import { type AnswerEntry, AnswersFile, missingProfileFields, Profile, ReposFile, TemplateMeta } from "./schema.js";
@@ -24,6 +25,17 @@ const AUX_FILE = /\.(aux|log|out|toc|fls|fdb_latexmk|synctex\.gz|xdv|bbl|blg|bcf
 const SKIP_DIRS = new Set([".git", ".build", ".history", ".previews", "node_modules", "__MACOSX"]);
 const IMPORT_MAX_FILES = 400;
 const IMPORT_MAX_BYTES = 60 * 1024 * 1024;
+const EXAMPLE_MAX_BYTES = 20 * 1024 * 1024;
+/** Sample letters Claude can read: PDFs and text through the documents tools, images directly. */
+const EXAMPLE_KINDS: Record<string, "pdf" | "image" | "text"> = {
+  ".pdf": "pdf",
+  ".png": "image",
+  ".jpg": "image",
+  ".jpeg": "image",
+  ".webp": "image",
+  ".txt": "text",
+  ".md": "text",
+};
 
 const ANSWERS_HEADER = `Screening-question answer bank. Used to fill application questions; Claude asks you when unsure.
   answer:     the confirmed answer ("Yes", "No", or text). null = ask me every time.
@@ -96,14 +108,16 @@ export class ProfileService {
 
   /**
    * Copy a LaTeX project into templates/<kind>/. Build artifacts and VCS folders are skipped. An
-   * existing template is moved to templates/.old/ rather than overwritten.
+   * existing template is moved to templates/.old/ rather than overwritten; replacing one the user has
+   * needs `replace`, replacing ezapply's shipped default does not.
    */
-  async importTemplate(input: {
-    sourceDir: string;
-    kind: TemplateKind;
-    main?: string;
-    replace?: boolean;
-  }): Promise<{ folder: string; main: string; files: string[]; previous?: string }> {
+  async importTemplate(input: { sourceDir: string; kind: TemplateKind; main?: string; replace?: boolean }): Promise<{
+    folder: string;
+    main: string;
+    files: string[];
+    previous?: string;
+    texProgram?: { engine: string; added: boolean; note?: string };
+  }> {
     if (!isAbsolute(input.sourceDir)) {
       throw new EzError(
         ErrorCode.BadRequest,
@@ -135,7 +149,7 @@ export class ProfileService {
     let previous: string | undefined;
     const existing = await readdir(dest).catch(() => [] as string[]);
     if (existing.length > 0) {
-      if (!input.replace) {
+      if (!input.replace && (await this.templateMeta(input.kind))?.origin !== "default") {
         throw new EzError(
           ErrorCode.BadRequest,
           `templates/${input.kind} already has files.`,
@@ -151,28 +165,101 @@ export class ProfileService {
       await mkdir(join(dest, f, ".."), { recursive: true });
       await cp(join(src, f), join(dest, f));
     }
-    const meta: TemplateMeta = { schemaVersion: 1, main, importedFrom: src, importedAt: new Date().toISOString() };
+    const texProgram = await ensureTexProgram(join(dest, main));
+    const meta: TemplateMeta = {
+      schemaVersion: 1,
+      main,
+      origin: "imported",
+      importedFrom: src,
+      importedAt: new Date().toISOString(),
+    };
     await writeJsonAtomic(join(dest, "template.json"), meta);
     this.log.info({ kind: input.kind, files: files.length }, "template imported");
-    return { folder: dest, main: join(dest, main), files, ...(previous ? { previous } : {}) };
+    return {
+      folder: dest,
+      main: join(dest, main),
+      files,
+      ...(previous ? { previous } : {}),
+      ...(texProgram ? { texProgram } : {}),
+    };
+  }
+
+  /**
+   * Copy a sample cover letter (PDF, image or text) into templates/cover/example/ so Claude can read it
+   * and rebuild the template in its layout. Word and other formats must be exported to PDF first.
+   */
+  async importExample(input: { sourcePath: string }): Promise<{
+    path: string;
+    format: "pdf" | "image" | "text";
+    previous?: string;
+  }> {
+    if (!isAbsolute(input.sourcePath)) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        "sourcePath must be an absolute path.",
+        "Ask the user for the full path.",
+      );
+    }
+    const src = input.sourcePath;
+    const srcStat = await stat(src).catch(() => null);
+    if (!srcStat?.isFile()) throw new EzError(ErrorCode.NotFound, `Not a file: ${src}`);
+    const ext = extname(src).toLowerCase();
+    const format = EXAMPLE_KINDS[ext];
+    if (!format) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `Can't read ${ext || "extensionless"} files as an example.`,
+        "Ask the user to export it as a PDF (in Word: File → Save As → PDF) and pass that path, or send a screenshot.",
+      );
+    }
+    if (srcStat.size > EXAMPLE_MAX_BYTES) {
+      throw new EzError(ErrorCode.BadRequest, `${src} is larger than ${EXAMPLE_MAX_BYTES / 1024 / 1024} MB.`);
+    }
+
+    const dir = this.ws.path("templates", "cover", "example");
+    let previous: string | undefined;
+    const existing = (await readdir(dir).catch(() => [] as string[])).filter((f) => !f.startsWith("."));
+    if (existing.length > 0) {
+      previous = this.ws.path("templates", ".old", `cover-example-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+      await mkdir(this.ws.path("templates", ".old"), { recursive: true });
+      await rename(dir, previous);
+    }
+    await mkdir(dir, { recursive: true });
+    const name = basename(src);
+    await copyFile(src, join(dir, name));
+
+    const cur = await this.templateMeta("cover");
+    if (cur)
+      await writeJsonAtomic(this.ws.path("templates", "cover", "template.json"), {
+        ...cur,
+        example: `example/${name}`,
+      });
+    this.log.info({ format }, "cover example imported");
+    return { path: join(dir, name), format, ...(previous ? { previous } : {}) };
+  }
+
+  async templateMeta(kind: TemplateKind): Promise<TemplateMeta | null> {
+    const parsed = TemplateMeta.safeParse(await readJson(this.ws.path("templates", kind, "template.json")));
+    return parsed.success ? parsed.data : null;
   }
 
   /** Main .tex of a template, or null if none is set up. */
   async templateMain(kind: TemplateKind): Promise<string | null> {
-    const parsed = TemplateMeta.safeParse(await readJson(this.ws.path("templates", kind, "template.json")));
-    if (parsed.success) return this.ws.path("templates", kind, parsed.data.main);
-    return null;
+    const meta = await this.templateMeta(kind);
+    return meta ? this.ws.path("templates", kind, meta.main) : null;
   }
 
+  /** Record the entry point. A template Claude reworks stops being the shipped default. */
   async setTemplateMain(kind: TemplateKind, main: string): Promise<void> {
     await stat(this.ws.path("templates", kind, main)).catch(() => {
       throw new EzError(ErrorCode.NotFound, `templates/${kind}/${main} does not exist.`);
     });
-    const cur = TemplateMeta.safeParse(await readJson(this.ws.path("templates", kind, "template.json")));
+    const cur = await this.templateMeta(kind);
     await writeJsonAtomic(this.ws.path("templates", kind, "template.json"), {
-      ...(cur.success ? cur.data : {}),
+      ...cur,
       schemaVersion: 1,
       main,
+      origin: cur?.origin === "imported" ? "imported" : "custom",
     });
   }
 
@@ -260,6 +347,24 @@ async function listImportable(root: string): Promise<string[]> {
   };
   await walk(root, "");
   return out.sort();
+}
+
+/**
+ * The engine an imported main file asks for with `% !TEX program`. A file without the comment that needs
+ * pdflatex gets it added, so it and every tailored copy build with pdflatex whatever tex.engine says.
+ */
+async function ensureTexProgram(mainPath: string): Promise<{ engine: string; added: boolean; note?: string } | null> {
+  const source = await readFile(mainPath, "utf8");
+  const existing = readTexProgram(source);
+  if (existing) return { engine: existing.value, added: false };
+  const needed = detectTexProgram(source);
+  if (!needed) return null;
+  await writeFile(mainPath, withTexProgram(source, needed.engine), "utf8");
+  return {
+    engine: needed.engine,
+    added: true,
+    note: `Added \`% !TEX program = ${needed.engine}\` to ${basename(mainPath)} because ${needed.reason}. Tell the user.`,
+  };
 }
 
 /** The main file is the one with both \documentclass and \begin{document}; prefer shallow, resume-ish names. */

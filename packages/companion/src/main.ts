@@ -23,6 +23,10 @@ export interface CompanionOptions {
   appDataDir?: string;
   /** Defaults to the OS keychain. */
   secrets?: SecretStore;
+  /** The extension package folder, so extension_pair can tell the user what to load. */
+  extensionDir?: string;
+  /** Called when the CLI asks the daemon to stop (POST /control/shutdown). */
+  onShutdownRequest?: () => void;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
 }
@@ -64,6 +68,11 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       config = { ...config, pairedExtensionId: extensionId };
       await save(config);
     },
+    onForgotten: async (pairingToken) => {
+      const { pairedExtensionId: _, ...rest } = config;
+      config = { ...rest, pairingToken };
+      await save(config);
+    },
     handlers: {
       "posting.capture": (payload) => postings.capture(payload),
     },
@@ -80,8 +89,15 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     github,
     repos,
     bridge,
+    ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
   };
-  const server = createHttpServer({ services, bridge, mcpToken: config.mcpToken, log: log.child({ svc: "http" }) });
+  const server = createHttpServer({
+    services,
+    bridge,
+    mcpToken: config.mcpToken,
+    log: log.child({ svc: "http" }),
+    ...(opts.onShutdownRequest ? { onShutdown: opts.onShutdownRequest } : {}),
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

@@ -5,7 +5,8 @@ import { parseDocument } from "yaml";
 import { z } from "zod";
 import type { GitHubService } from "../github/service.js";
 import type { Logger } from "../logger.js";
-import { run } from "../util/proc.js";
+import { installHint } from "../util/install-hints.js";
+import { run, which } from "../util/proc.js";
 import { readJson, type Workspace, writeJsonAtomic } from "../workspace/workspace.js";
 
 /** knowledge/<key>/meta.json */
@@ -118,6 +119,7 @@ export class RepoService {
     const meta = await this.knowledgeMeta(fullName);
     let changedSince: string[] | null = null;
     if (meta && meta.indexedSha !== headSha) {
+      requireGit();
       const diff = await run("git", ["-C", dir, "diff", "--name-only", meta.indexedSha, headSha], {
         timeoutMs: 60_000,
       });
@@ -297,6 +299,7 @@ export class RepoService {
   }
 
   private async git(pre: string[], args: string[]): Promise<string> {
+    requireGit();
     const r = await run("git", [...pre, ...args], {
       timeoutMs: 10 * 60_000,
       maxOutputBytes: 32 * 1024 * 1024,
@@ -314,6 +317,10 @@ export class RepoService {
     }
     return r.stdout;
   }
+}
+
+function requireGit(): void {
+  if (!which("git")) throw new EzError(ErrorCode.NotFound, "git is not installed.", installHint("git"));
 }
 
 function assertRepoName(fullName: string): void {

@@ -18,4 +18,6 @@ export interface Services {
   github: GitHubService;
   repos: RepoService;
   bridge: ExtensionBridge;
+  /** The extension package folder (holds dist/ and dist-firefox/), when known. */
+  extensionDir?: string;
 }
