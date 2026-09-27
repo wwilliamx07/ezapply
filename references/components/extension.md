@@ -50,7 +50,10 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
   `welcome`, start RPC and the 20 s ping. On close: `Unauthorized`/`ProtocolMismatch` → error state
   showing the companion's message and hint (no backoff retries); `Replaced` → nothing; otherwise
-  "disconnected" and retry with backoff from 1 s up to 30 s.
+  "disconnected" and retry with backoff from 1 s up to 30 s. After `Idle` (4005) the reason reads "ezapply
+  is idle; it starts again with Claude Code (Set posting still works)" until the next `welcome`.
+- `hello` carries `pendingCapture: true` when a capture is queued, so a freshly started companion waits
+  for it before answering `posting_active`.
 - **Without a code (not paired):** connect to the default port (17373) with an empty code. It succeeds
   only while pairing is open; the `welcome` then carries the code, which is saved without reconnecting.
   Failures quietly leave the state "not paired" and the alarm tries again.

@@ -20,10 +20,13 @@ export const DaemonConfig = z.object({
   pairedExtensionId: z.string().optional(),
   /** Absolute path of the workspace (ezapply-home). */
   workspace: z.string(),
+  /** Minutes without work before the daemon stops (default 15; 0 = never). Claude Code starts it again. */
+  idleTimeoutMinutes: z.number().min(0).optional(),
 });
 export type DaemonConfig = z.infer<typeof DaemonConfig>;
 
 export const DEFAULT_PORT = 17373;
+export const DEFAULT_IDLE_TIMEOUT_MINUTES = 15;
 
 export function appDir(): string {
   return process.env.EZAPPLY_APP_DIR ?? join(homedir(), ".ezapply");

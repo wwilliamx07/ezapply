@@ -16,11 +16,19 @@ import {
   RpcPeer,
 } from "@ezapply/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
+import type { ActivityTracker } from "../idle.js";
 import type { Logger } from "../logger.js";
 
 export const BRIDGE_PATH = "/bridge";
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+/**
+ * How long after the daemon starts a paired extension is waited for. The daemon starts on demand (and
+ * stops when idle), and the extension notices within its 30 s reconnect alarm.
+ */
+const RECONNECT_GRACE_MS = 40_000;
+/** How long to wait for a capture the extension announced in `hello` (made while the daemon was down). */
+const PENDING_CAPTURE_WAIT_MS = 15_000;
 
 export interface BridgeOptions {
   companionVersion: string;
@@ -32,6 +40,10 @@ export interface BridgeOptions {
   onForgotten: (pairingToken: string) => Promise<void>;
   handlers: Handlers<typeof CompanionApi>;
   log: Logger;
+  /** Counts extension RPC as work for the idle timer; keepalive pings are not work. */
+  activity?: ActivityTracker;
+  /** Override RECONNECT_GRACE_MS (tests). */
+  reconnectGraceMs?: number;
 }
 
 export interface BridgeStatus {
@@ -67,10 +79,54 @@ export class ExtensionBridge {
   private pairedExtensionId: string | undefined;
   private pairingToken: string;
   private pairingOpenUntil = 0;
+  private readonly startedAt = Date.now();
+  /** Resolved whenever an extension completes the handshake. */
+  private readonly connectWaiters = new Set<() => void>();
+  /** Set while a capture announced in `hello` hasn't arrived and been saved yet. */
+  private pendingCapture: { done: Promise<void>; resolve: () => void } | null = null;
 
   constructor(private readonly opts: BridgeOptions) {
     this.pairedExtensionId = opts.pairedExtensionId;
     this.pairingToken = opts.pairingToken;
+  }
+
+  /**
+   * Wait until the extension's view of things has reached the daemon: right after a start, give the paired
+   * extension time to reconnect, then let a capture it queued while the daemon was down be saved. Returns
+   * at once in the steady state. Posting tools call this so the active posting isn't stale.
+   */
+  async settled(): Promise<void> {
+    await this.awaitReconnect();
+    await this.pendingCapture?.done;
+  }
+
+  private async awaitReconnect(): Promise<void> {
+    if (this.conn || !this.pairedExtensionId) return;
+    const remaining = this.startedAt + (this.opts.reconnectGraceMs ?? RECONNECT_GRACE_MS) - Date.now();
+    if (remaining <= 0) return;
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.connectWaiters.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, remaining);
+      this.connectWaiters.add(done);
+    });
+  }
+
+  private expectCapture(): void {
+    let resolve = () => {};
+    const done = new Promise<void>((r) => {
+      resolve = r;
+    });
+    const timer = setTimeout(() => settle(), PENDING_CAPTURE_WAIT_MS);
+    const settle = () => {
+      clearTimeout(timer);
+      if (this.pendingCapture?.done === done) this.pendingCapture = null;
+      resolve();
+    };
+    this.pendingCapture = { done, resolve: settle };
   }
 
   status(): BridgeStatus {
@@ -120,11 +176,12 @@ export class ExtensionBridge {
     };
   }
 
-  call<K extends keyof typeof ExtensionApi & string>(
+  async call<K extends keyof typeof ExtensionApi & string>(
     method: K,
     params: ParamsOf<typeof ExtensionApi, K>,
     timeoutMs?: number,
   ): Promise<ResultOf<typeof ExtensionApi, K>> {
+    await this.awaitReconnect();
     if (!this.conn) {
       return Promise.reject(
         new EzError(
@@ -136,7 +193,12 @@ export class ExtensionBridge {
         ),
       );
     }
-    return this.conn.peer.request(method, params, timeoutMs);
+    const end = this.opts.activity?.begin();
+    try {
+      return await this.conn.peer.request(method, params, timeoutMs);
+    } finally {
+      end?.();
+    }
   }
 
   /** Attach to the HTTP server's `upgrade` event. Returns true when the request was handled. */
@@ -155,10 +217,13 @@ export class ExtensionBridge {
     return true;
   }
 
-  close(): void {
+  /** `code` tells the extension why: CloseCode.Idle after an idle stop, 1001 (going away) otherwise. */
+  close(code: number = 1001, reason = "shutting down"): void {
     this.conn?.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Companion shutting down"));
-    for (const client of this.wss.clients) client.close(1001, "shutting down");
+    for (const client of this.wss.clients) client.close(code, reason);
     this.wss.close();
+    this.pendingCapture?.resolve();
+    for (const done of [...this.connectWaiters]) done();
   }
 
   private onSocket(socket: WebSocket, extensionId: string): void {
@@ -222,6 +287,8 @@ export class ExtensionBridge {
           log.info("bridge: extension paired");
         }
         conn = this.adopt(socket, extensionId, msg.extensionVersion, send);
+        if (msg.pendingCapture) this.expectCapture();
+        for (const done of [...this.connectWaiters]) done();
         send({
           kind: "welcome",
           protocolVersion: PROTOCOL_VERSION,
@@ -236,7 +303,16 @@ export class ExtensionBridge {
         case "ping":
           send({ kind: "pong", t: msg.t });
           return;
-        case "request":
+        case "request": {
+          const end = this.opts.activity?.begin();
+          try {
+            await conn.peer.handle(msg);
+          } finally {
+            end?.();
+            if (msg.method === "posting.capture") this.pendingCapture?.resolve();
+          }
+          return;
+        }
         case "response":
           await conn.peer.handle(msg);
           return;

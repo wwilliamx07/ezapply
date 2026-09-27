@@ -4,11 +4,11 @@
 
 This is the user's ezapply workspace: their profile, base documents, project knowledge, and one folder per
 job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills in
-`.claude/skills/` (onboard, repos, index-repo, resume, cover-letter, bundle, apply, answers): use the
-matching skill for each task. The `ezapply` MCP server starts itself; nothing needs starting.
+`.claude/skills/` (`ezapply-onboard`, `-repos`, `-index-repo`, `-resume`, `-cover-letter`, `-bundle`,
+`-apply`, `-answers`): use the matching skill for each task. The `ezapply` MCP server starts itself; nothing needs starting.
 
 ## Setup and errors
-- New user, "set me up", or `workspace_check` shows missing steps: run the **onboard** skill.
+- New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
 - Tool errors carry a `hint` with the fix (e.g. an install command for this OS). Ask before installing
   anything, run it yourself, then retry. If only the user can do it (load the extension, click in the
   browser), tell them exactly that.
@@ -43,7 +43,7 @@ record them at the top of `postings/<id>/notes.md` under `## Application require
 - documents asked for (resume, cover letter, transcript, writing sample, references, portfolio) and ones
   it says not to send;
 - **"all files in one PDF"** or a single upload: set `bundleRequired: true` with `posting_update_meta`
-  and use the **bundle** skill;
+  and use the **ezapply-bundle** skill;
 - file format, file naming, size limits, page or word limits, who to address, reference numbers to quote,
   questions to answer in the letter, deadline.
 

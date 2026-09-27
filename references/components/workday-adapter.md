@@ -7,7 +7,7 @@ content scripts can't reach.
 
 | File | Role |
 |---|---|
-| `main.ts` | Bundle entry: defines `window.__ezapplyWorkday` (non-enumerable) unless the same `ADAPTER_VERSION` is already there |
+| `main.ts` | Bundle entry: defines `window.__ezapplyWorkday` (non-enumerable) unless the same `ADAPTER_VERSION` (now `"2"`, bumped whenever the API changes) is already there |
 | `api.ts` | `createWorkdayApi(doc, getUrl)`: the methods the background calls, plus `installSubmitGuard` |
 | `extract.ts` | Page detection, field extraction, step info, errors, page actions, `isSubmitControl`, `nextButton` |
 | `fill.ts` | One filler per field kind, option listing and search, uploads |
@@ -16,7 +16,7 @@ content scripts can't reach.
 
 ## API (`window.__ezapplyWorkday`)
 `getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
-`addRepeatable(addButtonId)`, `next()`, `pageAction(action)`, `blockedSubmitAttempts()`. The field registry
+`remove(fieldId, values?)`, `addRepeatable(addButtonId)`, `next()`, `pageAction(action)`, `blockedSubmitAttempts()`. The field registry
 from the last extraction is kept; a lookup whose element went stale re-extracts, and an unknown id fails
 with "call get_form again".
 
@@ -61,7 +61,7 @@ the DOM listeners the submit guard relies on.
 | typeahead | Type the query and pick the match; a value like `"Job Board > LinkedIn"` walks nested menus; arrays select several; already-selected values are skipped; chips are read back |
 | radio, checkbox, checkbox-group | Click the label or input; check `checked`/`aria-checked` |
 | date | `YYYY`, `YYYY-MM` or `YYYY-MM-DD` into the Month/Day/Year segments present; errors if the form needs a part not given |
-| file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`; else a drop on the drop zone; confirmed by the file chip showing the name |
+| file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`; else a drop on the drop zone; confirmed only by a **newly shown** file whose name matches, so a same-named file left from a previous application doesn't pass |
 
 **Option matching** (`matchOption`, whitespace-normalized and case-insensitive): exact, then a unique
 prefix, then a unique substring; otherwise no match (never a guess between several).
@@ -70,11 +70,32 @@ After a batch, the page is re-read and any validation error that appeared is att
 result. `addRepeatable` presses the add button and waits for more field containers. `pageAction` presses
 Apply, Apply Manually, Autofill with Resume or Use My Last Application.
 
+**Attached files** (`attachedFiles` in `extract.ts`) are listed once each: the `file-upload-item-name` elements
+with their row (`file-upload-item` / `file-upload-successful`), or the rows themselves when a tenant has no
+name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
+
+## Removing values and attachments (`remove`)
+Workday pre-fills from the candidate's last application, so a Skills multi-select or a Cover Letter field can
+hold another job's entries. `remove(fieldId, values?)` works on `typeahead` (multi-select) and `file`
+fields; other kinds fail with "use fill_fields". `values` are matched with `matchOption` against what the
+field holds (pill labels, from `promptSelectionLabel` when present, or file names); without `values` it
+removes everything. For each item:
+1. Press its remove control: `DELETE_charm` (or a button labelled delete/remove) on a pill; `delete-file`
+   (or a delete/remove button) in a file row.
+2. If it's still there, confirm a visible dialog that mentions delete/remove by pressing its
+   Delete/Remove/Yes/OK button (never a submit control).
+3. Then React's `onClick` on the control, then the keyboard: focus the pill and send Delete, then Backspace.
+
+Each removal is confirmed by the item count dropping. Returns `{ ok, removed, remaining, notFound?, error? }`.
+The remove-control hooks are best knowledge of Workday's markup and haven't been seen on a live tenant yet
+(they sit behind sign-in); the behavioural fixture has pills with charms, a pill removable only by keyboard,
+and a file whose delete asks for confirmation.
+
 ## Never submitting
 - `next()` refuses on `review` and `confirmation` pages, and whenever the forward button is a submit
   control, returning `refusedReason`.
 - `isSubmitControl`: a control whose text or label is "Submit" / "Submit Application", or the footer/next
-  button while the active step is Review (whatever its label). Fill, add and page-action calls refuse to
+  button while the active step is Review (whatever its label). Fill, remove, add and page-action calls refuse to
   touch such a control.
 - **Submit guard** (`installSubmitGuard`, installed once per document): capture-phase listeners for click,
   mouse and pointer down/up, Enter/Space keys and `submit` cancel any **untrusted** (script-generated)

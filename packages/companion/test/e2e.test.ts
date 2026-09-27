@@ -94,6 +94,12 @@ function fakeForm() {
       ok: true,
       readBack: [file.name],
     }),
+    "form.remove": async ({ fieldId, values }: { fieldId: string; values?: string[] }) => ({
+      fieldId,
+      ok: true,
+      removed: values ?? ["Old_Cover_Letter.pdf"],
+      remaining: [],
+    }),
     "form.addRepeatable": async () => ({ ok: true }),
     "form.next": async () => {
       if (step === "review")
@@ -107,7 +113,9 @@ function fakeForm() {
 }
 
 /** A stand-in for the browser extension speaking the real bridge protocol. */
-function fakeExtension(opts: { id?: string; origin?: string; token?: string; protocolVersion?: number } = {}) {
+function fakeExtension(
+  opts: { id?: string; origin?: string; token?: string; protocolVersion?: number; pendingCapture?: boolean } = {},
+) {
   const ws = new WebSocket(`ws://127.0.0.1:${handle.port}/bridge`, {
     origin: opts.origin ?? `chrome-extension://${opts.id ?? EXT_A}`,
   });
@@ -142,6 +150,7 @@ function fakeExtension(opts: { id?: string; origin?: string; token?: string; pro
           protocolVersion: opts.protocolVersion ?? PROTOCOL_VERSION,
           extensionVersion: "9.9.9",
           pairingToken: opts.token ?? PAIRING,
+          ...(opts.pendingCapture ? { pendingCapture: true } : {}),
         }),
       );
       ws.on("message", (data) => {
@@ -309,6 +318,102 @@ describe("pairing without a code", () => {
   });
 });
 
+describe("idle shutdown and on-demand start", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** Replace the default companion with one that stops after `idleMs` (onShutdownRequest records it). */
+  async function restartWith(extra: { idleTimeoutMs?: number; pairedExtensionId?: string; reconnectGraceMs?: number }) {
+    await handle.close();
+    let stoppedAt: number | undefined;
+    handle = await startCompanion({
+      config: {
+        schemaVersion: 1,
+        host: "127.0.0.1",
+        port: 0,
+        mcpToken: MCP_TOKEN,
+        pairingToken: PAIRING,
+        workspace: join(dir, "ws"),
+        ...(extra.pairedExtensionId ? { pairedExtensionId: extra.pairedExtensionId } : {}),
+      },
+      log: createLogger({ toFile: false, level: "silent" }),
+      appDataDir: join(dir, "app"),
+      secrets: new MemoryStore(),
+      saveConfig: async () => {},
+      onShutdownRequest: () => {
+        stoppedAt ??= Date.now();
+      },
+      ...(extra.idleTimeoutMs ? { idleTimeoutMs: extra.idleTimeoutMs } : {}),
+      ...(extra.reconnectGraceMs !== undefined ? { reconnectGraceMs: extra.reconnectGraceMs } : {}),
+    });
+    return { stopped: () => stoppedAt };
+  }
+
+  it("stops after the idle time even while the extension pings, and tells the extension why", async () => {
+    const d = await restartWith({ idleTimeoutMs: 300 });
+    const ext = fakeExtension();
+    expect((await ext.outcome).welcomed).toBe(true);
+    const closed = new Promise<number>((r) => ext.ws.on("close", (code) => r(code)));
+    const pinger = setInterval(() => ext.ws.send(JSON.stringify({ kind: "ping", t: Date.now() })), 50);
+    try {
+      expect(await closed).toBe(4005); // CloseCode.Idle
+      expect(d.stopped()).toBeDefined();
+    } finally {
+      clearInterval(pinger);
+    }
+  });
+
+  it("stays up during a request and an open pairing window, and counts idle time from their end", async () => {
+    const d = await restartWith({ idleTimeoutMs: 300 });
+    const client = await mcpClient();
+    // extension_pair_wait is in flight until the extension connects, well past the idle time.
+    const waiting = callJson(client, "extension_pair_wait", { timeoutSeconds: 5 });
+    await sleep(700);
+    expect(d.stopped()).toBeUndefined();
+    await fakeExtension().outcome;
+    expect((await waiting).data).toMatchObject({ connected: true });
+
+    const opened = Date.now();
+    const res = await fetch(`http://127.0.0.1:${handle.port}/control/pair`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${MCP_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds: 1 }),
+    });
+    expect(res.status).toBe(200);
+    await sleep(900);
+    expect(d.stopped()).toBeUndefined(); // the window is still open
+    const deadline = Date.now() + 3000;
+    while (!d.stopped() && Date.now() < deadline) await sleep(25);
+    // Window (1 s) + idle time (300 ms), less up to one check interval (75 ms) of granularity.
+    expect((d.stopped() ?? 0) - opened).toBeGreaterThanOrEqual(1000 + 300 - 75);
+  });
+
+  it("after a start, posting_active waits for the paired extension and the capture it queued", async () => {
+    await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 5000 });
+    const client = await mcpClient();
+    const active = callJson(client, "posting_active");
+
+    await sleep(300); // the extension's reconnect alarm fires a little later
+    const ext = fakeExtension({ pendingCapture: true });
+    expect((await ext.outcome).welcomed).toBe(true);
+    await sleep(100);
+    const html = `<div data-automation-id="jobPostingHeader">Data Engineer</div><p>${LONG}</p>`;
+    const capture = await ext.peer.request("posting.capture", {
+      url: "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Data-Engineer_R-2",
+      pageTitle: "Data Engineer",
+      html,
+      visibleHtml: html,
+      visibleText: `Data Engineer\n${LONG}`,
+      jsonLd: [],
+      capturedAt: "2026-09-26T12:00:00.000Z",
+      tabId: 7,
+    });
+
+    const result = await active;
+    expect(result.isError).toBe(false);
+    expect(result.data).toMatchObject({ id: capture.postingId, active: true });
+  });
+});
+
 describe("set posting → MCP", () => {
   it("reports no active posting before a capture", async () => {
     const client = await mcpClient();
@@ -433,6 +538,12 @@ describe("form tools over MCP", () => {
     });
     expect(fill.data[0]).toMatchObject({ ok: true, readBack: "Jane" });
 
+    const cleared = await callJson(client, "remove_items", {
+      fieldId: "main.resume",
+      reason: "left from a previous application",
+    });
+    expect(cleared.data).toMatchObject({ ok: true, removed: ["Old_Cover_Letter.pdf"], remaining: [] });
+
     const up = await callJson(client, "upload_file", {
       fieldId: "main.resume",
       path: `postings/${cap.postingId}/resume.pdf`,
@@ -450,8 +561,13 @@ describe("form tools over MCP", () => {
       .trim()
       .split(/\r?\n/)
       .map((l) => JSON.parse(l));
-    expect(log.map((e) => e.event)).toEqual(["fill", "upload", "next", "next"]);
+    expect(log.map((e) => e.event)).toEqual(["fill", "remove", "upload", "next", "next"]);
     expect(log[0]).toMatchObject({ fieldId: "main.firstName", value: "Jane", source: "profile", ok: true });
+    expect(log[1]).toMatchObject({
+      fieldId: "main.resume",
+      removed: ["Old_Cover_Letter.pdf"],
+      reason: "left from a previous application",
+    });
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentFileStatus, type DaemonConfig } from "@ezapply/companion";
@@ -60,6 +60,32 @@ describe("Claude Code config", () => {
     await initWorkspace(config);
     expect(await readFile(claudeMd, "utf8")).toMatch(/^@EZAPPLY\.md\n/);
     expect(await agentFileStatus(config.workspace)).toMatchObject({ done: true });
+  });
+});
+
+describe("skills", () => {
+  const skills = () => join(config.workspace, ".claude", "skills");
+
+  it("are installed under ezapply- names that can't shadow Claude Code commands", async () => {
+    await initWorkspace(config);
+    const names = await readdir(skills());
+    expect(names).toEqual(expect.arrayContaining(["ezapply-onboard", "ezapply-resume", "ezapply-apply"]));
+    for (const n of names.filter((n) => n.startsWith("ezapply-"))) {
+      const md = await readFile(join(skills(), n, "SKILL.md"), "utf8");
+      expect(md).toMatch(new RegExp(`^---\\nname: ${n}\\n`));
+    }
+  });
+
+  it("removes ezapply's old bare-named skills but keeps the user's own", async () => {
+    await mkdir(join(skills(), "resume"), { recursive: true });
+    await writeFile(join(skills(), "resume", "SKILL.md"), "---\nname: resume\n---\n1. `posting_active`\n");
+    await mkdir(join(skills(), "apply"), { recursive: true });
+    await writeFile(join(skills(), "apply", "SKILL.md"), "---\nname: apply\n---\nMy own apply notes.\n");
+
+    const report = await initWorkspace(config);
+    await expect(stat(join(skills(), "resume"))).rejects.toThrow();
+    expect(await readFile(join(skills(), "apply", "SKILL.md"), "utf8")).toContain("My own apply notes.");
+    expect(report.updated.some((u) => u.includes("renamed to ezapply-resume"))).toBe(true);
   });
 });
 

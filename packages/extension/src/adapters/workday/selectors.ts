@@ -30,11 +30,23 @@ export const SEL = {
   selectedItem: any("selectedItem", "selectedItemList"),
   /** Chips showing a typeahead's selected values. */
   selectedChips: `${A("selectedItemList")} li,${A("selectedItem")}`,
+  /** One selected value (pill) of a multi-select; `selectedItem` when present, else the list's items. */
+  chip: any("selectedItem"),
+  chipInList: within(any("selectedItemList"), "li"),
+  chipLabel: any("promptSelectionLabel", "selectedItemLabel"),
+  /** The pill's remove icon ("charm"); some tenants only label it. Unverified on a live tenant. */
+  chipRemove: `${any("DELETE_charm", "deleteButton", "removeButton")},[role="button"][aria-label*="delete" i],[role="button"][aria-label*="remove" i],button[aria-label*="delete" i],button[aria-label*="remove" i]`,
   promptOption: any("promptOption", "promptLeafNode"),
   popup: '[data-automation-widget="wd-popup"]',
   fileDropZone: any("file-upload-drop-zone"),
   fileInput: `${A("file-upload-input-ref")},input[type="file"]`,
   fileItem: any("file-upload-item-name", "file-upload-successful", "file-upload-item"),
+  /** One attached file: its row, its name, and its delete button. Unverified on a live tenant. */
+  fileRow: any("file-upload-item", "file-upload-successful"),
+  fileName: any("file-upload-item-name"),
+  fileRemove: `${any("delete-file", "file-upload-delete", "DELETE_charm")},button[aria-label*="delete" i],button[aria-label*="remove" i]`,
+  /** A confirmation some tenants show before removing an attachment. */
+  dialog: '[role="dialog"],[role="alertdialog"]',
   addButton: `${any("Add", "add-button", "addButton")},button[aria-label^="Add"]`,
   helpText: `${any("helpText", "formFieldHelpText")},[id$="-helpText"]`,
   confirmation: any("applicationSubmittedMessage", "confirmationMessage", "thankYouMessage"),

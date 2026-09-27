@@ -1,5 +1,5 @@
 ---
-name: answers
+name: ezapply-answers
 description: Review and tidy the screening-question answer bank (profile/answers.yaml), including answers learned while filling applications. Use when the user wants to see, change or clean up their stored answers.
 ---
 

@@ -19,7 +19,7 @@ Read-only tools carry the MCP `readOnlyHint`.
 
 | Tool | Input | Does |
 |---|---|---|
-| `posting_active` | — | The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. None → `no_active_posting` |
+| `posting_active` | — | Right after a daemon start, first waits (≤40 s) for the paired extension and any capture it queued. The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. None → `no_active_posting` |
 | `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active |
 | `posting_activate` | `id` | Make it active; returns its details |
 | `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status |
@@ -79,7 +79,8 @@ appended to the active posting's `form-log.jsonl`, and the posting status moves 
 | `list_options` | `fieldId`, `tabId?` | Options of a dropdown or a typeahead's top level (`hasChildren` = nested menu) |
 | `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead and return matches |
 | `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. Per field: ok, read-back, error, available options |
-| `upload_file` | `fieldId`, `path` (under `postings/` or `library/`, ≤25 MB), `tabId?` | Attach a file; success sets status `attached` |
+| `upload_file` | `fieldId`, `path` (under `postings/` or `library/`, ≤25 MB), `tabId?` | Attach a file; success needs a newly shown file (a same-named file left from a previous application doesn't count) and sets status `attached` |
+| `remove_items` | `fieldId`, `values?` (labels or file names; omit = all), `reason?`, `tabId?` | Remove selected entries from a multi-select (e.g. Skills) or attached files from a file field, typically what Workday carried over from the last application. `{ ok, removed, remaining, notFound?, error? }`; logged as `remove`. An extension without the method gets a "rebuild and reload the extension" hint |
 | `add_repeatable` | `addButtonId`, `tabId?` | Press an add button (another work or education row) |
 | `go_next` | `tabId?` | Next / Save and Continue. Refuses on review and on any submit control |
 | `page_action` | `action` (`apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`), `tabId?` | Start-page buttons |

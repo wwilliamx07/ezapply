@@ -155,7 +155,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Attach a file",
       description:
         "Upload a file from postings/ or library/ (usually the tailored resume.pdf, cover.pdf or a bundle) into a " +
-        "file field. Confirms by reading back the file name shown on the page.",
+        "file field. Confirms by reading back the newly shown file name. If the field still holds files from a " +
+        "previous application (get_form shows them as its value), remove them with remove_items first.",
       inputSchema: { fieldId: z.string(), path: z.string().describe("Workspace-relative or absolute path."), tabId },
     },
     tool(s.log, "upload_file", async ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) => {
@@ -185,6 +186,69 @@ export function registerFormTools(server: McpServer, s: Services): void {
       if (result.ok) await setStatus("attached");
       return result;
     }),
+  );
+
+  server.registerTool(
+    "remove_items",
+    {
+      title: "Remove selections or attachments",
+      description:
+        "Remove selected entries from a multi-select field (kind typeahead, e.g. Skills) or attached files from a " +
+        "file field (e.g. Resume/CV, Cover Letter). Workday pre-fills both from the user's last application, so an " +
+        "old cover letter or another job's skills list may already be there: remove what doesn't belong to this " +
+        "application before uploading or filling. values: labels or file names as get_form shows them (matched " +
+        "like fill values); omit to remove everything in the field. Returns removed, remaining, and notFound. " +
+        "Logged in form-log.jsonl.",
+      inputSchema: {
+        fieldId: z.string(),
+        values: z.array(z.string()).min(1).optional().describe("Entries to remove; omit to clear the field."),
+        reason: z.string().optional().describe("Why, for the log, e.g. 'left from a previous application'."),
+        tabId,
+      },
+    },
+    tool(
+      s.log,
+      "remove_items",
+      async ({
+        fieldId,
+        values,
+        reason,
+        tabId,
+      }: {
+        fieldId: string;
+        values?: string[];
+        reason?: string;
+        tabId?: number;
+      }) => {
+        const result = await s.bridge
+          .call(
+            "form.remove",
+            { fieldId, ...(values ? { values } : {}), ...(tabId === undefined ? {} : { tabId }) },
+            60_000,
+          )
+          .catch((err: unknown) => {
+            const e = EzError.from(err);
+            if (/Unknown method form\.remove/.test(e.message)) {
+              throw new EzError(
+                ErrorCode.BadRequest,
+                "The browser extension is older than this companion and can't remove items.",
+                "Ask the user to rebuild (npm run build) and reload the ezapply extension, then retry.",
+              );
+            }
+            throw e;
+          });
+        await logEvent({
+          event: "remove",
+          fieldId,
+          removed: result.removed,
+          remaining: result.remaining,
+          ...(reason ? { reason } : {}),
+          ok: result.ok,
+          ...(result.error ? { error: result.error } : {}),
+        });
+        return result;
+      },
+    ),
   );
 
   server.registerTool(

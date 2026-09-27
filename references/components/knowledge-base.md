@@ -1,6 +1,6 @@
 # Project knowledge base
 
-The only source of project facts for resumes and cover letters. Built by Claude with the `index-repo` skill
+The only source of project facts for resumes and cover letters. Built by Claude with the `ezapply-index-repo` skill
 from the read-only [repo cache](github-and-repos.md), checked by the daemon (`companion/src/repos/`).
 Accuracy matters more than coverage: every claim must cite the lines that prove it.
 
@@ -41,7 +41,7 @@ claims:
 - The skill's **self-check**: Claude re-reads each claim beside its cited lines and drops or downgrades
   anything the code doesn't directly support.
 
-## Indexing procedure (the `index-repo` skill)
+## Indexing procedure (the `ezapply-index-repo` skill)
 1. `repo_sync` → `changedSince`: `[]` = current, stop; a list = re-index only the affected components (and
    the README if the big picture changed); `null` = everything.
 2. `repo_contributions`: in shared repos, claims cover only the user's own areas and commits, and the
@@ -56,6 +56,6 @@ Reading uses Claude Code's own Read, Grep and Glob. Nothing in the cache is edit
 run, and no git command that changes it is used.
 
 ## How tailoring uses it
-The `resume` and `cover-letter` skills build an **evidence map** from each posting requirement to claim ids
+The `ezapply-resume` and `ezapply-cover-letter` skills build an **evidence map** from each posting requirement to claim ids
 (or profile entries), mark each changed bullet with `% src: <claim-id>`, and never present a requirement
 without evidence as a skill.

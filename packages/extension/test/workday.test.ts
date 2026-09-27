@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWorkdayApi, installSubmitGuard } from "../src/adapters/workday/api.js";
 import { press } from "../src/adapters/workday/dom.js";
 import { buildWorkdayStep } from "./workday-fixture.js";
@@ -14,6 +14,14 @@ class FakeDataTransfer {
   }
 }
 (globalThis as unknown as { DataTransfer: unknown }).DataTransfer = FakeDataTransfer;
+// jsdom also lacks DragEvent, which the upload's drop fallback dispatches.
+(globalThis as unknown as { DragEvent: unknown }).DragEvent = class extends Event {
+  dataTransfer: unknown;
+  constructor(type: string, init: EventInit & { dataTransfer?: unknown } = {}) {
+    super(type, init);
+    this.dataTransfer = init.dataTransfer;
+  }
+};
 
 let fixture: ReturnType<typeof buildWorkdayStep>;
 let api: ReturnType<typeof createWorkdayApi>;
@@ -129,6 +137,51 @@ describe("filling", () => {
     expect(r).toMatchObject({ ok: true, readBack: ["Doe_Resume.pdf"] });
   });
 
+  it("shows what a previous application left in multi-select and file fields", () => {
+    const fields = api.getForm().sections.flatMap((s) => s.fields);
+    expect(fields.find((f) => f.automationId === "formField-skills")).toMatchObject({
+      kind: "typeahead",
+      currentValue: ["Java", "COBOL", "Customer Service", "Fortran"],
+    });
+    expect(fields.find((f) => f.automationId === "formField-coverLetter")).toMatchObject({
+      kind: "file",
+      currentValue: ["cover.pdf"],
+    });
+  });
+
+  it("removes chosen skills, by their charm or the keyboard, and reports what's left", async () => {
+    const r = await api.remove(id("formField-skills"), ["cobol", "Fortran", "Rust"]);
+    expect(r).toMatchObject({
+      ok: false,
+      removed: ["COBOL", "Fortran"],
+      remaining: ["Java", "Customer Service"],
+      notFound: ["Rust"],
+    });
+    expect(r.error).toMatch(/Not in the field: Rust/);
+
+    const all = await api.remove(id("formField-skills"));
+    expect(all).toMatchObject({ ok: true, removed: ["Java", "Customer Service"], remaining: [] });
+  });
+
+  it("unattaches an old file, confirming the dialog, then uploads the new one", async () => {
+    const removed = await api.remove(id("formField-coverLetter"));
+    expect(removed).toMatchObject({ ok: true, removed: ["cover.pdf"], remaining: [] });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+    const up = await api.upload(id("formField-coverLetter"), {
+      name: "cover.pdf",
+      mimeType: "application/pdf",
+      base64: btoa("%PDF-1.4"),
+    });
+    expect(up).toMatchObject({ ok: true, readBack: ["cover.pdf"] });
+  });
+
+  it("refuses fields it can't remove from", async () => {
+    const r = await api.remove(id("formField-legalName--firstName"));
+    expect(r).toMatchObject({ ok: false, removed: [] });
+    expect(r.error).toMatch(/text field. Use fill_fields/);
+  });
+
   it("adds a repeatable row with its own field ids", async () => {
     expect(await api.addRepeatable("add.add-work-experience")).toEqual({ ok: true });
     const ids = api
@@ -137,6 +190,25 @@ describe("filling", () => {
       .filter((f) => f.automationId === "formField-jobTitle")
       .map((f) => f.id);
     expect(ids).toEqual(["work-experience-1.jobTitle", "work-experience-2.jobTitle"]);
+  });
+});
+
+describe("uploading over a leftover file", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("doesn't mistake a same-named file from a previous application for the new upload", async () => {
+    vi.useFakeTimers();
+    fixture = buildWorkdayStep(document, { coverUploadsWork: false });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const fieldId = api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === "formField-coverLetter")?.id as string;
+    const pending = api.upload(fieldId, { name: "cover.pdf", mimeType: "application/pdf", base64: btoa("%PDF") });
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(await pending).toMatchObject({ ok: false, error: "The upload did not appear in the field." });
   });
 });
 

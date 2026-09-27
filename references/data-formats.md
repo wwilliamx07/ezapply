@@ -15,6 +15,7 @@ and adds a migration (run by `ezapply init`). Schemas are zod definitions in the
 | `pairingToken` | the extension's code, `XXXX-XXXX-XXXX-XXXX` from an unambiguous alphabet; rotated when a paired extension is forgotten |
 | `pairedExtensionId?` | pinned Chrome extension id (stored bare, as before Firefox support, so older configs still match) or Firefox install UUID |
 | `workspace` | absolute workspace path |
+| `idleTimeoutMinutes?` | minutes without work before the daemon stops (default 15; 0 = never); kept by `ezapply init` |
 
 ### `github-app.json` (`companion/src/github/service.ts`)
 `{ schemaVersion: 1, appId, slug, clientId, htmlUrl, owner?, createdAt }`: the public parts of the user's
@@ -86,6 +87,7 @@ One JSON object per line, each with `ts`:
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
   `computed`, `user`, `judgment`
 - `{ event: "upload", fieldId, file, ok, error? }`
+- `{ event: "remove", fieldId, removed, remaining, reason?, ok, error? }`
 - `{ event: "next", advanced, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 

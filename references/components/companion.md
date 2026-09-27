@@ -24,6 +24,7 @@ the helpers exported from `src/index.ts`.
 | `workspace/workspace.ts` | `Workspace`: paths, `resolveAllowed` guard, config and `state.json`, atomic writes; `WORKSPACE_DIRS` |
 | `config/daemon.ts`, `config/workspace.ts` | `daemon.json` and `ezapply.config.json` schemas, token generators, `appDir()` |
 | `logger.ts` | pino logger with redaction |
+| `idle.ts` | `IdleMonitor`: counts work in flight and stops the daemon after the idle timeout ([below](#idle-shutdown)) |
 | `util/proc.ts` | `run()` (no shell, tree-kill on timeout), `which()` |
 | `util/install-hints.ts` | OS-specific install commands for TeX and git, used in error hints |
 | `version.ts` | `COMPANION_VERSION` (kept equal to the package version by a test) |
@@ -36,7 +37,18 @@ the helpers exported from `src/index.ts`.
 4. Build the HTTP server and listen on `config.host:config.port` (port 0 picks a free one, for tests).
 
 Options: `config`, `log`, `saveConfig`, `appDataDir`, `secrets` (keychain by default), `extensionDir` (so
-`extension_pair` can name the build folders), `onShutdownRequest`, and GitHub test hooks.
+`extension_pair` can name the build folders), `onShutdownRequest` (the CLI's daemon exits), `idleTimeoutMs`
+(needs `onShutdownRequest`; unset or 0 = never), `reconnectGraceMs` (tests), and GitHub test hooks.
+
+## Idle shutdown
+`IdleMonitor` (`idle.ts`) is created when `idleTimeoutMs` and `onShutdownRequest` are both given; the CLI
+passes `daemon.json`'s `idleTimeoutMinutes` (default 15). Every HTTP request except `/health`, and every
+extension RPC in either direction (`posting.capture`, form calls), is work: `begin()` when it starts, the
+returned function when it ends. Keepalive pings aren't. A check runs every quarter of the timeout (at most
+30 s): with nothing in flight, not busy, and no work for the whole timeout, it logs `idle: shutting down`,
+closes the extension socket with `Idle` (4005) and calls `onShutdownRequest`. Busy means a pairing window
+is open or a GitHub state value is still valid (`GitHubService.flowPending()`: the user may be on GitHub's
+pages); while busy or working, the idle clock restarts.
 
 ## HTTP surface
 
@@ -72,7 +84,11 @@ call a service, return JSON. The full list is in [mcp-tools.md](../mcp-tools.md)
   closes on use. `pairingStatus()` reports `{ openUntil?, pairedExtensionId?, connected }`.
 - **Forgetting** (`forgetPaired(newCode)`): unpins, replaces the pairing code (so the old extension's
   stored code stops working), drops the current connection at once, and persists (`onForgotten`).
-- `call(method, params, timeout)` sends RPC to the extension; without a connection it fails with
+- **After a start** (on demand, often after an idle stop) the paired extension needs up to its 30 s alarm to
+  reconnect. For 40 s after start (`RECONNECT_GRACE_MS`), `call()` and `settled()` wait for it when it's
+  paired but not connected. A `hello` with `pendingCapture: true` makes `settled()` also wait (up to 15 s)
+  until that `posting.capture` has been handled. `posting_active` and `postings_list` call `settled()`.
+- `call(method, params, timeout)` sends RPC to the extension (counted as work); without a connection it fails with
   `extension_disconnected` and a hint (call `extension_pair`, or open the browser).
 - `status()` reports connection details for `browser_status` and `workspace_check`.
 

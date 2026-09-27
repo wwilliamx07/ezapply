@@ -7,7 +7,7 @@ so a change here is a change to the contract between them.
 |---|---|
 | `bridge.ts` | `PROTOCOL_VERSION`, close codes, handshake and envelope messages, `CompanionApi` / `ExtensionApi` method maps, `parseBridgeMessage` |
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
-| `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, and the extension's form methods |
+| `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
 | `browser.ts` | `TabInfo`, `BrowserStatus`, `detectSite(url)` (Workday hosts: `*.myworkdayjobs.com`, `*.myworkdaysite.com`, `*.workday.com`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
@@ -16,8 +16,10 @@ so a change here is a change to the contract between them.
 
 WebSocket, JSON text frames, one message per frame.
 
-1. Extension → `hello { protocolVersion, extensionVersion, pairingToken }`. An empty `pairingToken` asks
-   to pair; it's accepted only while a pairing window is open.
+1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture? }`. An empty
+   `pairingToken` asks to pair; it's accepted only while a pairing window is open. `pendingCapture: true`
+   says a capture made while the companion was down follows right after `welcome` (the companion holds
+   `posting_active` until it's saved).
 2. Companion → `welcome { protocolVersion, companionVersion, pairingToken? }` (the code is included only
    when the extension paired without one), or `reject { error }` followed by a close.
 3. Then either side sends `request` / `response`; the extension sends `ping` every 20 s and gets `pong`.
@@ -30,6 +32,7 @@ The companion closes the socket if no `hello` arrives within 5 s.
 | 4002 | `ProtocolMismatch` | Versions differ; the error hint names the side to rebuild | Error state, as above |
 | 4003 | `Replaced` | A newer connection from the same extension took over | Stays quiet |
 | 4004 | `HandshakeTimeout` | No `hello` in time | Retries with backoff |
+| 4005 | `Idle` | The companion stopped after its idle timeout | "Disconnected: ezapply is idle; it starts again with Claude Code", retries with backoff and the alarm |
 
 Upgrades from an unexpected `Origin` (not `chrome-extension://<32 a–p>` or `moz-extension://<uuid>`, or not
 the pinned id) are refused with HTTP 403 before any message is exchanged.
@@ -61,6 +64,7 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 | `form.searchOptions` | `{ tabId?, fieldId, query }` → `OptionInfo[]` |
 | `form.fill` | `{ tabId?, fills: FillAction[] }` → `FillResult[]` |
 | `form.upload` | `{ tabId?, fieldId, file: UploadFile }` → `FillResult` |
+| `form.remove` | `{ tabId?, fieldId, values? }` → `RemoveResult { fieldId, ok, removed, remaining, notFound?, error? }` (no `values` = all). Added without a version bump; an older extension answers "Unknown method" |
 | `form.addRepeatable` | `{ tabId?, addButtonId }` → `{ ok, error? }` |
 | `form.next` | `{ tabId? }` → `NextResult` |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
@@ -97,8 +101,9 @@ What Claude sees of an application page (`FormSchema`): `adapter`, `tabId`, `url
 `internal`.
 
 ## Changing the protocol
-- Additive, optional fields: no version bump (both sides ignore unknown fields). Example: code-less
-  pairing added the optional `welcome.pairingToken` and kept `PROTOCOL_VERSION` at 2.
+- Additive, optional fields: no version bump (both sides ignore unknown fields). Examples: code-less
+  pairing added the optional `welcome.pairingToken`, and idle shutdown added `hello.pendingCapture` and
+  close code 4005 (an older extension treats it as a plain disconnect); `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its

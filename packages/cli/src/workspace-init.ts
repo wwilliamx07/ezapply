@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type DaemonConfig, defaultWorkspaceConfig, WORKSPACE_DIRS } from "@ezapply/companion";
@@ -63,7 +63,32 @@ export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
     await cp(skillsSrc, join(root, ".claude", "skills"), { recursive: true, force: true });
     report.updated.push(".claude/skills/");
   }
+  await removeLegacySkills(join(root, ".claude", "skills"), report);
   return report;
+}
+
+/**
+ * ezapply's skills before 0.2 had bare names that clashed with Claude Code: a project `resume` skill replaces
+ * the built-in /resume, and a personal skill of the same name overrides a project one. They're now
+ * `ezapply-<name>`. Remove an old folder only when its SKILL.md uses ezapply's tools, so a skill of the
+ * user's own that happens to share a name is kept.
+ */
+const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter", "bundle", "apply", "answers"];
+const EZAPPLY_TOOL =
+  /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check)\b/;
+
+async function removeLegacySkills(skillsDir: string, report: InitReport): Promise<void> {
+  for (const name of LEGACY_SKILLS) {
+    const dir = join(skillsDir, name);
+    const text = await readFile(join(dir, "SKILL.md"), "utf8").catch(() => null);
+    if (text === null) continue;
+    if (EZAPPLY_TOOL.test(text)) {
+      await rm(dir, { recursive: true, force: true });
+      report.updated.push(`${dir} (removed: renamed to ezapply-${name})`);
+    } else {
+      report.kept.push(`${dir} (not ezapply's)`);
+    }
+  }
 }
 
 /** Repo clones are strictly read-only: deny every write path Claude Code has into them. */

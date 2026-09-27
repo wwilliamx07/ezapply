@@ -5,6 +5,7 @@ import type {
   OptionInfo,
   PageAction,
   PageKind,
+  RemoveResult,
   UploadFile,
 } from "@ezapply/protocol";
 import { press, settle, text, waitFor } from "./dom.js";
@@ -18,10 +19,11 @@ import {
   pageErrors,
   stepInfo,
 } from "./extract.js";
-import { fillField, listDropdown, listTypeahead, searchTypeahead, uploadFile } from "./fill.js";
+import { fillField, listDropdown, listTypeahead, removeItems, searchTypeahead, uploadFile } from "./fill.js";
 import { SEL } from "./selectors.js";
 
-export const ADAPTER_VERSION = "1";
+/** Bump when the API changes, so a tab holding an older injected adapter gets the new one. */
+export const ADAPTER_VERSION = "2";
 
 /**
  * The adapter surface the service worker calls (via chrome.scripting in the MAIN world).
@@ -94,6 +96,17 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
         return { fieldId, ...(await uploadFile(r.container, f)) };
       } catch (err) {
         return { fieldId, ok: false, error: (err as Error).message };
+      }
+    },
+
+    /** Remove selected values (multi-select) or attached files; `values` null or absent = all of them. */
+    async remove(fieldId: string, values?: string[] | null): Promise<RemoveResult> {
+      try {
+        const r = ref(fieldId);
+        r.container.scrollIntoView?.({ block: "center" });
+        return { fieldId, ...(await removeItems(r, values)) };
+      } catch (err) {
+        return { fieldId, ok: false, removed: [], remaining: [], error: (err as Error).message };
       }
     },
 

@@ -1,5 +1,5 @@
 ---
-name: apply
+name: ezapply-apply
 description: Fill out the Workday application for the active posting, step by step, and attach the tailored documents, stopping at the review page for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
 ---
 
@@ -48,6 +48,19 @@ for workarounds; the user presses Submit.
    - **Dropdowns and typeaheads:** use `list_options` or `search_options` when unsure of the exact option
      text. Nested menus take a path: `"Job Board > LinkedIn"`.
    - **Files:** use `upload_file` with the posting's PDFs.
+   - **Carried over from a previous application.** Workday (especially "Use My Last Application") pre-fills
+     fields from the user's last application, so a field that already has a value may belong to another
+     job. `fill_fields` only adds to multi-selects and `upload_file` only adds files, so clear first:
+     - **File fields:** any attached file this application didn't upload (check `form-log.jsonl` for this
+       posting's `upload` events) is stale, even when its name matches, e.g. another job's `cover.pdf`.
+       `remove_items` it (no `values` clears the field), then `upload_file` the current document. Remove
+       a stale file even when this posting wants no document in that field.
+     - **Multi-selects such as Skills:** decide the list this application should have (from `profile.yaml`
+       and the posting), `remove_items` the entries that don't belong, then `fill_fields` the missing ones.
+     - Text, dropdowns and radios are simply overwritten by `fill_fields`; check that pre-filled ones match
+       the profile.
+     - Give a `reason` (e.g. "left from a previous application") and list what you removed in the step's
+       report.
 2. `fill_fields` in one batch, with a `source` for every value (`profile`, `answer-bank` + `answerId`,
    `computed`, `user`, `judgment`). Read the results: fix mismatches using `availableOptions`, re-fill, and
    re-check with `get_form` if needed.
@@ -57,6 +70,7 @@ for workarounds; the user presses Submit.
 ## Hand-off (review page)
 Stop. In one message, give:
 - the steps completed and the files attached
+- what you removed that a previous application had left (old attachments, skills)
 - every answer that came from the user or from your judgment, flagged for a second look
 - anything you could not fill
 
@@ -64,5 +78,5 @@ Then ask the user to review everything in their browser and press **Submit** the
 you they submitted, run `get_form` once so the confirmation page is recorded.
 
 ## Resuming
-`postings/<id>/form-log.jsonl` records every fill, upload and step. After an interruption, `get_form`
+`postings/<id>/form-log.jsonl` records every fill, removal, upload and step. After an interruption, `get_form`
 shows where the application stands; continue from there.

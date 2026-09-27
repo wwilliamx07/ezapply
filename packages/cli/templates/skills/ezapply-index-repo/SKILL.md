@@ -1,5 +1,5 @@
 ---
-name: index-repo
+name: ezapply-index-repo
 description: Build or refresh the project knowledge base for one selected GitHub repo, with markdown docs per component and evidence-linked claims.yaml. Use when a selected repo is not indexed, when the user asks to re-index, or when repo_sync reports changes.
 ---
 

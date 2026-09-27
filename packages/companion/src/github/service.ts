@@ -434,6 +434,13 @@ export class GitHubService {
     return parsed.success ? parsed.data : null;
   }
 
+  /** True while a login or app setup the user started in the browser can still complete (keeps the daemon up). */
+  flowPending(): boolean {
+    const now = Date.now();
+    for (const p of this.states.values()) if (p.expires > now) return true;
+    return false;
+  }
+
   private newState(purpose: Pending["purpose"]): string {
     const now = Date.now();
     for (const [k, v] of this.states) if (v.expires < now) this.states.delete(k);

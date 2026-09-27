@@ -8,6 +8,7 @@ ezapply/
   references/               this reference (source of truth)
   plan.md                   the original design plan (history; references/ wins where they differ)
   README.md                 quick start
+  todo.md                   review findings and proposals, ranked (a work list; references/ describes what's built)
   package.json              npm workspaces, scripts
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
@@ -49,7 +50,7 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | File | Covers |
 |---|---|
 | `protocol/test/rpc.test.ts` | RPC round trips, validation, errors, timeouts |
-| `companion/test/e2e.test.ts` | A real daemon on a free port: HTTP guards, control routes, bridge handshake, pinning, Firefox origins, pairing window, `extension_pair`/`replace`, capture → MCP, form tools against a fake extension |
+| `companion/test/e2e.test.ts` | A real daemon on a free port: HTTP guards, control routes, bridge handshake, pinning, Firefox origins, pairing window, `extension_pair`/`replace`, idle shutdown (pings don't count, close code 4005, requests and pairing windows hold it off), `posting_active` waiting for a queued capture after a start, capture → MCP, form tools (incl. `remove_items` and its log entry) against a fake extension |
 | `companion/test/extract.test.ts` | Posting extraction and metadata |
 | `companion/test/documents.test.ts` | Page-range parsing; PDF merge (ranges, bookmarks, metadata, normalizing), render with preview, text, images → PDF, compression, encrypted or broken input, path guards; `% !TEX program` parsing (both spellings, 20-line window, unknown values), pdfTeX-only detection, engine resolution order and no-fallback errors (engines mocked); TeX compile, page limit, snapshots, errors with lines, no shell escape, the default cover template building under auto, and a pdfTeX-only resume building with pdflatex over `tex.engine: xelatex` (real-TeX parts skipped without an engine or without pdflatex) |
 | `companion/test/texlog.test.ts` | TeX log parsing |
@@ -57,9 +58,9 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | `companion/test/github.test.ts` | Against a mock GitHub: app manifest → install → OAuth login, paginated repo listing, callbacks without an issued state rejected, token refresh |
 | `companion/test/repos.test.ts` | With real git: read-only clone, first sync = index everything, changes since the last index, contributions, claims check, malformed repo names |
 | `companion/test/version.test.ts` | `COMPANION_VERSION` equals the package version |
-| `cli/test/workspace-init.test.ts` | `.mcp.json` stdio entry without a token, `EZAPPLY.md` command paths and sections, the `CLAUDE.md` import and `agentFileStatus`, default cover template install and no-overwrite |
+| `cli/test/workspace-init.test.ts` | `.mcp.json` stdio entry without a token, `EZAPPLY.md` command paths and sections, skills installed under `ezapply-` names with matching `name:`, old bare-named ezapply skills removed while a user's own is kept, the `CLAUDE.md` import and `agentFileStatus`, default cover template install and no-overwrite |
 | `cli/test/mcp-relay.test.ts` | The relay starts the daemon on first use, relays requests and notifications, reports an unreachable daemon |
-| `extension/test/workday.test.ts` | Adapter extraction, every filler, next/refusals, submit guard, against a behavioural fixture (jsdom) |
+| `extension/test/workday.test.ts` | Adapter extraction, every filler, removing pills (charm and keyboard) and attachments (with a confirmation dialog), uploads not fooled by a same-named leftover file, next/refusals, submit guard, against a behavioural fixture (jsdom) |
 | `extension/test/workday-live.test.ts` | Page detection on live snapshots (posting, start-choice, sign-in) |
 | `extension/test/manifest.test.ts` | The built Firefox manifest: CSP without `upgrade-insecure-requests` and loopback-only `connect-src`, event-page background, gecko id |
 
@@ -95,6 +96,9 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, on `
 - **Change a stored format:** bump its `schemaVersion`, add a migration run by `ezapply init`, update
   [data-formats.md](data-formats.md).
 - **Change a skill or `EZAPPLY.md`:** edit `packages/cli/templates/`; users get it with `ezapply init`.
+  A new skill is named `ezapply-<name>` (folder and `name:`), never a bare word, so it can't shadow a
+  Claude Code command or be overridden by a user's skill. Renaming one means adding the old name to
+  `LEGACY_SKILLS` in `workspace-init.ts` so `init` removes the old copy.
   `EZAPPLY.md` is in every session's context: keep it near 100 lines, add only rules that apply to every
   task, and put procedures in skills. Rules that must hold even without it (Explore/Plan subagents) also go
   in the MCP server instructions (`mcp/server.ts`).

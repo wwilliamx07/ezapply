@@ -40,7 +40,14 @@
   answer back. If a request can't connect (the daemon died), it starts the daemon again and retries once.
 - **The companion daemon** listens on `127.0.0.1:<port>` (default 17373). One process serves HTTP (MCP,
   control routes, GitHub pages) and the WebSocket bridge. It outlives Claude Code sessions, so the
-  extension stays connected. It stops on SIGINT/SIGTERM or `POST /control/shutdown` (`ezapply stop`). There
+  extension stays connected between them. It stops on SIGINT/SIGTERM, `POST /control/shutdown`
+  (`ezapply stop`), or **after 15 minutes without work** (`idleTimeoutMinutes` in `daemon.json`; 0 = never).
+  Work is MCP, control and GitHub-page requests and extension RPC (captures, form calls); `/health` probes
+  and the extension's keepalive pings don't count, so a connected browser doesn't keep it up. An open
+  pairing window or a GitHub login in progress does, and idle time counts from when the last of these
+  ends. The next Claude Code request starts it again through the relay. After a start, tools that need the
+  extension wait up to 40 s for it to reconnect (its 30 s alarm), and `posting_active`/`postings_list`
+  also wait for a capture it queued while the daemon was down, so the active posting is never stale. There
   is no login item: Claude Code starts it when needed, and the extension queues captures until then. (A
   login item would need different code on each OS, and on Windows a console program started at login
   shows a window; Claude Code is the only consumer of the tools anyway.)

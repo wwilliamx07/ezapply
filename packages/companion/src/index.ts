@@ -1,6 +1,7 @@
 export {
   appDir,
   DaemonConfig,
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_PORT,
   daemonConfigPath,
   loadDaemonConfig,

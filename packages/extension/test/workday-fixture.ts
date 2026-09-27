@@ -3,7 +3,10 @@
  * use (formField-* containers, listbox portals, prompt popups, split dates, drop zones, progress bar).
  * It is not Workday: live verification against real tenants is still required (plan M7 recon).
  */
-export function buildWorkdayStep(doc: Document): { submitClicks: () => number } {
+export function buildWorkdayStep(
+  doc: Document,
+  opts: { coverUploadsWork?: boolean } = {},
+): { submitClicks: () => number } {
   doc.body.innerHTML = `
   <div data-automation-id="applyFlowPage">
     <ol data-automation-id="progressBar">
@@ -25,6 +28,16 @@ export function buildWorkdayStep(doc: Document): { submitClicks: () => number } 
       <div data-automation-id="multiSelectContainer" id="ms-source"><input type="text" aria-required="true"></div>
       <ul data-automation-id="selectedItemList"></ul>
     </div>
+    <div data-automation-id="formField-skills">
+      <label>Skills</label>
+      <div data-automation-id="multiSelectContainer" id="ms-skills"><input type="text"></div>
+      <ul data-automation-id="selectedItemList">
+        <li data-automation-id="selectedItem" tabindex="0"><div data-automation-id="promptSelectionLabel">Java</div><div data-automation-id="DELETE_charm" role="button" aria-label="press delete to clear value"></div></li>
+        <li data-automation-id="selectedItem" tabindex="0"><div data-automation-id="promptSelectionLabel">COBOL</div><div data-automation-id="DELETE_charm" role="button" aria-label="press delete to clear value"></div></li>
+        <li data-automation-id="selectedItem" tabindex="0"><div data-automation-id="promptSelectionLabel">Customer Service</div><div data-automation-id="DELETE_charm" role="button" aria-label="press delete to clear value"></div></li>
+        <li data-automation-id="selectedItem" tabindex="0"><div data-automation-id="promptSelectionLabel">Fortran</div></li>
+      </ul>
+    </div>
     <fieldset>
       <legend>Application Questions</legend>
       <div data-automation-id="formField-previousWorker">
@@ -45,6 +58,13 @@ export function buildWorkdayStep(doc: Document): { submitClicks: () => number } 
         <label>Resume/CV</label>
         <div data-automation-id="file-upload-drop-zone"><input data-automation-id="file-upload-input-ref" type="file"></div>
         <div data-automation-id="uploaded"></div>
+      </div>
+      <div data-automation-id="formField-coverLetter">
+        <label>Cover Letter</label>
+        <div data-automation-id="file-upload-drop-zone"><input id="cl-input" type="file"></div>
+        <div id="cl-files">
+          <div data-automation-id="file-upload-item"><div data-automation-id="file-upload-item-name">cover.pdf</div><button data-automation-id="delete-file" aria-label="Delete cover.pdf"></button></div>
+        </div>
       </div>
     </fieldset>
     <div role="group" id="we" aria-labelledby="we-h">
@@ -145,6 +165,44 @@ export function buildWorkdayStep(doc: Document): { submitClicks: () => number } 
       const shown = doc.querySelector('[data-automation-id="uploaded"]') as HTMLElement;
       shown.innerHTML = `<div data-automation-id="file-upload-item-name">${name}</div>`;
     }
+  });
+
+  // Skills pills: the delete charm removes a pill; a focused pill also goes with Delete/Backspace
+  // ("Fortran" has no charm, so only the keyboard removes it).
+  doc.addEventListener("click", (e) => {
+    const charm = (e.target as Element).closest?.('[data-automation-id="DELETE_charm"]');
+    charm?.closest("li")?.remove();
+  });
+  for (const pill of doc.querySelectorAll<HTMLElement>('[data-automation-id="selectedItem"]')) {
+    pill.addEventListener("keydown", (e) => {
+      if (["Delete", "Backspace"].includes((e as KeyboardEvent).key)) pill.remove();
+    });
+  }
+
+  // Cover letter: holds a file left from a previous application. Deleting asks for confirmation;
+  // uploads append a new row (unless opts.coverUploadsWork is false).
+  const clFiles = doc.getElementById("cl-files") as HTMLElement;
+  clFiles.addEventListener("click", (e) => {
+    const del = (e.target as Element).closest?.('[data-automation-id="delete-file"]');
+    const row = del?.closest('[data-automation-id="file-upload-item"]');
+    if (!row) return;
+    const dialog = doc.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.innerHTML = "<p>Delete this file?</p><button>Delete</button><button>Cancel</button>";
+    dialog.addEventListener("click", (ev) => {
+      if ((ev.target as Element).textContent === "Delete") row.remove();
+      dialog.remove();
+    });
+    doc.body.append(dialog);
+  });
+  const clInput = doc.getElementById("cl-input") as HTMLInputElement;
+  clInput.addEventListener("change", () => {
+    const name = clInput.files?.[0]?.name;
+    if (!name || opts.coverUploadsWork === false) return;
+    const row = doc.createElement("div");
+    row.setAttribute("data-automation-id", "file-upload-item");
+    row.innerHTML = `<div data-automation-id="file-upload-item-name">${name}</div><button data-automation-id="delete-file" aria-label="Delete ${name}"></button>`;
+    clFiles.append(row);
   });
 
   // Repeatable: Add clones the work experience row.

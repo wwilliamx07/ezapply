@@ -1,11 +1,13 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { CloseCode } from "@ezapply/protocol";
 import { ExtensionBridge } from "./bridge/server.js";
 import { appDir, type DaemonConfig, saveDaemonConfig } from "./config/daemon.js";
 import { DocumentsService } from "./documents/service.js";
 import { KeyringStore, type SecretStore } from "./github/secrets.js";
 import { GitHubService } from "./github/service.js";
 import { createHttpServer } from "./http.js";
+import { IdleMonitor } from "./idle.js";
 import { createLogger, type Logger } from "./logger.js";
 import { PostingsService } from "./postings/service.js";
 import { ProfileService } from "./profile/service.js";
@@ -25,8 +27,15 @@ export interface CompanionOptions {
   secrets?: SecretStore;
   /** The extension package folder, so extension_pair can tell the user what to load. */
   extensionDir?: string;
-  /** Called when the CLI asks the daemon to stop (POST /control/shutdown). */
+  /** Called when the CLI asks the daemon to stop (POST /control/shutdown), and after an idle timeout. */
   onShutdownRequest?: () => void;
+  /**
+   * Stop (through onShutdownRequest) after this long without work. Unset or 0: never. The CLI's daemon
+   * passes daemon.json's idleTimeoutMinutes (default 15); Claude Code starts it again on demand.
+   */
+  idleTimeoutMs?: number;
+  /** Override how long a fresh daemon waits for the paired extension to reconnect (tests). */
+  reconnectGraceMs?: number;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
 }
@@ -60,6 +69,20 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   });
   const repos = new RepoService(workspace, github, log.child({ svc: "repos" }), opts.github?.cloneUrl);
 
+  const onShutdown = opts.onShutdownRequest;
+  const idle =
+    onShutdown && opts.idleTimeoutMs
+      ? new IdleMonitor({
+          timeoutMs: opts.idleTimeoutMs,
+          busy: () => bridge.pairingStatus().openUntil !== undefined || github.flowPending(),
+          onIdle: () => {
+            log.info({ minutes: Math.round((opts.idleTimeoutMs ?? 0) / 60_000) }, "idle: shutting down");
+            bridge.close(CloseCode.Idle, "idle");
+            onShutdown();
+          },
+        })
+      : undefined;
+
   const bridge = new ExtensionBridge({
     companionVersion: COMPANION_VERSION,
     pairingToken: config.pairingToken,
@@ -77,6 +100,8 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       "posting.capture": (payload) => postings.capture(payload),
     },
     log: log.child({ svc: "bridge" }),
+    ...(idle ? { activity: idle } : {}),
+    ...(opts.reconnectGraceMs !== undefined ? { reconnectGraceMs: opts.reconnectGraceMs } : {}),
   });
 
   const services: Services = {
@@ -97,6 +122,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     mcpToken: config.mcpToken,
     log: log.child({ svc: "http" }),
     ...(opts.onShutdownRequest ? { onShutdown: opts.onShutdownRequest } : {}),
+    ...(idle ? { activity: idle } : {}),
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -113,6 +139,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     port,
     services,
     close: async () => {
+      idle?.stop();
       bridge.close();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -11,8 +11,8 @@ export function registerProfileTools(server: McpServer, s: Services): void {
       title: "Workspace readiness",
       description:
         "Onboarding checklist: TeX, extension, GitHub login, selected repos, knowledge base, resume/cover templates, " +
-        "profile, answer bank, preferences, library. Returns `nextStep`, the first required item not done. The onboard " +
-        "skill walks these in order.",
+        "profile, answer bank, preferences, library. Returns `nextStep`, the first required item not done. The " +
+        "ezapply-onboard skill walks these in order.",
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "workspace_check", () => workspaceStatus(s)),

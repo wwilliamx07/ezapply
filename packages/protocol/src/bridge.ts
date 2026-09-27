@@ -18,6 +18,8 @@ export const CloseCode = {
   ProtocolMismatch: 4002,
   Replaced: 4003,
   HandshakeTimeout: 4004,
+  /** The companion stopped after a period of inactivity; Claude Code starts it again when needed. */
+  Idle: 4005,
 } as const;
 
 export const HelloMessage = z.object({
@@ -26,6 +28,8 @@ export const HelloMessage = z.object({
   extensionVersion: z.string(),
   /** Empty when the extension isn't paired yet and asks to pair (only accepted while pairing is open). */
   pairingToken: z.string(),
+  /** A capture made while the companion was down follows right after `welcome`. */
+  pendingCapture: z.boolean().optional(),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 

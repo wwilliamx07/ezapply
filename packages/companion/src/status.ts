@@ -30,7 +30,7 @@ export async function agentFileStatus(root: string): Promise<{ done: boolean; de
 }
 
 /**
- * Onboarding / readiness checklist, in the order the onboard skill walks through it.
+ * Onboarding / readiness checklist, in the order the ezapply-onboard skill walks through it.
  * Each item is cheap to compute so Claude can call this freely.
  */
 export async function workspaceStatus(

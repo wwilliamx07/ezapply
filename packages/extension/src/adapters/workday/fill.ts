@@ -14,7 +14,7 @@ import {
   text,
   waitFor,
 } from "./dom.js";
-import { type FieldRef, fieldKind, optionLabel } from "./extract.js";
+import { attachedFiles, type FieldRef, fieldKind, isSubmitControl, optionLabel } from "./extract.js";
 import { SEL, within } from "./selectors.js";
 
 type Result = Omit<FillResult, "fieldId">;
@@ -343,8 +343,10 @@ async function fillDate(c: HTMLElement, value: string): Promise<Result> {
 
 export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
   if (fieldKind(c) !== "file") return fail("Not a file field.");
-  const names = () => [...c.querySelectorAll(SEL.fileItem)].map(text).filter(Boolean);
-  const done = () => names().some((n) => n.includes(file.name));
+  const names = () => attachedFiles(c).map((f) => f.name);
+  // Only a newly shown file counts: a same-named file left from a previous application must not pass.
+  const before = new Set(attachedFiles(c).map((f) => f.nameEl));
+  const done = () => attachedFiles(c).some((f) => !before.has(f.nameEl) && f.name.includes(file.name));
   const input = c.querySelector<HTMLInputElement>(SEL.fileInput);
   const dt = new DataTransfer();
   dt.items.add(file);
@@ -368,4 +370,124 @@ export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
   return done()
     ? { ok: true, readBack: names() }
     : fail("The upload did not appear in the field.", { readBack: names() });
+}
+
+// ---- removing selected values and attachments ----------------------------------------------------
+
+export interface RemoveOutcome {
+  ok: boolean;
+  removed: string[];
+  remaining: string[];
+  notFound?: string[];
+  error?: string;
+}
+
+interface Item {
+  label: string;
+  el: HTMLElement;
+  remove: HTMLElement | null;
+}
+
+function chipItems(c: HTMLElement): Item[] {
+  const own = [...c.querySelectorAll<HTMLElement>(SEL.chip)];
+  const els = own.length ? own : [...c.querySelectorAll<HTMLElement>(SEL.chipInList)];
+  return els.map((el) => ({
+    label: text(el.querySelector(SEL.chipLabel) ?? el),
+    el,
+    remove: el.querySelector<HTMLElement>(SEL.chipRemove),
+  }));
+}
+
+function fileItems(c: HTMLElement): Item[] {
+  return attachedFiles(c).map((f) => ({
+    label: f.name,
+    el: f.row,
+    remove: f.row.querySelector<HTMLElement>(SEL.fileRemove),
+  }));
+}
+
+/** Press the confirm button of a delete/remove confirmation, if one appeared. */
+async function confirmRemoval(doc: Document): Promise<void> {
+  const dialog = [...doc.querySelectorAll<HTMLElement>(SEL.dialog)].find(
+    (d) => isVisible(d) && /delete|remove/i.test(text(d)),
+  );
+  const button = dialog
+    ? [...dialog.querySelectorAll<HTMLElement>("button,[role='button']")].find((b) =>
+        /^(delete|remove|yes|ok|confirm)$/i.test(text(b)),
+      )
+    : undefined;
+  if (button && !isSubmitControl(button)) {
+    press(button);
+    await settle(doc, 150, 1500);
+  }
+}
+
+async function removeOne(c: HTMLElement, item: Item, gone: () => boolean): Promise<boolean> {
+  const doc = c.ownerDocument;
+  if (item.remove && !isSubmitControl(item.remove)) {
+    press(item.remove);
+    if (await waitFor(gone, 1500)) return true;
+    await confirmRemoval(doc);
+    if (await waitFor(gone, 1500)) return true;
+    callReact(item.remove, "onClick", {});
+    if (await waitFor(gone, 1500)) return true;
+  }
+  // Keyboard fallback: a focused pill is removed with Delete or Backspace.
+  item.el.focus?.();
+  key(item.el, "Delete");
+  if (await waitFor(gone, 800)) return true;
+  key(item.el, "Backspace");
+  return Boolean(await waitFor(gone, 800));
+}
+
+/**
+ * Remove selected values from a multi-select (e.g. Skills) or attached files from a file field. Workday
+ * pre-fills both from the candidate's last application. `values` are matched like fill values (exact,
+ * then a unique prefix, then a unique substring); without them, everything in the field is removed.
+ */
+export async function removeItems(ref: FieldRef, values?: string[] | null): Promise<RemoveOutcome> {
+  const c = ref.container;
+  const kind = ref.field.kind;
+  if (kind !== "typeahead" && kind !== "file") {
+    return {
+      ok: false,
+      removed: [],
+      remaining: [],
+      error: `remove_items works on multi-select (typeahead) and file fields; this is a ${kind} field. Use fill_fields to change it.`,
+    };
+  }
+  const items = () => (kind === "file" ? fileItems(c) : chipItems(c));
+  const current = items().map((i) => i.label);
+  const notFound: string[] = [];
+  const targets: string[] = [];
+  for (const v of values ?? current) {
+    const idx = matchOption(v, current);
+    if (idx < 0) notFound.push(v);
+    else targets.push(current[idx] as string);
+  }
+
+  const removed: string[] = [];
+  const failed: string[] = [];
+  for (const label of targets) {
+    const matching = () => items().filter((i) => norm(i.label) === norm(label));
+    const before = matching().length;
+    const item = matching()[0];
+    if (!item) continue;
+    if (await removeOne(c, item, () => matching().length < before)) removed.push(label);
+    else failed.push(label);
+    await settle(c.ownerDocument, 150, 1500);
+  }
+
+  const remaining = items().map((i) => i.label);
+  const problems = [
+    failed.length ? `Could not remove: ${failed.join(", ")}.` : "",
+    notFound.length ? `Not in the field: ${notFound.join(", ")} (it holds: ${current.join(", ") || "nothing"}).` : "",
+  ].filter(Boolean);
+  return {
+    ok: problems.length === 0,
+    removed,
+    remaining,
+    ...(notFound.length ? { notFound } : {}),
+    ...(problems.length ? { error: problems.join(" ") } : {}),
+  };
 }

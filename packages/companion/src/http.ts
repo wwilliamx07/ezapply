@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { ExtensionBridge } from "./bridge/server.js";
+import type { ActivityTracker } from "./idle.js";
 import type { Logger } from "./logger.js";
 import { createMcpServer } from "./mcp/server.js";
 import type { Services } from "./services.js";
@@ -21,6 +22,8 @@ export interface HttpOptions {
   log: Logger;
   /** Called after answering POST /control/shutdown. */
   onShutdown?: () => void;
+  /** Counts every request except /health (probes must not keep an idle daemon up) as work. */
+  activity?: ActivityTracker;
 }
 
 /**
@@ -32,6 +35,8 @@ export interface HttpOptions {
  */
 export function createHttpServer(opts: HttpOptions): Server {
   const server = createServer((req, res) => {
+    const end = req.url?.startsWith(HEALTH_PATH) ? undefined : opts.activity?.begin();
+    if (end) res.on("close", end);
     void route(req, res, server, opts).catch((err: unknown) => {
       opts.log.error({ err: (err as Error).message }, "http: unhandled error");
       if (!res.headersSent) sendJson(res, 500, { error: "internal" });

@@ -304,8 +304,23 @@ function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
       return [y, m?.padStart(2, "0"), d?.padStart(2, "0")].filter(Boolean).join("-");
     }
     case "file":
-      return [...c.querySelectorAll(SEL.fileItem)].map(text).filter(Boolean);
+      return attachedFiles(c).map((f) => f.name);
   }
+}
+
+/**
+ * The files attached to a file field, once each: `name` from the file-name element, `row` the element
+ * holding it and its delete button. A row and the name inside it both match the file hooks, so rows are
+ * used only when a tenant shows no separate name element.
+ */
+export function attachedFiles(c: Element): { name: string; row: HTMLElement; nameEl: HTMLElement }[] {
+  const names = [...c.querySelectorAll<HTMLElement>(SEL.fileName)];
+  const found = names.length
+    ? names.map((n) => ({ nameEl: n, row: n.closest<HTMLElement>(SEL.fileRow) ?? n.parentElement ?? n }))
+    : [...c.querySelectorAll<HTMLElement>(SEL.fileItem)]
+        .filter((el, _, all) => !all.some((o) => o !== el && o.contains(el)))
+        .map((el) => ({ nameEl: el, row: el }));
+  return found.map((f) => ({ ...f, name: text(f.nameEl) })).filter((f) => f.name);
 }
 
 export function optionLabel(input: HTMLInputElement): string {

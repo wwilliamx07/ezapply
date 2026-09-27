@@ -1,5 +1,5 @@
 ---
-name: bundle
+name: ezapply-bundle
 description: Combine application documents (cover letter, resume, transcript, portfolio…) into a single PDF when a posting or form requires one file. Use when the user asks to combine or merge documents, or when the posting requires a single upload.
 ---
 

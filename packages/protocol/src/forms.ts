@@ -88,6 +88,20 @@ export const FillResult = z.object({
 });
 export type FillResult = z.infer<typeof FillResult>;
 
+/** Result of removing selected values or attached files from a field. */
+export const RemoveResult = z.object({
+  fieldId: z.string(),
+  ok: z.boolean(),
+  /** Labels or file names that were removed. */
+  removed: z.array(z.string()),
+  /** What the field still holds afterwards. */
+  remaining: z.array(z.string()),
+  /** Requested values that matched nothing in the field. */
+  notFound: z.array(z.string()).optional(),
+  error: z.string().optional(),
+});
+export type RemoveResult = z.infer<typeof RemoveResult>;
+
 export const OptionInfo = z.object({
   label: z.string(),
   /** Hierarchical prompts: choosing this opens another level. */
@@ -125,6 +139,11 @@ export const FormMethods = {
   },
   "form.fill": { params: TabParam.extend({ fills: z.array(FillAction).min(1) }), result: z.array(FillResult) },
   "form.upload": { params: TabParam.extend({ fieldId: z.string(), file: UploadFile }), result: FillResult },
+  /** Remove selected values (multi-select) or attached files (file field); no `values` = all. */
+  "form.remove": {
+    params: TabParam.extend({ fieldId: z.string(), values: z.array(z.string()).min(1).optional() }),
+    result: RemoveResult,
+  },
   "form.addRepeatable": {
     params: TabParam.extend({ addButtonId: z.string() }),
     result: z.object({ ok: z.boolean(), error: z.string().optional() }),

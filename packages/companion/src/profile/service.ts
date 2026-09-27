@@ -79,7 +79,10 @@ export class ProfileService {
   async checkProfile() {
     const p = await this.profile();
     if (!p.exists)
-      return { exists: false, hint: "Create profile/profile.yaml (the onboard skill extracts it from the resume)." };
+      return {
+        exists: false,
+        hint: "Create profile/profile.yaml (the ezapply-onboard skill extracts it from the resume).",
+      };
     if (!p.valid) return { exists: true, valid: false, errors: p.errors };
     return { exists: true, valid: true, missing: missingProfileFields(p.value) };
   }

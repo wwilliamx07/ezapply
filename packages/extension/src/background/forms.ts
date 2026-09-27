@@ -86,6 +86,9 @@ export const formHandlers: FormHandlers = {
   "form.fill": async ({ tabId, fills }) => callAdapter(requireWorkday(await resolveTab(tabId)), "fill", [fills]),
   "form.upload": async ({ tabId, fieldId, file }) =>
     callAdapter(requireWorkday(await resolveTab(tabId)), "upload", [fieldId, file]),
+  // executeScript args must be JSON-serializable: send null rather than undefined for "all values".
+  "form.remove": async ({ tabId, fieldId, values }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "remove", [fieldId, values ?? null]),
   "form.addRepeatable": async ({ tabId, addButtonId }) =>
     callAdapter(requireWorkday(await resolveTab(tabId)), "addRepeatable", [addButtonId]),
   "form.next": async ({ tabId }) => callAdapter(requireWorkday(await resolveTab(tabId)), "next", []),

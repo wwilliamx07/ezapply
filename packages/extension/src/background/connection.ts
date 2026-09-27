@@ -31,6 +31,8 @@ export class CompanionConnection {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private backoff = 1_000;
   private connecting = false;
+  /** The companion last went away because it was idle, so later failed reconnects say so too. */
+  private lastCloseWasIdle = false;
   /** Settings the current socket was opened with; an empty token means "asking to pair". */
   private active: Settings | null = null;
   private readonly listeners = new Set<(s: ConnState) => void>();
@@ -71,6 +73,8 @@ export class CompanionConnection {
     const settings: Settings = stored ?? { port: DEFAULT_PORT, pairingToken: "" };
     this.active = settings;
     this.connecting = true;
+    // Tells a freshly started companion to wait for this capture before answering posting_active.
+    const pendingCapture = (await store.pendingCapture()) !== null;
     clearTimeout(this.retry);
     if (!pairing) await this.setState({ state: "connecting" });
 
@@ -93,6 +97,7 @@ export class CompanionConnection {
         protocolVersion: PROTOCOL_VERSION,
         extensionVersion: this.extensionVersion,
         pairingToken: settings.pairingToken,
+        ...(pendingCapture ? { pendingCapture } : {}),
       });
     };
 
@@ -102,6 +107,7 @@ export class CompanionConnection {
       switch (msg.kind) {
         case "welcome":
           welcomed = true;
+          this.lastCloseWasIdle = false;
           this.connecting = false;
           this.backoff = 1_000;
           this.peer = new RpcPeer({
@@ -153,9 +159,15 @@ export class CompanionConnection {
         return;
       }
       if (ev.code === CloseCode.Replaced) return;
+      const idle = ev.code === CloseCode.Idle || (!welcomed && this.lastCloseWasIdle);
+      this.lastCloseWasIdle = idle;
       await this.setState({
         state: "disconnected",
-        reason: welcomed ? "companion closed the connection" : "companion not reachable",
+        reason: idle
+          ? "ezapply is idle; it starts again with Claude Code (Set posting still works)"
+          : welcomed
+            ? "companion closed the connection"
+            : "companion not reachable",
       });
       this.scheduleRetry();
     };

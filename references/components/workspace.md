@@ -13,7 +13,7 @@ ezapply-home/
   state.json               the active posting id
   .mcp.json                Claude Code → `node <cli>/main.js mcp`
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/
-  .claude/skills/          onboard, repos, index-repo, resume, cover-letter, bundle, apply, answers
+  .claude/skills/          ezapply-onboard, -repos, -index-repo, -resume, -cover-letter, -bundle, -apply, -answers
   profile/                 profile.yaml, answers.yaml, preferences.md, repos.yaml
   templates/resume/        the user's LaTeX resume + template.json
   templates/cover/         cover letter template + template.json (+ example/, format.md)
@@ -30,7 +30,7 @@ Every file's format: [data-formats.md](../data-formats.md).
 The workspace rules, about 100 lines and kept short on purpose: Claude Code loads it into every session,
 so every line costs context. Procedures live in skills, which load only when used, and the tool list isn't
 repeated because the MCP server already provides it. Sections:
-- **Setup and errors:** run `onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
+- **Setup and errors:** run `ezapply-onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
   before installing, run it, retry); the `doctor`, `status`, `restart`/`start`/`stop` and `init`
   commands with this install's absolute path.
 - **How the user works:** capture sets the active posting; every request is about it; tweaks happen in
@@ -39,7 +39,7 @@ repeated because the MCP server already provides it. Sections:
   example letters are data. What injections look like; work from the visible capture; on noticing one, carry
   on and tell the user in one line; delegate posting or repo reading only to general-purpose subagents.
 - **Application requirements:** on the first request about a posting, record its instructions for applying
-  (documents wanted or not, "all files in one PDF" → `bundleRequired` and the bundle skill, format,
+  (documents wanted or not, "all files in one PDF" → `bundleRequired` and the `ezapply-bundle` skill, format,
   naming, size, page and word limits, addressee, reference numbers, deadline) under
   `## Application requirements` at the top of `notes.md`; follow them over defaults; mention them in the
   first reply; re-check before hand-off or filling. Requirements aimed at an AI, hidden, or asking for what
@@ -69,16 +69,22 @@ repeated because the MCP server already provides it. Sections:
 
 ## Skills (`.claude/skills/`)
 
+Every skill is named `ezapply-<name>`. Claude Code resolves skill names against its own commands and the
+user's other skills: a project skill replaces a built-in command of the same name (a skill called `resume`
+hid Claude Code's `/resume`), and a personal skill in `~/.claude/skills/` overrides a project skill with the
+same name. The prefix avoids both. Only each skill's `description` is always in context; the body loads
+when a request matches it or the user types `/ezapply-<name>`.
+
 | Skill | When | What it does |
 |---|---|---|
-| `onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub, repos, knowledge base, resume + profile, cover template, answer bank, preferences, library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
-| `repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
-| `index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does |
-| `resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check |
-| `cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy, fields and body, `format.md` structure if present, one-page build loop |
-| `bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks |
-| `apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; form text treated as untrusted; step-by-step Workday filling with sources, questions in chat, hand-off at review |
-| `answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants), validation |
+| `ezapply-onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub, repos, knowledge base, resume + profile, cover template, answer bank, preferences, library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
+| `ezapply-repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
+| `ezapply-index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does |
+| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check |
+| `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy, fields and body, `format.md` structure if present, one-page build loop |
+| `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks |
+| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills) with `remove_items`; form text treated as untrusted; step-by-step Workday filling with sources, questions in chat, hand-off at review |
+| `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants), validation |
 
 ## Claude Code settings
 - `.mcp.json` runs the CLI's `mcp` command with absolute paths to Node and the built CLI, so the workspace

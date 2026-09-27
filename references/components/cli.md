@@ -10,7 +10,7 @@ controls the daemon. Run it as `npm run ezapply -- <command>` or `node packages/
 | `init [--workspace <dir>] [--port <n>]` | Write `~/.ezapply/daemon.json` and create or refresh the workspace; print the next steps |
 | `mcp` | Claude Code's MCP server (stdio relay to the daemon; starts it when needed). Nothing else may write to stdout |
 | `start` / `stop` / `restart` | Start the daemon in the background / stop it / stop and start (to pick up a new build) |
-| `daemon` | Run the daemon in the foreground (debugging) |
+| `daemon` | Run the daemon in the foreground (debugging). Stops after `idleTimeoutMinutes` without work (default 15; set 0 in `daemon.json` to keep it up) |
 | `pair [--reset]` | Start the daemon if needed, open pairing, wait up to 10 minutes for the extension. `--reset` forgets the pinned extension and makes a new code |
 | `status` | Whether the daemon answers, and whether the extension is connected |
 | `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), daemon, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript |
@@ -20,8 +20,8 @@ controls the daemon. Run it as `npm run ezapply -- <command>` or `node packages/
 ## `init` (`workspace-init.ts`)
 Idempotent. User-owned files are never overwritten; ezapply-managed ones are refreshed.
 
-1. **`daemon.json`**: port (flag, existing, or 17373), and existing MCP token, pairing code and pinned id
-   kept; new random ones otherwise. Workspace defaults to `~/ezapply-home`. Written with mode 0600.
+1. **`daemon.json`**: port (flag, existing, or 17373), and existing MCP token, pairing code, pinned id and
+   `idleTimeoutMinutes` kept; new random ones otherwise. Workspace defaults to `~/ezapply-home`. Written with mode 0600.
 2. **Folders**: `WORKSPACE_DIRS` (`profile`, `templates/resume`, `templates/cover`, `library`, `knowledge`,
    `postings`, `repo-cache`, `.claude/skills`).
 3. **`ezapply.config.json`** if missing, then config migrations for untouched old defaults (e.g. the 0.1
@@ -36,7 +36,10 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
 8. **`.claude/settings.json`**: merged so `enabledMcpjsonServers` includes `ezapply` (no approval prompt),
    `permissions.allow` includes `mcp__ezapply`, and `permissions.deny` includes Edit, Write and NotebookEdit
    on `repo-cache/**`.
-9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills).
+9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Then
+   the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
+   their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
+   skill with one of those names is kept and reported.
 
 Prints the workspace, what was created/updated/kept, and "cd there, run `claude`, say 'set me up'".
 
@@ -65,5 +68,5 @@ paths.
 ## Shipped templates (`packages/cli/templates/`)
 - `workspace/EZAPPLY.md`: the agent file → [workspace.md](workspace.md#the-agent-file-ezapplymd)
 - `workspace/CLAUDE.md`: the user's stub
-- `skills/*/SKILL.md`: `onboard`, `repos`, `index-repo`, `resume`, `cover-letter`, `bundle`, `apply`, `answers`
+- `skills/*/SKILL.md`: `ezapply-onboard`, `ezapply-repos`, `ezapply-index-repo`, `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`, `ezapply-apply`, `ezapply-answers`
 - `cover/`: the default cover letter → [profile-and-templates.md](profile-and-templates.md#the-default-cover-letter)

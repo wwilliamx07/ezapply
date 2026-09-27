@@ -10,6 +10,7 @@ import {
   COMPANION_VERSION,
   createLogger,
   type DaemonConfig,
+  DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_PORT,
   daemonConfigPath,
   KeyringStore,
@@ -90,6 +91,7 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
     mcpToken: existing?.mcpToken ?? newToken(),
     pairingToken: existing?.pairingToken ?? newPairingToken(),
     ...(existing?.pairedExtensionId ? { pairedExtensionId: existing.pairedExtensionId } : {}),
+    ...(existing?.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: existing.idleTimeoutMinutes } : {}),
     workspace: resolve(opts.workspace ?? existing?.workspace ?? join(homedir(), "ezapply-home")),
   };
   await saveDaemonConfig(config);
@@ -150,6 +152,7 @@ async function cmdDaemon(): Promise<number> {
       log,
       extensionDir: EXTENSION_DIR,
       onShutdownRequest: () => void shutdown(),
+      idleTimeoutMs: (config.idleTimeoutMinutes ?? DEFAULT_IDLE_TIMEOUT_MINUTES) * 60_000,
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {

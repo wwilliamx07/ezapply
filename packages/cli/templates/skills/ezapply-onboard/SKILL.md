@@ -1,5 +1,5 @@
 ---
-name: onboard
+name: ezapply-onboard
 description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base, resume import and profile, cover letter template, screening-question answers, preferences). Use when the user says onboard, set up, or get started, or when workspace_check reports missing steps.
 ---
 
@@ -17,16 +17,16 @@ the few steps that remain, then work through them in order. Keep each step conve
 
 Neither blocks the next steps. If the user wants to skip one, move on and come back to it later.
 
-## 2. GitHub (`github_login`, then `repos`)
+## 2. GitHub (`github_login`, then `ezapply-repos`)
 1. Say what will happen before calling `github_login`: a browser page opens. The first time, GitHub asks
    them to create a private, read-only "ezapply" app, pick which repositories it may read, install it,
    and authorize. Only contents and metadata can be read; nothing can be written.
 2. Call `github_login`, relay its `tell` text, then `github_login_wait`. If it times out, ask whether they
    finished, and wait again.
-3. Run the **repos** skill to choose repositories.
+3. Run the **ezapply-repos** skill to choose repositories.
 
 ## 3. Knowledge base
-For each selected repo not yet indexed, run the **index-repo** skill. With more than two repos, index
+For each selected repo not yet indexed, run the **ezapply-index-repo** skill. With more than two repos, index
 them in parallel with subagents (one repo each) and summarize when all finish.
 
 ## 4. Resume template and profile
@@ -54,7 +54,7 @@ them in parallel with subagents (one repo each) and summarize when all finish.
 2. **Their own LaTeX template.** `template_import kind: "cover"` with the folder path. It replaces the
    default without asking.
 3. **An example letter to copy the format from** (PDF, screenshot, or text; Word files exported to PDF).
-   Follow **Build from an example** in the cover-letter skill.
+   Follow **Build from an example** in the **ezapply-cover-letter** skill.
 
 Then compile, `pdf_render`, and ask them to approve the look.
 
