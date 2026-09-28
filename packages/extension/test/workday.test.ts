@@ -2,26 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWorkdayApi, installSubmitGuard } from "../src/adapters/workday/api.js";
 import { press } from "../src/adapters/workday/dom.js";
-import { buildWorkdayStep } from "./workday-fixture.js";
+import { buildWorkdayStep, installDomShims } from "./workday-fixture.js";
 
-// jsdom lacks DataTransfer; the adapter only needs items.add + files.
-class FakeDataTransfer {
-  private list: File[] = [];
-  items = { add: (f: File) => this.list.push(f) };
-  get files() {
-    const l = this.list;
-    return Object.assign([...l], { item: (i: number) => l[i] ?? null }) as unknown as FileList;
-  }
-}
-(globalThis as unknown as { DataTransfer: unknown }).DataTransfer = FakeDataTransfer;
-// jsdom also lacks DragEvent, which the upload's drop fallback dispatches.
-(globalThis as unknown as { DragEvent: unknown }).DragEvent = class extends Event {
-  dataTransfer: unknown;
-  constructor(type: string, init: EventInit & { dataTransfer?: unknown } = {}) {
-    super(type, init);
-    this.dataTransfer = init.dataTransfer;
-  }
-};
+installDomShims(document.defaultView as Window);
 
 let fixture: ReturnType<typeof buildWorkdayStep>;
 let api: ReturnType<typeof createWorkdayApi>;
@@ -105,6 +88,47 @@ describe("filling", () => {
     expect((await api.listOptions(id("formField-countryDropdown"))).map((o) => o.label)).toContain("Canada");
     const found = await api.searchOptions(id("formField-source"), "job");
     expect(found).toEqual([{ label: "Job Board", hasChildren: true }]);
+  });
+
+  it("reads each dropdown's own options when one follows another", async () => {
+    // Live Workday: the listbox just closed is still on screen, and buttons have no aria-controls.
+    const res = await api.fill([
+      { fieldId: id("formField-countryDropdown"), value: "Canada" },
+      { fieldId: id("formField-degreeLevel"), value: "Masters" },
+    ]);
+    expect(res.map((r) => [r.ok, r.readBack])).toEqual([
+      [true, "Canada"],
+      [true, "Masters"],
+    ]);
+    expect((await api.listOptions(id("formField-countryDropdown"))).map((o) => o.label)).toContain("Canada");
+    expect((await api.listOptions(id("formField-degreeLevel"))).map((o) => o.label)).toEqual([
+      "Undergraduate",
+      "Masters",
+      "Ph.D",
+    ]);
+    const [miss] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Diploma" }]);
+    expect(miss?.availableOptions).toEqual(["Undergraduate", "Masters", "Ph.D"]);
+    expect(document.querySelectorAll('[role="listbox"]')).toHaveLength(0);
+  });
+
+  it("enters a date a second time when the field still shows an error", async () => {
+    fixture = buildWorkdayStep(document, { dateNeedsSecondPass: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const month = document.querySelector('[data-automation-id="formField-startDate"] input[aria-label="Month"]');
+    const changes = vi.fn();
+    month?.addEventListener("change", changes);
+    const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
+    expect(r).toEqual({ fieldId: id("formField-startDate"), ok: true, readBack: "2024-12" });
+    expect(changes).toHaveBeenCalledTimes(2);
+  });
+
+  it("enters a date once when the page accepts it", async () => {
+    const month = document.querySelector('[data-automation-id="formField-startDate"] input[aria-label="Month"]');
+    const changes = vi.fn();
+    month?.addEventListener("change", changes);
+    const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
+    expect(r).toMatchObject({ ok: true, readBack: "2024-12" });
+    expect(changes).toHaveBeenCalledTimes(1);
   });
 
   it("reports unmatched options with the choices available", async () => {
@@ -191,6 +215,31 @@ describe("filling", () => {
       .map((f) => f.id);
     expect(ids).toEqual(["work-experience-1.jobTitle", "work-experience-2.jobTitle"]);
   });
+
+  it("marks rows with their own Delete button removable, and nothing else", () => {
+    const removable = api
+      .getForm()
+      .sections.filter((s) => s.removable)
+      .map((s) => s.id);
+    expect(removable).toEqual(["work-experience-1"]);
+  });
+
+  it("removes a repeatable row, confirming the dialog, and later rows move up", async () => {
+    await api.addRepeatable("add.add-work-experience");
+    const title = () =>
+      api
+        .getForm()
+        .sections.flatMap((s) => s.fields)
+        .filter((f) => f.automationId === "formField-jobTitle");
+    await api.fill([{ fieldId: "work-experience-2.jobTitle", value: "Engineer" }]);
+
+    const r = await api.removeRepeatable("work-experience-1");
+    expect(r).toEqual({ sectionId: "work-experience-1", ok: true, removed: "Work Experience 1" });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(title().map((f) => [f.id, f.currentValue])).toEqual([["work-experience-1.jobTitle", "Engineer"]]);
+
+    expect(await api.removeRepeatable("my-information")).toMatchObject({ ok: false, error: /No removable row/ });
+  });
 });
 
 describe("uploading over a leftover file", () => {
@@ -227,6 +276,22 @@ describe("navigation and the submit guard", () => {
     const again = await api.next();
     expect(again.advanced).toBe(false);
     expect(again.refusedReason).toMatch(/user must press Submit/);
+    expect(fixture.submitClicks()).toBe(0);
+  });
+
+  it("goes back from the review page to the step, with its entries, and refuses on the first step", async () => {
+    const first = await api.back();
+    expect(first).toMatchObject({ moved: false, refusedReason: expect.stringMatching(/No Back button/) });
+
+    const fn = api.getForm().sections[0]?.fields[0]?.id as string;
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    await api.next();
+    expect(api.getForm()).toMatchObject({ pageKind: "review", backLabel: "Back" });
+    const r = await api.back();
+    expect(r).toMatchObject({ moved: true, pageKind: "step", step: { title: "My Information" } });
+    const form = api.getForm();
+    expect(form.backLabel).toBeUndefined();
+    expect(form.sections[0]?.fields[0]).toMatchObject({ id: fn, currentValue: "Jane" });
     expect(fixture.submitClicks()).toBe(0);
   });
 

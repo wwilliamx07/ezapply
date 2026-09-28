@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { appDir, type DaemonConfig, HEALTH_PATH, PAIR_PATH, SHUTDOWN_PATH } from "@ezapply/companion";
+import { appDir, type DaemonConfig, HEALTH_PATH, PAIR_PATH, SHUTDOWN_PATH, waitFor } from "@ezapply/companion";
 
 export interface Health {
   version: string;
@@ -85,14 +85,4 @@ export async function stopDaemon(config: DaemonConfig): Promise<boolean> {
   const gone = await waitFor(async () => ((await fetchHealth(config)) ? null : true), 10_000);
   if (!gone) throw new Error(`The daemon on port ${config.port} did not stop.`);
   return true;
-}
-
-export async function waitFor<T>(probe: () => Promise<T | null>, timeoutMs: number, everyMs = 300): Promise<T | null> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const v = await probe();
-    if (v !== null) return v;
-    if (Date.now() >= deadline) return null;
-    await new Promise((r) => setTimeout(r, everyMs));
-  }
 }

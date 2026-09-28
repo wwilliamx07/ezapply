@@ -3,13 +3,17 @@ import { join } from "node:path";
 import {
   type CapturePayload,
   type CaptureResult,
+  detectSite,
   ErrorCode,
   EzError,
   PostingMeta,
   type PostingMetaPatch,
+  WORKDAY_LOCALE_SEGMENT,
 } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
-import { readJson, type Workspace, writeFileAtomic, writeJsonAtomic } from "../workspace/workspace.js";
+import { exists, readJson, writeFileAtomic, writeJsonAtomic } from "../util/fs.js";
+import { KeyedQueue } from "../util/keyed-queue.js";
+import type { Workspace } from "../workspace/workspace.js";
 import { extractPosting } from "./extract.js";
 
 export interface PostingFile {
@@ -33,8 +37,11 @@ const HIDDEN_DIRS = new Set([".history", ".build", ".previews"]);
 /** Job query parameters that identify a posting; everything else is dropped from the canonical URL. */
 const JOB_ID_PARAMS = new Set(["gh_jid", "jobid", "job_id", "jid", "jk", "currentjobid", "id", "reqid"]);
 
+/** Posting ids are folder names ezapply made (`2026-09-24_acme_backend-engineer`): no separators, no `..`. */
+const POSTING_ID = /^[\w.-]+$/;
+
 export class PostingsService {
-  private queue: Promise<unknown> = Promise.resolve();
+  private readonly queue = new KeyedQueue();
 
   constructor(
     private readonly ws: Workspace,
@@ -56,6 +63,7 @@ export class PostingsService {
     }
     const metas: PostingMeta[] = [];
     for (const id of entries) {
+      if (!isPostingId(id)) continue;
       const raw = await readJson(this.metaPath(id)).catch(() => null);
       const parsed = PostingMeta.safeParse(raw);
       if (parsed.success) metas.push(parsed.data);
@@ -126,18 +134,26 @@ export class PostingsService {
     });
   }
 
+  /** The posting's folder. Ids come from Claude, so anything that isn't a plain folder name is refused. */
   folder(id: string): string {
+    if (!isPostingId(id)) {
+      throw new EzError(ErrorCode.BadRequest, `Invalid posting id: ${id}`, "Use an id from postings_list.");
+    }
     return this.ws.path("postings", id);
   }
 
   private async doCapture(p: CapturePayload): Promise<CaptureResult> {
     const canonicalUrl = canonicalizeUrl(p.url);
-    const existing = (await this.list()).find((m) => m.canonicalUrl === canonicalUrl);
+    // Also re-canonicalize stored URLs, so postings saved before a canonicalization change still match.
+    const existing = (await this.list()).find(
+      (m) => m.canonicalUrl === canonicalUrl || canonicalizeUrl(m.url) === canonicalUrl,
+    );
     const extracted = extractPosting({
       visibleHtml: p.visibleHtml,
       url: p.url,
       pageTitle: p.pageTitle,
       jsonLd: p.jsonLd,
+      ...(p.frameUrl ? { frameUrl: p.frameUrl } : {}),
     });
 
     const now = new Date().toISOString();
@@ -158,9 +174,11 @@ export class PostingsService {
       id,
       url: p.url,
       canonicalUrl,
+      ...(p.frameUrl ? { frameUrl: p.frameUrl } : {}),
       pageTitle: p.pageTitle,
       site: extracted.site,
-      tenant: existing?.tenant ?? extracted.tenant,
+      // The tenant comes from the URL, never from Claude, so a fresh reading replaces an older one.
+      tenant: extracted.tenant ?? existing?.tenant,
       company: existing?.company ?? extracted.company,
       role: existing?.role ?? extracted.role,
       reqId: existing?.reqId ?? extracted.reqId,
@@ -196,19 +214,27 @@ export class PostingsService {
     return join(this.folder(id), "meta.json");
   }
 
+  /** Captures and metadata updates run one at a time (two quick clicks must not race on one folder). */
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
-    this.queue = run.catch(() => undefined);
-    return run;
+    return this.queue.run("postings", fn);
   }
 }
 
+function isPostingId(id: string): boolean {
+  return POSTING_ID.test(id) && id !== "." && id !== "..";
+}
+
+/**
+ * The URL that identifies a posting: lowercase host, no trailing slash, only job-id query parameters, and
+ * on Workday no leading locale segment (`/en-US/`), which the same job's links have or lack.
+ */
 export function canonicalizeUrl(raw: string): string {
   const u = new URL(raw);
   const keep = new URLSearchParams();
   for (const [k, v] of u.searchParams) if (JOB_ID_PARAMS.has(k.toLowerCase())) keep.set(k, v);
   const query = keep.toString();
-  const path = u.pathname.replace(/\/+$/, "") || "/";
+  const pathname = detectSite(raw) === "workday" ? u.pathname.replace(WORKDAY_LOCALE_SEGMENT, "") : u.pathname;
+  const path = pathname.replace(/\/+$/, "") || "/";
   return `${u.protocol}//${u.hostname.toLowerCase()}${u.port ? `:${u.port}` : ""}${path}${query ? `?${query}` : ""}`;
 }
 
@@ -221,15 +247,6 @@ export function slugify(s: string, max: number): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, max)
     .replace(/-+$/g, "");
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function listFiles(folder: string): Promise<PostingFile[]> {

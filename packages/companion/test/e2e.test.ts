@@ -1,23 +1,29 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type BridgeMessage,
   CompanionApi,
+  detectSite,
   ExtensionApi,
+  type Handlers,
   PROTOCOL_VERSION,
   parseBridgeMessage,
   RpcPeer,
 } from "@ezapply/protocol";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
+import { createWorkdayApi } from "../../extension/src/adapters/workday/api.js";
+import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
 import type { DaemonConfig } from "../src/config/daemon.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
-import { type CompanionHandle, startCompanion } from "../src/main.js";
+import { type CompanionHandle, type CompanionOptions, startCompanion } from "../src/main.js";
+import type { Opener } from "../src/util/open.js";
 
 const EXT_A = "a".repeat(32);
 const EXT_B = "b".repeat(32);
@@ -57,90 +63,78 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-/** A tiny scripted Workday: one step with two fields, then review. */
-function fakeForm() {
-  let step: "step" | "review" = "step";
-  const base = {
-    adapter: "workday",
-    tabId: 7,
-    url: "https://acme.wd5.myworkdayjobs.com/apply",
-    addButtons: [],
-    actions: [],
-    errors: [],
+const APPLY_URL = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply";
+
+interface FakeTab {
+  tabId: number;
+  url: string;
+  active?: boolean;
+}
+
+/**
+ * The browser side of the form tools: each tab runs the real Workday adapter on the shared jsdom fixture
+ * (extension/test/workday-fixture.ts), and the handlers call it the way the extension's forms.ts does. One
+ * model of a Workday step serves both the adapter's tests and these.
+ */
+function workdayTabs(tabs: FakeTab[]) {
+  const pages = tabs.map((t) => {
+    const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: t.url });
+    installDomShims(dom.window as unknown as Window);
+    buildWorkdayStep(dom.window.document);
+    return { ...t, api: createWorkdayApi(dom.window.document, () => t.url) };
+  });
+  const page = (tabId?: number) => pages.find((p) => p.tabId === tabId) ?? (pages[0] as (typeof pages)[number]);
+  const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status"> = {
+    "form.get": async ({ tabId }) => ({ ...page(tabId).api.getForm(), tabId: page(tabId).tabId }),
+    "form.listOptions": async ({ tabId, fieldId }) => page(tabId).api.listOptions(fieldId),
+    "form.searchOptions": async ({ tabId, fieldId, query }) => page(tabId).api.searchOptions(fieldId, query),
+    "form.fill": async ({ tabId, fills }) => page(tabId).api.fill(fills),
+    "form.upload": async ({ tabId, fieldId, file }) => page(tabId).api.upload(fieldId, file),
+    "form.remove": async ({ tabId, fieldId, values }) => page(tabId).api.remove(fieldId, values ?? null),
+    "form.removeRepeatable": async ({ tabId, sectionId }) => page(tabId).api.removeRepeatable(sectionId),
+    "form.addRepeatable": async ({ tabId, addButtonId }) => page(tabId).api.addRepeatable(addButtonId),
+    "form.next": async ({ tabId }) => page(tabId).api.next(),
+    "form.back": async ({ tabId }) => page(tabId).api.back(),
+    "form.pageAction": async ({ tabId, action }) => page(tabId).api.pageAction(action),
+    "tab.screenshot": async ({ tabId }) => ({ tabId: page(tabId).tabId, pngBase64: "iVBORw0KGgo=" }),
   };
-  return {
-    "form.get": async () => ({
-      ...base,
-      pageKind: step,
-      step: { title: step === "step" ? "My Information" : "Review", index: step === "step" ? 1 : 2, total: 2 },
-      sections: [
-        {
-          id: "main",
-          title: "Main",
-          fields: [
-            { id: "main.firstName", label: "First Name", required: true, kind: "text" as const, currentValue: "" },
-            { id: "main.resume", label: "Resume", required: true, kind: "file" as const, currentValue: [] },
-          ],
-        },
-      ],
-      nextLabel: step === "step" ? "Save and Continue" : "Submit",
-    }),
-    "form.listOptions": async () => [],
-    "form.searchOptions": async () => [],
-    "form.fill": async ({ fills }: { fills: { fieldId: string; value: unknown }[] }) =>
-      fills.map((f) => ({ fieldId: f.fieldId, ok: f.fieldId === "main.firstName", readBack: String(f.value) })),
-    "form.upload": async ({ fieldId, file }: { fieldId: string; file: { name: string } }) => ({
-      fieldId,
-      ok: true,
-      readBack: [file.name],
-    }),
-    "form.remove": async ({ fieldId, values }: { fieldId: string; values?: string[] }) => ({
-      fieldId,
-      ok: true,
-      removed: values ?? ["Old_Cover_Letter.pdf"],
-      remaining: [],
-    }),
-    "form.addRepeatable": async () => ({ ok: true }),
-    "form.next": async () => {
-      if (step === "review")
-        return { advanced: false, pageKind: "review" as const, errors: [], refusedReason: "review" };
-      step = "review";
-      return { advanced: true, pageKind: "review" as const, errors: [] };
-    },
-    "form.pageAction": async () => ({ ok: true, pageKind: "step" as const }),
-    "tab.screenshot": async () => ({ tabId: 7, pngBase64: "iVBORw0KGgo=" }),
-  };
+  const status = async () => ({
+    extensionVersion: "9.9.9",
+    tabs: tabs.map((t, i) => ({
+      tabId: t.tabId,
+      windowId: 1,
+      url: t.url,
+      title: "Apply",
+      active: t.active ?? i === 0,
+      focused: t.active ?? i === 0,
+      site: detectSite(t.url),
+    })),
+  });
+  return { handlers, status };
 }
 
 /** A stand-in for the browser extension speaking the real bridge protocol. */
 function fakeExtension(
-  opts: { id?: string; origin?: string; token?: string; protocolVersion?: number; pendingCapture?: boolean } = {},
+  opts: {
+    id?: string;
+    origin?: string;
+    token?: string;
+    protocolVersion?: number;
+    pendingCapture?: boolean;
+    tabs?: FakeTab[];
+  } = {},
 ) {
   const ws = new WebSocket(`ws://127.0.0.1:${handle.port}/bridge`, {
     origin: opts.origin ?? `chrome-extension://${opts.id ?? EXT_A}`,
   });
   sockets.push(ws);
   const send = (m: BridgeMessage) => ws.send(JSON.stringify(m));
+  const browser = workdayTabs(opts.tabs ?? [{ tabId: 7, url: APPLY_URL }]);
   const peer = new RpcPeer({
     send,
     remote: CompanionApi,
     local: ExtensionApi,
-    handlers: {
-      "browser.status": async () => ({
-        extensionVersion: "9.9.9",
-        tabs: [
-          {
-            tabId: 7,
-            windowId: 1,
-            url: "https://acme.wd5.myworkdayjobs.com/x",
-            title: "Apply",
-            active: true,
-            site: "workday" as const,
-          },
-        ],
-      }),
-      ...fakeForm(),
-    },
+    handlers: { "browser.status": browser.status, ...browser.handlers },
   });
   const outcome = new Promise<{ welcomed: boolean; pairingToken?: string; closeCode?: number; error?: string }>(
     (resolve) => {
@@ -412,6 +406,128 @@ describe("idle shutdown and on-demand start", () => {
     expect(result.isError).toBe(false);
     expect(result.data).toMatchObject({ id: capture.postingId, active: true });
   });
+
+  it("doesn't wait for an extension that hasn't been seen for hours, and says it may still come", async () => {
+    await mkdir(join(dir, "app"), { recursive: true });
+    await writeFile(
+      join(dir, "app", "daemon-state.json"),
+      JSON.stringify({ schemaVersion: 1, extensionLastSeenAt: Date.now() - 2 * 24 * 3600_000 }),
+    );
+    await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 5000 });
+    const client = await mcpClient();
+    const started = Date.now();
+    const res = await callJson(client, "posting_active");
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(res.data.error).toMatchObject({ code: "no_active_posting", hint: expect.stringMatching(/reconnected/) });
+    await client.close();
+  });
+
+  it("remembers when the extension was last connected", async () => {
+    await restartWith({});
+    const ext = fakeExtension();
+    expect((await ext.outcome).welcomed).toBe(true);
+    const deadline = Date.now() + 2000;
+    let state: { extensionLastSeenAt?: number } = {};
+    while (!state.extensionLastSeenAt && Date.now() < deadline) {
+      state = JSON.parse(await readFile(join(dir, "app", "daemon-state.json"), "utf8").catch(() => "{}"));
+      await sleep(25);
+    }
+    expect(state.extensionLastSeenAt).toBeGreaterThan(Date.now() - 10_000);
+  });
+});
+
+describe("daemon.json", () => {
+  it("records pairing without undoing edits made while the daemon runs", async () => {
+    await handle.close();
+    const appDir = join(dir, "machine");
+    const previous = process.env.EZAPPLY_APP_DIR;
+    process.env.EZAPPLY_APP_DIR = appDir;
+    try {
+      const config: DaemonConfig = {
+        schemaVersion: 1,
+        host: "127.0.0.1",
+        port: 0,
+        mcpToken: MCP_TOKEN,
+        pairingToken: PAIRING,
+        workspace: join(dir, "ws"),
+      };
+      await mkdir(appDir, { recursive: true });
+      await writeFile(join(appDir, "daemon.json"), JSON.stringify(config));
+      handle = await startCompanion({
+        config,
+        log: createLogger({ toFile: false, level: "silent" }),
+        appDataDir: appDir,
+        secrets: new MemoryStore(),
+      });
+      // `ezapply init --port 18000` and an idle-timeout edit while the daemon runs:
+      await writeFile(join(appDir, "daemon.json"), JSON.stringify({ ...config, port: 18000, idleTimeoutMinutes: 0 }));
+      expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: true });
+      const onDisk = JSON.parse(await readFile(join(appDir, "daemon.json"), "utf8"));
+      expect(onDisk).toMatchObject({ port: 18000, idleTimeoutMinutes: 0, pairedExtensionId: EXT_A });
+    } finally {
+      if (previous === undefined) delete process.env.EZAPPLY_APP_DIR;
+      else process.env.EZAPPLY_APP_DIR = previous;
+    }
+  });
+});
+
+describe("github_login", () => {
+  async function withOpener(opener: Opener) {
+    await handle.close();
+    const options: CompanionOptions = {
+      config: {
+        schemaVersion: 1,
+        host: "127.0.0.1",
+        port: 0,
+        mcpToken: MCP_TOKEN,
+        pairingToken: PAIRING,
+        workspace: join(dir, "ws"),
+      },
+      log: createLogger({ toFile: false, level: "silent" }),
+      appDataDir: join(dir, "app"),
+      secrets: new MemoryStore(),
+      saveConfig: async () => {},
+      opener,
+    };
+    handle = await startCompanion(options);
+    return mcpClient();
+  }
+
+  it("opens the daemon's page in the browser and says so", async () => {
+    const opened: string[] = [];
+    const client = await withOpener({ file: async () => {}, url: async (u) => void opened.push(u) });
+    const res = await callJson(client, "github_login");
+    expect(opened).toEqual([res.data.url]);
+    expect(res.data.url).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${handle.port}/github/start\\?nonce=`));
+    expect(res.data).toMatchObject({ openedBrowser: true, tell: expect.stringMatching(/opened in the browser/) });
+    await client.close();
+  });
+
+  it("offers connecting an existing app, with the callback URL it needs", async () => {
+    const client = await withOpener({ file: async () => {}, url: async () => {} });
+    const res = await callJson(client, "github_login", { app: "existing" });
+    expect(res.data).toMatchObject({
+      firstTimeSetup: true,
+      callbackUrl: `http://127.0.0.1:${handle.port}/github/callback`,
+    });
+    expect(res.data.tell).toContain(res.data.callbackUrl);
+    expect(res.data.tell).toMatch(/never into this chat/);
+    await client.close();
+  });
+
+  it("gives the URL to click when no browser opened", async () => {
+    const client = await withOpener({
+      file: async () => {},
+      url: async () => {
+        throw new Error("no xdg-open");
+      },
+    });
+    const res = await callJson(client, "github_login");
+    expect(res.data.openedBrowser).toBe(false);
+    expect(res.data.tell).toContain(res.data.url);
+    expect(res.data.tell).not.toMatch(/opened in the browser/);
+    await client.close();
+  });
 });
 
 describe("set posting → MCP", () => {
@@ -511,49 +627,96 @@ describe("document tools over MCP", () => {
 });
 
 describe("form tools over MCP", () => {
-  it("fills, uploads, advances, logs every action and tracks posting status", async () => {
-    const ext = fakeExtension();
-    await ext.outcome;
+  async function capture(ext: ReturnType<typeof fakeExtension>, url: string, role = "Engineer") {
     const html = `<div data-automation-id="jobPostingDescription"><p>${LONG}</p></div>`;
-    const cap = await ext.peer.request("posting.capture", {
-      url: "https://acme.wd5.myworkdayjobs.com/job/1",
-      pageTitle: "Engineer",
+    return ext.peer.request("posting.capture", {
+      url,
+      pageTitle: role,
       html,
       visibleHtml: html,
       visibleText: LONG,
       capturedAt: "2026-09-24T12:00:00.000Z",
       tabId: 7,
     });
-    const { mkdir, writeFile } = await import("node:fs/promises");
+  }
+
+  it("fills, clears, uploads, removes rows, advances, logs every action and tracks posting status", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
     const folder = join(dir, "ws", "postings", cap.postingId);
-    await mkdir(folder, { recursive: true });
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 fake");
 
     const client = await mcpClient();
-    const form = await callJson(client, "get_form");
-    expect(form.data).toMatchObject({ pageKind: "step", nextLabel: "Save and Continue" });
-
-    const fill = await callJson(client, "fill_fields", {
-      fills: [{ fieldId: "main.firstName", value: "Jane", source: "profile" }],
+    expect((await callJson(client, "attach_mode_set", { mode: "immediately" })).data).toEqual({
+      attachMode: "immediately",
     });
-    expect(fill.data[0]).toMatchObject({ ok: true, readBack: "Jane" });
+    const form = await callJson(client, "get_form");
+    expect(form.data).toMatchObject({
+      pageKind: "step",
+      nextLabel: "Save and Continue",
+      posting: cap.postingId,
+      tabId: 7,
+    });
+
+    const options = await callJson(client, "list_options", {
+      fieldIds: ["my-information.countryDropdown", "application-questions.degreeLevel", "nope.nope"],
+    });
+    expect(options.data).toMatchObject({
+      "my-information.countryDropdown": [{ label: "Canada" }, { label: "United States of America" }, {}],
+      "application-questions.degreeLevel": [{ label: "Undergraduate" }, { label: "Masters" }, { label: "Ph.D" }],
+      "nope.nope": { error: expect.stringMatching(/get_form/) },
+    });
+
+    // A clean success is just { fieldId, ok }; a read-back that differs from the value is kept.
+    const fill = await callJson(client, "fill_fields", {
+      fills: [
+        { fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" },
+        { fieldId: "my-information.countryDropdown", value: "canada", source: "profile" },
+      ],
+    });
+    expect(fill.data.results).toEqual([
+      { fieldId: "my-information.legalName--firstName", ok: true },
+      { fieldId: "my-information.countryDropdown", ok: true, readBack: "Canada" },
+    ]);
+    expect(fill.data.postingMismatch).toBeUndefined();
 
     const cleared = await callJson(client, "remove_items", {
-      fieldId: "main.resume",
+      fieldId: "application-questions.coverLetter",
       reason: "left from a previous application",
     });
-    expect(cleared.data).toMatchObject({ ok: true, removed: ["Old_Cover_Letter.pdf"], remaining: [] });
+    expect(cleared.data).toMatchObject({ ok: true, removed: ["cover.pdf"], remaining: [] });
 
     const up = await callJson(client, "upload_file", {
-      fieldId: "main.resume",
+      fieldId: "application-questions.resume",
       path: `postings/${cap.postingId}/resume.pdf`,
     });
     expect(up.data).toMatchObject({ ok: true, readBack: ["resume.pdf"] });
-    const outside = await callJson(client, "upload_file", { fieldId: "main.resume", path: "profile/profile.yaml" });
+    const outside = await callJson(client, "upload_file", {
+      fieldId: "application-questions.resume",
+      path: "profile/profile.yaml",
+    });
     expect(outside.data.error.code).toBe("path_not_allowed");
+
+    expect((await callJson(client, "add_repeatable", { addButtonId: "add.add-work-experience" })).data).toEqual({
+      ok: true,
+    });
+    const row = await callJson(client, "remove_repeatable", {
+      sectionId: "work-experience-2",
+      reason: "not in profile",
+    });
+    expect(row.data).toMatchObject({ ok: true, removed: "Work Experience 2" });
 
     expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, pageKind: "review" });
     expect((await callJson(client, "go_next")).data.refusedReason).toBeDefined();
+    // Back from the review page to fix something, and forward again.
+    expect((await callJson(client, "get_form")).data.backLabel).toBe("Back");
+    expect((await callJson(client, "go_back")).data).toMatchObject({
+      moved: true,
+      pageKind: "step",
+      step: { title: "My Information" },
+    });
+    expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, pageKind: "review" });
 
     const active = await callJson(client, "posting_active");
     expect(active.data.status).toBe("filled");
@@ -561,16 +724,229 @@ describe("form tools over MCP", () => {
       .trim()
       .split(/\r?\n/)
       .map((l) => JSON.parse(l));
-    expect(log.map((e) => e.event)).toEqual(["fill", "remove", "upload", "next", "next"]);
-    expect(log[0]).toMatchObject({ fieldId: "main.firstName", value: "Jane", source: "profile", ok: true });
-    expect(log[1]).toMatchObject({
-      fieldId: "main.resume",
-      removed: ["Old_Cover_Letter.pdf"],
+    expect(log.map((e) => e.event)).toEqual([
+      "fill",
+      "fill",
+      "remove",
+      "upload",
+      "remove-row",
+      "next",
+      "next",
+      "back",
+      "next",
+    ]);
+    expect(log[0]).toMatchObject({
+      fieldId: "my-information.legalName--firstName",
+      value: "Jane",
+      source: "profile",
+      ok: true,
+    });
+    expect(log[2]).toMatchObject({
+      fieldId: "application-questions.coverLetter",
+      removed: ["cover.pdf"],
       reason: "left from a previous application",
     });
+    expect(log[4]).toMatchObject({ sectionId: "work-experience-2", removed: "Work Experience 2", ok: true });
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");
+    await client.close();
+  });
+
+  it("returns a lean get_form, with filters", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const client = await mcpClient();
+    const form = (await callJson(client, "get_form")).data;
+    const fields = form.sections.flatMap((sec: { fields: Record<string, unknown>[] }) => sec.fields);
+    expect(fields.find((f: { id: string }) => f.id === "my-information.legalName--firstName")).toEqual({
+      id: "my-information.legalName--firstName",
+      label: "First Name",
+      required: true,
+      kind: "text",
+      currentValue: "",
+      hint: { profileKey: "identity.firstName" },
+    });
+    for (const f of fields) {
+      expect(f).not.toHaveProperty("automationId");
+      expect(f).not.toHaveProperty("optionsLazy");
+      expect(f.required).not.toBe(false);
+    }
+    expect(form.sections.find((sec: { id: string }) => sec.id === "work-experience-1")).toMatchObject({
+      removable: true,
+    });
+
+    const empty = (await callJson(client, "get_form", { onlyEmpty: true })).data;
+    const emptyIds = empty.sections.flatMap((sec: { fields: { id: string }[] }) => sec.fields.map((f) => f.id));
+    expect(emptyIds).not.toContain("application-questions.skills"); // holds carried-over skills
+    expect(emptyIds).toContain("my-information.legalName--firstName");
+
+    const one = (await callJson(client, "get_form", { section: "work experience" })).data;
+    expect(one.sections.map((sec: { id: string }) => sec.id)).toEqual(["work-experience-1"]);
+    await client.close();
+  });
+
+  it("credits a tab only to the active posting on its tenant, and prefers that tenant's tab", async () => {
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: APPLY_URL, active: true },
+        { tabId: 8, url: "https://globex.wd1.myworkdayjobs.com/en-US/Careers/job/y/apply", active: false },
+      ],
+    });
+    await ext.outcome;
+    const acme = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1", "Backend Engineer");
+    const globex = await capture(ext, "https://globex.wd1.myworkdayjobs.com/en-US/Careers/job/y", "Data Engineer");
+    const client = await mcpClient();
+
+    // Globex is active: its tab is chosen even though the Acme tab is the one in front.
+    const form = await callJson(client, "get_form");
+    expect(form.data).toMatchObject({ tabId: 8, posting: globex.postingId });
+
+    // Acting on the Acme tab explicitly: done, but not credited to Globex.
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+      tabId: 7,
+    });
+    expect(fill.data.results[0]).toMatchObject({ ok: true });
+    expect(fill.data.postingMismatch).toMatchObject({
+      activePosting: { id: globex.postingId, tenant: "globex" },
+      formTenant: "acme",
+      hint: expect.stringMatching(/posting_activate/),
+    });
+    await expect(readFile(join(dir, "ws", "postings", globex.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(dir, "ws", "postings", acme.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
+
+    // After activating Acme, the same tab is credited to it.
+    await callJson(client, "posting_activate", { id: acme.postingId });
+    expect((await callJson(client, "get_form", { tabId: 7 })).data).toMatchObject({ posting: acme.postingId });
+    await client.close();
+  });
+
+  it("attaches generated documents only in a version the user approved on the review page", async () => {
+    const opened: string[] = [];
+    await handle.close();
+    handle = await startCompanion({
+      config: {
+        schemaVersion: 1,
+        host: "127.0.0.1",
+        port: 0,
+        mcpToken: MCP_TOKEN,
+        pairingToken: PAIRING,
+        workspace: join(dir, "ws"),
+      },
+      log: createLogger({ toFile: false, level: "silent" }),
+      appDataDir: join(dir, "app"),
+      secrets: new MemoryStore(),
+      saveConfig: async () => {},
+      opener: { file: async () => {}, url: async (u) => void opened.push(u) },
+    });
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume v1");
+    await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover v1");
+    const client = await mcpClient();
+    const upload = (name: string, fieldId: string) =>
+      callJson(client, "upload_file", { fieldId, path: `postings/${cap.postingId}/${name}` });
+
+    // The default mode: nothing generated goes out unreviewed.
+    const refused = await upload("resume.pdf", "application-questions.resume");
+    expect(refused.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/review_open/) });
+
+    const review = (
+      await callJson(client, "review_open", {
+        files: [`postings/${cap.postingId}/resume.pdf`, `postings/${cap.postingId}/cover.pdf`],
+      })
+    ).data;
+    expect(review).toMatchObject({ openedBrowser: true, files: ["resume.pdf", "cover.pdf"] });
+    expect(opened).toEqual([review.url]);
+    const page = await fetch(review.url);
+    expect(page.headers.get("content-security-policy")).toContain("frame-src 'self'");
+    const html = await page.text();
+    expect(html).toContain("resume.pdf");
+    const token = new URL(review.url).searchParams.get("t") ?? "";
+    const pdf = await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}/file/0?t=${token}`);
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(await pdf.text()).toBe("%PDF-1.4 resume v1");
+    // Without the token there's nothing to see or answer.
+    expect((await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}/file/0`)).status).toBe(404);
+    const post = (fields: Record<string, string>) =>
+      fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}`, {
+        method: "POST",
+        body: new URLSearchParams(fields),
+      });
+    expect((await post({ t: "wrong", c0: "", c1: "" })).status).toBe(404);
+
+    // Status and waiting before an answer.
+    expect((await callJson(client, "posting_active")).data.documents).toMatchObject({
+      attachMode: "after-approval",
+      approved: [],
+      openReview: { reviewId: review.reviewId },
+    });
+    expect(
+      (await callJson(client, "review_wait", { reviewId: review.reviewId, timeoutSeconds: 5 })).data,
+    ).toMatchObject({
+      done: false,
+    });
+
+    const waiting = callJson(client, "review_wait", { reviewId: review.reviewId, timeoutSeconds: 30 });
+    const answered = await post({ t: token, c0: "", c1: "Make the second paragraph shorter." });
+    expect(answered.status).toBe(200);
+    expect((await waiting).data).toEqual({
+      done: true,
+      approved: ["resume.pdf"],
+      changes: [{ file: "cover.pdf", request: "Make the second paragraph shorter." }],
+    });
+    expect(await (await post({ t: token, c0: "", c1: "" })).text()).toContain("Already answered");
+
+    expect((await upload("resume.pdf", "application-questions.resume")).data).toMatchObject({ ok: true });
+    expect((await upload("cover.pdf", "application-questions.coverLetter")).data.error.code).toBe("bad_request");
+
+    // A rebuilt resume is a new version: it needs approving again.
+    await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume v2");
+    expect((await upload("resume.pdf", "application-questions.resume")).data.error.code).toBe("bad_request");
+    expect((await callJson(client, "posting_active")).data.documents.approved).toEqual([
+      expect.objectContaining({ file: "resume.pdf", current: false }),
+    ]);
+    // The user's own library documents never need approval.
+    await mkdir(join(dir, "ws", "library"), { recursive: true });
+    await writeFile(join(dir, "ws", "library", "transcript.pdf"), "%PDF-1.4 transcript");
+    expect(
+      (
+        await callJson(client, "upload_file", {
+          fieldId: "application-questions.resume",
+          path: "library/transcript.pdf",
+        })
+      ).data,
+    ).toMatchObject({ ok: true });
+    await client.close();
+  });
+
+  it("switches the attach mode without touching the rest of the config", async () => {
+    await mkdir(join(dir, "ws"), { recursive: true });
+    await writeFile(
+      join(dir, "ws", "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, resume: { pageLimit: 2 } }),
+    );
+    const client = await mcpClient();
+    await callJson(client, "attach_mode_set", { mode: "immediately" });
+    expect(JSON.parse(await readFile(join(dir, "ws", "ezapply.config.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      resume: { pageLimit: 2 },
+      documents: { attach: "immediately" },
+    });
+    const check = await callJson(client, "workspace_check");
+    expect(check.data.items).toContainEqual(
+      expect.objectContaining({ step: "attach_mode", detail: expect.stringMatching(/^immediately/) }),
+    );
+    await client.close();
+  });
+
+  it("refuses posting ids that aren't plain folder names", async () => {
+    const client = await mcpClient();
+    const res = await callJson(client, "posting_activate", { id: "../profile" });
+    expect(res.data.error.code).toBe("bad_request");
     await client.close();
   });
 });

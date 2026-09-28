@@ -72,13 +72,40 @@ describe("helpers", () => {
   it("companyFromUrl", () => {
     expect(companyFromUrl("https://jobs.lever.co/umbrella/abc")).toBe("umbrella");
     expect(companyFromUrl("https://acme.wd1.myworkdayjobs.com/x")).toBe("acme");
+    expect(companyFromUrl("https://wd5.myworkdaysite.com/en-US/recruiting/acme/External/job/1")).toBe("acme");
     expect(companyFromUrl("https://careers.stark.com/jobs/1")).toBe("stark");
+    // Job boards whose paths don't name the company: leave it to the title and JSON-LD.
+    expect(companyFromUrl("https://www.linkedin.com/jobs/view/4012345678")).toBeUndefined();
+    expect(companyFromUrl("https://www.indeed.com/viewjob?jk=abc123")).toBeUndefined();
+    expect(companyFromUrl("https://www.indeed.com/cmp/Initech/jobs")).toBe("Initech");
   });
 
   it("canonicalizeUrl keeps only job id params", () => {
     expect(canonicalizeUrl("https://Example.com/jobs/1/?utm_source=x&gh_jid=42")).toBe(
       "https://example.com/jobs/1?gh_jid=42",
     );
+  });
+
+  it("canonicalizeUrl drops Workday's locale segment, so one job is one posting", () => {
+    const bare = "https://acme.wd5.myworkdayjobs.com/External/job/Austin/Backend_R-1";
+    expect(canonicalizeUrl("https://acme.wd5.myworkdayjobs.com/en-US/External/job/Austin/Backend_R-1")).toBe(bare);
+    expect(canonicalizeUrl(bare)).toBe(bare);
+    // Elsewhere a path like /en-US/ may be meaningful and stays.
+    expect(canonicalizeUrl("https://example.com/en-US/jobs/1")).toBe("https://example.com/en-US/jobs/1");
+  });
+
+  it("reads the tenant from the path on myworkdaysite.com and records an embedded frame", () => {
+    const html = `<div data-automation-id="jobPostingHeader">Analyst</div>
+      <div data-automation-id="jobPostingDescription"><p>${"Analyze things. ".repeat(40)}</p></div>`;
+    const r = extractPosting({
+      visibleHtml: html,
+      url: "https://careers.acme.com/jobs?gh_jid=1",
+      frameUrl: "https://wd5.myworkdaysite.com/recruiting/acme/External/job/Analyst_R-9",
+      pageTitle: "Careers at Acme",
+      jsonLd: [],
+    });
+    expect(r).toMatchObject({ site: "workday", tenant: "acme", role: "Analyst", company: "acme" });
+    expect(r.markdown).toContain("- Embedded from: https://wd5.myworkdaysite.com/recruiting/acme/");
   });
 
   it("slugify", () => {

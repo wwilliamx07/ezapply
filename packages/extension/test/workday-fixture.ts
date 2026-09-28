@@ -1,11 +1,38 @@
 /**
+ * jsdom lacks DataTransfer and DragEvent, which uploads use; the adapter only needs items.add + files, and a
+ * drop event that carries them. Installed on the window the adapter reads its constructors from.
+ */
+export function installDomShims(win: Window): void {
+  const w = win as unknown as Record<string, unknown> & { Event: typeof Event };
+  w.DataTransfer = class FakeDataTransfer {
+    private list: File[] = [];
+    items = { add: (f: File) => this.list.push(f) };
+    get files() {
+      const l = this.list;
+      return Object.assign([...l], { item: (i: number) => l[i] ?? null }) as unknown as FileList;
+    }
+  };
+  w.DragEvent = class extends w.Event {
+    dataTransfer: unknown;
+    constructor(type: string, init: EventInit & { dataTransfer?: unknown } = {}) {
+      super(type, init);
+      this.dataTransfer = init.dataTransfer;
+    }
+  };
+}
+
+/** How long a closed dropdown listbox stays on screen while it animates away. */
+export const LISTBOX_LINGER_MS = 150;
+
+/**
  * A small behavioural imitation of a Workday application step, built from the structure real tenants
  * use (formField-* containers, listbox portals, prompt popups, split dates, drop zones, progress bar).
- * It is not Workday: live verification against real tenants is still required (plan M7 recon).
+ * It is not Workday: live verification against real tenants is still required (plan M7 recon). The
+ * companion's e2e tests drive it through the real adapter too, so there is one model of a Workday step.
  */
 export function buildWorkdayStep(
   doc: Document,
-  opts: { coverUploadsWork?: boolean } = {},
+  opts: { coverUploadsWork?: boolean; dateNeedsSecondPass?: boolean } = {},
 ): { submitClicks: () => number } {
   doc.body.innerHTML = `
   <div data-automation-id="applyFlowPage">
@@ -47,6 +74,10 @@ export function buildWorkdayStep(
           <input type="radio" id="pw-no" name="pw" value="false"><label for="pw-no">No</label>
         </fieldset>
       </div>
+      <div data-automation-id="formField-degreeLevel">
+        <label id="dl">Degree Level*</label>
+        <button aria-haspopup="listbox" aria-labelledby="dl">Select One</button>
+      </div>
       <div data-automation-id="formField-agreement">
         <input type="checkbox" id="agree"><label for="agree">I agree to the privacy notice</label>
       </div>
@@ -69,44 +100,73 @@ export function buildWorkdayStep(
     </fieldset>
     <div role="group" id="we" aria-labelledby="we-h">
       <div class="we-row"><h4 id="we-h">Work Experience 1</h4>
+        <button data-automation-id="panel-set-delete-button" aria-label="Delete Work Experience 1">Delete</button>
         <div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>
       </div>
       <button data-automation-id="Add" aria-label="Add Work Experience">Add Another</button>
     </div>
     <div data-automation-id="pageFooter">
+      <button data-automation-id="bottom-navigation-previous-button" hidden>Back</button>
       <button data-automation-id="bottom-navigation-next-button">Save and Continue</button>
     </div>
   </div>`;
 
-  // Dropdown: clicking the button renders a listbox portal at the end of <body>.
-  const button = doc.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]') as HTMLButtonElement;
-  button.addEventListener("click", () => {
-    const existing = doc.getElementById("lb-country");
-    if (existing) {
-      existing.remove();
+  // Dropdowns: clicking the button renders a listbox portal at the end of <body>. A closed listbox stays on
+  // screen for LISTBOX_LINGER_MS while it animates away, as on live Workday. Country's button names its
+  // listbox with aria-controls; Degree Level's doesn't (live buttons don't).
+  const dropdown = (automationId: string, options: string[], listId?: string) => {
+    const button = doc.querySelector<HTMLButtonElement>(
+      `[data-automation-id="${automationId}"] button[aria-haspopup="listbox"]`,
+    ) as HTMLButtonElement;
+    let open: HTMLElement | null = null;
+    const close = () => {
+      const ul = open;
+      open = null;
       button.setAttribute("aria-expanded", "false");
-      return;
-    }
-    const ul = doc.createElement("ul");
-    ul.id = "lb-country";
-    ul.setAttribute("role", "listbox");
-    for (const c of ["Canada", "United States of America", "United Kingdom"]) {
-      const li = doc.createElement("li");
-      li.setAttribute("role", "option");
-      li.innerHTML = `<div>${c}</div>`;
-      li.addEventListener("click", () => {
-        button.textContent = c;
-        ul.remove();
-        button.setAttribute("aria-expanded", "false");
+      setTimeout(() => ul?.remove(), LISTBOX_LINGER_MS);
+    };
+    button.addEventListener("click", () => {
+      if (open) return close();
+      const ul = doc.createElement("ul");
+      if (listId) ul.id = listId;
+      ul.setAttribute("role", "listbox");
+      for (const c of options) {
+        const li = doc.createElement("li");
+        li.setAttribute("role", "option");
+        li.innerHTML = `<div>${c}</div>`;
+        li.addEventListener("click", () => {
+          button.textContent = c;
+          close();
+        });
+        ul.append(li);
+      }
+      ul.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Escape" && open === ul) close();
       });
-      ul.append(li);
-    }
-    doc.body.append(ul);
-    button.setAttribute("aria-expanded", "true");
-  });
-  button.addEventListener("keydown", (e) => {
-    if ((e as KeyboardEvent).key === "Escape") doc.getElementById("lb-country")?.remove();
-  });
+      doc.body.append(ul);
+      open = ul;
+      button.setAttribute("aria-expanded", "true");
+    });
+    button.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Escape" && open) close();
+    });
+  };
+  dropdown("formField-countryDropdown", ["Canada", "United States of America", "United Kingdom"], "lb-country");
+  dropdown("formField-degreeLevel", ["Undergraduate", "Masters", "Ph.D"]);
+
+  // Split date: with opts.dateNeedsSecondPass, Start Date shows a "required" error (as after a failed Next)
+  // that only clears on the second entry of its month, as seen live.
+  if (opts.dateNeedsSecondPass) {
+    const date = doc.querySelector('[data-automation-id="formField-startDate"]') as HTMLElement;
+    const err = doc.createElement("div");
+    err.setAttribute("data-automation-id", "errorMessage");
+    err.textContent = "Error: The field Available Start Date is required and must have a value.";
+    date.append(err);
+    let entries = 0;
+    date.querySelector('input[aria-label="Month"]')?.addEventListener("change", () => {
+      if (++entries === 2) err.remove();
+    });
+  }
 
   // Prompt: Enter in the input opens a popup with matching options (and a nested category).
   const sourceInput = doc.querySelector<HTMLInputElement>("#ms-source input") as HTMLInputElement;
@@ -205,19 +265,51 @@ export function buildWorkdayStep(
     clFiles.append(row);
   });
 
-  // Repeatable: Add clones the work experience row.
-  let rows = 1;
+  // Repeatable: Add appends a work experience row; a row's Delete asks for confirmation, removes it, and
+  // renumbers the rest (as Workday does, so later rows' field ids change).
+  const renumber = () => {
+    [...doc.querySelectorAll(".we-row")].forEach((row, i) => {
+      const h = row.querySelector("h4") as HTMLElement;
+      h.textContent = `Work Experience ${i + 1}`;
+      row.querySelector("button")?.setAttribute("aria-label", `Delete Work Experience ${i + 1}`);
+    });
+  };
   doc.querySelector('[data-automation-id="Add"]')?.addEventListener("click", () => {
-    rows++;
     const row = doc.createElement("div");
     row.className = "we-row";
-    row.innerHTML = `<h4>Work Experience ${rows}</h4><div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>`;
+    row.innerHTML = `<h4></h4><button data-automation-id="panel-set-delete-button">Delete</button><div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>`;
     doc.getElementById("we")?.insertBefore(row, doc.querySelector('[data-automation-id="Add"]'));
+    renumber();
+  });
+  doc.getElementById("we")?.addEventListener("click", (e) => {
+    const row = (e.target as Element).closest?.('[data-automation-id="panel-set-delete-button"]')?.closest(".we-row");
+    if (!row) return;
+    const dialog = doc.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.innerHTML = "<p>Delete this Work Experience?</p><button>Delete</button><button>Cancel</button>";
+    dialog.addEventListener("click", (ev) => {
+      if ((ev.target as Element).textContent === "Delete") {
+        row.remove();
+        renumber();
+      }
+      dialog.remove();
+    });
+    doc.body.append(dialog);
   });
 
-  // Next: requires first name; moves to Review where the forward button becomes Submit.
+  // Next: requires first name; moves to Review where the forward button becomes Submit and Back appears.
+  // Back returns to the step with its entries kept (Workday saved them when Next was pressed).
   let submitClicks = 0;
   const next = doc.querySelector('[data-automation-id="bottom-navigation-next-button"]') as HTMLButtonElement;
+  const back = doc.querySelector('[data-automation-id="bottom-navigation-previous-button"]') as HTMLButtonElement;
+  const bar = doc.querySelector('[data-automation-id="progressBar"]') as HTMLElement;
+  const firstStepBar = bar.innerHTML;
+  back.addEventListener("click", () => {
+    bar.innerHTML = firstStepBar;
+    for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = false;
+    next.textContent = "Save and Continue";
+    back.hidden = true;
+  });
   next.addEventListener("click", () => {
     if (next.textContent === "Submit") {
       submitClicks++;
@@ -231,10 +323,10 @@ export function buildWorkdayStep(
       doc.querySelector('[data-automation-id="formField-legalName--firstName"]')?.append(err);
       return;
     }
-    const bar = doc.querySelector('[data-automation-id="progressBar"]') as HTMLElement;
     bar.innerHTML = `<li>My Information</li><li>Application Questions</li><li data-automation-id="progressBarActiveStep">Review</li>`;
-    for (const f of doc.querySelectorAll('[data-automation-id^="formField-"]')) f.remove();
+    for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = true;
     next.textContent = "Submit";
+    back.hidden = false;
   });
 
   return { submitClicks: () => submitClicks };

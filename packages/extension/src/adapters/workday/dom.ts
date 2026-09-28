@@ -1,7 +1,18 @@
 /**
  * DOM helpers for driving React-controlled widgets. This code runs in the page's MAIN world so it
  * can reach React's handlers when plain DOM events are not enough.
+ *
+ * Constructors (events, observers, element prototypes) come from the element's own window, never from
+ * globals, so the adapter works on any document: the page's, a jsdom test window, or a jsdom created in
+ * a Node test that isn't a DOM environment at all.
  */
+
+/** The window a node belongs to. */
+export function win(node: Node): Window & typeof globalThis {
+  const view = (node.ownerDocument ?? (node as Document)).defaultView;
+  if (!view) throw new Error("The element is not in a window.");
+  return view as Window & typeof globalThis;
+}
 
 /** CSS.escape with a fallback for environments that lack it (jsdom). */
 export function cssEscape(s: string): string {
@@ -76,35 +87,39 @@ export function callReact(el: Element, handler: string, event: Record<string, un
 
 /** Set an input's value past React's instance-level value tracker, then notify. */
 export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const w = win(el);
+  const proto = el instanceof w.HTMLTextAreaElement ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
   if (setter) setter.call(el, value);
   else el.value = value;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new w.Event("input", { bubbles: true }));
+  el.dispatchEvent(new w.Event("change", { bubbles: true }));
 }
 
 export function blur(el: HTMLElement): void {
-  el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-  el.dispatchEvent(new FocusEvent("blur"));
+  const w = win(el);
+  el.dispatchEvent(new w.FocusEvent("focusout", { bubbles: true }));
+  el.dispatchEvent(new w.FocusEvent("blur"));
 }
 
 /** Full pointer + mouse sequence; some widgets listen to mousedown rather than click. */
 export function press(el: Element): void {
-  const view = el.ownerDocument.defaultView ?? window;
+  const w = win(el);
   const opts = { bubbles: true, cancelable: true, composed: true, button: 0 };
-  const Pointer = (view as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent;
+  // jsdom has no PointerEvent.
+  const Pointer = (w as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent;
   if (Pointer) el.dispatchEvent(new Pointer("pointerdown", { ...opts, pointerType: "mouse" }));
-  el.dispatchEvent(new MouseEvent("mousedown", opts));
+  el.dispatchEvent(new w.MouseEvent("mousedown", opts));
   if (Pointer) el.dispatchEvent(new Pointer("pointerup", { ...opts, pointerType: "mouse" }));
-  el.dispatchEvent(new MouseEvent("mouseup", opts));
-  el.dispatchEvent(new MouseEvent("click", opts));
+  el.dispatchEvent(new w.MouseEvent("mouseup", opts));
+  el.dispatchEvent(new w.MouseEvent("click", opts));
 }
 
 export function key(el: Element, k: string): void {
+  const w = win(el);
   const opts = { bubbles: true, cancelable: true, key: k, code: k === "Enter" ? "Enter" : k };
-  el.dispatchEvent(new KeyboardEvent("keydown", opts));
-  el.dispatchEvent(new KeyboardEvent("keyup", opts));
+  el.dispatchEvent(new w.KeyboardEvent("keydown", opts));
+  el.dispatchEvent(new w.KeyboardEvent("keyup", opts));
 }
 
 /** Resolve once the DOM has been quiet for `quietMs`, or after `maxMs`. */
@@ -112,7 +127,7 @@ export function settle(doc: Document, quietMs = 250, maxMs = 4000): Promise<void
   return new Promise((resolve) => {
     let timer = setTimeout(done, quietMs);
     const hard = setTimeout(done, maxMs);
-    const obs = new MutationObserver(() => {
+    const obs = new (win(doc).MutationObserver)(() => {
       clearTimeout(timer);
       timer = setTimeout(done, quietMs);
     });

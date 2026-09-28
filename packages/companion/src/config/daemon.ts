@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { ErrorCode, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 
 /**
@@ -52,6 +53,7 @@ export function newPairingToken(): string {
   return out;
 }
 
+/** The config, or null when there is none. A damaged file fails with what to do, not a stack trace. */
 export async function loadDaemonConfig(path = daemonConfigPath()): Promise<DaemonConfig | null> {
   let raw: string;
   try {
@@ -60,10 +62,74 @@ export async function loadDaemonConfig(path = daemonConfigPath()): Promise<Daemo
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-  return DaemonConfig.parse(JSON.parse(raw));
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (err) {
+    throw invalidConfig(path, `not valid JSON (${(err as Error).message})`);
+  }
+  const parsed = DaemonConfig.safeParse(json);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw invalidConfig(path, issue ? `${issue.path.join(".") || "(root)"}: ${issue.message}` : "invalid");
+  }
+  return parsed.data;
+}
+
+function invalidConfig(path: string, why: string): EzError {
+  return new EzError(
+    ErrorCode.BadRequest,
+    `${path} is invalid: ${why}.`,
+    "Fix it, or delete it and run `ezapply init` (a new file means pairing the extension again).",
+  );
 }
 
 export async function saveDaemonConfig(config: DaemonConfig, path = daemonConfigPath()): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(DaemonConfig.parse(config), null, 2)}\n`, { mode: 0o600 });
+}
+
+/**
+ * Change some fields of daemon.json as it is on disk now. The running daemon uses this for pairing changes,
+ * so edits made meanwhile (`ezapply init --port`, `idleTimeoutMinutes`) aren't overwritten by its old copy.
+ * `fallback` is used when the file has gone or can't be read.
+ */
+export async function updateDaemonConfig(
+  change: (current: DaemonConfig) => DaemonConfig,
+  fallback: DaemonConfig,
+  path = daemonConfigPath(),
+): Promise<DaemonConfig> {
+  const current = (await loadDaemonConfig(path).catch(() => null)) ?? fallback;
+  const next = change(current);
+  await saveDaemonConfig(next, path);
+  return next;
+}
+
+/** ~/.ezapply/daemon-state.json: what the daemon remembers between runs (not settings). */
+export const DaemonState = z.object({
+  schemaVersion: z.literal(1),
+  /** When the extension was last connected (epoch ms): decides whether a fresh daemon waits for it. */
+  extensionLastSeenAt: z.number().optional(),
+});
+export type DaemonState = z.infer<typeof DaemonState>;
+
+export function daemonStatePath(dir = appDir()): string {
+  return join(dir, "daemon-state.json");
+}
+
+export async function loadDaemonState(path: string): Promise<DaemonState> {
+  const raw = await readFile(path, "utf8").catch(() => null);
+  let json: unknown = null;
+  try {
+    json = raw === null ? null : JSON.parse(raw);
+  } catch {
+    // unreadable state is no state
+  }
+  const parsed = DaemonState.safeParse(json);
+  return parsed.success ? parsed.data : { schemaVersion: 1 };
+}
+
+export async function saveDaemonState(path: string, state: DaemonState): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(DaemonState.parse(state), null, 2)}\n`);
 }

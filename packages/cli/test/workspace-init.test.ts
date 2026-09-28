@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentFileStatus, type DaemonConfig } from "@ezapply/companion";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { initWorkspace } from "../src/workspace-init.js";
+import { initWorkspace, writeLauncher } from "../src/workspace-init.js";
 
 let root: string;
 let config: DaemonConfig;
@@ -33,6 +33,20 @@ describe("Claude Code config", () => {
     expect(server.args[1]).toBe("mcp");
     expect(server.args[0]).toMatch(/main\.js$/);
     expect(raw).not.toContain(config.mcpToken);
+  });
+
+  it("writes a launcher so `ezapply chat` runs from the workspace", async () => {
+    const report = await initWorkspace(config);
+    const launcher = join(config.workspace, process.platform === "win32" ? "ezapply.cmd" : "ezapply");
+    expect(report.created.concat(report.updated)).toContain(launcher);
+    const node = process.execPath.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+    const empty = () => ({ created: [], updated: [], kept: [] });
+    await mkdir(join(root, "launchers"), { recursive: true });
+    const posix = await writeLauncher(join(root, "launchers"), empty(), "linux");
+    expect(await readFile(posix, "utf8")).toMatch(new RegExp(`^#!/bin/sh\\nexec "${node}" ".+main\\.js" "\\$@"\\n$`));
+    const windows = await writeLauncher(join(root, "launchers"), empty(), "win32");
+    expect(windows).toMatch(/ezapply\.cmd$/);
+    expect(await readFile(windows, "utf8")).toMatch(new RegExp(`^@echo off\\r\\n"${node}" ".+main\\.js" %\\*\\r\\n$`));
   });
 
   it("gives Claude runnable ezapply commands in EZAPPLY.md", async () => {

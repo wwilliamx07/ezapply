@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { ExtensionBridge } from "./bridge/server.js";
+import { CHAT_SESSION_HEADER, type ChatSessions, chatSessionId, toolCallCount } from "./chat.js";
 import type { ActivityTracker } from "./idle.js";
 import type { Logger } from "./logger.js";
 import { createMcpServer } from "./mcp/server.js";
@@ -12,8 +13,11 @@ export const MCP_PATH = "/mcp";
 export const HEALTH_PATH = "/health";
 export const PAIR_PATH = "/control/pair";
 export const SHUTDOWN_PATH = "/control/shutdown";
+export const CHAT_PATH = "/control/chat";
 
 const MAX_PAIRING_WINDOW_MS = 30 * 60_000;
+/** The MCP SDK's own limit for a message body. */
+const MAX_MCP_BODY_BYTES = 4 * 1024 * 1024;
 
 export interface HttpOptions {
   services: Services;
@@ -22,6 +26,8 @@ export interface HttpOptions {
   log: Logger;
   /** Called after answering POST /control/shutdown. */
   onShutdown?: () => void;
+  /** Tool calls per `ezapply chat` session, for GET /control/chat. */
+  chat: ChatSessions;
   /** Counts every request except /health (probes must not keep an idle daemon up) as work. */
   activity?: ActivityTracker;
 }
@@ -30,7 +36,7 @@ export interface HttpOptions {
  * One loopback HTTP server hosts three things:
  *   GET  /health  — unauthenticated liveness probe (no user data)
  *   POST /mcp     — MCP Streamable HTTP, stateless, bearer-token protected
- *   /control/*    — CLI controls (pairing window, shutdown), bearer-token protected
+ *   /control/*    — CLI controls (pairing window, shutdown, chat session state), bearer-token protected
  *   WS   /bridge  — extension connection (see bridge/server.ts)
  */
 export function createHttpServer(opts: HttpOptions): Server {
@@ -67,13 +73,19 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     });
   }
 
+  // The document review page (token-guarded; see documents/review.ts).
+  if (path.startsWith("/review/")) {
+    await opts.services.reviews.handleHttp(req, res);
+    return;
+  }
+
   // Browser-facing GitHub setup/login pages (state-guarded; see github/service.ts).
   if (path.startsWith("/github/")) {
     await opts.services.github.handleHttp(req, res);
     return;
   }
 
-  if (path !== MCP_PATH && path !== PAIR_PATH && path !== SHUTDOWN_PATH) {
+  if (path !== MCP_PATH && path !== PAIR_PATH && path !== SHUTDOWN_PATH && path !== CHAT_PATH) {
     return sendJson(res, 404, { error: "not found" });
   }
 
@@ -98,9 +110,33 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     return;
   }
 
+  if (path === CHAT_PATH) {
+    if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+    const id = chatSessionId(new URL(req.url ?? "/", "http://localhost").searchParams.get("session") ?? undefined);
+    if (!id) return sendJson(res, 400, { error: "a session id is required" });
+    return sendJson(res, 200, await chatState(opts, id));
+  }
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
+  }
+
+  // Under `ezapply chat` the relay names the session: count its tool calls, so the wrapper knows whether the
+  // session has done anything and never restarts Claude while a call is running. That needs the body here,
+  // so it's parsed once and handed to the transport.
+  let parsed: unknown;
+  const chatId = chatSessionId(req.headers[CHAT_SESSION_HEADER]);
+  if (chatId) {
+    const raw = await readRawBody(req, MAX_MCP_BODY_BYTES);
+    if (raw === null)
+      return sendJson(res, 413, { jsonrpc: "2.0", error: { code: -32000, message: "Too large." }, id: null });
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null });
+    }
+    for (let n = toolCallCount(parsed); n > 0; n--) res.on("close", opts.chat.beginToolCall(chatId));
   }
 
   const mcp = createMcpServer(opts.services);
@@ -110,7 +146,25 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     void mcp.close();
   });
   await mcp.connect(transport);
-  await transport.handleRequest(req, res);
+  await transport.handleRequest(req, res, parsed);
+}
+
+/**
+ * What `ezapply chat` polls: the active posting (a change means the user captured another one), whether its
+ * session has used a tool or has one running, and whether restarting on a new posting is turned on.
+ */
+async function chatState(opts: HttpOptions, id: string) {
+  const { postings, workspace } = opts.services;
+  const activeId = await postings.activeId();
+  const meta = activeId ? await postings.get(activeId).catch(() => null) : null;
+  const config = await workspace.readConfig().catch(() => null);
+  return {
+    activePosting: meta
+      ? { id: meta.id, ...(meta.company ? { company: meta.company } : {}), ...(meta.role ? { role: meta.role } : {}) }
+      : null,
+    ...opts.chat.state(id),
+    restartOnCapture: config?.context.restartOnCapture ?? true,
+  };
 }
 
 function hostAllowed(req: IncomingMessage, server: Server): boolean {
@@ -126,6 +180,18 @@ function bearerOk(header: string | undefined, token: string): boolean {
   const a = Buffer.from(m[1]);
   const b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** The whole body as text, or null when it passes `max` bytes. */
+async function readRawBody(req: IncomingMessage, max: number): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > max) return null;
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {

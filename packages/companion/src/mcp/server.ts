@@ -6,6 +6,7 @@ import { registerFormTools } from "./tools/forms.js";
 import { registerGitHubTools } from "./tools/github.js";
 import { registerPostingTools } from "./tools/postings.js";
 import { registerProfileTools } from "./tools/profile.js";
+import { registerTemplateTools } from "./tools/templates.js";
 
 /**
  * Always in context while the server is connected, including in subagents that skip CLAUDE.md (Explore,
@@ -30,6 +31,7 @@ export function createMcpServer(services: Services): McpServer {
   registerBrowserTools(server, services);
   registerDocumentTools(server, services);
   registerProfileTools(server, services);
+  registerTemplateTools(server, services);
   registerGitHubTools(server, services);
   registerFormTools(server, services);
   return server;

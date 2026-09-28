@@ -11,7 +11,7 @@ and the reasons behind them) is in [references/](references/README.md).
 |---|---|
 | `packages/protocol` | Shared zod schemas: the extension↔companion wire protocol (`PROTOCOL_VERSION`), form schema, and a typed RPC peer. |
 | `packages/companion` | The daemon: MCP server (Streamable HTTP), extension bridge (WebSocket), plus postings, documents (TeX/PDF), profile, GitHub, repos and forms. |
-| `packages/cli` | The `ezapply` command (`init`, `doctor`, `start`/`stop`, and `mcp`, the stdio server Claude Code runs) plus the workspace agent file (`EZAPPLY.md`), templates and Claude Code skills. |
+| `packages/cli` | The `ezapply` command (`chat`, how you run ezapply; `init`, `doctor`, `start`/`stop`, and `mcp`, the stdio server Claude Code runs) plus the workspace agent file (`EZAPPLY.md`), templates and Claude Code skills. |
 | `packages/extension` | MV3 extension for Chrome (`dist/`) and Firefox 128+ (`dist-firefox/`): the Set posting button, the bridge client, and the Workday adapter (`workday-main.js`, injected into the page's own JavaScript context). |
 
 ## Setup
@@ -21,7 +21,7 @@ Prerequisites: Node 22+, Chrome or Firefox 128+, and [Claude Code](https://claud
 ```sh
 npm run setup          # install, build, and create the workspace ~/ezapply-home
 cd ~/ezapply-home
-claude
+./ezapply chat         # Windows: .ezapply chat
 ```
 
 Then say **"set me up"**. Claude reads the workspace's `EZAPPLY.md`, checks what's missing, and walks you
@@ -34,17 +34,26 @@ unpacked extension. Claude gives you the page and the path. It pairs by itself; 
 Firefox removes temporary add-ons when it closes: load it again and ask Claude to pair it. To keep it
 installed, sign it as an unlisted add-on (`npx web-ext sign`).
 
-Day to day, run `claude` in `~/ezapply-home`. There's nothing to start: Claude Code starts the ezapply
-daemon when it needs it. Open a posting and click the ezapply button (Alt+Shift+P), then ask for a cover
-letter, a tailored resume, "attach them", or "fill out the application". Postings you capture before
-starting Claude are sent once the daemon is up.
+Day to day, run `./ezapply chat` in `~/ezapply-home` (`.ezapply chat` on Windows). It runs Claude Code
+there, and when you capture a different posting it starts a fresh Claude session by itself (after any tool
+call in progress finishes), so the last application isn't carried along and paid for on every turn; the old
+one can be reopened with `claude --resume`. Arguments after `chat` go to `claude`, and
+`context.restartOnCapture: false` in `ezapply.config.json` turns the restart off. There's nothing else to
+start: Claude Code starts the ezapply daemon when it needs it, and the daemon stops by itself after 15 minutes without work
+(`idleTimeoutMinutes` in `~/.ezapply/daemon.json`; 0 keeps it running). While it's stopped the extension's
+badge is grey and its tooltip says ezapply is idle; that's normal. Open a posting and click the ezapply
+button (Alt+Shift+P), then ask for a cover letter, a tailored resume, "attach them", or "fill out the
+application". Postings you capture while the daemon is stopped (the badge shows `…`) are sent once it's up.
+By default each finished resume, cover letter or bundle opens in your browser to approve or ask changes, and
+only approved versions are attached; say "attach documents immediately" to skip the review (onboarding asks).
 
-After pulling changes, run `npm run setup` again (your data is kept), reload the extension, and run
-`ezapply restart` if the daemon is running. The extension and daemon refuse to talk across protocol
-versions, and the badge says which side to update.
+After pulling changes, run `npm run setup` again (your data is kept), then **reload the extension**
+(chrome://extensions → the reload arrow; Firefox: load it again from about:debugging): most updates change
+it, and a stale copy can't use newer form tools. Run `ezapply restart` if the daemon is running. The
+extension and daemon refuse to talk across protocol versions, and the badge says which side to update.
 
-The `ezapply` command (`npm run ezapply -- <command>`, or `node packages/cli/dist/main.js <command>`):
-`doctor`, `status`, `start`, `stop`, `restart`, `pair [--reset]`, `init`, `daemon` (foreground, for
+The `ezapply` command (the workspace's `./ezapply`, `npm run ezapply -- <command>`, or
+`node packages/cli/dist/main.js <command>`): `chat`, `doctor`, `status`, `start`, `stop`, `restart`, `pair [--reset]`, `init`, `daemon` (foreground, for
 debugging), and `mcp` (what Claude Code runs).
 
 ## Scripts
@@ -57,6 +66,7 @@ debugging), and `mcp` (what Claude Code runs).
 | `npm run typecheck` | all packages and tests |
 | `npm run lint` / `npm run format` | Biome |
 | `npm run recon:workday -- <careers-url> [outDir]` | headless check of the Workday adapter on a public tenant, saving page snapshots |
+| `npm run usage:report [-- <transcript.jsonl>]` | token usage of a Claude Code session in the workspace (default: the latest): turns, context, per prompt, per tool, per subagent |
 
 TypeScript 7 note: if type errors look stale after changing a `tsconfig`, delete `packages/*/tsconfig.tsbuildinfo`.
 
@@ -64,5 +74,6 @@ TypeScript 7 note: if type errors look stale after changing a `tsconfig`, delete
 
 - `~/.ezapply/daemon.json`: port, MCP bearer token, pairing code, pinned extension ID (Chrome's extension ID or Firefox's install UUID; to switch browsers, run `ezapply pair --reset`), workspace path (`EZAPPLY_APP_DIR` overrides the folder).
 - `~/.ezapply/github-app.json`: your private ezapply GitHub App (non-secret parts). Secrets and tokens are in the OS keychain under "ezapply".
-- `~/.ezapply/logs/companion.log`: structured logs, with page content and tokens redacted.
-- `~/ezapply-home/`: the workspace: profile, templates, knowledge, postings, library, repo cache, skills. `EZAPPLY.md` is managed; `CLAUDE.md` is yours.
+- `~/.ezapply/logs/companion.log`: structured logs, with page content and tokens redacted; rotated at 5 MB (`.1`, `.2` kept).
+- `~/.ezapply/daemon-state.json`: when the extension was last connected (so a freshly started daemon knows whether to wait for it).
+- `~/ezapply-home/`: the workspace: profile, templates, knowledge, postings, library, repo cache, skills. `EZAPPLY.md` and the `ezapply` launcher are managed; `CLAUDE.md` is yours.

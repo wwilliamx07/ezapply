@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { WORKDAY_HOST_PERMISSIONS } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 
 // npm test builds first, so both outputs exist.
@@ -19,5 +20,13 @@ describe("Firefox build", () => {
   it("runs the background as an event page with a fixed gecko id", () => {
     expect(ff.background.scripts).toEqual(["background.js"]);
     expect(ff.browser_specific_settings.gecko.id).toBe("ezapply@ezapply.local");
+  });
+});
+
+describe("host permissions", () => {
+  it("cover exactly the Workday application hosts that site detection knows", () => {
+    for (const dir of ["dist", "dist-firefox"]) {
+      expect(manifest(dir).host_permissions).toEqual([...WORKDAY_HOST_PERMISSIONS]);
+    }
   });
 });

@@ -18,11 +18,23 @@ the few steps that remain, then work through them in order. Keep each step conve
 Neither blocks the next steps. If the user wants to skip one, move on and come back to it later.
 
 ## 2. GitHub (`github_login`, then `ezapply-repos`)
-1. Say what will happen before calling `github_login`: a browser page opens. The first time, GitHub asks
-   them to create a private, read-only "ezapply" app, pick which repositories it may read, install it,
-   and authorize. Only contents and metadata can be read; nothing can be written.
-2. Call `github_login`, relay its `tell` text, then `github_login_wait`. If it times out, ask whether they
-   finished, and wait again.
+1. If `github_status` shows no app registered here, ask first: "Do you already have an ezapply GitHub App,
+   from another computer or an earlier install (it's listed at github.com/settings/apps as ezapply-…), or
+   should I create a new one?"
+   - **Existing:** `github_login` with `app: "existing"`. A local page walks them through it: edit the app on
+     GitHub, add the `callbackUrl` from the result as a Callback URL if it's missing, copy the Client ID,
+     generate a new client secret (their other computers keep working), paste those into the page, and
+     authorize. Never ask for the Client ID or secret in chat, and if they paste the secret here anyway, tell
+     them to generate a new one and use the page.
+   - **New:** `github_login` with `app: "new"`. GitHub asks them to create a private, read-only "ezapply" app,
+     pick which repositories it may read, install it, and authorize.
+   - Unsure, or no GitHub App: new.
+
+   Only contents and metadata can be read either way; nothing can be written. With an app already
+   registered, just call `github_login`: it's a single authorize click.
+2. Say what will happen, call `github_login`, relay its `tell` text, then `github_login_wait`. If it times
+   out, ask whether they finished, and wait again. If the page says the app isn't installed yet, they install
+   it on the repositories ezapply may read (the link is on the page), then carry on.
 3. Run the **ezapply-repos** skill to choose repositories.
 
 ## 3. Knowledge base
@@ -68,7 +80,12 @@ answers into `answer` in `profile/answers.yaml` (leave `suggested` as is). Leave
 unless they insist. Run `answers_check` after each group.
 
 ## 7. Preferences
-Ask 4–5 quick questions and write `profile/preferences.md`:
+First ask how documents should reach applications, and save it with `attach_mode_set`:
+- **after-approval** (default): each resume, cover letter or bundle opens in the browser for them to approve
+  or ask changes, and is attached only once approved.
+- **immediately**: attached as soon as it's built, without a review step.
+
+Then ask 4–5 quick questions and write `profile/preferences.md`:
 - the tone for cover letters
 - what to emphasize
 - anything never to mention

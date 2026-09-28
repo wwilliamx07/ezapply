@@ -89,7 +89,10 @@ export interface TexEngine {
 type Distro = "miktex" | "texlive" | "unknown";
 let distroCache: Promise<Distro> | undefined;
 
-/** MiKTeX and TeX Live spell some options differently. */
+/**
+ * MiKTeX and TeX Live spell some options differently. Only a definite answer is remembered: a daemon that
+ * started before TeX was installed finds out once it is.
+ */
 function distro(): Promise<Distro> {
   distroCache ??= (async () => {
     const bin = ["xelatex", "lualatex", "pdflatex"].find((b) => which(b));
@@ -97,7 +100,10 @@ function distro(): Promise<Distro> {
     const r = await run(bin, ["--version"], { timeoutMs: 15_000 }).catch(() => null);
     const text = `${r?.stdout ?? ""}${r?.stderr ?? ""}`;
     return /MiKTeX/i.test(text) ? "miktex" : /TeX Live/i.test(text) ? "texlive" : "unknown";
-  })();
+  })().then((d) => {
+    if (d === "unknown") distroCache = undefined;
+    return d;
+  });
   return distroCache;
 }
 

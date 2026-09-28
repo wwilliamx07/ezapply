@@ -9,269 +9,148 @@ code reads that way but it hasn't been reproduced.
 
 ---
 
-## Part 1: Correctness
+## Parts 1 and 2: done (2026-09-27)
 
-### High
+All of Part 1 except item 13 and all of Part 2 are built, tested and described in `references/`
+(`references/status.md` lists what is still unverified in a real browser or on a signed-in Workday page).
 
-**1. The MCP relay can run a tool twice, and it cuts off requests after 5 minutes.** *Checked (code).*
-`packages/cli/src/mcp-relay.ts:50-56`
-- **Retries everything.** Any `fetch` error leads to `ensureDaemon()` and a second POST of the same
-  message. That includes a connection reset *after* the daemon received the request, for example when the
-  daemon stops for idleness or crashes mid-call. So `upload_file`, `fill_fields`, `remove_items` or
-  `add_repeatable` can run twice: a second attachment, a second work-history row, a doubled log entry.
-- **Cuts off long requests.** Node's `fetch` gives up waiting for response headers after 300 s by default
-  (undici). Some tools legitimately take longer: `extension_pair_wait` and `github_login_wait` accept
-  timeouts up to 900 s (`github_login_wait` defaults to exactly 300 s), and `repo_sync` allows git
-  10 minutes. Such a call fails with "fetch failed", and then the retry above repeats it.
-- **Fix:**
-  - Retry only when the connection was refused (`ECONNREFUSED` in `err.cause.code`), never after the
-    request was sent.
-  - Use an undici `Agent` with `headersTimeout: 0` and `bodyTimeout: 0` (or above the longest tool
-    timeout).
-  - Add relay tests for both cases.
+| Item | What was done |
+|---|---|
+| 1. Relay retried and timed out | Re-sends only on `ECONNREFUSED`; `node:http` without an agent, so no response timeout. Relay tests for a broken connection and a slow response |
+| 2. Token refresh raced | Single-flight refresh that re-reads the stored token, and adopts one refreshed meanwhile. Mock GitHub with single-use refresh tokens |
+| 3. `github_login` never opened the browser | `Opener.url` (loopback only, detached); `tell` depends on `openedBrowser`. Tested with a stub opener |
+| 4. Reconnect alarm lost on browser restart | Created at every background start when missing. Lifecycle test with a stubbed API |
+| 5. Form actions credited to the wrong posting | `FormsService`: tab chosen by the active posting's tenant; mismatch → action done, nothing logged or moved, `postingMismatch` with a hint |
+| 6. Multi-file resumes | `contentFiles` (from `\input`/`\include`/`\subfile`) in `template_import`, `template_set_main` and `template.json`; skills copy them |
+| 7. Carried-over rows | `remove_repeatable` (adapter `removeRepeatable`, `removable` sections), logged as `remove-row` |
+| 8. Postings in iframes | Capture from all readable frames and pick the posting's; an unreadable embedded board opens in its own tab |
+| 9. Bundling stripped links | Pages resized in place (content and annotations transformed), not redrawn as XObjects |
+| 10. Log grew forever | Rotation at 5 MB, three files, checked at start and every 10 minutes |
+| 11. 40 s stall after a start | Waits only for an extension seen in the last 6 hours (`daemon-state.json`); otherwise `extensionReconnecting` |
+| 12. Token on git's command line | `GIT_CONFIG_*` environment variables |
+| 14. Unchecked ids and paths | Posting ids must be plain folder names; template `main` must stay in `templates/<kind>/` |
+| 15. Wrong capture metadata | LinkedIn/Indeed company, myworkdaysite tenants (shared `workdayTenant`), Workday locale dropped from canonical URLs |
+| 16. Windows hints everywhere | `installCommand`/`installHint` per OS, with a Ghostscript case |
+| 17. Daemon undid `daemon.json` edits | `updateDaemonConfig`: only pairing fields, on the file as it is then |
+| 18. TeX distro cached as unknown | Only definite answers cached |
+| 19. Concurrent builds and syncs | `KeyedQueue` per `.tex` file and per repo |
+| 20. Stack traces on bad input | Safe token parsing; `EzError` for a bad `--port` or damaged `daemon.json`, printed as one line |
+| 21. GitHub App port | `localBaseUrl` recorded; `portMismatch` in `github_status`, `github_login` refuses with the fix |
+| 22. Workday site detection too broad | Only `*.myworkdayjobs.com` and `*.myworkdaysite.com`, in detection and host permissions |
+| 23. Stale claim evidence | Evidence `hash` stamped by `knowledge_mark_indexed`; `claims_check` flags changed lines |
+| Part 2 | Compact results, lean `get_form` with filters, shorter descriptions; `FormsService`; `TemplateService`; shared helpers in `companion/src/util/`; Workday hooks shared through `protocol/src/workday.ts`; `doctor.ts`; tool-naming rule in `references/mcp-tools.md`; CI `tex` and `firefox` jobs; one Workday fixture driven by both test suites; `ADAPTER_VERSION` stamped from a bundle hash; references and README updated |
 
-**2. Refreshing the GitHub token races, and a race logs the user out.** *Checked (code).*
-`packages/companion/src/github/service.ts:162-176` (`token()`)
-- GitHub App refresh tokens are single-use. The onboard skill runs `ezapply-index-repo` in parallel
-  subagents, which call `repo_sync` at the same time.
-- Once the access token is within 5 minutes of expiring, both calls refresh with the same refresh token.
-  The second gets `bad_refresh_token`, and the user has to run `github_login` again in the middle of
-  onboarding.
-- **Fix:** single-flight the refresh (one shared promise while a refresh runs). Also re-read the stored
-  blob before refreshing, in case another call just refreshed it.
+### Still open
 
-**3. `github_login` never opens the browser, then tells Claude it did.** *Checked (code).*
-`packages/companion/src/mcp/tools/github.ts:31`, `packages/companion/src/documents/pdf/toolkit.ts`
-(`openInDefaultApp`)
-- `openInDefaultApp(url)` calls `stat()` on its argument first. A URL is not a file, so this always
-  throws, and `openedBrowser` is always `false`.
-- The result still says "A GitHub authorize page opened", so Claude tells the user a page opened when
-  none did. This step is part of onboarding.
-- **Fix:**
-  - Add `openUrl()` that skips the file check and only accepts `http://127.0.0.1:<port>/…`.
-  - Make `tell` depend on `openedBrowser`: when nothing opened, give the URL to click.
-  - Test it with a stubbed opener.
-
-**4. The extension stops reconnecting after a browser restart.** *Checked (code); the browser behaviour
-is documented, not tested here.*
-`packages/extension/src/background/index.ts:93-101`
-- The 30-second reconnect alarm is only created in `onInstalled`.
-  - Firefox does not keep alarms across browser sessions.
-  - Chrome may clear them on restart.
-- After a browser restart, `onStartup` tries to connect once. The daemon usually isn't running then,
-  because Claude Code starts it, so the extension stays disconnected until the user clicks Set posting.
-- This defeats the reconnect and queued-capture design that idle shutdown relies on:
-  - `posting_active` waits 40 s for an extension that never comes back.
-  - A capture queued in the extension stays unsent.
-- **Fix:** create the alarm on every background start: at the top level, or in `onStartup` plus a
-  top-level `alarms.get` check (`create` with the same name just replaces it). Add a check in the
-  manifest or lifecycle test.
-
-**5. Form actions are credited to the active posting, not to the posting the application tab belongs
-to.** *Checked (code).*
-`packages/companion/src/mcp/tools/forms.ts:31-43` (`logEvent`, `setStatus`),
-`packages/extension/src/background/forms.ts:9` (`resolveTab`)
-- `resolveTab` picks the focused Workday tab, else the most recently used one.
-- `form-log.jsonl` entries, `attached`/`filled` and above all `submitted` all go to whatever posting is
-  active. Two ways this goes wrong:
-  - Capture a new posting mid-application, or have two Workday tabs open, and fills get logged to the
-    wrong posting.
-  - Look at an old confirmation page, and the wrong posting is marked `submitted`.
-- **Fix:**
-  - Compare the form's tenant (from `get_form.url`) with the active posting's `tenant`.
-  - On a mismatch, don't change status or write the log. Return a `postingMismatch` warning with the
-    hint "activate the matching posting (postings_list company filter)".
-  - Default the tab to one on the active posting's tenant.
-
-### Medium
-
-**6. Resumes split across several `.tex` files can't be tailored without editing the template.**
-*Checked (skills + code).*
-`packages/cli/templates/skills/ezapply-resume/SKILL.md` (Setup 3), `EZAPPLY.md` (Documents)
-- The skills copy only the main file into the posting folder. Many resume templates `\input` their
-  content (`sections/experience.tex`).
-- Those files resolve from `templates/resume/` on `TEXINPUTS`. So Claude either edits the template
-  (forbidden) or can't change the bullets.
-- **Fix:**
-  - When the main file inputs content files, copy them into the posting folder too. The posting folder
-    comes first on the search path.
-  - Alternatively, flatten the file (`latexpand`, or a small `\input` inliner in the companion).
-  - Say so in the skill and in `template_import`'s result (`contentFiles: [...]`).
-
-**7. Work-history rows carried over from a previous application can't be removed.** *Checked (code).*
-`packages/cli/templates/skills/ezapply-apply/SKILL.md` ("add_repeatable until the row counts match")
-- "Use My Last Application" pre-fills work experience, education and websites rows. When Workday holds
-  more rows than the profile, Claude can only add, so stale rows go into the application.
-- **Fix:** `remove_repeatable` (in the plan, never built). Same pattern as `remove_items`: find the row's
-  Delete button inside its group, confirm, check that the row count dropped, then re-read the field ids.
-
-**8. Postings embedded in an iframe come back nearly empty.** *Likely.*
-`packages/extension/src/capture/capture.ts`, `packages/extension/src/background/index.ts` (`setPosting`)
-- `executeScript` runs only in the top frame. Company career pages often embed Greenhouse, Lever or iCIMS
-  boards in an iframe.
-- The capture then holds the company's page chrome, and `posting.md` has no job description.
-- **Fix:**
-  - Capture with `allFrames: true` and pick the frame with the most visible text or a `JobPosting`
-    JSON-LD block.
-  - Failing that, detect an ATS iframe and flash "open the job in its own tab" with the iframe URL.
-
-**9. Bundling can strip the links from the resume.** *Checked (code).*
-`packages/companion/src/documents/pdf/toolkit.ts:203` (`drawScaled` via `embedPage`)
-- When page sizes differ (an A4 transcript, a Letter resume), normalized pages are redrawn as form
-  XObjects, and link annotations are dropped.
-- If the first input's size differs from the resume's, the resume loses its clickable LinkedIn and GitHub
-  links.
-- **Fix:**
-  - Copy the pages instead and scale with `/UserUnit` or `setMediaBox` plus a content transform. That
-    keeps annotations, with their rectangles transformed.
-  - Or never normalize the documents ezapply generated itself; only normalize library scans.
-
-**10. The daemon log grows forever.** *Checked (code).*
-`packages/companion/src/logger.ts:33`
-- `companion.log` is appended to with no rotation. Since idle shutdown, every restart adds to it.
-- **Fix:** rotate by size (keep, say, three files of 5 MB), or truncate on start when it's over a limit.
-
-**11. `posting_active` can stall for 40 seconds after a start.** *Checked (design; this came from my own
-idle-shutdown change).*
-`packages/companion/src/bridge/server.ts:29` (`RECONNECT_GRACE_MS`)
-- After an on-demand start with the browser closed, the first `posting_active` or `postings_list` waits
-  the full 40 s for an extension that isn't coming.
-- **Fix:**
-  - Track the extension's last-seen time in `daemon.json` or `state.json`. Only wait when it was connected
-    in the last few hours.
-  - Or return right away with `extensionReconnecting: true`, so Claude can say it's waiting.
-
-**12. The GitHub token is visible in git's command line.** *Checked (code).*
-`packages/companion/src/repos/service.ts:100`
-- `-c http.extraHeader=Authorization: Basic …` puts the token in the git process's arguments. On Linux,
-  `/proc/<pid>/cmdline` can be read by other local users.
-- **Fix:** pass it through the environment (`GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=http.extraHeader`,
-  `GIT_CONFIG_VALUE_0=…`), which isn't in the arguments.
-
-**13. The Workday remove controls haven't been seen on a live page.** *Known; recorded in
-`references/status.md`.*
-- `DELETE_charm` and `delete-file` come from knowledge of Workday's markup.
-- **Fix:** on the first real application, `screenshot` plus a saved snapshot of a field that has a
-  removable pill or file. Turn that into a live fixture (see proposal 3).
-
-### Low
-
-**14. Ids and paths passed by Claude aren't checked.** *Checked (code).*
-`packages/companion/src/postings/service.ts:129` (`folder(id)`),
-`packages/companion/src/profile/service.ts:256` (`setTemplateMain`)
-- A `posting_activate` or `posting_update_meta` id like `../x` resolves outside `postings/`, and so does
-  a `template_set_main` main like `../../x.tex`. The damage is limited because the file must already
-  parse as posting metadata, but these are the only paths that skip `resolveAllowed`.
-- **Fix:** accept only `^[\w.-]+$` ids, and resolve `main` with `resolveAllowed(["templates"])`.
-
-**15. Some capture metadata guesses are wrong.** *Checked (code).*
-- `companyFromUrl` returns `jobs` for `linkedin.com/jobs/view/…` and `viewjob` for Indeed
-  (`packages/companion/src/postings/extract.ts:210-215`).
-- On `wd5.myworkdaysite.com/recruiting/<tenant>/…` both the companion and the adapter's `tenantOf` give
-  the tenant as `wd5` (`packages/extension/src/adapters/workday/extract.ts:197`). That also defeats the
-  tenant check proposed in item 5.
-- `canonicalizeUrl` keeps Workday's locale segment (`/en-US/`), so the same job captured with and without
-  it becomes two postings.
-- **Fix:**
-  - Handle LinkedIn and Indeed in `companyFromUrl`.
-  - Take the tenant from the path on `myworkdaysite`.
-  - Drop `/[a-z]{2}-[A-Z]{2}/` from Workday paths.
-
-**16. Some hints give Windows commands on every OS.** *Checked (code).*
-`packages/cli/src/main.ts:312` (doctor), `packages/companion/src/documents/pdf/toolkit.ts:385`
-(Ghostscript).
-- **Fix:** use `installHint("tex")`, and add a `"ghostscript"` case to `installHint`.
-
-**17. A running daemon can undo edits made to `daemon.json`.** *Checked (code).*
-`packages/companion/src/main.ts:92,97`
-- `onPaired` and `onForgotten` save the daemon's in-memory copy of the config. They overwrite anything
-  `ezapply init` changed while the daemon ran, such as the port or `idleTimeoutMinutes`.
-- **Fix:** re-read the file and change only the pairing fields.
-
-**18. The TeX distribution check is cached even when it found nothing.** *Checked; cosmetic only.*
-`packages/companion/src/documents/tex/engines.ts:94`
-- If the daemon started before MiKTeX was installed, `distro()` stays `"unknown"`, and MiKTeX gets the TeX
-  Live flag `-no-shell-escape`.
-- I ran it: MiKTeX accepts that flag, and `\write18` stays disabled. So this only loses
-  `--max-print-line`.
-- **Fix:** don't cache `"unknown"`.
-
-**19. Two operations on the same file or repo can run at once.** *Likely.*
-- Two `tex_compile` calls on the same file share `.build/<name>/`.
-- Two `repo_sync` calls on the same repo collide on git's `index.lock`.
-- **Fix:** a per-key promise queue, as `PostingsService.serialize` already does.
-
-**20. Some bad input ends in a raw stack trace.** *Checked (code).*
-- A corrupt keychain token blob: `JSON.parse` in `tokenBlob()` and in doctor.
-- `ezapply init --port abc`: a zod stack trace.
-- **Fix:** parse safely, and give a one-line error that says what to do.
-
-**21. The GitHub App remembers the port it was created on.** *Likely.*
-- The callback and setup URLs include the port at creation time. After `ezapply init --port N`, login
-  redirects to the old port.
-- **Fix:** notice the mismatch in `github_status`, with the hint to update the app's callback URL, or
-  re-register it.
-
-**22. Site detection treats non-application Workday sites as Workday.** *Checked (code).*
-`packages/protocol/src/browser.ts:20`
-- `workday.com` also matches `www.workday.com` (marketing) and `*.myworkday.com` (employee tenants).
-- **Fix:** list the application hosts explicitly (`*.myworkdayjobs.com`, `*.myworkdaysite.com`,
-  `wd*.myworkday.com/<tenant>/d/…` if needed).
-
-**23. Claim evidence can quietly go out of date.** *Checked (code).*
-- `claims_check` only checks that line ranges are in bounds. After the code changes, a claim can point at
-  unrelated lines and still pass.
-- **Fix:** store a short hash of the cited lines in `evidence`. `claims_check` then flags claims whose
-  lines changed, and re-indexing re-verifies them.
+**13. The Workday remove controls haven't been seen on a live page.** `DELETE_charm`, `delete-file` and now
+`panel-set-delete-button` come from knowledge of Workday's markup. On the first real application,
+`screenshot` plus a saved snapshot of a step with a removable pill, file and row; turn it into a live
+fixture (see proposal 3).
 
 ---
 
-## Part 2: Design, consistency, aesthetics
+## Part 4: Context and usage: done (2026-09-27)
 
-1. **Leaner tool output (context cost).**
-   - `mcp/result.ts:6` pretty-prints every tool result (`JSON.stringify(…, null, 2)`). Compact JSON saves
-     about 20–30% of the tokens on large results.
-   - `get_form` is the biggest result and is called every step. Add `onlyEmpty` / `section` filters, and
-     leave out defaults (`required: false`, empty `options`).
-   - Trim the longest tool descriptions (`fill_fields`, `remove_items`, `tex_compile`). All 43 tool
-     descriptions sit in context all the time.
-2. **The form tools break "thin tools, fat services".**
-   - `mcp/tools/forms.ts` (317 lines) holds the logging, status changes, the MIME map, reading the file
-     for upload, and the error translation for older extensions.
-   - Move these into a `FormsService`. Item 5's tenant check belongs there too.
-3. **Split `ProfileService`.** Template import, examples and TeX-engine detection are a `TemplateService`
-   concern. Profile, answers and repos stay where they are.
-4. **Repeated helpers.**
-   - `exists()` is defined in 4 files.
-   - `waitFor` appears twice (`cli/daemonctl.ts`, `extension/dom.ts`).
-   - `writeAtomic` in `pdf/toolkit.ts` duplicates `writeFileAtomic` in `workspace.ts`.
-   - Put them in `companion/src/util/fs.ts`.
-5. **Workday strings outside `selectors.ts`.** `companion/src/postings/extract.ts:121-130` repeats
-   `jobPostingDescription`, `jobPostingHeader`, `locations` and `requisitionId`. Move them into the
-   protocol package (shared with the adapter), or relax the convention in `development.md` so it covers
-   only the extension.
-6. **CLI layout.** `cli/src/main.ts` (343 lines) mixes command parsing with `doctor`. Move `doctor` into
-   `doctor.ts` and share checks with `workspace_check` (`agentFileStatus` already does).
-7. **Inconsistent tool names.**
-   - `posting_active` vs `postings_list` vs `posting_activate`.
-   - `repos_selection_get` vs `github_list_repos`.
-   - `claims_check` vs `knowledge_mark_indexed`.
-   - Not worth breaking now. Pick a noun-verb scheme for new tools, and rename with aliases if a major
-     version ever happens.
-8. **CI doesn't cover the risky parts.**
-   - No TeX engine, so every compile test is skipped.
-   - No `web-ext lint`, no Firefox.
-   - Add an Ubuntu job with `texlive-xetex latexmk` (or Tectonic) and `web-ext lint dist-firefox`.
-9. **Test fixtures drift apart.** The e2e `fakeForm()` and the jsdom fixture model the same Workday step
-   separately, so each new method needs two fakes. Generate the e2e fake from the adapter plus the jsdom
-   fixture, or share one scripted model.
-10. **`ADAPTER_VERSION` is bumped by hand** (`adapters/workday/api.ts`). Forgetting leaves stale adapters
-    in open tabs. Stamp it with a hash of the bundle in `build.mjs`.
-11. **One reference line is wrong until item 4 is fixed.** `references/architecture.md` ("a 30 s alarm
-    reconnects it whenever it's down") and `components/extension.md` (wake-ups) describe an alarm that
-    doesn't survive a browser restart.
-12. **README.** It says nothing about idle shutdown (the daemon stops after 15 idle minutes, and the badge
-    shows "idle"), or that the extension needs a reload after most updates.
+### What the first real session cost
+Measured from the first real workspace session (onboarding, then one Soylent Workday application) with
+`npm run usage:report`. Every turn re-sends the whole conversation, so **cost ≈ turns × context size**.
+
+| | |
+|---|---|
+| Main session | 159 model turns: **19.4M** tokens re-sent from the cache, 208k newly written, 44k output |
+| Fill phase | 92 turns, **14.4M** tokens, average context **156k** per turn |
+| Carried into the fill | **~115k** of onboarding was still in context at "fill in the active posting". A fresh session starts at ~45k, a subagent at ~33k |
+| Wasted turns | ~18 turns at ~160k lost to the stale-dropdown bug; after the first failures the agent filled **one field per call**, about 40 calls on the Application Questions step |
+| Documents mid-fill | The resume and cover letter were built at the upload step: 12 turns, 1.77M tokens |
+| Repo indexing (one-off) | **10.5M** more in 9 subagents; one (canvasbuddy) reached 204k over 37 turns, 5.2M on its own |
+
+### What was done
+All built, tested and described in `references/`. What still needs a real run is in `references/status.md`.
+
+| Item | What was done |
+|---|---|
+| A0. Measuring | `scripts/usage-report.mjs` (`npm run usage:report`): turns, context, per prompt, per tool, per subagent |
+| A1. Stale dropdown options | `openListbox` waits for other listboxes to go and accepts only one that appeared (or changed) after the press; `closeListbox` waits until its listbox has gone. The fixture lingers a closed listbox and drops `aria-controls`; the test fails on the old logic |
+| A2. Dates needing a second entry | Entered again when the field still shows an error. The cause is still unknown: needs a live snapshot |
+| A3. Batching | `ezapply-apply`: one `fill_fields` per step, one retry call for all failures, no listing first unless the option wording decides the answer |
+| A4. `list_options` for several fields | `fieldIds` → `{ fieldId: options | { error } }` in one call |
+| A5. Lean fill results | A clean success that reads back exactly the value is `{ fieldId, ok: true }` |
+| B. Clearing | `ezapply chat` (the workspace launcher `./ezapply`) runs Claude Code and restarts it with a fresh session when another posting is captured, once the session has used a tool and none is running. The relay tags MCP requests with the session id, the daemon counts its tool calls (`GET /control/chat`), `context.restartOnCapture` turns it off. No hooks, no handoff: work is on disk, and every claim is read in one Grep (`EZAPPLY.md`) |
+
+### Later
+
+**C1. Forked skills.** A skill with `context: fork` runs in a separate subagent that starts at ~33k,
+without the conversation, and only its final report comes back. `background: false` keeps the full tool
+set, `AskUserQuestion` included.
+- **Candidates:** the first drafts of the resume and cover letter (1.77M tokens in the session, ~0.7M
+  forked), and `ezapply-index-repo`.
+- **Experiment:** `ezapply-apply`, with step questions through `AskUserQuestion`. The cost is that the
+  user can't chat during the fill.
+- Tweaks and the review loop stay inline.
+
+**C2. Indexing cost.** Look at why the canvasbuddy indexing subagent grew to 204k over 37 turns (5.2M
+tokens) when the others stayed under 80k: a large component read whole, or re-reads.
+
+---
+
+## Part 5: The daemon inside `ezapply chat` (next up)
+
+ezapply runs only through `ezapply chat`, so a separate background daemon no longer buys anything. Run the
+companion in the wrapper's own process instead: the same HTTP/MCP server and extension bridge on the same
+port, with `claude` as its child. This is a cleanup, not a token saving: it removes a background process, the
+on-demand start and the once-a-second polling, and lets restarts react to a capture at once.
+
+### What changes
+- **`ezapply chat` hosts the companion.** It calls `startCompanion` in-process (no idle monitor), then starts
+  `claude`. It ends when Claude ends, closing the server and the extension socket as `ezapply stop` does now.
+- **Restarts are driven by events, not polling.** The companion gets an `onActivePostingChanged` hook, fired
+  by a capture (`PostingsService.capture`) and by `posting_activate`, and `ChatSessions` is read in-process.
+  `GET /control/chat` and `fetchChatState` go. The restart rules stay as built: only after the session has
+  used a tool, never during a call, not for the same posting, `context.restartOnCapture` to turn it off.
+- **The relay stays but no longer starts a daemon.** Claude Code talks to MCP servers over stdio; its direct
+  HTTP transport would bring its own timeouts, and some tools wait up to 15 minutes. `ensureDaemon` leaves
+  `ezapply mcp`: an unreachable daemon answers every request with "ezapply isn't running: start it with
+  `ezapply chat`". The session header stays, so stray MCP clients aren't counted.
+- **`ezapply daemon` stays** as the foreground debug mode, with the idle monitor. `ezapply start`, `stop` and
+  `restart` go, or become "run `ezapply chat`" messages. `status` and `doctor` report "not running, start
+  `ezapply chat`" instead of treating a stopped daemon as normal.
+- **Code that only mattered for a background daemon** becomes debug-mode only or goes: the idle timeout,
+  `daemon-state.json` and the "wait for the extension only if it was seen in the last 6 hours" rule. Decide
+  per piece: after `ezapply chat` starts, the extension still takes up to 30 s to reconnect and deliver a
+  queued capture, so `settled()` still matters.
+
+### What has to be handled
+1. **Nothing may write to the terminal.** Claude's screen owns it. Today the logger writes to the file *and*
+   stderr (`companion/src/logger.ts`), `pdfjs-dist` prints warnings with `console.log`, and jsdom forwards page
+   errors to the console during extraction. In chat mode: file-only logging, pdfjs `verbosity` at errors
+   only, and the wrapper's own `console.*` and `process.stderr.write` redirected to the log. (Claude writes
+   to the inherited terminal, not the wrapper's streams, so it's unaffected.) Test: run a capture,
+   extraction and `pdf_render` in chat mode and assert nothing reached stdout or stderr.
+2. **A crash in companion code must not kill the wrapper.** Today the relay restarts a crashed daemon; in
+   process, an uncaught error would end `ezapply chat` and leave Claude without tools. Add
+   `uncaughtException` / `unhandledRejection` handlers that log and keep serving. If the server itself dies,
+   say so in one line and keep Claude running: the user can finish or exit.
+3. **One instance.** A second `ezapply chat` finds the port taken. If `/health` answers as ezapply in chat
+   mode (add `mode: "chat" | "daemon"` to `/health`), refuse with "ezapply is already running in another
+   terminal". If it's a debug `ezapply daemon`, ask it to shut down first, as `ensureDaemon` does now.
+4. **Picking up a new build** means restarting `ezapply chat` (and so Claude). `npm run setup` should say so.
+5. **Pages that need the daemon** (GitHub login, document review, pairing) work only while chat is open. That
+   matches how ezapply is run; the tools already run only from inside Claude.
+
+### References to update
+`architecture.md` (processes, lifecycle, the diagram, transports), `components/cli.md` (`chat`, `mcp`,
+removed commands, `doctor`), `components/companion.md` (startup options, HTTP surface without
+`/control/chat`, idle shutdown in debug mode only, the capture hook), `security.md` (the daemon's port open
+only while chat runs), `flows.md` (setup, capture restarting the session), `data-formats.md`
+(`daemon-state.json` if it goes, `idleTimeoutMinutes`), `development.md` (tests), `status.md`, README.
+
+### Tests
+- `ezapply chat` with the stub `claude`: the companion answers MCP while Claude runs; a capture delivered
+  over the bridge restarts Claude at once; the server closes when Claude exits.
+- A second instance is refused.
+- A thrown error in a tool handler doesn't end the wrapper.
+- Chat mode writes nothing to stdout or stderr (item 1).
+- The relay's "not running" answer.
 
 ---
 
@@ -279,9 +158,10 @@ idle-shutdown change).*
 
 Ranked by how much they help one person apply faster without lowering quality or honesty.
 
-1. **Tie each application to its posting.** Builds on item 5. `get_form` reports which posting the tab
-   belongs to (by tenant and requisition). A mismatch stops filling with a clear hint. Tab choice follows
-   the active posting. This removes a whole class of wrong-application mistakes.
+1. **Tie each application to its posting.** Item 5 did the tenant part: `get_form` reports the posting a tab
+   is credited to, tab choice follows the active posting, and a mismatch warns and logs nothing. Left: match
+   by requisition too (two postings at one company share a tenant), and stop filling on a mismatch instead
+   of warning.
 2. **More application sites: Greenhouse, Lever, Ashby.**
    - Their forms are plain HTML and much simpler than Workday's, and they're very common for software
      jobs.
@@ -311,7 +191,7 @@ Ranked by how much they help one person apply faster without lowering quality or
 8. **Duplicate-application warning at capture.** When a capture's company matches earlier postings,
    `posting_active` says so ("applied to Acme on 2026-08-02 for Backend Engineer"). That helps with
    "Have you applied here before?" and avoids duplicates.
-9. **Capture from PDFs and iframes.** Item 8 plus: a posting that is a PDF (`tab.url` ends in `.pdf`)
+9. **Capture from PDFs.** (Iframes were item 8.) A posting that is a PDF (`tab.url` ends in `.pdf`)
    gets captured through `pdf_text` on the fetched bytes, or by asking the user to save it into
    `library/`.
 10. **Workspace history.** Offer `git init` in the workspace (with `repo-cache/` ignored), so profile,

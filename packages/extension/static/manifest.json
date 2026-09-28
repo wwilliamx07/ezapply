@@ -24,5 +24,5 @@
     "open_in_tab": false
   },
   "permissions": ["activeTab", "scripting", "storage", "tabs", "alarms"],
-  "host_permissions": ["*://*.myworkdayjobs.com/*", "*://*.myworkdaysite.com/*", "*://*.workday.com/*"]
+  "host_permissions": ["*://*.myworkdayjobs.com/*", "*://*.myworkdaysite.com/*"]
 }

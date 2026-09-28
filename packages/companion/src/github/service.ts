@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 import type { Logger } from "../logger.js";
-import { readJson, writeJsonAtomic } from "../workspace/workspace.js";
+import { readJson, writeJsonAtomic } from "../util/fs.js";
+import { escapeHtml, htmlPage, readForm } from "../util/html.js";
 import type { SecretStore } from "./secrets.js";
 
 /**
@@ -17,12 +18,18 @@ import type { SecretStore } from "./secrets.js";
 
 const AppFile = z.object({
   schemaVersion: z.literal(1),
-  appId: z.number(),
+  /** Unknown for a reused app that isn't installed anywhere yet. */
+  appId: z.number().optional(),
   slug: z.string(),
   clientId: z.string(),
   htmlUrl: z.string(),
   owner: z.string().optional(),
+  /** When this machine started using the app (created here, or reused). */
   createdAt: z.string(),
+  /** created: made here from the manifest. reused: an app the user already had, connected with github_login app "existing". */
+  origin: z.enum(["created", "reused"]).optional(),
+  /** http://127.0.0.1:<port> when the app was set up here: its callback URL points there. */
+  localBaseUrl: z.string().optional(),
 });
 type AppFile = z.infer<typeof AppFile>;
 
@@ -50,6 +57,8 @@ export interface GitHubStatus {
   login?: string;
   name?: string;
   tokenExpiresAt?: string;
+  /** The app's callback URLs point at another port than the daemon's: logins would redirect there. */
+  portMismatch?: { appUrl: string; daemonUrl: string; hint: string };
 }
 
 export interface RepoInfo {
@@ -76,7 +85,24 @@ export interface GitHubOptions {
   fetchImpl?: typeof fetch;
 }
 
-type Pending = { purpose: "start" | "manifest" | "install" | "oauth"; expires: number };
+/** Which app github_login should use: create a new one, or connect one the user already has. */
+export type AppChoice = "new" | "existing";
+
+/** An existing app's credentials the user entered, kept in memory until a login with them succeeds. */
+interface AppCredentials {
+  clientId: string;
+  clientSecret: string;
+  slug: string;
+}
+
+type Pending = {
+  purpose: "start" | "manifest" | "install" | "reuse" | "oauth";
+  expires: number;
+  /** On "start": the app the user chose. */
+  choice?: AppChoice;
+  /** On "oauth" for a reused app: the credentials to exchange the code with. */
+  creds?: AppCredentials;
+};
 
 export class GitHubService {
   private readonly webBase: string;
@@ -84,6 +110,8 @@ export class GitHubService {
   private readonly fetch: typeof fetch;
   private readonly states = new Map<string, Pending>();
   private loginWaiters: (() => void)[] = [];
+  /** The refresh in flight: GitHub's refresh tokens are single-use, so concurrent callers share one. */
+  private refreshing: Promise<string> | undefined;
 
   constructor(private readonly opts: GitHubOptions) {
     this.webBase = opts.webBase ?? "https://github.com";
@@ -94,9 +122,11 @@ export class GitHubService {
   async status(): Promise<GitHubStatus> {
     const app = await this.app();
     const token = await this.tokenBlob();
+    const mismatch = app ? this.portMismatch(app) : undefined;
     return {
       appRegistered: app !== null,
       ...(app ? { appSlug: app.slug, manageUrl: `${this.webBase}/apps/${app.slug}/installations/new` } : {}),
+      ...(mismatch ? { portMismatch: mismatch } : {}),
       loggedIn: token !== null,
       ...(token
         ? {
@@ -108,10 +138,18 @@ export class GitHubService {
     };
   }
 
-  /** URL for the user to open: registers the app if needed, then logs in. */
-  loginUrl(): string {
-    const nonce = this.newState("start");
+  /**
+   * URL for the user to open. Without a choice: the app registered here, else a new one. "new" creates
+   * another app from the manifest; "existing" connects an ezapply app the user already has on GitHub.
+   */
+  loginUrl(choice?: AppChoice): string {
+    const nonce = this.newState("start", choice ? { choice } : {});
     return `${this.opts.localBaseUrl()}/github/start?nonce=${nonce}`;
+  }
+
+  /** Where GitHub must send logins back to; an existing app needs this among its callback URLs. */
+  callbackUrl(): string {
+    return `${this.opts.localBaseUrl()}/github/callback`;
   }
 
   /** Resolve when a login completes (or immediately if already logged in). */
@@ -157,6 +195,40 @@ export class GitHubService {
 
   /** A valid user access token, refreshed when close to expiry. */
   async token(): Promise<string> {
+    const blob = await this.requireTokenBlob();
+    if (fresh(blob)) return blob.accessToken;
+    // Parallel repo_sync calls (onboarding indexes repos in parallel subagents) must not each spend the
+    // single-use refresh token: the second would get bad_refresh_token and log the user out.
+    this.refreshing ??= this.refresh().finally(() => {
+      this.refreshing = undefined;
+    });
+    return this.refreshing;
+  }
+
+  private async refresh(): Promise<string> {
+    // Re-read: another call may have refreshed while this one waited.
+    const blob = await this.requireTokenBlob();
+    if (fresh(blob)) return blob.accessToken;
+    if (!blob.refreshToken || (blob.refreshExpiresAt !== null && blob.refreshExpiresAt < Date.now())) {
+      await this.opts.secrets.delete(SECRET_TOKEN);
+      throw new EzError(ErrorCode.Unauthorized, "GitHub session expired.", "Call github_login to sign in again.");
+    }
+    let refreshed: Awaited<ReturnType<GitHubService["exchange"]>>;
+    try {
+      refreshed = await this.exchange({ grant_type: "refresh_token", refresh_token: blob.refreshToken });
+    } catch (err) {
+      // Refreshed by someone else in the meantime (the stored refresh token changed): use theirs.
+      const now = await this.tokenBlob();
+      if (now && now.refreshToken !== blob.refreshToken && fresh(now)) return now.accessToken;
+      throw err;
+    }
+    const next: TokenBlob = { ...blob, ...refreshed };
+    await this.opts.secrets.set(SECRET_TOKEN, JSON.stringify(next));
+    this.opts.log.info("github token refreshed");
+    return next.accessToken;
+  }
+
+  private async requireTokenBlob(): Promise<TokenBlob> {
     const blob = await this.tokenBlob();
     if (!blob) {
       throw new EzError(
@@ -165,15 +237,22 @@ export class GitHubService {
         "Call github_login and have the user finish the browser flow.",
       );
     }
-    if (blob.expiresAt === null || blob.expiresAt - Date.now() > 5 * 60 * 1000) return blob.accessToken;
-    if (!blob.refreshToken || (blob.refreshExpiresAt !== null && blob.refreshExpiresAt < Date.now())) {
-      await this.opts.secrets.delete(SECRET_TOKEN);
-      throw new EzError(ErrorCode.Unauthorized, "GitHub session expired.", "Call github_login to sign in again.");
-    }
-    const refreshed = await this.exchange({ grant_type: "refresh_token", refresh_token: blob.refreshToken });
-    const next: TokenBlob = { ...blob, ...refreshed };
-    await this.opts.secrets.set(SECRET_TOKEN, JSON.stringify(next));
-    return next.accessToken;
+    return blob;
+  }
+
+  /** Where the app's callbacks point, when that differs from where the daemon listens now. */
+  private portMismatch(app: AppFile): GitHubStatus["portMismatch"] {
+    const now = this.opts.localBaseUrl();
+    if (!app.localBaseUrl || app.localBaseUrl === now) return undefined;
+    return {
+      appUrl: app.localBaseUrl,
+      daemonUrl: now,
+      hint:
+        `The ezapply GitHub App was created while the daemon listened on ${app.localBaseUrl}, so GitHub sends ` +
+        `logins there. Either move the daemon back (\`ezapply init --port ${new URL(app.localBaseUrl).port}\`, ` +
+        `then \`ezapply restart\`), or have the user open ${this.webBase}/settings/apps/${app.slug} and change ` +
+        `the Callback URL to ${now}/github/callback and the Setup URL to ${now}/github/installed.`,
+    };
   }
 
   /** Every repo the app installation(s) let this user read. */
@@ -227,15 +306,20 @@ export class GitHubService {
 
   // ---- browser-facing routes ------------------------------------------------------------------
 
-  /** Handles GET /github/*. Returns false when the path is not ours. */
+  /** Handles /github/* (GET, and POST for the existing-app form). Returns false when the path is not ours. */
   async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (!url.pathname.startsWith("/github/")) return false;
-    if (req.method !== "GET") {
+    const post = req.method === "POST" && url.pathname === "/github/reuse";
+    if (req.method !== "GET" && !post) {
       page(res, 405, "Method not allowed", "");
       return true;
     }
     try {
+      if (post) {
+        await this.onReuse(req, res);
+        return true;
+      }
       switch (url.pathname) {
         case "/github/start":
           await this.onStart(url, res);
@@ -267,10 +351,14 @@ export class GitHubService {
   }
 
   private async onStart(url: URL, res: ServerResponse): Promise<void> {
-    this.consumeState(url.searchParams.get("nonce"), "start");
+    const { choice } = this.consumeState(url.searchParams.get("nonce"), "start");
+    if (choice === "existing") {
+      this.reusePage(res);
+      return;
+    }
     const app = await this.app();
-    if (app) {
-      redirect(res, this.authorizeUrl(app));
+    if (app && choice !== "new") {
+      redirect(res, this.authorizeUrl(app.clientId));
       return;
     }
     const state = this.newState("manifest");
@@ -321,9 +409,13 @@ export class GitHubService {
       htmlUrl: String(data.html_url),
       ...(owner ? { owner } : {}),
       createdAt: new Date().toISOString(),
+      origin: "created",
+      localBaseUrl: this.opts.localBaseUrl(),
     };
     await this.opts.secrets.set(SECRET_CLIENT, String(data.client_secret));
     await writeJsonAtomic(this.opts.appFilePath, app);
+    // A token belongs to the app that issued it; one from a replaced app is useless now.
+    await this.opts.secrets.delete(SECRET_TOKEN);
     this.opts.log.info({ slug: app.slug }, "github app created");
     // The private key and webhook secret are not needed (no server-to-server calls) and are discarded.
     this.newState("install");
@@ -340,42 +432,140 @@ export class GitHubService {
       page(res, 200, "Repository access updated", "You can close this tab and return to Claude Code.");
       return;
     }
-    redirect(res, this.authorizeUrl(app));
+    redirect(res, this.authorizeUrl(app.clientId));
+  }
+
+  /**
+   * The page for connecting an app the user already has. GitHub offers no way to list a user's apps before
+   * they sign in, and never shows an app's client secret again after creating it, so the user picks the app
+   * on GitHub, copies its Client ID and generates a new client secret (older secrets keep working, e.g. on
+   * another computer). They paste them here, into the daemon's own page, so the secret never passes through
+   * the chat.
+   */
+  private reusePage(res: ServerResponse, error?: string): void {
+    const state = this.newState("reuse");
+    const settings = `${this.webBase}/settings/apps`;
+    page(
+      res,
+      error ? 400 : 200,
+      "Use your existing ezapply GitHub App",
+      `${error ? `<p class="err">${escapeHtml(error)}</p>` : ""}
+      <ol>
+        <li>Open <a href="${escapeHtml(settings)}" target="_blank" rel="noopener">your GitHub Apps</a> and click
+          <b>Edit</b> next to your <b>ezapply-…</b> app.</li>
+        <li>Under <b>Callback URL</b>, add <code>${escapeHtml(this.callbackUrl())}</code> if it isn't listed
+          (<b>Add Callback URL</b>), and <b>Save changes</b> at the bottom.</li>
+        <li>Copy the <b>Client ID</b>, then click <b>Generate a new client secret</b> and copy it. It is shown only
+          once; the app's other secrets keep working.</li>
+      </ol>
+      <form method="post" action="/github/reuse" autocomplete="off">
+        <input type="hidden" name="state" value="${escapeHtml(state)}">
+        <label>App name or its GitHub page<br><input name="app" required placeholder="ezapply-1a2b3c4d" size="40"></label><br>
+        <label>Client ID<br><input name="client_id" required size="40"></label><br>
+        <label>Client secret<br><input name="client_secret" type="password" required size="40"></label><br>
+        <button type="submit">Continue to GitHub</button>
+      </form>
+      <p>These go only to the ezapply daemon on this computer; the secret is stored in your OS keychain once
+      you've signed in.</p>`,
+    );
+  }
+
+  /** The existing-app form: check the fields, keep them with the login's state, and send the user to authorize. */
+  private async onReuse(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const form = await readForm(req);
+    if (!form) throw new EzError(ErrorCode.BadRequest, "Form too large.");
+    this.consumeState(form.get("state"), "reuse");
+    const slug = appSlugFrom(form.get("app") ?? "");
+    const clientId = (form.get("client_id") ?? "").trim();
+    const clientSecret = (form.get("client_secret") ?? "").trim();
+    const problem = !slug
+      ? "Enter the app's name (like ezapply-1a2b3c4d) or paste its GitHub page address."
+      : !/^[A-Za-z0-9.]{10,64}$/.test(clientId)
+        ? "That doesn't look like a Client ID (it starts with Iv)."
+        : !/^[A-Za-z0-9_]{20,128}$/.test(clientSecret)
+          ? "That doesn't look like a client secret. Generate a new one and paste all of it."
+          : undefined;
+    if (problem || !slug) {
+      this.reusePage(res, problem);
+      return;
+    }
+    redirect(res, this.authorizeUrl(clientId, { clientId, clientSecret, slug }));
   }
 
   private async onCallback(url: URL, res: ServerResponse): Promise<void> {
-    this.consumeState(url.searchParams.get("state"), "oauth");
+    const { creds } = this.consumeState(url.searchParams.get("state"), "oauth");
     const code = url.searchParams.get("code");
     if (!code) throw new EzError(ErrorCode.BadRequest, "Missing code from GitHub.");
-    const tokens = await this.exchange({ code, redirect_uri: `${this.opts.localBaseUrl()}/github/callback` });
+    const tokens = await this.exchange({ code, redirect_uri: this.callbackUrl() }, creds).catch((err: unknown) => {
+      const e = EzError.from(err);
+      throw creds ? new EzError(e.code, `${e.message}. Check that the Client ID and secret are from the same app.`) : e;
+    });
     const me = await this.fetch(`${this.apiBase}/user`, {
       headers: { ...apiHeaders(), Authorization: `Bearer ${tokens.accessToken}` },
     });
     if (!me.ok) throw new EzError(ErrorCode.Internal, `Could not read the GitHub user (${me.status}).`);
     const user = (await me.json()) as { login: string; name: string | null; id: number };
+    const installed = creds ? await this.connectReused(creds, tokens.accessToken) : true;
     const blob: TokenBlob = { ...tokens, login: user.login, name: user.name ?? null, userId: user.id };
     await this.opts.secrets.set(SECRET_TOKEN, JSON.stringify(blob));
-    this.opts.log.info({ login: user.login }, "github login complete");
+    this.opts.log.info({ login: user.login, reused: Boolean(creds) }, "github login complete");
     for (const w of this.loginWaiters.splice(0)) w();
-    page(res, 200, `Signed in as ${escapeHtml(user.login)}`, "You can close this tab and return to Claude Code.");
+    const app = await this.app();
+    page(
+      res,
+      200,
+      `Signed in as ${escapeHtml(user.login)}`,
+      installed || !app
+        ? "You can close this tab and return to Claude Code."
+        : `The app isn't installed on your account yet, so it can't read any repositories:
+          <a href="${escapeHtml(`${this.webBase}/apps/${app.slug}/installations/new`)}">install it and choose repositories</a>.`,
+    );
+  }
+
+  /**
+   * A login with an existing app's credentials worked: record the app and keep its secret. A user token only
+   * sees installations of the app that issued it, so they name the app for certain (the typed name is only a
+   * fallback for an app not installed anywhere yet). Returns whether it's installed.
+   */
+  private async connectReused(creds: AppCredentials, accessToken: string): Promise<boolean> {
+    const r = await this.fetch(`${this.apiBase}/user/installations?per_page=100`, {
+      headers: { ...apiHeaders(), Authorization: `Bearer ${accessToken}` },
+    });
+    const body = r.ok ? ((await r.json()) as { installations?: { app_id?: number; app_slug?: string }[] }) : {};
+    const inst = body.installations?.[0];
+    const slug = inst?.app_slug ?? creds.slug;
+    const app: AppFile = {
+      schemaVersion: 1,
+      ...(inst?.app_id !== undefined ? { appId: inst.app_id } : {}),
+      slug,
+      clientId: creds.clientId,
+      htmlUrl: `${this.webBase}/apps/${slug}`,
+      createdAt: new Date().toISOString(),
+      origin: "reused",
+      localBaseUrl: this.opts.localBaseUrl(),
+    };
+    await this.opts.secrets.set(SECRET_CLIENT, creds.clientSecret);
+    await writeJsonAtomic(this.opts.appFilePath, app);
+    this.opts.log.info({ slug, installed: Boolean(inst) }, "github app reused");
+    return inst !== undefined;
   }
 
   // ---- internals ---------------------------------------------------------------------------------
 
-  private authorizeUrl(app: AppFile): string {
-    const state = this.newState("oauth");
-    const q = new URLSearchParams({
-      client_id: app.clientId,
-      redirect_uri: `${this.opts.localBaseUrl()}/github/callback`,
-      state,
-    });
+  private authorizeUrl(clientId: string, creds?: AppCredentials): string {
+    const state = this.newState("oauth", creds ? { creds } : {});
+    const q = new URLSearchParams({ client_id: clientId, redirect_uri: this.callbackUrl(), state });
     return `${this.webBase}/login/oauth/authorize?${q}`;
   }
 
-  private async exchange(params: Record<string, string>): Promise<Omit<TokenBlob, "login" | "name" | "userId">> {
-    const app = await this.app();
-    const secret = await this.opts.secrets.get(SECRET_CLIENT);
-    if (!app || !secret)
+  /** Trade a code or refresh token for tokens, with the registered app's credentials or ones just entered. */
+  private async exchange(
+    params: Record<string, string>,
+    creds?: AppCredentials,
+  ): Promise<Omit<TokenBlob, "login" | "name" | "userId">> {
+    const clientId = creds?.clientId ?? (await this.app())?.clientId;
+    const secret = creds?.clientSecret ?? (await this.opts.secrets.get(SECRET_CLIENT));
+    if (!clientId || !secret)
       throw new EzError(
         ErrorCode.Unauthorized,
         "GitHub app credentials missing.",
@@ -384,7 +574,7 @@ export class GitHubService {
     const r = await this.fetch(`${this.webBase}/login/oauth/access_token`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "ezapply" },
-      body: JSON.stringify({ client_id: app.clientId, client_secret: secret, ...params }),
+      body: JSON.stringify({ client_id: clientId, client_secret: secret, ...params }),
     });
     const data = (await r.json().catch(() => ({}))) as Record<string, unknown>;
     if (!r.ok || typeof data.access_token !== "string") {
@@ -427,10 +617,12 @@ export class GitHubService {
     return parsed.success ? parsed.data : null;
   }
 
+  /** The stored token, or null when there is none or it can't be read (a damaged entry means: log in again). */
   private async tokenBlob(): Promise<TokenBlob | null> {
     const raw = await this.opts.secrets.get(SECRET_TOKEN);
     if (!raw) return null;
-    const parsed = TokenBlob.safeParse(JSON.parse(raw));
+    const parsed = TokenBlob.safeParse(parseJson(raw));
+    if (!parsed.success) this.opts.log.warn("github: stored token is unreadable; treating as logged out");
     return parsed.success ? parsed.data : null;
   }
 
@@ -441,20 +633,34 @@ export class GitHubService {
     return false;
   }
 
-  private newState(purpose: Pending["purpose"]): string {
+  private newState(purpose: Pending["purpose"], extra: Pick<Pending, "choice" | "creds"> = {}): string {
     const now = Date.now();
     for (const [k, v] of this.states) if (v.expires < now) this.states.delete(k);
     const state = randomBytes(18).toString("base64url");
-    this.states.set(state, { purpose, expires: now + STATE_TTL_MS });
+    this.states.set(state, { purpose, expires: now + STATE_TTL_MS, ...extra });
     return state;
   }
 
-  private consumeState(state: string | null, purpose: Pending["purpose"]): void {
+  private consumeState(state: string | null, purpose: Pending["purpose"]): Pending {
     const p = state ? this.states.get(state) : undefined;
     if (!state || !p || p.purpose !== purpose || p.expires < Date.now()) {
       throw new EzError(ErrorCode.Unauthorized, "This link is invalid or expired.");
     }
     this.states.delete(state);
+    return p;
+  }
+}
+
+/** More than 5 minutes left (or no expiry at all). */
+function fresh(blob: TokenBlob): boolean {
+  return blob.expiresAt === null || blob.expiresAt - Date.now() > 5 * 60 * 1000;
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 
@@ -467,27 +673,20 @@ function parseNextLink(link: string | null): string | null {
   return m?.match(/<([^>]+)>/)?.[1] ?? null;
 }
 
+/** "ezapply-1a2b", or the slug in github.com/apps/<slug> or github.com/settings/apps/<slug>, lowercased. */
+export function appSlugFrom(input: string): string | undefined {
+  const s = input.trim();
+  const fromUrl = s.match(/github\.com\/(?:settings\/apps|apps)\/([A-Za-z0-9-]+)/i)?.[1];
+  const slug = (fromUrl ?? s).toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,99}$/.test(slug) ? slug : undefined;
+}
+
 function redirect(res: ServerResponse, location: string): void {
   res.writeHead(302, { Location: location, "Cache-Control": "no-store" });
   res.end();
 }
 
+/** GitHub's pages post forms to GitHub (the app manifest) or back to this daemon (the existing-app form). */
 function page(res: ServerResponse, status: number, title: string, body: string): void {
-  res.writeHead(status, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action https://github.com",
-    "X-Frame-Options": "DENY",
-  });
-  res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ezapply: ${escapeHtml(title)}</title>
-<style>:root{color-scheme:light dark;font:15px system-ui,sans-serif}body{max-width:560px;margin:12vh auto;padding:0 16px;line-height:1.5}
-button{font:inherit;padding:8px 16px;margin-top:12px;cursor:pointer}</style></head>
-<body><h2>${escapeHtml(title)}</h2>${body}</body></html>`);
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
-  );
+  htmlPage(res, status, title, body, { csp: "form-action 'self' https://github.com" });
 }

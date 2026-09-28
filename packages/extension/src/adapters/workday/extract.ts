@@ -1,4 +1,5 @@
 import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
+import { workdayTenant } from "@ezapply/protocol/workday";
 import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "./dom.js";
 import { hintKey, PROFILE_HINTS, SEL } from "./selectors.js";
 
@@ -9,10 +10,19 @@ export interface FieldRef {
   container: HTMLElement;
 }
 
+/** A repeatable row (one work-history entry) and the button that deletes it. */
+export interface RowRef {
+  title: string;
+  row: HTMLElement;
+  button: HTMLElement;
+}
+
 export interface Extraction {
   schema: PageSchema;
   fields: Map<string, FieldRef>;
   addButtons: Map<string, HTMLElement>;
+  /** Removable rows by section id. */
+  rows: Map<string, RowRef>;
 }
 
 const SUBMIT_TEXT = /^\s*submit(\s+application)?\s*$/i;
@@ -26,6 +36,16 @@ export function nextButton(doc: Document): HTMLElement | null {
     (b) => isVisible(b) && /^(next|save and continue|continue|submit)$/i.test(text(b)),
   );
   return nav.at(-1) ?? null;
+}
+
+/** The button back to the previous step: by automation id, else a visible button reading Back or Previous. */
+export function backButton(doc: Document): HTMLElement | null {
+  const byId = [...doc.querySelectorAll<HTMLElement>(SEL.backButton)].find(isVisible);
+  if (byId) return byId;
+  return (
+    [...doc.querySelectorAll<HTMLElement>("button")].find((b) => isVisible(b) && /^(back|previous)$/i.test(text(b))) ??
+    null
+  );
 }
 
 export function isSubmitControl(el: Element | null): boolean {
@@ -117,7 +137,8 @@ export function detectPage(doc: Document, fieldCount: number): PageKind {
 
 export function extract(doc: Document, url: string): Extraction {
   const fields = new Map<string, FieldRef>();
-  const sections = new Map<string, { id: string; title: string; fields: Field[] }>();
+  const sections = new Map<string, { id: string; title: string; fields: Field[]; removable?: boolean }>();
+  const firstContainer = new Map<string, HTMLElement>();
   const containers = [...doc.querySelectorAll<HTMLElement>(SEL.fieldContainer)].filter(
     // Skip containers nested in another container (composite widgets).
     (c) => isVisible(c) && !c.parentElement?.closest(SEL.fieldContainer),
@@ -163,6 +184,16 @@ export function extract(doc: Document, url: string): Extraction {
     const section = sections.get(sectionId) ?? { id: sectionId, title: sectionTitle, fields: [] };
     section.fields.push(field);
     sections.set(sectionId, section);
+    if (!firstContainer.has(sectionId)) firstContainer.set(sectionId, container);
+  }
+
+  const rows = new Map<string, RowRef>();
+  for (const [sectionId, container] of firstContainer) {
+    const section = sections.get(sectionId);
+    const found = section && rowOf(container, sectionId, section.title);
+    if (!found || !section) continue;
+    rows.set(sectionId, found);
+    section.removable = true;
   }
 
   const addButtons = new Map<string, HTMLElement>();
@@ -175,11 +206,13 @@ export function extract(doc: Document, url: string): Extraction {
   }
 
   const next = nextButton(doc);
+  const back = backButton(doc);
   const step = stepInfo(doc);
+  const tenant = workdayTenant(url);
   const schema: PageSchema = {
     adapter: "workday",
     url,
-    tenant: tenantOf(url),
+    ...(tenant ? { tenant } : {}),
     pageKind: detectPage(doc, fields.size),
     ...(step ? { step } : {}),
     sections: [...sections.values()],
@@ -190,16 +223,28 @@ export function extract(doc: Document, url: string): Extraction {
     actions: pageActions(doc),
     errors: pageErrors(doc),
     ...(next ? { nextLabel: text(next) } : {}),
+    ...(back ? { backLabel: text(back) } : {}),
   };
-  return { schema, fields, addButtons };
+  return { schema, fields, addButtons, rows };
 }
 
-function tenantOf(url: string): string {
-  try {
-    return new URL(url).hostname.split(".")[0] ?? "";
-  } catch {
-    return "";
+/**
+ * The repeatable row a section's fields sit in: the nearest ancestor of its first field that holds a
+ * row-delete button of its own (not one inside a field, like a file's delete) and no field of another
+ * section. Rows and their delete buttons are best knowledge of Workday's markup, unverified on a live
+ * tenant (they sit behind sign-in).
+ */
+function rowOf(container: HTMLElement, sectionId: string, title: string): RowRef | undefined {
+  const doc = container.ownerDocument;
+  for (let el = container.parentElement; el && el !== doc.body; el = el.parentElement) {
+    const inside = [...el.querySelectorAll<HTMLElement>(SEL.fieldContainer)];
+    if (inside.some((c) => slug(sectionTitleOf(c)) !== sectionId)) return undefined;
+    const button = [...el.querySelectorAll<HTMLElement>(SEL.rowDelete)].find(
+      (b) => isVisible(b) && !b.closest(SEL.fieldContainer) && !isSubmitControl(b),
+    );
+    if (button) return { title, row: el, button };
   }
+  return undefined;
 }
 
 export function fieldKind(c: HTMLElement): FieldKind | null {
@@ -355,7 +400,7 @@ function isMultiple(c: HTMLElement, kind: FieldKind): boolean {
   );
 }
 
-function fieldError(c: HTMLElement): string | undefined {
+export function fieldError(c: HTMLElement): string | undefined {
   const err = c.querySelector(SEL.errors);
   if (err && text(err)) return text(err).slice(0, 300);
   const invalid = c.querySelector('[aria-invalid="true"]');

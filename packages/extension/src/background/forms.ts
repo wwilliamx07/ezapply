@@ -5,7 +5,11 @@ type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
 
 const ADAPTER_FILE = "workday-main.js";
 
-/** Pick the tab to act on: explicit id, else the focused window's active Workday tab, else the most recent one. */
+/**
+ * Pick the tab to act on: explicit id, else the focused window's active Workday tab, else the most recent one.
+ * The companion normally passes an explicit id (it prefers the active posting's tenant); the fallback serves
+ * callers that don't.
+ */
 async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
   if (tabId !== undefined) {
     const tab = await ext.tabs.get(tabId).catch(() => null);
@@ -89,9 +93,12 @@ export const formHandlers: FormHandlers = {
   // executeScript args must be JSON-serializable: send null rather than undefined for "all values".
   "form.remove": async ({ tabId, fieldId, values }) =>
     callAdapter(requireWorkday(await resolveTab(tabId)), "remove", [fieldId, values ?? null]),
+  "form.removeRepeatable": async ({ tabId, sectionId }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "removeRepeatable", [sectionId]),
   "form.addRepeatable": async ({ tabId, addButtonId }) =>
     callAdapter(requireWorkday(await resolveTab(tabId)), "addRepeatable", [addButtonId]),
   "form.next": async ({ tabId }) => callAdapter(requireWorkday(await resolveTab(tabId)), "next", []),
+  "form.back": async ({ tabId }) => callAdapter(requireWorkday(await resolveTab(tabId)), "back", []),
   "form.pageAction": async ({ tabId, action }) =>
     callAdapter(requireWorkday(await resolveTab(tabId)), "pageAction", [action]),
   "tab.screenshot": async ({ tabId }) => {

@@ -1,16 +1,21 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, extname, join } from "node:path";
 import {
+  PDFArray,
   type PDFContext,
+  PDFDict,
   PDFDocument,
   PDFHexString,
   PDFName,
   PDFNull,
+  PDFNumber,
   type PDFPage,
   type PDFRef,
 } from "@cantoo/pdf-lib";
 import { ErrorCode, EzError } from "@ezapply/protocol";
+import { writeFileAtomic } from "../../util/fs.js";
+import { installHint } from "../../util/install-hints.js";
 import { run, which } from "../../util/proc.js";
 import { describeSize, PAGE_SIZES, type PageSizeName, parsePageRanges, sameSize } from "./pages.js";
 
@@ -196,15 +201,16 @@ export async function pdfMerge(inputs: MergeInput[], output: string, opts: Merge
     const indices = parsePageRanges(input.pages, src.getPageCount());
     const firstPage = out.getPageCount() + 1;
     for (const i of indices) {
-      const page = src.getPage(i);
-      const { width, height } = page.getSize();
-      if (opts.normalize === "auto" && target === null) target = [width, height];
-      if (target && opts.normalize !== "none" && !sameSize([width, height], target)) {
-        await drawScaled(out, page, target);
+      const [page] = await out.copyPages(src, [i]);
+      if (!page) continue;
+      out.addPage(page);
+      const size = displayedSize(page);
+      if (opts.normalize === "auto" && target === null) target = size;
+      // A landscape page of the right paper size (a wide table) is already right.
+      const fits = target && (sameSize(size, target) || sameSize(size, [target[1], target[0]]));
+      if (target && opts.normalize !== "none" && !fits) {
+        fitToSize(page, target);
         normalizedPages++;
-      } else {
-        const [copied] = await out.copyPages(src, [i]);
-        if (copied) out.addPage(copied);
       }
     }
     sections.push({
@@ -226,24 +232,72 @@ export async function pdfMerge(inputs: MergeInput[], output: string, opts: Merge
   out.setProducer("ezapply");
 
   const bytes = await out.save({ useObjectStreams: true });
-  await writeAtomic(output, bytes);
+  await writeFileAtomic(output, bytes);
   return { output, pages: out.getPageCount(), bytes: bytes.length, sections, normalizedPages };
 }
 
-/** Scale a foreign page onto a new page of the target size, centred, preserving vectors. */
-async function drawScaled(out: PDFDocument, page: PDFPage, target: readonly [number, number]): Promise<void> {
-  const embedded = await out.embedPage(page);
-  const { width, height } = page.getSize();
-  const landscape = width > height;
-  const [tw, th] = landscape ? [target[1], target[0]] : target;
-  const scale = Math.min(tw / width, th / height);
-  const dest = out.addPage([tw, th]);
-  dest.drawPage(embedded, {
-    x: (tw - width * scale) / 2,
-    y: (th - height * scale) / 2,
-    xScale: scale,
-    yScale: scale,
-  });
+/** The page as a viewer shows it: [width, height] after /Rotate. */
+function displayedSize(page: PDFPage): [number, number] {
+  const { width, height } = page.getMediaBox();
+  return quarterTurned(page) ? [height, width] : [width, height];
+}
+
+function quarterTurned(page: PDFPage): boolean {
+  return Math.abs(page.getRotation().angle) % 180 === 90;
+}
+
+/**
+ * Resize a page to the target paper size (turned to the page's own orientation) and scale its content to
+ * fit, centred. The page keeps its own content stream, so text, vectors and its annotations survive: the
+ * resume's clickable LinkedIn and GitHub links. (Redrawing it as a form XObject, as this once did, drops
+ * every annotation.) Annotation rectangles get the same transform as the content.
+ */
+function fitToSize(page: PDFPage, target: readonly [number, number]): void {
+  const box = page.getMediaBox();
+  const [dw, dh] = displayedSize(page);
+  const [short, long] = [Math.min(...target), Math.max(...target)];
+  const [tdw, tdh] = dw > dh ? [long, short] : [short, long];
+  // Work in the unrotated coordinate space; /Rotate then turns the result like the original.
+  const [tw, th] = quarterTurned(page) ? [tdh, tdw] : [tdw, tdh];
+  const s = Math.min(tw / box.width, th / box.height);
+  // p' = s * (p - origin) + margin, since a MediaBox needn't start at (0, 0).
+  const dx = (tw - box.width * s) / 2 - s * box.x;
+  const dy = (th - box.height * s) / 2 - s * box.y;
+  page.scaleContent(s, s);
+  page.translateContent(dx, dy); // wraps the scaled content, so the translation applies after scaling
+  transformAnnotations(page, s, dx, dy);
+  page.setMediaBox(0, 0, tw, th);
+  for (const name of ["CropBox", "BleedBox", "TrimBox", "ArtBox"]) page.node.delete(PDFName.of(name));
+}
+
+/** Apply p' = s * p + d to every coordinate array of the page's annotations. */
+function transformAnnotations(page: PDFPage, s: number, dx: number, dy: number): void {
+  const annots = page.node.Annots();
+  if (!annots) return;
+  const move = (arr: PDFArray) => {
+    for (let i = 0; i < arr.size(); i++) {
+      const n = arr.lookup(i);
+      if (n instanceof PDFNumber) arr.set(i, PDFNumber.of(n.asNumber() * s + (i % 2 === 0 ? dx : dy)));
+    }
+  };
+  for (let i = 0; i < annots.size(); i++) {
+    const annot = annots.lookup(i);
+    if (!(annot instanceof PDFDict)) continue;
+    for (const key of ["Rect", "QuadPoints", "Vertices", "L", "CL"]) {
+      const arr = annot.lookup(PDFName.of(key));
+      if (arr instanceof PDFArray) move(arr);
+    }
+    const ink = annot.lookup(PDFName.of("InkList"));
+    if (ink instanceof PDFArray) {
+      for (let j = 0; j < ink.size(); j++) {
+        const path = ink.lookup(j);
+        if (path instanceof PDFArray) move(path);
+      }
+    }
+    // /RD holds distances, not positions: scale only.
+    const rd = annot.lookup(PDFName.of("RD"));
+    if (rd instanceof PDFArray) rd.scalePDFNumbers(s, s);
+  }
 }
 
 /** pdf-lib has no outline API; build the /Outlines tree directly. */
@@ -292,7 +346,7 @@ export async function pdfFromImages(
   }
   doc.setCreator("ezapply");
   const bytes = await doc.save({ useObjectStreams: true });
-  await writeAtomic(output, bytes);
+  await writeFileAtomic(output, bytes);
   return { output, pages: doc.getPageCount(), bytes: bytes.length };
 }
 
@@ -373,7 +427,7 @@ export async function pdfCompress(
     await rm(tmpOut, { force: true });
   }
 
-  await writeAtomic(output, best);
+  await writeFileAtomic(output, best);
   const metTarget = targetBytes === undefined ? null : best.length <= targetBytes;
   return {
     output,
@@ -382,42 +436,9 @@ export async function pdfCompress(
     method,
     metTarget,
     ...(metTarget === false && !gs
-      ? { hint: "Install Ghostscript to downsample images (winget install ArtifexSoftware.GhostScript)." }
+      ? { hint: `Ghostscript can downsample its images further. ${installHint("ghostscript")}` }
       : {}),
   };
-}
-
-/** Open a file in the OS default application (the user's PDF viewer). */
-export async function openInDefaultApp(path: string): Promise<void> {
-  await stat(path).catch(() => {
-    throw new EzError(ErrorCode.NotFound, `File not found: ${path}`);
-  });
-  if (process.platform === "win32") {
-    // explorer.exe hands the file to its registered viewer without a shell parsing the path.
-    await run("explorer.exe", [path], { timeoutMs: 10_000 });
-  } else {
-    await run(process.platform === "darwin" ? "open" : "xdg-open", [path], { timeoutMs: 10_000 });
-  }
-}
-
-export async function writeAtomic(path: string, bytes: Uint8Array): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, bytes);
-  try {
-    await rename(tmp, path);
-  } catch (err) {
-    await rm(tmp, { force: true });
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EBUSY" || code === "EPERM") {
-      throw new EzError(
-        ErrorCode.BadRequest,
-        `${path} is locked by another program.`,
-        "Ask the user to close the PDF in their viewer (Acrobat locks open files), then retry.",
-      );
-    }
-    throw err;
-  }
 }
 
 function baseLabel(path: string): string {

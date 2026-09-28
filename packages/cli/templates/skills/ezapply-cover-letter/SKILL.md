@@ -12,14 +12,15 @@ description: Write or revise a cover letter for the active job posting using the
   letter is wanted at all.
 - `profile/preferences.md` for tone, emphasis and things never to mention. `profile/profile.yaml`.
 - `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a quick
-  version: the top requirements and the matching claims from `knowledge/*/claims.yaml`.
+  version: the top requirements and the matching claims, from every claim read with the one Grep in
+  EZAPPLY.md.
 - Template: `templates/cover/` main file (`template.json` names it). If there is none, ask the user to run
   `ezapply init`, which installs the default.
 - `templates/cover/format.md` if it exists: the structure taken from the user's example letter.
 
 ## Write `postings/<id>/cover.tex`
-Copy the template main file, fill its placeholders (company, role, date, addressee if the posting names
-one), and write the body (between the `% BODY START` / `% BODY END` markers when the template has them):
+Copy the template main file (and any `contentFiles` from `template.json`, at the same relative paths), fill
+its placeholders (company, role, date, addressee if the posting names one), and write the body (between the `% BODY START` / `% BODY END` markers when the template has them):
 1. **Opening (2–3 sentences):** the specific role and a concrete, true reason this company or team
    interests the user, drawn from the posting. No clichés ("I am writing to express…", "passionate").
 2. **Two evidence paragraphs:** each ties one or two requirements to a specific project or role, citing
@@ -37,7 +38,7 @@ Constraints:
 
 ## Build and check
 `tex_compile` (must be one page) → `pdf_render` → read it once as the hiring manager would. Cut filler and
-repeated claims. `open_file` the first time.
+repeated claims.
 
 ## Build from an example
 When the user gives a sample letter whose format they like:
@@ -56,6 +57,8 @@ Never reuse the example's sentences, claims or voice in the user's letters. Only
 Tone comes from `profile/preferences.md`.
 
 ## Report and iterate
-Reply with a 2–3 line summary of the angle taken, plus the path. Handle tweaks ("more concise", "mention
-X") by editing, recompiling and reporting in one line. Every build is saved in `.history/`, so earlier
+Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode (EZAPPLY.md):
+in `after-approval`, `review_open` it (with the resume if that's ready and not yet approved) and
+`review_wait`. Handle tweaks ("more concise", "mention X"), from chat or the review page, by editing,
+recompiling, reporting in one line, and reviewing again in `after-approval`. Every build is saved in `.history/`, so earlier
 versions can be restored on request.

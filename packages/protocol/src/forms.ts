@@ -46,6 +46,8 @@ export const Section = z.object({
   id: z.string(),
   title: z.string(),
   fields: z.array(Field),
+  /** A repeatable row (e.g. "Work Experience 2") with its own Delete button: remove_repeatable can remove it. */
+  removable: z.boolean().optional(),
 });
 export type Section = z.infer<typeof Section>;
 
@@ -69,6 +71,8 @@ export const FormSchema = z.object({
   errors: z.array(z.string()),
   /** Label of the forward button (e.g. "Save and Continue", "Submit"). */
   nextLabel: z.string().optional(),
+  /** Label of the button back to the previous step, when there is one. */
+  backLabel: z.string().optional(),
 });
 export type FormSchema = z.infer<typeof FormSchema>;
 
@@ -102,6 +106,16 @@ export const RemoveResult = z.object({
 });
 export type RemoveResult = z.infer<typeof RemoveResult>;
 
+/** Result of deleting a repeatable row (a work-history, education or website entry). */
+export const RemoveRowResult = z.object({
+  sectionId: z.string(),
+  ok: z.boolean(),
+  /** Title of the row that was removed. */
+  removed: z.string().optional(),
+  error: z.string().optional(),
+});
+export type RemoveRowResult = z.infer<typeof RemoveRowResult>;
+
 export const OptionInfo = z.object({
   label: z.string(),
   /** Hierarchical prompts: choosing this opens another level. */
@@ -119,6 +133,18 @@ export const NextResult = z.object({
   refusedReason: z.string().optional(),
 });
 export type NextResult = z.infer<typeof NextResult>;
+
+export const BackResult = z.object({
+  /** The page moved to an earlier step. */
+  moved: z.boolean(),
+  pageKind: PageKind,
+  step: z
+    .object({ index: z.number().int().optional(), total: z.number().int().optional(), title: z.string() })
+    .optional(),
+  errors: z.array(z.string()),
+  refusedReason: z.string().optional(),
+});
+export type BackResult = z.infer<typeof BackResult>;
 
 export const UploadFile = z.object({
   name: z.string(),
@@ -144,11 +170,14 @@ export const FormMethods = {
     params: TabParam.extend({ fieldId: z.string(), values: z.array(z.string()).min(1).optional() }),
     result: RemoveResult,
   },
+  /** Delete a repeatable row by its section id (a section get_form marks `removable`). */
+  "form.removeRepeatable": { params: TabParam.extend({ sectionId: z.string() }), result: RemoveRowResult },
   "form.addRepeatable": {
     params: TabParam.extend({ addButtonId: z.string() }),
     result: z.object({ ok: z.boolean(), error: z.string().optional() }),
   },
   "form.next": { params: TabParam, result: NextResult },
+  "form.back": { params: TabParam, result: BackResult },
   "form.pageAction": {
     params: TabParam.extend({ action: PageAction }),
     result: z.object({ ok: z.boolean(), pageKind: PageKind, error: z.string().optional() }),

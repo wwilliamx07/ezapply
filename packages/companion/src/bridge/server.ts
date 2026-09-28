@@ -27,6 +27,11 @@ const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
  * stops when idle), and the extension notices within its 30 s reconnect alarm.
  */
 const RECONNECT_GRACE_MS = 40_000;
+/**
+ * Only wait for an extension that was connected this recently. Longer ago, the browser is probably
+ * closed, and waiting would stall the first posting or form call for the whole grace period.
+ */
+const RECENTLY_SEEN_MS = 6 * 60 * 60_000;
 /** How long to wait for a capture the extension announced in `hello` (made while the daemon was down). */
 const PENDING_CAPTURE_WAIT_MS = 15_000;
 
@@ -44,6 +49,16 @@ export interface BridgeOptions {
   activity?: ActivityTracker;
   /** Override RECONNECT_GRACE_MS (tests). */
   reconnectGraceMs?: number;
+  /** When the extension was last connected, from the previous run (epoch ms); unknown = assume recently. */
+  extensionLastSeenAt?: number;
+  /** Called with the time whenever the extension connects or disconnects, and at close while connected. */
+  onSeen?: (at: number) => void;
+}
+
+/** What `settled()` found. */
+export interface Settled {
+  /** The paired extension hasn't reconnected since this daemon started, and it wasn't waited for. */
+  extensionReconnecting: boolean;
 }
 
 export interface BridgeStatus {
@@ -93,17 +108,33 @@ export class ExtensionBridge {
   /**
    * Wait until the extension's view of things has reached the daemon: right after a start, give the paired
    * extension time to reconnect, then let a capture it queued while the daemon was down be saved. Returns
-   * at once in the steady state. Posting tools call this so the active posting isn't stale.
+   * at once in the steady state, and without waiting when the extension hasn't been seen for hours (then
+   * `extensionReconnecting` says it may still turn up). Posting tools call this so the active posting
+   * isn't stale.
    */
-  async settled(): Promise<void> {
+  async settled(): Promise<Settled> {
     await this.awaitReconnect();
     await this.pendingCapture?.done;
+    return { extensionReconnecting: this.inGrace() };
+  }
+
+  /** Paired, not connected yet, and still inside the reconnect window after a start. */
+  private inGrace(): boolean {
+    return !this.conn && this.pairedExtensionId !== undefined && this.graceLeft() > 0;
+  }
+
+  private graceLeft(): number {
+    return this.startedAt + (this.opts.reconnectGraceMs ?? RECONNECT_GRACE_MS) - Date.now();
+  }
+
+  private seenRecently(): boolean {
+    const at = this.opts.extensionLastSeenAt;
+    return at === undefined || Date.now() - at < RECENTLY_SEEN_MS;
   }
 
   private async awaitReconnect(): Promise<void> {
-    if (this.conn || !this.pairedExtensionId) return;
-    const remaining = this.startedAt + (this.opts.reconnectGraceMs ?? RECONNECT_GRACE_MS) - Date.now();
-    if (remaining <= 0) return;
+    if (!this.inGrace() || !this.seenRecently()) return;
+    const remaining = this.graceLeft();
     await new Promise<void>((resolve) => {
       const done = () => {
         clearTimeout(timer);
@@ -219,6 +250,7 @@ export class ExtensionBridge {
 
   /** `code` tells the extension why: CloseCode.Idle after an idle stop, 1001 (going away) otherwise. */
   close(code: number = 1001, reason = "shutting down"): void {
+    if (this.conn) this.opts.onSeen?.(Date.now());
     this.conn?.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Companion shutting down"));
     for (const client of this.wss.clients) client.close(code, reason);
     this.wss.close();
@@ -287,6 +319,7 @@ export class ExtensionBridge {
           log.info("bridge: extension paired");
         }
         conn = this.adopt(socket, extensionId, msg.extensionVersion, send);
+        this.opts.onSeen?.(Date.now());
         if (msg.pendingCapture) this.expectCapture();
         for (const done of [...this.connectWaiters]) done();
         send({
@@ -325,6 +358,7 @@ export class ExtensionBridge {
       clearTimeout(handshakeTimer);
       if (conn && this.conn === conn) {
         this.conn = null;
+        this.opts.onSeen?.(Date.now());
         conn.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "The extension disconnected."));
         log.info("bridge: extension disconnected");
       }

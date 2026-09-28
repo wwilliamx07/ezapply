@@ -13,8 +13,9 @@ import {
   sleep,
   text,
   waitFor,
+  win,
 } from "./dom.js";
-import { attachedFiles, type FieldRef, fieldKind, isSubmitControl, optionLabel } from "./extract.js";
+import { attachedFiles, type FieldRef, fieldError, fieldKind, isSubmitControl, optionLabel } from "./extract.js";
 import { SEL, within } from "./selectors.js";
 
 type Result = Omit<FillResult, "fieldId">;
@@ -79,39 +80,69 @@ function dropdownButton(c: HTMLElement): HTMLElement | null {
   return c.querySelector<HTMLElement>('button[aria-haspopup="listbox"]');
 }
 
-async function openListbox(c: HTMLElement): Promise<{ button: HTMLElement; options: HTMLElement[] } | null> {
+interface OpenListbox {
+  button: HTMLElement;
+  list: HTMLElement;
+  options: HTMLElement[];
+}
+
+/** Dropdown listboxes are portals under `body`; one inside a field (e.g. a list of selected items) isn't one. */
+const visibleListboxes = (doc: Document) =>
+  [...doc.querySelectorAll<HTMLElement>('[role="listbox"]')].filter(
+    (l) => isVisible(l) && !l.closest(SEL.fieldContainer),
+  );
+const listOptions = (list: HTMLElement) => [...list.querySelectorAll<HTMLElement>('[role="option"], li')];
+const optionsSignature = (list: HTMLElement) => listOptions(list).map(text).join("\u0001");
+
+/**
+ * Open a dropdown and return its listbox. Live Workday gives the button no usable `aria-controls` and
+ * animates a closed listbox away, so right after one dropdown the previous one's listbox is often still on
+ * screen, and "the visible listbox" would be the wrong one (seen live: every first attempt got the previous
+ * dropdown's options). So: wait for other listboxes to go first, and accept only a listbox that appeared,
+ * or whose options changed, after the press.
+ */
+async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
   const button = dropdownButton(c);
   if (!button) return null;
   const doc = c.ownerDocument;
-  const listFor = () => {
+  if (!(await waitFor(() => visibleListboxes(doc).length === 0, 1000))) {
+    for (const l of visibleListboxes(doc)) key(l, "Escape");
+    await waitFor(() => visibleListboxes(doc).length === 0, 500);
+  }
+  const stale = new Map(visibleListboxes(doc).map((l) => [l, optionsSignature(l)]));
+  const fresh = (l: HTMLElement | null): l is HTMLElement =>
+    l !== null && isVisible(l) && (!stale.has(l) || stale.get(l) !== optionsSignature(l));
+  const listFor = (): OpenListbox | null => {
     const id = button.getAttribute("aria-controls");
-    const list = id ? doc.getElementById(id) : null;
-    const scoped = list ?? [...doc.querySelectorAll<HTMLElement>('[role="listbox"]')].find(isVisible) ?? null;
-    const opts = scoped ? [...scoped.querySelectorAll<HTMLElement>('[role="option"], li')] : [];
-    return opts.length ? opts : null;
+    const controlled = id ? doc.getElementById(id) : null;
+    const list = fresh(controlled) ? controlled : visibleListboxes(doc).find(fresh);
+    const options = list ? listOptions(list) : [];
+    return list && options.length ? { button, list, options } : null;
   };
   if (button.getAttribute("aria-expanded") !== "true") press(button);
-  let options = await waitFor(listFor, 2000);
-  if (!options) {
+  let opened = await waitFor(listFor, 2000);
+  if (!opened) {
     callReact(button, "onClick", {});
-    options = await waitFor(listFor, 2000);
+    opened = await waitFor(listFor, 2000);
   }
-  return options ? { button, options } : null;
+  return opened;
 }
 
-async function closeListbox(button: HTMLElement): Promise<void> {
+/** Close the listbox and wait until it has gone, so the next dropdown can't mistake it for its own. */
+async function closeListbox({ button, list }: OpenListbox): Promise<void> {
   if (button.getAttribute("aria-expanded") === "true") {
     key(button, "Escape");
     await sleep(50);
     if (button.getAttribute("aria-expanded") === "true") press(button);
   }
+  await waitFor(() => !list.isConnected || !isVisible(list), 1000);
 }
 
 export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
   const opened = await openListbox(c);
   if (!opened) return [];
   const labels = opened.options.map((o) => ({ label: text(o) })).filter((o) => o.label);
-  await closeListbox(opened.button);
+  await closeListbox(opened);
   return labels;
 }
 
@@ -121,7 +152,7 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
   const labels = opened.options.map(text);
   const idx = matchOption(value, labels);
   if (idx < 0) {
-    await closeListbox(opened.button);
+    await closeListbox(opened);
     return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
   }
   const option = opened.options[idx] as HTMLElement;
@@ -132,7 +163,7 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
     callReact(option, "onClick", {});
     await waitFor(() => norm(text(opened.button)) === norm(wanted), 1500);
   }
-  await closeListbox(opened.button);
+  await closeListbox(opened);
   const readBack = text(opened.button);
   return norm(readBack) === norm(wanted) ? { ok: true, readBack } : fail("Selection did not stick.", { readBack });
 }
@@ -309,24 +340,33 @@ async function fillDate(c: HTMLElement, value: string): Promise<Result> {
   const m = value.match(/^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/);
   if (!m) return fail('Dates must be "YYYY", "YYYY-MM" or "YYYY-MM-DD".');
   const [, year, month, day] = m;
-  const parts: [string, string | undefined][] = [
+  const parts: [HTMLInputElement, string][] = [];
+  for (const [label, v] of [
     ["Month", month?.padStart(2, "0")],
     ["Day", day?.padStart(2, "0")],
     ["Year", year],
-  ];
-  for (const [label, v] of parts) {
+  ] as const) {
     const input = c.querySelector<HTMLInputElement>(`input[aria-label="${label}" i]`);
     if (!input) continue;
     if (v === undefined) return fail(`This date needs a ${label.toLowerCase()}.`);
-    input.focus();
-    setNativeValue(input, v);
-    if (Number(input.value) !== Number(v)) {
-      callReact(input, "onChange", { target: { ...input, value: v } });
-    }
-    blur(input);
-    await sleep(40);
+    parts.push([input, v]);
   }
-  await settle(c.ownerDocument, 150, 1500);
+  const enter = async () => {
+    for (const [input, v] of parts) {
+      input.focus();
+      setNativeValue(input, v);
+      if (Number(input.value) !== Number(v)) {
+        callReact(input, "onChange", { target: { ...input, value: v } });
+      }
+      blur(input);
+      await sleep(40);
+    }
+    await settle(c.ownerDocument, 150, 1500);
+  };
+  await enter();
+  // Seen live: dates filled in a batch showed the right digits while Workday still called them required,
+  // and entering them again was accepted. So one more pass when the field still shows an error.
+  if (fieldError(c)) await enter();
   const readBack = [
     c.querySelector<HTMLInputElement>('input[aria-label="Year" i]')?.value,
     c.querySelector<HTMLInputElement>('input[aria-label="Month" i]')?.value,
@@ -348,7 +388,8 @@ export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
   const before = new Set(attachedFiles(c).map((f) => f.nameEl));
   const done = () => attachedFiles(c).some((f) => !before.has(f.nameEl) && f.name.includes(file.name));
   const input = c.querySelector<HTMLInputElement>(SEL.fileInput);
-  const dt = new DataTransfer();
+  const w = win(c);
+  const dt = new w.DataTransfer();
   dt.items.add(file);
   if (input) {
     try {
@@ -356,14 +397,14 @@ export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
     } catch {
       Object.defineProperty(input, "files", { value: dt.files, configurable: true });
     }
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new w.Event("input", { bubbles: true }));
+    input.dispatchEvent(new w.Event("change", { bubbles: true }));
   }
   if (!(await waitFor(done, 8000, 200))) {
     const zone = c.querySelector<HTMLElement>(SEL.fileDropZone);
     if (zone) {
       const handled = callReact(zone, "onDrop", { dataTransfer: dt });
-      if (!handled) zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+      if (!handled) zone.dispatchEvent(new w.DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
     }
     await waitFor(done, 20000, 250);
   }
@@ -407,7 +448,7 @@ function fileItems(c: HTMLElement): Item[] {
 }
 
 /** Press the confirm button of a delete/remove confirmation, if one appeared. */
-async function confirmRemoval(doc: Document): Promise<void> {
+export async function confirmRemoval(doc: Document): Promise<void> {
   const dialog = [...doc.querySelectorAll<HTMLElement>(SEL.dialog)].find(
     (d) => isVisible(d) && /delete|remove/i.test(text(d)),
   );

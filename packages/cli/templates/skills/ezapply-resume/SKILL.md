@@ -9,10 +9,13 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 1. `posting_active`, then read `posting.md`. If the capture-time company or role is wrong, fix it with
    `posting_update_meta`. If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
    and follow it: a required format, page limit or single PDF changes what you produce.
-2. Read `profile/profile.yaml`, `profile/preferences.md`, and the template (template main from
-   `workspace_check` or `templates/resume/template.json`).
-3. If `postings/<id>/resume.tex` does not exist, copy the template main file there (the class and style
-   files are found automatically; don't copy them). Set status `drafting` via `posting_update_meta`.
+2. Read `profile/profile.yaml`, `profile/preferences.md`, every claim (the one Grep in EZAPPLY.md), and
+   the template (template main from `workspace_check` or `templates/resume/template.json`).
+3. If `postings/<id>/resume.tex` does not exist, copy the template main file there. If `template.json`
+   lists `contentFiles` (files the main file `\input`s, e.g. `sections/experience.tex`), copy each to the same
+   path relative to `resume.tex`: the posting folder comes first on TeX's search path, so the copies are
+   the ones used, and they're where the bullets live. The class and style files are found automatically;
+   don't copy them. Set status `drafting` via `posting_update_meta`.
 
 ## Analyze (write to `postings/<id>/notes.md`)
 - Must-have and nice-to-have requirements, and the posting's key terms.
@@ -20,7 +23,7 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
   Mark requirements with no evidence as **gaps**. Gaps are never presented as skills the user has.
 - Rank the knowledge-base projects by relevance to this posting.
 
-## Edit `resume.tex`
+## Edit `resume.tex` (and its copied content files)
 - Keep the template's structure, macros and styling. Only change content.
 - Reword existing bullets toward the posting's terms where the evidence supports it. Put the strongest,
   most relevant bullets first. Swap in better-matching projects from the knowledge base.
@@ -39,6 +42,8 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 5. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
 
 ## Report
-Give 3–6 lines: what changed and why, plus any gaps you did not claim. Include the PDF path and
-`open_file` it the first time. For later tweaks, repeat the build-and-check loop and report in one or two
-lines. When the user asks to see the changes, use `tex_diff` (template vs tailored).
+Give 3–6 lines: what changed and why, plus any gaps you did not claim, and the PDF path. Then follow the
+attach mode (EZAPPLY.md): in `after-approval`, `review_open` it (with the cover letter if that's ready too)
+and `review_wait`; each change the user writes on the page is a tweak. For tweaks, repeat the
+build-and-check loop, report in one or two lines, and review again in `after-approval`. When the user asks to
+see the changes, use `tex_diff` (template vs tailored).

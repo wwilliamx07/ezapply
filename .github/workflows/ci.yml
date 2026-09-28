@@ -20,3 +20,37 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # The compile tests skip without a TeX engine, so the check job never runs them. This one installs TeX
+  # Live (XeLaTeX and latexmk for the default cover letter, pdfLaTeX for pdfTeX-only resumes) and makes a
+  # missing engine a failure (EZAPPLY_REQUIRE_TEX).
+  tex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends latexmk texlive-xetex texlive-latex-recommended \
+            texlive-latex-extra texlive-fonts-recommended fonts-lmodern
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run packages/companion/test/documents.test.ts packages/companion/test/templates.test.ts
+        env:
+          EZAPPLY_REQUIRE_TEX: "1"
+
+  # Mozilla's linter over the Firefox build (manifest, CSP, APIs). Firefox itself isn't run in CI.
+  firefox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx --yes web-ext@8 lint --source-dir packages/extension/dist-firefox --self-hosted

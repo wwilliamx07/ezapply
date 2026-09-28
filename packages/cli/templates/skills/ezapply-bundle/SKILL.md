@@ -26,4 +26,6 @@ description: Combine application documents (cover letter, resume, transcript, po
    - The resume section is still exactly one page (from the merge `sections`).
    - Size is under the form's limit, or 5 MB if unknown. Otherwise run `pdf_compress` and report the
      result. If it can't reach the target, say so and suggest what to drop.
-6. `open_file` the bundle and report the sections with their page ranges in one line.
+6. Report the sections with their page ranges in one line. The bundle is a new document: in the
+   `after-approval` attach mode `review_open` it and `review_wait` before attaching, even when its parts were
+   approved; in `immediately`, `open_file` it.

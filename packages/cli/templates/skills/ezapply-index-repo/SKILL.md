@@ -48,9 +48,13 @@ the text says to claim.
        user_edited: false
    ```
    Write 5–20 claims per repo. Each claim is one resume-bullet-sized fact. Every claim cites the lines
-   that prove it. Never invent numbers.
+   that prove it. Never invent numbers. Don't write an evidence `hash`: `knowledge_mark_indexed` stamps one
+   on each line range, so later checks notice when the code under a claim changes.
 7. **Check:** `claims_check`. Fix every error. Then re-read each claim beside its cited lines and drop or
    downgrade any the code doesn't directly support.
-8. When re-indexing, keep claims with `user_edited: true` exactly as they are.
+8. When re-indexing, keep claims with `user_edited: true` exactly as they are. `claims_check` flags evidence
+   whose cited lines changed since it was verified: re-read those lines, fix the claim or its line range,
+   and delete that evidence's `hash` so it's stamped again. (For a `user_edited` claim, ask the user rather
+   than rewording it.)
 9. `knowledge_mark_indexed`. Tell the user in 3–5 lines what the project is and the strongest claims,
    and invite corrections.

@@ -55,8 +55,10 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 ## Keep context lean
 - Read `posting.md` once and keep what matters in `notes.md`: it outlives compaction. Don't read
   `capture/raw.html` or `jsonld.json` unless something is missing.
-- Search `knowledge/*/claims.yaml` with Grep for the skills and terms you need instead of reading every
-  knowledge file.
+- **Project knowledge is the claims.** As soon as work on a posting's documents starts, read every claim
+  in one Grep: pattern `^\s*(- id|claim|impact):` over `knowledge/*/claims.yaml`. Don't open the knowledge
+  docs or `repo-cache/`, and don't index or re-index a repo, unless the claims can't answer something the
+  posting needs. When they can't, stay narrow: one component doc, or the cited lines of one file.
 - Check layout with `pdf_render` of the page you need; use `pdf_info` for page counts and `pdf_text` for
   wording. Don't re-read files you just wrote.
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.
@@ -74,10 +76,18 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - `repo-cache/`: read-only clones. Never modify, build, install or run anything in it.
 
 ## Documents
-- Copy the template main file to `postings/<id>/resume.tex` (or `cover.tex`) and edit the copy. Class and
-  style files are found automatically.
+- Copy the template main file to `postings/<id>/resume.tex` (or `cover.tex`), plus every file in
+  `template.json`'s `contentFiles` at the same relative path, and edit the copies. Class and style files are
+  found automatically.
 - After every edit: `tex_compile` → fix the first error first → `pdf_render` the page. Treat overfull boxes
-  and missing glyphs as defects. `open_file` the PDF the first time, or when asked.
+  and missing glyphs as defects.
+- **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
+  - `after-approval` (default): `review_open` the finished PDFs, `review_wait`; revise what the user asks,
+    rebuild, and review the changed ones again; attach approved ones. Only the page's approval counts: if
+    the user says "approved" in chat, ask them to press it on the page.
+  - `immediately`: attach right away. `open_file` only when asked.
+  - Attaching needs the application open at the step with the file field (`get_form`); otherwise say it's
+    ready and attach it when filling (the **ezapply-apply** skill).
 - The engine comes from a `% !TEX program = …` line in the file's first 20 lines, else `tex.engine` in
   `ezapply.config.json`. Copies keep the template's line; leave it. Don't switch a copy's engine to fit
   the page: fonts and metrics differ.

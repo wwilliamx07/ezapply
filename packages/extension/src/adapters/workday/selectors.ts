@@ -1,6 +1,9 @@
+import { WORKDAY_POSTING } from "@ezapply/protocol/workday";
+
 /**
  * Workday data-automation-id hooks. Workday ships variants across tenants and releases, so most
- * lookups list several candidates. Keep every Workday-specific string in this file.
+ * lookups list several candidates. Keep every Workday-specific string of the adapter in this file; the
+ * posting-page hooks the companion also reads, hosts and tenant parsing live in protocol/src/workday.ts.
  */
 export const A = (id: string) => `[data-automation-id="${id}"]`;
 export const any = (...ids: string[]) => ids.map(A).join(",");
@@ -18,8 +21,10 @@ export const SEL = {
   progressStep: `${A("progressBar")} li`,
   progressActive: any("progressBarActiveStep"),
   nextButton: any("bottom-navigation-next-button", "pageFooterNextButton", "wd-CommandButton_next"),
+  /** The footer's Back button. Unverified on a live tenant (it appears from step 2, behind sign-in). */
+  backButton: any("bottom-navigation-previous-button", "pageFooterBackButton", "wd-CommandButton_back"),
   errors: `${any("errorMessage", "errorBanner", "inputAlert")},[role="alert"]`,
-  postingHeader: any("jobPostingHeader"),
+  postingHeader: any(WORKDAY_POSTING.header),
   applyButton: any("adventureButton", "applyButton"),
   applyManually: any("applyManually"),
   autofillWithResume: any("autofillWithResume"),
@@ -48,6 +53,8 @@ export const SEL = {
   /** A confirmation some tenants show before removing an attachment. */
   dialog: '[role="dialog"],[role="alertdialog"]',
   addButton: `${any("Add", "add-button", "addButton")},button[aria-label^="Add"]`,
+  /** Deletes one repeatable row (a work-history entry). Unverified on a live tenant. */
+  rowDelete: `${any("panel-set-delete-button", "deleteButton")},button[aria-label^="Delete" i]`,
   helpText: `${any("helpText", "formFieldHelpText")},[id$="-helpText"]`,
   confirmation: any("applicationSubmittedMessage", "confirmationMessage", "thankYouMessage"),
 } as const;

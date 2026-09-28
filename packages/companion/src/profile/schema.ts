@@ -182,16 +182,3 @@ export const ReposFile = z.object({
     .default([]),
 });
 export type ReposFile = z.infer<typeof ReposFile>;
-
-/** templates/<kind>/template.json: which file is the entry point. */
-export const TemplateMeta = z.object({
-  schemaVersion: z.literal(1),
-  main: z.string().regex(/\.tex$/i),
-  /** default: shipped by ezapply, replaceable without asking. imported: the user's LaTeX. custom: made or edited by Claude. */
-  origin: z.enum(["default", "imported", "custom"]).optional(),
-  /** A sample letter the layout was drawn from, relative to templates/<kind>/. */
-  example: z.string().optional(),
-  importedFrom: z.string().optional(),
-  importedAt: z.string().optional(),
-});
-export type TemplateMeta = z.infer<typeof TemplateMeta>;

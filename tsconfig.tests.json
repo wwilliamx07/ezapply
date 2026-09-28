@@ -6,7 +6,7 @@
     "declarationMap": false,
     "noEmit": true,
     "lib": ["es2023", "dom", "dom.iterable"],
-    "types": ["node"]
+    "types": ["node", "chrome"]
   },
   "include": [
     "packages/protocol/test",

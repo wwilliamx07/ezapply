@@ -1,31 +1,28 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
-  agentFileStatus,
-  appDir,
+  CHAT_SESSION_HEADER,
   COMPANION_VERSION,
   createLogger,
   type DaemonConfig,
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_PORT,
   daemonConfigPath,
-  KeyringStore,
   loadDaemonConfig,
   MCP_PATH,
   newPairingToken,
   newToken,
-  resolveEngine,
   saveDaemonConfig,
   startCompanion,
-  Workspace,
-  which,
+  waitFor,
 } from "@ezapply/companion";
-import { PROTOCOL_VERSION } from "@ezapply/protocol";
-import { ensureDaemon, fetchHealth, openPairing, pairingStatus, stopDaemon, waitFor } from "./daemonctl.js";
+import { ErrorCode, EzError } from "@ezapply/protocol";
+import { CHAT_SESSION_ENV, fetchChatState, findClaude, runChat } from "./chat.js";
+import { ensureDaemon, fetchHealth, openPairing, pairingStatus, stopDaemon } from "./daemonctl.js";
+import { runDoctor } from "./doctor.js";
 import { runMcpRelay } from "./mcp-relay.js";
 import { type InitReport, initWorkspace } from "./workspace-init.js";
 
@@ -36,6 +33,8 @@ const PAIR_WAIT_SECONDS = 10 * 60;
 const USAGE = `ezapply ${COMPANION_VERSION}
 
 Usage:
+  ezapply chat [claude args…]                        Run Claude Code in the workspace (how you use ezapply);
+                                                     a newly captured posting starts a fresh session
   ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
   ezapply start | stop | restart                     Run the daemon in the background / stop it / restart it
   ezapply daemon                                     Run the daemon in the foreground (for debugging)
@@ -48,6 +47,8 @@ Usage:
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
+    case "chat":
+      return cmdChat(rest);
     case "init":
       return cmdInit(rest);
     case "start":
@@ -63,7 +64,7 @@ async function main(argv: string[]): Promise<number> {
     case "status":
       return cmdStatus();
     case "doctor":
-      return cmdDoctor();
+      return runDoctor();
     case "mcp":
       return cmdMcp();
     case undefined:
@@ -87,7 +88,7 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
   const config: DaemonConfig = {
     schemaVersion: 1,
     host: "127.0.0.1",
-    port: opts.port ? Number(opts.port) : (existing?.port ?? DEFAULT_PORT),
+    port: opts.port ? parsePort(opts.port) : (existing?.port ?? DEFAULT_PORT),
     mcpToken: existing?.mcpToken ?? newToken(),
     pairingToken: existing?.pairingToken ?? newPairingToken(),
     ...(existing?.pairedExtensionId ? { pairedExtensionId: existing.pairedExtensionId } : {}),
@@ -96,6 +97,14 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
   };
   await saveDaemonConfig(config);
   return { config, report: await initWorkspace(config) };
+}
+
+function parsePort(raw: string): number {
+  const port = Number(raw);
+  if (!/^\d+$/.test(raw.trim()) || port < 1 || port > 65535) {
+    throw new EzError(ErrorCode.BadRequest, `--port must be a whole number from 1 to 65535, not "${raw}".`);
+  }
+  return port;
 }
 
 async function cmdInit(args: string[]): Promise<number> {
@@ -111,9 +120,10 @@ async function cmdInit(args: string[]): Promise<number> {
     "",
     "Next:",
     `  cd "${config.workspace}"`,
-    "  claude",
+    `  ${process.platform === "win32" ? ".\\ezapply" : "./ezapply"} chat`,
     'Then say "set me up". Claude checks what\'s missing (TeX, the browser extension, GitHub, your resume)',
-    "and walks you through it. If the daemon was running an older build: ezapply restart",
+    "and walks you through it. Always start ezapply this way: capturing another posting then starts a",
+    "fresh Claude session by itself. If the daemon was running an older build: ezapply restart",
     "",
   ];
   process.stdout.write(out.join("\n"));
@@ -166,6 +176,24 @@ async function cmdDaemon(): Promise<number> {
   return new Promise<number>(() => {}); // run until signalled
 }
 
+/**
+ * Claude Code in the workspace, restarted with a fresh session when the user captures another posting
+ * (see chat.ts). Ctrl+C belongs to Claude: the wrapper ignores it and ends when Claude does.
+ */
+async function cmdChat(args: string[]): Promise<number> {
+  const config = await requireConfig();
+  const claude = findClaude();
+  if (!claude) {
+    process.stderr.write(
+      "Claude Code isn't on PATH. Install it (https://code.claude.com/docs), or point EZAPPLY_CLAUDE at it.\n",
+    );
+    return 1;
+  }
+  await ensureDaemon(config, { cliMain: CLI_MAIN }).catch((err: Error) => process.stderr.write(`${err.message}\n`));
+  process.on("SIGINT", () => {});
+  return runChat({ claude, args, cwd: config.workspace, state: (session) => fetchChatState(config, session) });
+}
+
 /** Claude Code's MCP server: relay stdio to the daemon, starting it when needed. Nothing else may use stdout. */
 async function cmdMcp(): Promise<number> {
   const config = await loadDaemonConfig();
@@ -182,6 +210,8 @@ async function cmdMcp(): Promise<number> {
     output: process.stdout,
     url: `http://${config.host}:${config.port}${MCP_PATH}`,
     token: config.mcpToken,
+    // Under `ezapply chat`, name the session so the daemon can tell the wrapper when it's safe to restart.
+    ...(process.env[CHAT_SESSION_ENV] ? { headers: { [CHAT_SESSION_HEADER]: process.env[CHAT_SESSION_ENV] } } : {}),
     ensureDaemon: ensure,
   });
   return 0;
@@ -238,91 +268,6 @@ async function cmdStatus(): Promise<number> {
   return 0;
 }
 
-async function cmdDoctor(): Promise<number> {
-  const checks: { name: string; ok: boolean; detail: string }[] = [];
-  const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
-
-  const major = Number(process.versions.node.split(".")[0]);
-  add("node", major >= 22, `v${process.versions.node} (need >= 22)`);
-
-  const config = await loadDaemonConfig().catch((e: Error) => {
-    add("daemon config", false, e.message);
-    return null;
-  });
-  if (config) {
-    add("daemon config", true, daemonConfigPath());
-    try {
-      await new Workspace(config.workspace).readConfig();
-      add("workspace", true, config.workspace);
-    } catch (e) {
-      add("workspace", false, `${config.workspace}: ${(e as Error).message} (run ezapply init)`);
-    }
-    const agent = await agentFileStatus(config.workspace);
-    add("agent file", agent.done, agent.detail);
-    const health = await fetchHealth(config);
-    add(
-      "daemon",
-      Boolean(health),
-      health ? `v${health.version} on port ${config.port}` : "not running (ezapply start)",
-    );
-    if (health) {
-      add(
-        "protocol",
-        health.protocolVersion === PROTOCOL_VERSION,
-        `daemon v${health.protocolVersion}, cli v${PROTOCOL_VERSION}`,
-      );
-      add(
-        "extension",
-        health.extensionConnected,
-        health.extensionConnected ? "connected" : "not connected (open the browser / pair)",
-      );
-    }
-    add("extension paired", Boolean(config.pairedExtensionId), config.pairedExtensionId ?? "not yet (ezapply pair)");
-  } else {
-    add("daemon config", false, "missing (run ezapply init)");
-  }
-
-  // GitHub (optional until onboarding reaches it).
-  const appFile = join(appDir(), "github-app.json");
-  const appRegistered = await readFile(appFile, "utf8").then(
-    () => true,
-    () => false,
-  );
-  const token = await new KeyringStore().get("github-user-token");
-  const login = token ? (JSON.parse(token) as { login?: string }).login : undefined;
-  add(
-    "github",
-    true,
-    appRegistered
-      ? login
-        ? `logged in as ${login}`
-        : "app registered, not logged in"
-      : "not set up yet (onboarding does this)",
-  );
-
-  // Documents: the engine is required; the rest are optional helpers.
-  const wsConfig = config ? await new Workspace(config.workspace).readConfig().catch(() => null) : null;
-  const configured = wsConfig?.tex.engine ?? "auto";
-  const engine = await resolveEngine(configured);
-  add(
-    "tex engine",
-    Boolean(engine),
-    engine
-      ? `${engine.id}${configured === "auto" ? " (auto)" : ""} at ${which(engine.id) ?? "?"}`
-      : `none usable for "${configured}" (install MiKTeX: winget install MiKTeX.MiKTeX, then ezapply restart)`,
-  );
-  const optional = (name: string, bins: string[], why: string) => {
-    const found = bins.map((b) => which(b)).find(Boolean);
-    add(name, true, found ?? `not installed (optional: ${why})`);
-  };
-  optional("latexdiff", ["latexdiff"], "change-highlighted PDFs");
-  optional("ghostscript", ["gswin64c", "gswin32c", "gs"], "shrinking image-heavy PDFs");
-
-  const width = Math.max(...checks.map((c) => c.name.length));
-  for (const c of checks) process.stdout.write(`${c.ok ? " ok " : "FAIL"}  ${c.name.padEnd(width)}  ${c.detail}\n`);
-  return checks.some((c) => !c.ok) ? 1 : 0;
-}
-
 async function requireConfig(): Promise<DaemonConfig> {
   const config = await loadDaemonConfig();
   if (!config) {
@@ -337,7 +282,12 @@ main(process.argv.slice(2)).then(
     if (code !== 0) process.exitCode = code;
   },
   (err: unknown) => {
-    process.stderr.write(`${(err as Error).stack ?? String(err)}\n`);
+    // Expected problems (bad input, a damaged config) get one line and what to do; bugs keep their stack.
+    if (err instanceof EzError) {
+      process.stderr.write(`ezapply: ${err.message}\n${err.hint ? `${err.hint}\n` : ""}`);
+    } else {
+      process.stderr.write(`${(err as Error).stack ?? String(err)}\n`);
+    }
     process.exitCode = 1;
   },
 );

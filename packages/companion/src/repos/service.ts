@@ -1,13 +1,16 @@
-import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import type { GitHubService } from "../github/service.js";
 import type { Logger } from "../logger.js";
+import { readJson, writeJsonAtomic } from "../util/fs.js";
 import { installHint } from "../util/install-hints.js";
+import { KeyedQueue } from "../util/keyed-queue.js";
 import { run, which } from "../util/proc.js";
-import { readJson, type Workspace, writeJsonAtomic } from "../workspace/workspace.js";
+import type { Workspace } from "../workspace/workspace.js";
 
 /** knowledge/<key>/meta.json */
 export const KnowledgeMeta = z.object({
@@ -36,6 +39,11 @@ export const Claim = z.object({
           .regex(/^\d+(-\d+)?$/, 'like "12" or "12-40"')
           .optional(),
         sha: z.string().min(7).optional(),
+        /** Short hash of the cited lines, stamped by knowledge_mark_indexed; claims_check flags a change. */
+        hash: z
+          .string()
+          .regex(/^[0-9a-f]{12}$/, "12 hex characters, written by ezapply")
+          .optional(),
       }),
     )
     .min(1),
@@ -56,11 +64,22 @@ export interface SyncResult {
 
 type RepoSource = "app" | "public-url";
 
+export interface ClaimsCheck {
+  valid: boolean;
+  claims: number;
+  errors: { path: string; message: string }[];
+  /** Evidence with a line range but no hash yet; knowledge_mark_indexed stamps them. */
+  unstamped: number;
+}
+
 /**
  * Read-only mirrors of the user's repos under repo-cache/. Only this service writes there; files are
  * marked read-only after every sync, and credentials are passed per command, never stored.
  */
 export class RepoService {
+  /** Two syncs of one repo would collide on git's index.lock (and on the read-only flags). */
+  private readonly syncs = new KeyedQueue();
+
   constructor(
     private readonly ws: Workspace,
     private readonly github: GitHubService,
@@ -82,6 +101,10 @@ export class RepoService {
 
   async sync(fullName: string, source: RepoSource): Promise<SyncResult> {
     assertRepoName(fullName);
+    return this.syncs.run(fullName.toLowerCase(), () => this.doSync(fullName, source));
+  }
+
+  private async doSync(fullName: string, source: RepoSource): Promise<SyncResult> {
     const dir = this.cachePath(fullName);
     const auth = source === "app" ? await this.github.gitAuthHeader() : null;
     const remote = this.cloneUrl(fullName);
@@ -89,16 +112,12 @@ export class RepoService {
     const transport = remote.startsWith("https://")
       ? ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always"]
       : [];
-    const safe = [
-      ...transport,
-      "-c",
-      "core.symlinks=false",
-      "-c",
-      "core.hooksPath=",
-      "-c",
-      "credential.helper=",
-      ...(auth ? ["-c", `http.extraHeader=${auth}`] : []),
-    ];
+    const safe = [...transport, "-c", "core.symlinks=false", "-c", "core.hooksPath=", "-c", "credential.helper="];
+    // The token goes through the environment, not `-c` on the command line: other local users can read a
+    // process's arguments (/proc/<pid>/cmdline), but not its environment. Needs git 2.31 or later.
+    const authEnv: Record<string, string> = auth
+      ? { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: auth }
+      : {};
     const exists = await stat(join(dir, ".git")).then(
       () => true,
       () => false,
@@ -106,10 +125,10 @@ export class RepoService {
 
     if (!exists) {
       await rm(dir, { recursive: true, force: true });
-      await this.git(safe, ["clone", "--filter=blob:none", "--no-tags", "--single-branch", "--", remote, dir]);
+      await this.git(safe, ["clone", "--filter=blob:none", "--no-tags", "--single-branch", "--", remote, dir], authEnv);
     } else {
       await setReadOnly(dir, false);
-      await this.git(safe, ["-C", dir, "fetch", "--no-tags", "--filter=blob:none", "origin", "HEAD"]);
+      await this.git(safe, ["-C", dir, "fetch", "--no-tags", "--filter=blob:none", "origin", "HEAD"], authEnv);
       await this.git(safe, ["-C", dir, "reset", "--hard", "FETCH_HEAD"]);
       await this.git(safe, ["-C", dir, "clean", "-fdx"]);
     }
@@ -205,8 +224,11 @@ export class RepoService {
     return parsed.success ? parsed.data : null;
   }
 
-  /** Record that knowledge/<repo> now reflects the cached HEAD. */
-  async markIndexed(fullName: string): Promise<KnowledgeMeta> {
+  /**
+   * Record that knowledge/<repo> now reflects the cached HEAD, after stamping a hash of the cited lines on
+   * every evidence entry that has a line range but no hash (Claude verified those lines in its self-check).
+   */
+  async markIndexed(fullName: string): Promise<KnowledgeMeta & { stamped: number }> {
     const dir = await this.requireCache(fullName);
     const headSha = (await this.git([], ["-C", dir, "rev-parse", "HEAD"])).trim();
     const fileCount = (await this.git([], ["-C", dir, "ls-files"])).split(/\r?\n/).filter(Boolean).length;
@@ -218,6 +240,7 @@ export class RepoService {
         JSON.stringify(claims.errors.slice(0, 5)),
       );
     }
+    const stamped = await this.stampEvidence(fullName);
     const meta: KnowledgeMeta = {
       schemaVersion: 1,
       repo: fullName,
@@ -228,33 +251,21 @@ export class RepoService {
       depthPolicy: ">15 source files or >2k LOC per component → subfolder, max depth 3",
     };
     await writeJsonAtomic(join(this.knowledgePath(fullName), "meta.json"), meta);
-    return meta;
+    return { ...meta, stamped };
   }
 
-  /** Schema + evidence check: every cited file must exist in the cache and every line range must fit. */
-  async checkClaims(
-    fullName: string,
-  ): Promise<{ valid: boolean; claims: number; errors: { path: string; message: string }[] }> {
-    const file = join(this.knowledgePath(fullName), "claims.yaml");
-    const text = await readFile(file, "utf8").catch(() => null);
-    if (text === null) return { valid: false, claims: 0, errors: [{ path: "claims.yaml", message: "missing" }] };
-    const doc = parseDocument(text);
-    if (doc.errors.length) {
-      return { valid: false, claims: 0, errors: doc.errors.map((e) => ({ path: "claims.yaml", message: e.message })) };
-    }
-    const parsed = ClaimsFile.safeParse(doc.toJS());
-    if (!parsed.success) {
-      return {
-        valid: false,
-        claims: 0,
-        errors: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-      };
-    }
+  /**
+   * Schema + evidence check: every cited file must exist in the cache, every line range must fit, and cited
+   * lines that carry a hash must still hash the same (otherwise the code changed under the claim).
+   */
+  async checkClaims(fullName: string): Promise<ClaimsCheck> {
+    const loaded = await this.loadClaims(fullName);
+    if ("errors" in loaded) return { valid: false, claims: 0, errors: loaded.errors, unstamped: 0 };
     const errors: { path: string; message: string }[] = [];
     const ids = new Set<string>();
-    const cache = this.cachePath(fullName);
-    const lineCounts = new Map<string, number | null>();
-    for (const [i, c] of parsed.data.claims.entries()) {
+    const files = new Map<string, string[] | null>();
+    let unstamped = 0;
+    for (const [i, c] of loaded.claims.entries()) {
       if (ids.has(c.id)) errors.push({ path: `claims.${i}.id`, message: `duplicate id ${c.id}` });
       ids.add(c.id);
       for (const [j, ev] of c.evidence.entries()) {
@@ -263,24 +274,76 @@ export class RepoService {
           errors.push({ path: where, message: "path must stay inside the repo" });
           continue;
         }
-        if (!lineCounts.has(ev.path)) {
-          const content = await readFile(join(cache, ev.path), "utf8").catch(() => null);
-          lineCounts.set(ev.path, content === null ? null : content.split("\n").length);
-        }
-        const lines = lineCounts.get(ev.path);
-        if (lines === null || lines === undefined) {
+        const lines = await this.cachedLines(fullName, ev.path, files);
+        if (lines === null) {
           errors.push({ path: where, message: `${ev.path} not found in the cached repo` });
           continue;
         }
-        if (ev.lines) {
-          const [a, b] = ev.lines.split("-").map(Number);
-          if ((a ?? 0) < 1 || (b ?? a ?? 0) > lines || (b !== undefined && b < (a ?? 0))) {
-            errors.push({ path: where, message: `lines ${ev.lines} outside 1-${lines} of ${ev.path}` });
-          }
+        if (!ev.lines) continue;
+        const range = lineRange(ev.lines);
+        if (!range || range[0] < 1 || range[1] > lines.length || range[1] < range[0]) {
+          errors.push({ path: where, message: `lines ${ev.lines} outside 1-${lines.length} of ${ev.path}` });
+          continue;
+        }
+        if (!ev.hash) unstamped++;
+        else if (ev.hash !== hashLines(lines, range)) {
+          errors.push({
+            path: where,
+            message:
+              `${ev.path} lines ${ev.lines} changed since claim "${c.id}" was verified. Re-read them, fix the ` +
+              "claim or its line range, then delete this evidence's hash (knowledge_mark_indexed stamps a new one).",
+          });
         }
       }
     }
-    return { valid: errors.length === 0, claims: parsed.data.claims.length, errors };
+    return { valid: errors.length === 0, claims: loaded.claims.length, errors, unstamped };
+  }
+
+  /** Write a hash onto every evidence entry with a line range and no hash, keeping the file's comments. */
+  private async stampEvidence(fullName: string): Promise<number> {
+    const file = join(this.knowledgePath(fullName), "claims.yaml");
+    const doc = parseDocument(await readFile(file, "utf8"));
+    const parsed = ClaimsFile.parse(doc.toJS());
+    const files = new Map<string, string[] | null>();
+    let stamped = 0;
+    for (const [i, c] of parsed.claims.entries()) {
+      for (const [j, ev] of c.evidence.entries()) {
+        const range = ev.lines ? lineRange(ev.lines) : null;
+        if (!range || ev.hash) continue;
+        const lines = await this.cachedLines(fullName, ev.path, files);
+        if (!lines) continue;
+        doc.setIn(["claims", i, "evidence", j, "hash"], hashLines(lines, range));
+        stamped++;
+      }
+    }
+    if (stamped > 0) await writeFile(file, doc.toString({ lineWidth: 0 }), "utf8");
+    return stamped;
+  }
+
+  private async loadClaims(
+    fullName: string,
+  ): Promise<{ claims: z.infer<typeof Claim>[] } | { errors: { path: string; message: string }[] }> {
+    const text = await readFile(join(this.knowledgePath(fullName), "claims.yaml"), "utf8").catch(() => null);
+    if (text === null) return { errors: [{ path: "claims.yaml", message: "missing" }] };
+    const doc = parseDocument(text);
+    if (doc.errors.length) return { errors: doc.errors.map((e) => ({ path: "claims.yaml", message: e.message })) };
+    const parsed = ClaimsFile.safeParse(doc.toJS());
+    if (!parsed.success) {
+      return { errors: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) };
+    }
+    return { claims: parsed.data.claims };
+  }
+
+  private async cachedLines(
+    fullName: string,
+    path: string,
+    memo: Map<string, string[] | null>,
+  ): Promise<string[] | null> {
+    if (!memo.has(path)) {
+      const content = await readFile(join(this.cachePath(fullName), path), "utf8").catch(() => null);
+      memo.set(path, content === null ? null : content.split("\n"));
+    }
+    return memo.get(path) ?? null;
   }
 
   async requireCache(fullName: string): Promise<string> {
@@ -298,12 +361,12 @@ export class RepoService {
     return entries.filter((e) => e.includes("__")).map((e) => e.replace("__", "/"));
   }
 
-  private async git(pre: string[], args: string[]): Promise<string> {
+  private async git(pre: string[], args: string[], env: Record<string, string> = {}): Promise<string> {
     requireGit();
     const r = await run("git", [...pre, ...args], {
       timeoutMs: 10 * 60_000,
       maxOutputBytes: 32 * 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", GCM_INTERACTIVE: "never" },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", GCM_INTERACTIVE: "never", ...env },
     });
     if (r.exitCode !== 0) {
       const msg = r.stderr.replace(/Authorization: Basic \S+/g, "Authorization: [redacted]").trim();
@@ -317,6 +380,23 @@ export class RepoService {
     }
     return r.stdout;
   }
+}
+
+/** "12" or "12-40" as [first, last]. */
+function lineRange(spec: string): [number, number] | null {
+  const [a, b] = spec.split("-").map(Number);
+  if (a === undefined || Number.isNaN(a)) return null;
+  const last = b ?? a;
+  return Number.isNaN(last) ? null : [a, last];
+}
+
+/** 12 hex characters of SHA-256 over the cited lines, ignoring line endings and trailing whitespace. */
+function hashLines(lines: string[], [a, b]: [number, number]): string {
+  const text = lines
+    .slice(a - 1, b)
+    .map((l) => l.trimEnd())
+    .join("\n");
+  return createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
 function requireGit(): void {

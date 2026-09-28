@@ -19,7 +19,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "ezapply": "node packages/cli/dist/main.js",
-    "recon:workday": "node scripts/workday-recon.mjs"
+    "recon:workday": "node scripts/workday-recon.mjs",
+    "usage:report": "node scripts/usage-report.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

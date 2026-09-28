@@ -2,15 +2,16 @@ import { EzError } from "@ezapply/protocol";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Logger } from "../logger.js";
 
+/** Compact JSON: results sit in Claude's context, and indentation costs a fifth to a third more tokens. */
 export function ok(data: unknown): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  return { content: [{ type: "text", text: JSON.stringify(data) }] };
 }
 
 function failure(log: Logger, name: string, err: unknown): CallToolResult {
   const e = EzError.from(err);
   if (e.code === "internal") log.error({ tool: name, err: e.message, stack: (err as Error).stack }, "tool failed");
   else log.info({ tool: name, code: e.code }, "tool returned error");
-  return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: e.toPayload() }, null, 2) }] };
+  return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: e.toPayload() }) }] };
 }
 
 /**

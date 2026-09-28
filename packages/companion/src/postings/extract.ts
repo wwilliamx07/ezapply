@@ -1,4 +1,4 @@
-import { detectSite, type SiteId } from "@ezapply/protocol";
+import { detectSite, type SiteId, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
@@ -33,17 +33,22 @@ export function extractPosting(input: {
   url: string;
   pageTitle: string;
   jsonLd: string[];
+  /** The embedded job board frame the HTML came from, if not the page itself. */
+  frameUrl?: string;
 }): ExtractedPosting {
-  const site = detectSite(input.url);
+  // The content's own site decides how to read it (a Workday board embedded in a career page is Workday);
+  // the company still comes from the page the user was on.
+  const contentUrl = input.frameUrl ?? input.url;
+  const site = detectSite(contentUrl);
   const dom = new JSDOM(`<!doctype html><html><head><title></title></head><body>${input.visibleHtml}</body></html>`, {
-    url: input.url,
+    url: contentUrl,
   });
   const doc = dom.window.document;
   doc.title = input.pageTitle;
   for (const el of doc.querySelectorAll(STRIP_SELECTORS)) el.remove();
 
   const ld = parseJobPostingLd(input.jsonLd);
-  const workday = site === "workday" ? extractWorkday(doc, input.url) : {};
+  const workday = site === "workday" ? extractWorkday(doc, contentUrl) : {};
   // Workday titles are just the role; the company comes from JSON-LD or the tenant subdomain.
   const fromTitle = site === "workday" ? {} : splitTitle(input.pageTitle);
 
@@ -62,6 +67,7 @@ export function extractPosting(input: {
     ...(location ? [`- Location: ${location}`] : []),
     ...(reqId ? [`- Requisition: ${reqId}`] : []),
     `- URL: ${input.url}`,
+    ...(input.frameUrl ? [`- Embedded from: ${input.frameUrl}`] : []),
     "",
     "---",
     "",
@@ -112,21 +118,22 @@ function readableHtml(doc: Document): string | undefined {
   return article.content;
 }
 
-/** Workday data-automation-id hooks. Verified against live tenants during recon (plan M7). */
+/** Workday posting pages, through the hooks shared with the adapter (protocol/src/workday.ts). */
 function extractWorkday(
   doc: Document,
   url: string,
 ): { descriptionHtml?: string; role?: string; location?: string; reqId?: string; tenant?: string } {
+  const hook = (id: string) => `[data-automation-id="${id}"]`;
   const text = (sel: string) => doc.querySelector(sel)?.textContent?.trim() || undefined;
-  const description = doc.querySelector('[data-automation-id="jobPostingDescription"]');
-  const tenant = new URL(url).hostname.split(".")[0];
+  const description = doc.querySelector(hook(WORKDAY_POSTING.description));
+  const tenant = workdayTenant(url);
   const result: { descriptionHtml?: string; role?: string; location?: string; reqId?: string; tenant?: string } = {};
   if (description) result.descriptionHtml = description.innerHTML;
-  const role = text('[data-automation-id="jobPostingHeader"]');
+  const role = text(hook(WORKDAY_POSTING.header));
   if (role) result.role = role;
-  const location = text('[data-automation-id="locations"] dd') ?? text('[data-automation-id="locations"]');
+  const location = text(`${hook(WORKDAY_POSTING.locations)} dd`) ?? text(hook(WORKDAY_POSTING.locations));
   if (location) result.location = location.replace(/^locations\s*/i, "");
-  const reqId = text('[data-automation-id="requisitionId"] dd') ?? text('[data-automation-id="requisitionId"]');
+  const reqId = text(`${hook(WORKDAY_POSTING.requisitionId)} dd`) ?? text(hook(WORKDAY_POSTING.requisitionId));
   if (reqId) result.reqId = reqId.replace(/^job requisition id\s*/i, "");
   if (tenant) result.tenant = tenant;
   return result;
@@ -209,9 +216,16 @@ function cleanCompany(s: string): string | undefined {
 export function companyFromUrl(url: string): string | undefined {
   const u = new URL(url);
   if (ATS_HOSTS.test(u.hostname)) {
-    // e.g. boards.greenhouse.io/acme/jobs/1, jobs.lever.co/acme/..., acme.wd5.myworkdayjobs.com
-    if (/myworkday/i.test(u.hostname)) return u.hostname.split(".")[0];
-    return u.pathname.split("/").filter(Boolean)[0];
+    // Workday: acme.wd5.myworkdayjobs.com, wd5.myworkdaysite.com/recruiting/acme/...
+    if (/myworkday/i.test(u.hostname)) return workdayTenant(url);
+    const segments = u.pathname.split("/").filter(Boolean);
+    // Job boards: the company is only in the path of Indeed company pages (indeed.com/cmp/acme/jobs);
+    // linkedin.com/jobs/view/<id> and indeed.com/viewjob?jk= don't name it (the page title and JSON-LD do).
+    if (/(^|\.)(linkedin|indeed)\./i.test(u.hostname)) {
+      return segments[0] === "cmp" && segments[1] ? segments[1] : undefined;
+    }
+    // e.g. boards.greenhouse.io/acme/jobs/1, jobs.lever.co/acme/...
+    return segments[0];
   }
   const labels = u.hostname.replace(/^www\./, "").split(".");
   return labels.length >= 2 ? labels[labels.length - 2] : labels[0];

@@ -1,15 +1,20 @@
-/**
- * Runs inside the job posting page via chrome.scripting.executeScript, which serialises the
- * function source. It must be self-contained: no imports, helpers or outer references.
- */
-export function capturePage(): {
+/** What `capturePage` returns from one frame. */
+export interface PageCapture {
   url: string;
   pageTitle: string;
   html: string;
   visibleHtml: string;
   visibleText: string;
   jsonLd: string[];
-} {
+  /** Visible iframes of this frame, for spotting a job board embedded from another site. */
+  frames: { src: string; width: number; height: number }[];
+}
+
+/**
+ * Runs inside the job posting page via chrome.scripting.executeScript, which serialises the
+ * function source. It must be self-contained: no imports, helpers or outer references.
+ */
+export function capturePage(): PageCapture {
   const body = document.body;
   const clone = body.cloneNode(true) as HTMLElement;
 
@@ -51,6 +56,12 @@ export function capturePage(): {
   const jsonLd = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(
     (s) => s.textContent ?? "",
   );
+  const frames = Array.from(document.querySelectorAll("iframe"))
+    .map((f) => {
+      const r = f.getBoundingClientRect();
+      return { src: f.src, width: Math.round(r.width), height: Math.round(r.height) };
+    })
+    .filter((f) => /^https?:/i.test(f.src) && f.width > 0 && f.height > 0);
 
   return {
     url: location.href,
@@ -59,5 +70,6 @@ export function capturePage(): {
     visibleHtml: clone.innerHTML,
     visibleText: body.innerText,
     jsonLd,
+    frames,
   };
 }

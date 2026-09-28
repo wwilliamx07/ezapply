@@ -27,7 +27,8 @@ claims:
     skills: [Redis, Lua, rate limiting]
     impact: null                    # only a result the repo itself shows
     evidence:
-      - { path: src/limiter/window.lua, lines: "1-48", sha: a1b2c3d }   # lines and sha optional
+      - { path: src/limiter/window.lua, lines: "1-48", sha: a1b2c3d, hash: 3f9c0a17b2de }
+        # lines and sha optional; hash is written by knowledge_mark_indexed, never by hand
     confidence: high                # high = visible in code; medium = inferred from structure or docs
     user_edited: false              # true = the user edited it; re-indexing keeps it verbatim
 ```
@@ -35,9 +36,19 @@ claims:
 
 ## Checks
 - **`claims_check`** validates the schema, unique ids, that every evidence path exists in the cached repo
-  (and stays inside it), and that line ranges are within the file. Returns `{ valid, claims, errors[] }`.
-- **`knowledge_mark_indexed`** refuses unless `claims_check` passes, then writes `meta.json` with the cached
-  HEAD commit, file count and depth policy. Later `repo_sync` calls report only files changed since.
+  (and stays inside it), that line ranges are within the file, and that cited lines carrying a `hash` still
+  hash the same. Returns `{ valid, claims, errors[], unstamped }` (`unstamped`: line ranges without a hash
+  yet).
+- **`knowledge_mark_indexed`** refuses unless `claims_check` passes, then stamps a `hash` on every evidence
+  entry that has a line range and none yet, and writes `meta.json` with the cached HEAD commit, file count
+  and depth policy. Later `repo_sync` calls report only files changed since. The stamp goes into
+  `claims.yaml` through the YAML document model, so comments and layout are kept.
+- **Why hashes.** Line ranges alone go stale quietly: after the code changes, a claim can point at unrelated
+  lines that are still in bounds and still pass. The hash is 12 hex characters of SHA-256 over the cited
+  lines (line endings and trailing whitespace ignored). When they change, `claims_check` names the claim,
+  and re-indexing re-verifies it: Claude re-reads the lines, fixes the claim or its range, and deletes the
+  hash so the next `knowledge_mark_indexed` stamps a fresh one. Evidence without a line range (a whole file)
+  isn't hashed: any edit to the file would flag it.
 - The skill's **self-check**: Claude re-reads each claim beside its cited lines and drops or downgrades
   anything the code doesn't directly support.
 
@@ -49,7 +60,8 @@ claims:
 3. Survey the tree (skipping vendored, generated, lock and build output), manifests, README, entry points,
    CI and tests.
 4. Split into components; write component docs bottom-up, then the README, then `claims.yaml`.
-5. `claims_check` until clean; self-check; keep `user_edited` claims unchanged.
+5. `claims_check` until clean; self-check; keep `user_edited` claims unchanged (a changed-lines error on one
+   goes to the user). Evidence whose lines changed is re-verified and its hash deleted.
 6. `knowledge_mark_indexed`; summarize the project and its strongest claims for the user in 3–5 lines.
 
 Reading uses Claude Code's own Read, Grep and Glob. Nothing in the cache is edited, built, installed or

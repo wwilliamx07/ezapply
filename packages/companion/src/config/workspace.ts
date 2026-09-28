@@ -28,8 +28,28 @@ export const WorkspaceConfig = z.object({
         .default(5 * 1024 * 1024),
     })
     .default({ defaultMaxBytes: 5 * 1024 * 1024 }),
+  documents: z
+    .object({
+      /**
+       * after-approval: generated documents are shown in the browser (review_open) and attached only once the
+       * user approves that exact version on the page; upload_file refuses anything else from postings/.
+       * immediately: attached as soon as they're built.
+       */
+      attach: z.enum(["after-approval", "immediately"]).default("after-approval"),
+    })
+    .default({ attach: "after-approval" }),
   decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
+  context: z
+    .object({
+      /**
+       * Under `ezapply chat`, capturing a different posting restarts Claude with a fresh session, so the last
+       * posting's conversation stops being re-sent with every turn.
+       */
+      restartOnCapture: z.boolean().default(true),
+    })
+    .default({ restartOnCapture: true }),
 });
+export type AttachMode = WorkspaceConfig["documents"]["attach"];
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfig>;
 
 export function defaultWorkspaceConfig(): WorkspaceConfig {

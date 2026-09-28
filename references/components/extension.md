@@ -9,12 +9,13 @@ review UI: that happens in Claude Code and the PDF viewer.
 | Path | Role |
 |---|---|
 | `src/ext.ts` | `ext`: Firefox's promise-based `browser`, else Chrome's `chrome` (typed as Chrome's API); `isFirefox` |
-| `src/background/index.ts` | Entry: wiring, Set posting, lifecycle listeners, `browser.status` handler |
+| `src/background/index.ts` | Entry: wiring, Set posting, lifecycle listeners and the reconnect alarm, `browser.status` handler |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
 | `src/background/forms.ts` | Handlers for the form methods: choose the tab, check site access, inject and call the adapter |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
 | `src/background/badge.ts` | Toolbar badge and tooltip |
-| `src/capture/capture.ts` | `capturePage`: runs in the posting's page (self-contained, serialized by `executeScript`) |
+| `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
+| `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
 | `src/options/options.ts`, `static/options.html` | Options page: status, site access, manual pairing |
 | `src/adapters/workday/` | The Workday adapter → [workday-adapter.md](workday-adapter.md) |
 | `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time |
@@ -22,14 +23,19 @@ review UI: that happens in Claude Code and the PDF viewer.
 
 ## Manifest
 - Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`.
-- Host permissions: `*://*.myworkdayjobs.com/*`, `*://*.myworkdaysite.com/*`, `*://*.workday.com/*`
-  (needed to inject the adapter without a click). Capture needs none: the button click grants `activeTab`.
+- Host permissions: `*://*.myworkdayjobs.com/*`, `*://*.myworkdaysite.com/*` (needed to inject the adapter
+  without a click), exactly `WORKDAY_HOST_PERMISSIONS` from the protocol (a test checks both builds). Not
+  `*.workday.com`: that matched Workday's marketing site and employees' own tenants (`*.myworkday.com`),
+  which aren't application sites. Capture needs none: the button click grants `activeTab`.
 - `commands._execute_action`: Alt+Shift+P runs Set posting.
 - Options page embedded (`open_in_tab: false`).
 
 ## Builds (`npm run build -w @ezapply/extension`)
 esbuild bundles `background.js` (ESM), `options.js` and `workday-main.js` (IIFE, small and without zod) for
-`chrome120` and `firefox128`, with linked source maps.
+`chrome120` and `firefox128`, with linked source maps. `workday-main.js` gets its `ADAPTER_VERSION` stamped
+in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
+(so the source map stays exact). Any change to the adapter therefore replaces older copies in open tabs,
+with no version number to remember to bump.
 
 | Folder | For | Manifest differences |
 |---|---|---|
@@ -58,7 +64,12 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   only while pairing is open; the `welcome` then carries the code, which is saved without reconnecting.
   Failures quietly leave the state "not paired" and the alarm tries again.
 - **Wake-ups:** a 30 s alarm, browser startup, install/update, and settings changes all call
-  `ensureConnected()`, which is a no-op when already connected or connecting.
+  `ensureConnected()`, which is a no-op when already connected or connecting. The alarm is created every
+  time the background starts, if it doesn't exist (`ensureReconnectAlarm`): Firefox drops alarms when the
+  browser closes and Chrome may clear them on restart, so an alarm made only at install left the extension
+  disconnected after a browser restart, until the user clicked Set posting. Creating it only when missing
+  keeps a wake-up from pushing the next firing back. `test/background.test.ts` loads the background with a
+  stubbed API and checks this.
 - **Firefox keepalive:** its MV3 background is an event page unloaded after 30 s without an extension
   event, and socket traffic doesn't count. Each ping therefore also writes `storage.session`; the
   resulting `storage.onChanged` event resets the idle timer.
@@ -67,14 +78,28 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   `disconnected { reason }`, `error { message, hint? }`, stored for the badge and options page.
 
 ## Set posting
-Click (or Alt+Shift+P) on an `http(s)` page → inject `capturePage` → send `posting.capture` (60 s timeout)
-→ save the "Company: Role" label and flash ✓. Not connected: store the capture as pending (only the latest
-is kept; badge `…`) and send it on the next connection. Pages that can't be captured, or failures, flash `!`
-with the reason in the tooltip. Details of what's captured: [postings.md](postings.md).
+Click (or Alt+Shift+P) on an `http(s)` page → inject `capturePage` into every frame the extension may read
+→ pick the frame that holds the posting → send `posting.capture` (60 s timeout) → save the "Company: Role"
+label and flash ✓. Not connected: store the capture as pending (only the latest is kept; badge `…`) and
+send it on the next connection. Pages that can't be captured, or failures, flash `!` with the reason in the
+tooltip. Details of what's captured: [postings.md](postings.md).
+
+**Embedded job boards.** Career pages often show a Greenhouse, Lever, iCIMS or Workday board in an iframe,
+and a capture of the top frame alone holds only the company's page around it.
+- `executeScript` runs with `allFrames: true` (falling back to the top frame if that fails). The click's
+  `activeTab` grant covers the tab's own origin; frames from other sites are skipped without an error.
+- `chooseFrame`: the top frame, unless it has no `JobPosting` JSON-LD and a child frame does, or a child
+  frame (with at least 300 characters) shows more text than the page around it. The payload keeps the tab's
+  URL and title, takes the content from that frame, and sets `frameUrl`.
+- `unreadableBoard`: when the chosen frame has no `JobPosting` data but contains a visible iframe of at least
+  300×300 from a known job board host that couldn't be read, nothing is captured; the board's URL opens in a
+  new tab next to the page, and the badge says to click Set posting there.
 
 ## Serving form requests (`forms.ts`)
 1. **Tab:** the explicit `tabId`; else the focused window's active tab if it's Workday; else the most
-   recently used Workday tab. None → `not_found` ("ask the user to open the application").
+   recently used Workday tab. None → `not_found` ("ask the user to open the application"). The companion
+   normally chooses the tab itself (preferring the active posting's tenant) and always passes it; the
+   fallback serves callers that don't.
 2. The tab must be a Workday URL (`detectSite`).
 3. **Site access:** Firefox lets users withhold or revoke host permissions, so the handler checks
    `permissions.contains` for the tab's origin first and fails with a hint to click **Grant site access**
@@ -85,7 +110,9 @@ with the reason in the tooltip. Details of what's captured: [postings.md](postin
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
    switch to it).
 
-`browser.status` lists every tab with a URL: id, window, URL, title, active, and site.
+`browser.status` lists every tab with a URL: id, window, URL, title, active, `focused` (active in the window
+the user last focused), `lastAccessed` when the browser reports it, and site. The companion picks form tabs
+from it.
 
 ## Badge and options
 - Badge: green = connected, grey = connecting or disconnected, amber = not paired or a capture is pending

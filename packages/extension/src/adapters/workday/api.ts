@@ -1,4 +1,5 @@
 import type {
+  BackResult,
   FillAction,
   FillResult,
   NextResult,
@@ -6,10 +7,12 @@ import type {
   PageAction,
   PageKind,
   RemoveResult,
+  RemoveRowResult,
   UploadFile,
 } from "@ezapply/protocol";
-import { press, settle, text, waitFor } from "./dom.js";
+import { press, settle, text, waitFor, win } from "./dom.js";
 import {
+  backButton,
   detectPage,
   type Extraction,
   extract,
@@ -19,11 +22,24 @@ import {
   pageErrors,
   stepInfo,
 } from "./extract.js";
-import { fillField, listDropdown, listTypeahead, removeItems, searchTypeahead, uploadFile } from "./fill.js";
+import {
+  confirmRemoval,
+  fillField,
+  listDropdown,
+  listTypeahead,
+  removeItems,
+  searchTypeahead,
+  uploadFile,
+} from "./fill.js";
 import { SEL } from "./selectors.js";
 
-/** Bump when the API changes, so a tab holding an older injected adapter gets the new one. */
-export const ADAPTER_VERSION = "2";
+declare const __ADAPTER_VERSION__: string | undefined;
+
+/**
+ * Identifies this build of the adapter, so a tab holding an older injected copy gets the new one. build.mjs
+ * stamps a hash of the bundle; unbundled (tests) it's "dev".
+ */
+export const ADAPTER_VERSION: string = typeof __ADAPTER_VERSION__ === "string" ? __ADAPTER_VERSION__ : "dev";
 
 /**
  * The adapter surface the service worker calls (via chrome.scripting in the MAIN world).
@@ -91,8 +107,9 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
     async upload(fieldId: string, file: UploadFile): Promise<FillResult> {
       try {
         const r = ref(fieldId);
-        const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
-        const f = new File([bytes], file.name, { type: file.mimeType });
+        const w = win(doc);
+        const bytes = Uint8Array.from(w.atob(file.base64), (ch) => ch.charCodeAt(0));
+        const f = new w.File([bytes], file.name, { type: file.mimeType });
         return { fieldId, ...(await uploadFile(r.container, f)) };
       } catch (err) {
         return { fieldId, ok: false, error: (err as Error).message };
@@ -108,6 +125,34 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       } catch (err) {
         return { fieldId, ok: false, removed: [], remaining: [], error: (err as Error).message };
       }
+    },
+
+    /**
+     * Delete one repeatable row (e.g. a work-history entry carried over from the last application) with its
+     * own Delete button, confirming a dialog if one appears. Done once the page has fewer fields.
+     */
+    async removeRepeatable(sectionId: string): Promise<RemoveRowResult> {
+      const row = refresh().rows.get(sectionId);
+      if (!row) {
+        return {
+          sectionId,
+          ok: false,
+          error: `No removable row "${sectionId}". Call get_form: rows that can be removed are marked removable.`,
+        };
+      }
+      if (isSubmitControl(row.button)) return { sectionId, ok: false, error: "Refusing to press a submit control." };
+      const count = () => doc.querySelectorAll(SEL.fieldContainer).length;
+      const before = count();
+      row.button.scrollIntoView?.({ block: "center" });
+      press(row.button);
+      if (!(await waitFor(() => count() < before, 1500))) {
+        await confirmRemoval(doc);
+        await waitFor(() => count() < before, 2500);
+      }
+      await settle(doc, 200, 2000);
+      return count() < before
+        ? { sectionId, ok: true, removed: row.title }
+        : { sectionId, ok: false, error: `"${row.title}" is still there.` };
     },
 
     async addRepeatable(addButtonId: string): Promise<{ ok: boolean; error?: string }> {
@@ -152,6 +197,35 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       );
       await settle(doc, 300, 4000);
       return summary(Boolean(changed) && (stepInfo(doc)?.title ?? "") !== stepBefore);
+    },
+
+    /**
+     * Press Back to the previous step, e.g. to correct an answer from the review page. Allowed anywhere there
+     * is a Back button except after submitting; it never touches a submit control.
+     */
+    async back(): Promise<BackResult> {
+      const before = refresh();
+      const summary = (moved: boolean, extra: Partial<BackResult> = {}): BackResult => {
+        const s = stepInfo(doc);
+        return {
+          moved,
+          pageKind: detectPage(doc, extract(doc, getUrl()).fields.size),
+          ...(s ? { step: s } : {}),
+          errors: pageErrors(doc),
+          ...extra,
+        };
+      };
+      if (before.schema.pageKind === "confirmation") {
+        return summary(false, { refusedReason: "The application was already submitted." });
+      }
+      const button = backButton(doc);
+      if (!button) return summary(false, { refusedReason: "No Back button on this page (it's the first step)." });
+      if (isSubmitControl(button)) return summary(false, { refusedReason: "Refusing to press a submit control." });
+      const stepBefore = before.schema.step?.title ?? "";
+      press(button);
+      const changed = await waitFor(() => (stepInfo(doc)?.title ?? "") !== stepBefore, 12000, 150);
+      await settle(doc, 300, 4000);
+      return summary(Boolean(changed));
     },
 
     async pageAction(action: PageAction): Promise<{ ok: boolean; pageKind: PageKind; error?: string }> {

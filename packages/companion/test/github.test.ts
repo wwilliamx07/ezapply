@@ -5,12 +5,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "../src/github/secrets.js";
+import { appSlugFrom } from "../src/github/service.js";
 import { createLogger } from "../src/logger.js";
 import { type CompanionHandle, startCompanion } from "../src/main.js";
+
+/** A client secret the user generated for an app they already had (GitHub's are 40 hex characters). */
+const REUSE_SECRET = "0123456789abcdef0123456789abcdef01234567";
 
 /** Minimal stand-in for github.com + api.github.com. */
 function mockGitHub() {
   const calls: string[] = [];
+  const usedRefreshTokens = new Set<string>();
   let tokenCounter = 0;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
@@ -36,7 +41,15 @@ function mockGitHub() {
     }
     if (req.method === "POST" && url.pathname === "/login/oauth/access_token") {
       const p = JSON.parse(body) as Record<string, string>;
-      if (p.client_secret !== "shh") return json(401, { error: "bad_client" });
+      if (p.client_secret !== "shh" && p.client_secret !== REUSE_SECRET) {
+        return json(200, { error: "incorrect_client_credentials" });
+      }
+      // Refresh tokens are single-use, like GitHub's.
+      if (p.grant_type === "refresh_token") {
+        if (usedRefreshTokens.has(p.refresh_token ?? "")) return json(200, { error: "bad_refresh_token" });
+        usedRefreshTokens.add(p.refresh_token ?? "");
+        await new Promise((r) => setTimeout(r, 50)); // a real round trip, so concurrent callers overlap
+      }
       if (p.code === "oauth-code" || p.grant_type === "refresh_token") {
         tokenCounter++;
         return json(200, {
@@ -50,7 +63,9 @@ function mockGitHub() {
     }
     if (!auth.startsWith("Bearer ghu_")) return json(401, { message: "Bad credentials" });
     if (url.pathname === "/user") return json(200, { login: "jane", name: "Jane Doe", id: 7 });
-    if (url.pathname === "/user/installations") return json(200, { installations: [{ id: 1 }] });
+    if (url.pathname === "/user/installations") {
+      return json(200, { installations: [{ id: 1, app_id: 42, app_slug: "ezapply-test" }] });
+    }
     if (url.pathname === "/user/installations/1/repositories") {
       const page = url.searchParams.get("page") ?? "1";
       const repo = (n: string, pushed: string) => ({
@@ -157,6 +172,108 @@ describe("GitHub app setup and login", () => {
     expect(await svc.gitAuthHeader()).toMatch(/^Authorization: Basic /);
   });
 
+  it("connects an existing app from its Client ID and a new secret, entered on the daemon's page", async () => {
+    const svc = handle.services.github;
+    const start = new URL(svc.loginUrl("existing"));
+    const form = await local(start.pathname + start.search);
+    expect(form.status).toBe(200);
+    const html = await form.text();
+    expect(html).toContain(`${ghBase}/settings/apps`);
+    expect(html).toContain(svc.callbackUrl());
+    expect(form.headers.get("content-security-policy")).toContain("form-action 'self'");
+    const state = html.match(/name="state" value="([^"]+)"/)?.[1] ?? "";
+
+    const submit = (fields: Record<string, string>) =>
+      fetch(`http://127.0.0.1:${handle.port}/github/reuse`, {
+        method: "POST",
+        body: new URLSearchParams(fields),
+        redirect: "manual",
+      });
+    // Nothing is accepted without the page's one-time state.
+    expect(
+      (await submit({ state: "forged", app: "ezapply-test", client_id: "Iv1.client", client_secret: REUSE_SECRET }))
+        .status,
+    ).toBe(400);
+
+    const sent = await submit({
+      state,
+      app: "https://github.com/settings/apps/ezapply-test",
+      client_id: "Iv1.client",
+      client_secret: REUSE_SECRET,
+    });
+    expect(sent.status).toBe(302);
+    const authorize = sent.headers.get("location") ?? "";
+    expect(authorize).toContain(`${ghBase}/login/oauth/authorize?client_id=Iv1.client`);
+    // Until the login works, nothing is stored.
+    expect(await svc.status()).toMatchObject({ appRegistered: false, loggedIn: false });
+    expect(await secrets.get("github-app-client-secret")).toBeNull();
+
+    const waiting = svc.waitForLogin(5_000);
+    const cb = await local(`/github/callback?code=oauth-code&state=${stateOf(authorize)}`);
+    expect(cb.status).toBe(200);
+    expect(await waiting).toMatchObject({
+      loggedIn: true,
+      login: "jane",
+      appRegistered: true,
+      appSlug: "ezapply-test",
+    });
+    expect(await secrets.get("github-app-client-secret")).toBe(REUSE_SECRET);
+    const { readFile } = await import("node:fs/promises");
+    expect(JSON.parse(await readFile(join(dir, "app", "github-app.json"), "utf8"))).toMatchObject({
+      appId: 42,
+      slug: "ezapply-test",
+      clientId: "Iv1.client",
+      origin: "reused",
+      localBaseUrl: `http://127.0.0.1:${handle.port}`,
+    });
+    expect((await svc.listRepos()).map((r) => r.fullName)).toContain("jane/secret");
+  });
+
+  it("keeps the current app when an existing app's credentials don't work", async () => {
+    await registerApp();
+    const svc = handle.services.github;
+    const start = new URL(svc.loginUrl("existing"));
+    const html = await (await local(start.pathname + start.search)).text();
+    const state = html.match(/name="state" value="([^"]+)"/)?.[1] ?? "";
+
+    // A malformed secret: the form comes back with the problem and a fresh state.
+    const retry = await fetch(`http://127.0.0.1:${handle.port}/github/reuse`, {
+      method: "POST",
+      body: new URLSearchParams({ state, app: "ezapply-other", client_id: "Iv1.other00", client_secret: "short" }),
+      redirect: "manual",
+    });
+    expect(retry.status).toBe(400);
+    const again = await retry.text();
+    expect(again).toMatch(/look like a client secret/);
+    expect(again).not.toContain("short");
+    const state2 = again.match(/name="state" value="([^"]+)"/)?.[1] ?? "";
+
+    const sent = await fetch(`http://127.0.0.1:${handle.port}/github/reuse`, {
+      method: "POST",
+      body: new URLSearchParams({
+        state: state2,
+        app: "ezapply-other",
+        client_id: "Iv1.other00",
+        client_secret: "f".repeat(40),
+      }),
+      redirect: "manual",
+    });
+    const authorize = sent.headers.get("location") ?? "";
+    const cb = await local(`/github/callback?code=oauth-code&state=${stateOf(authorize)}`);
+    expect(cb.status).toBe(400);
+    expect(await cb.text()).toMatch(/incorrect_client_credentials.*same app/s);
+    expect(await secrets.get("github-app-client-secret")).toBe("shh");
+    expect(await svc.status()).toMatchObject({ appSlug: "ezapply-test" });
+  });
+
+  it("reads an app's name from what the user pastes", () => {
+    expect(appSlugFrom("ezapply-1a2b3c4d")).toBe("ezapply-1a2b3c4d");
+    expect(appSlugFrom(" https://github.com/settings/apps/Ezapply-1A2B ")).toBe("ezapply-1a2b");
+    expect(appSlugFrom("https://github.com/apps/ezapply-9f/installations/new")).toBe("ezapply-9f");
+    expect(appSlugFrom("../../etc")).toBeUndefined();
+    expect(appSlugFrom("")).toBeUndefined();
+  });
+
   it("rejects callbacks without a state it issued", async () => {
     const r = await local("/github/callback?code=oauth-code&state=forged");
     expect(r.status).toBe(400);
@@ -193,6 +310,64 @@ describe("GitHub app setup and login", () => {
     expect(await handle.services.github.token()).toBe("ghu_token1");
     expect(JSON.parse((await secrets.get("github-user-token")) ?? "{}").accessToken).toBe("ghu_token1");
   });
+
+  it("refreshes once when parallel calls find the token about to expire", async () => {
+    await registerApp();
+    await expiringToken();
+    const tokens = await Promise.all([1, 2, 3, 4].map(() => handle.services.github.token()));
+    expect(new Set(tokens)).toEqual(new Set(["ghu_token1"]));
+    expect(gh.calls.filter((c) => c === "POST /login/oauth/access_token")).toHaveLength(1);
+    expect(await handle.services.github.status()).toMatchObject({ loggedIn: true });
+  });
+
+  it("treats an unreadable stored token as logged out instead of failing", async () => {
+    await secrets.set("github-user-token", "{not json");
+    expect(await handle.services.github.status()).toMatchObject({ loggedIn: false });
+    await expect(handle.services.github.token()).rejects.toMatchObject({ code: "unauthorized" });
+  });
+
+  it("notices when the app's callback URLs point at another port", async () => {
+    await registerApp({ localBaseUrl: "http://127.0.0.1:1234" });
+    const status = await handle.services.github.status();
+    expect(status.portMismatch).toMatchObject({
+      appUrl: "http://127.0.0.1:1234",
+      daemonUrl: `http://127.0.0.1:${handle.port}`,
+      hint: expect.stringMatching(/ezapply init --port 1234/),
+    });
+  });
 });
+
+async function registerApp(extra: Record<string, unknown> = {}) {
+  const { writeFile, mkdir } = await import("node:fs/promises");
+  await secrets.set("github-app-client-secret", "shh");
+  await mkdir(join(dir, "app"), { recursive: true });
+  await writeFile(
+    join(dir, "app", "github-app.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      appId: 42,
+      slug: "ezapply-test",
+      clientId: "Iv1.client",
+      htmlUrl: "x",
+      createdAt: "2026-01-01",
+      ...extra,
+    }),
+  );
+}
+
+async function expiringToken() {
+  await secrets.set(
+    "github-user-token",
+    JSON.stringify({
+      accessToken: "ghu_old",
+      expiresAt: Date.now() + 60_000,
+      refreshToken: "ghr_x",
+      refreshExpiresAt: Date.now() + 1e9,
+      login: "jane",
+      name: null,
+      userId: 7,
+    }),
+  );
+}
 
 export type { Server };

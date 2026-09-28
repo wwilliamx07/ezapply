@@ -11,12 +11,10 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
     {
       title: "Compile LaTeX",
       description:
-        "Compile a .tex file (under postings/ or templates/) to PDF next to it, with shell-escape disabled. Returns the PDF " +
-        "path, page count, and errors/warnings with line numbers (overfull boxes, missing fonts or glyphs). Files named " +
-        "*resume*/*cv* are checked against the configured page limit (default 1). Each successful build is snapshotted " +
-        "into .history/ beside the file so earlier versions can be restored. The engine comes from a " +
-        "`% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in the file's first 20 lines, else from " +
-        `tex.engine in ezapply.config.json; the result says which (engine, engineFrom). ${PATH_NOTE}`,
+        "Compile a .tex file (under postings/ or templates/) to a PDF next to it, without shell escape. Returns the " +
+        "PDF, page count, and diagnostics with line numbers (overfull boxes, missing glyphs). *resume*/*cv* files are " +
+        "checked against the page limit. Successful builds are snapshotted to .history/. Engine: the file's " +
+        `\`% !TEX program\` comment, else tex.engine (engine, engineFrom say which). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),
         maxPages: z.number().int().min(1).optional().describe("Override the page limit check for this document."),
@@ -180,6 +178,67 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       ({ path, output, targetBytes }: { path: string; output?: string; targetBytes?: number }) =>
         s.documents.compress(path, output, targetBytes),
     ),
+  );
+
+  server.registerTool(
+    "review_open",
+    {
+      title: "Show documents for approval",
+      description:
+        "In the after-approval attach mode: open a page in the user's browser showing these PDFs (one posting's " +
+        "resume, cover letter or bundle) to approve or ask changes for. Then call review_wait. Only approval on " +
+        "that page lets upload_file attach a document, and only in the version shown.",
+      inputSchema: {
+        files: z.array(z.string()).min(1).max(6).describe("PDFs under postings/<id>/, e.g. postings/<id>/resume.pdf."),
+      },
+    },
+    tool(s.log, "review_open", async ({ files }: { files: string[] }) => {
+      const review = await s.reviews.open(files);
+      const opened = await s.opener.url(review.url).then(
+        () => true,
+        () => false,
+      );
+      return {
+        ...review,
+        openedBrowser: opened,
+        tell: opened
+          ? "A review page opened in the browser: approve each document, or write what should change."
+          : `Ask the user to open ${review.url} to approve the documents or write what should change.`,
+      };
+    }),
+  );
+
+  server.registerTool(
+    "review_wait",
+    {
+      title: "Wait for the review",
+      description:
+        "Block until the user answers the review page (default up to 10 minutes). Returns approved documents and " +
+        "change requests per document; revise those, rebuild, and review_open the changed ones again.",
+      inputSchema: {
+        reviewId: z.string(),
+        timeoutSeconds: z.number().int().min(5).max(900).default(600),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    tool(s.log, "review_wait", ({ reviewId, timeoutSeconds }: { reviewId: string; timeoutSeconds: number }) =>
+      s.reviews.wait(reviewId, timeoutSeconds * 1000),
+    ),
+  );
+
+  server.registerTool(
+    "attach_mode_set",
+    {
+      title: "Set the attach mode",
+      description:
+        "How generated documents reach applications: after-approval (shown in the browser, attached once the user " +
+        "approves) or immediately (attached as soon as they're built). Saved in ezapply.config.json. Only when the " +
+        "user asks for it.",
+      inputSchema: { mode: z.enum(["after-approval", "immediately"]) },
+    },
+    tool(s.log, "attach_mode_set", async ({ mode }: { mode: "after-approval" | "immediately" }) => ({
+      attachMode: await s.reviews.setAttachMode(mode),
+    })),
   );
 
   server.registerTool(

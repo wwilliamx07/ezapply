@@ -19,7 +19,11 @@ All browser-facing steps are pages served by the daemon under `/github/*`, each 
 state value that expires after 30 minutes.
 
 1. `github_login` returns a `/github/start?nonce=…` URL (the nonce is issued to Claude, so a web page can't
-   start the flow) and opens it in the default browser.
+   start the flow) and opens it in the default browser through the `Opener`, which accepts only
+   `http://127.0.0.1:<port>/` URLs. The result says whether that worked (`openedBrowser`), and its `tell`
+   text gives the user the URL to open when it didn't (no `xdg-open` on a headless Linux, say). (It used to
+   call the file opener, which checks that its argument exists on disk: a URL never does, so no browser
+   ever opened while the text said one had.)
 2. **First time only** (`/github/start` with no app registered): a page posts an App Manifest to GitHub
    (`ezapply-<random>`, private, read-only permissions, callback and setup URLs on the daemon). The user
    clicks "Create".
@@ -33,15 +37,54 @@ state value that expires after 30 minutes.
 
 Without the first-time steps (app already registered), `/github/start` goes straight to authorize.
 
+### Reusing an existing app
+Someone with an ezapply app from another computer or an earlier install doesn't need another one:
+onboarding asks, and `github_login` with `app: "existing"` connects it (`app: "new"` forces the manifest flow
+even when an app is registered; neither given: the registered app, else a new one). GitHub offers no way to
+list a user's apps before they sign in, and never shows an app's client secret again, so:
+1. `/github/start` (with a nonce whose choice is `existing`) serves a form page with the steps: open
+   github.com/settings/apps and edit the ezapply-… app, add this daemon's callback URL
+   (`http://127.0.0.1:<port>/github/callback`) if it's missing, copy the Client ID, and generate a new client
+   secret. GitHub keeps an app's older secrets valid, so other computers keep working.
+2. The user pastes the app's name (or its GitHub address), the Client ID and the secret into that page, which
+   posts to `POST /github/reuse` on the daemon, the only POST route. The secret never passes through the
+   chat. The form carries a one-time state of its own, so a web page can't post credentials to the daemon.
+   Malformed fields bring the form back with the problem (never echoing the secret) and a fresh state.
+3. The credentials are kept in memory with the OAuth state, and the user is sent to authorize with that
+   Client ID. Nothing is written yet.
+4. `/github/callback` exchanges the code with those credentials. Only if that works does the daemon store
+   the secret in the keychain and write `github-app.json` (`origin: "reused"`). A user token only sees
+   installations of the app that issued it, so `/user/installations` names the app for certain (its id and
+   slug); the typed name is the fallback for an app not installed anywhere yet, and then the page links to
+   its install page. Wrong credentials leave the registered app, secret and token as they were, and the
+   error page says to check that the Client ID and secret are from the same app.
+
+Creating a new app over a registered one deletes the old app's token (tokens belong to the app that issued
+them). A port mismatch doesn't stop `github_login` when an app is chosen, since the choice replaces the app.
+
 ### Tokens
 - Stored in the OS keychain (service `ezapply`, keys `github-app-client-secret`, `github-user-token`) via
   `@napi-rs/keyring`. Tests use an in-memory store.
 - `token()` refreshes when the access token is within 5 minutes of expiry. If the refresh token expired,
   the stored token is deleted and the error hint says to call `github_login`.
+- **One refresh at a time.** GitHub App refresh tokens are single-use, and onboarding indexes repos in
+  parallel subagents whose `repo_sync` calls all ask for a token. Concurrent callers share one refresh in
+  flight; the refresh re-reads the stored token first (another call may just have refreshed it), and if
+  GitHub rejects the refresh token after someone else replaced it, the new stored token is used. Without
+  this the second caller got `bad_refresh_token` and the user had to log in again mid-onboarding.
+- A stored token that can't be parsed reads as logged out (and is logged), never as a crash.
 - `github_logout` revokes the token with GitHub (best effort) and deletes it locally. The app and cached
   repos stay.
-- `github_status`: `{ appRegistered, appSlug?, manageUrl?, loggedIn, login?, name?, tokenExpiresAt? }`.
+- `github_status`: `{ appRegistered, appSlug?, manageUrl?, portMismatch?, loggedIn, login?, name?, tokenExpiresAt? }`.
   `manageUrl` is where the user grants access to more repos.
+
+### The app remembers its port
+The app's callback and setup URLs contain the daemon's port at creation time, so after
+`ezapply init --port N` GitHub would redirect logins to the old port. `github-app.json` records
+`localBaseUrl` at creation; when it differs from where the daemon listens, `github_status` reports
+`portMismatch { appUrl, daemonUrl, hint }` (move the daemon back, or change the Callback URL and Setup URL
+in the app's settings on GitHub), `github_login` refuses with that hint, and `workspace_check` counts
+`github_login` as not done. Apps created before this field existed can't be checked.
 
 ### Listing repos
 `github_list_repos` walks every installation of the app the user can see (`/user/installations`, then each
@@ -59,13 +102,17 @@ anonymously.
 
 - **Sync** (`repo_sync`): first time, `git clone --filter=blob:none --no-tags --single-branch` (history is
   kept for contributions, blobs are fetched on demand); later, `fetch` + `reset --hard FETCH_HEAD` +
-  `clean -fdx`. Returns `{ repo, path, headSha, indexedSha, changedSince, fileCount }`, where
+  `clean -fdx`. Syncs of the same repo run one after another (they'd collide on git's `index.lock`). Returns `{ repo, path, headSha, indexedSha, changedSince, fileCount }`, where
   `changedSince` is `null` (never indexed: index everything), `[]` (current), or the files changed since
   the indexed commit.
 - **Hardening on every git command:** HTTPS only for real remotes (`protocol.allow=never`,
   `protocol.https.allow=always`, so no `file://`, ssh, `ext::` or submodule transports), symlinks off, hooks
-  off, credential helpers off, and the token passed as `-c http.extraHeader=…` per command, never written
-  to `.git/config`. `GIT_TERMINAL_PROMPT=0` and no askpass, so git never prompts.
+  off, credential helpers off, and the token passed per command, never written to `.git/config`.
+  `GIT_TERMINAL_PROMPT=0` and no askpass, so git never prompts.
+- **The token travels in the environment** (`GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=http.extraHeader`,
+  `GIT_CONFIG_VALUE_0=Authorization: Basic …`), not as `-c http.extraHeader=…` on the command line: on Linux
+  other local users can read a process's arguments (`/proc/<pid>/cmdline`) but not its environment. This
+  needs git 2.31 or later; an older git ignores the variables and private repos fail to authenticate.
 - **Read-only:** after each sync every file is marked read-only; only a sync clears it, briefly. Claude
   Code's workspace settings also deny Edit/Write/NotebookEdit under `repo-cache/`, and the skills forbid
   building, installing or running anything from it.

@@ -2,21 +2,22 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs
 import { basename, dirname, extname, join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
+import { writeFileAtomic } from "../util/fs.js";
 import { installHint } from "../util/install-hints.js";
+import { KeyedQueue } from "../util/keyed-queue.js";
+import type { Opener } from "../util/open.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
 import type { PageSizeName } from "./pdf/pages.js";
 import {
   type MergeInput,
   type MergeOptions,
-  openInDefaultApp,
   pdfCompress,
   pdfFromImages,
   pdfInfo,
   pdfMerge,
   pdfRender,
   pdfText,
-  writeAtomic,
 } from "./pdf/toolkit.js";
 import {
   ENGINES,
@@ -59,9 +60,13 @@ export interface CompileResult {
 }
 
 export class DocumentsService {
+  /** Builds of the same file share <dir>/.build/<name>/, so they run one after another. */
+  private readonly builds = new KeyedQueue();
+
   constructor(
     private readonly ws: Workspace,
     private readonly log: Logger,
+    private readonly opener: Opener,
   ) {}
 
   /**
@@ -73,6 +78,11 @@ export class DocumentsService {
     if (extname(texPath).toLowerCase() !== ".tex") {
       throw new EzError(ErrorCode.BadRequest, `Not a .tex file: ${input}`);
     }
+    const key = process.platform === "win32" ? texPath.toLowerCase() : texPath;
+    return this.builds.run(key, () => this.build(texPath, opts));
+  }
+
+  private async build(texPath: string, opts: { maxPages?: number }): Promise<CompileResult> {
     await stat(texPath).catch(() => {
       throw new EzError(ErrorCode.NotFound, `File not found: ${texPath}`);
     });
@@ -113,7 +123,7 @@ export class DocumentsService {
     }
 
     const pdf = join(dir, `${name}.pdf`);
-    await writeAtomic(pdf, new Uint8Array(await readFile(engineRun.pdfPath)));
+    await writeFileAtomic(pdf, new Uint8Array(await readFile(engineRun.pdfPath)));
     const pages = (await pdfInfo(pdf)).pages;
     const pageLimit = opts.maxPages ?? (/resume|cv/i.test(name) ? config.resume.pageLimit : undefined);
     const pageLimitExceeded = pageLimit !== undefined && pages > pageLimit;
@@ -217,7 +227,7 @@ export class DocumentsService {
 
   async open(input: string): Promise<{ opened: string }> {
     const path = this.pdfPath(input, "open");
-    await openInDefaultApp(path);
+    await this.opener.file(path);
     return { opened: path };
   }
 

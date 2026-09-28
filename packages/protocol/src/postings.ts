@@ -18,6 +18,8 @@ export const CapturePayload = z.object({
   visibleText: z.string(),
   /** Contents of every <script type="application/ld+json"> on the page (head included). */
   jsonLd: z.array(z.string()).default([]),
+  /** Set when the content came from an embedded frame (a job board on a career page); `url` is the tab's. */
+  frameUrl: z.string().url().optional(),
   capturedAt: z.string().datetime(),
   tabId: z.number().int(),
 });
@@ -37,6 +39,8 @@ export const PostingMeta = z.object({
   id: z.string(),
   url: z.string(),
   canonicalUrl: z.string(),
+  /** The embedded job board frame the content was captured from, if any. */
+  frameUrl: z.string().optional(),
   pageTitle: z.string(),
   site: SiteId,
   tenant: z.string().optional(),

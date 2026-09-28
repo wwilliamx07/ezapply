@@ -1,29 +1,45 @@
 # Status
 
-As of 2026-09-26.
+As of 2026-09-27.
 
 ## Done
 | Area | State |
 |---|---|
-| Scaffold | Monorepo, protocol package, CI on Ubuntu and Windows, Biome, Vitest, `ezapply doctor` |
-| Daemon, bridge, capture | MCP over the stdio relay; extension pairs, stays connected, captures; verified live in Chrome |
-| Documents | TeX compile with page count, log parsing and history; per-file engine from `% !TEX program` (pdfTeX-only templates marked at import); render, text, info, merge, images, compress, open, diff |
-| GitHub and repos | Per-user GitHub App via manifest, OAuth login, keychain tokens with refresh, repo listing and selection, hardened read-only cache |
-| Knowledge base | `ezapply-index-repo` skill, `claims.yaml` with `claims_check`, contributions, incremental re-index |
-| Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates, default cover letter, cover from an example; readiness checklist |
-| Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed |
-| Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant |
-| Workday write path | All fillers, removing carried-over selections and attachments, repeatables, next, page actions, screenshot, submit guard, `ezapply-apply` skill; tested against a behavioural fixture |
-| Audit and status | `form-log.jsonl`, automatic status, duplicate lookup by company, resume after interruption |
+| Scaffold | Monorepo, protocol package, CI (Ubuntu and Windows checks, a TeX Live job, `web-ext lint` of the Firefox build), Biome, Vitest, `ezapply doctor` |
+| Daemon, bridge, capture | MCP over the stdio relay (retries only refused connections, no timeout); extension pairs, stays connected (alarm recreated on every start), captures, including from embedded job board frames; verified live in Chrome |
+| Documents | TeX compile with page count, log parsing and history; per-file engine from `% !TEX program` (pdfTeX-only templates marked at import); multi-file templates (content files copied with the main file); render, text, info, merge (normalizing keeps links), images, compress, open, diff |
+| GitHub and repos | Per-user GitHub App via manifest, or an existing ezapply app connected from its Client ID and a new secret; OAuth login (browser opened, or the URL given), keychain tokens with single-flight refresh, port-mismatch detection, repo listing and selection, hardened read-only cache with the token in git's environment |
+| Knowledge base | `ezapply-index-repo` skill, `claims.yaml` with `claims_check`, evidence hashes that flag changed code, contributions, incremental re-index |
+| Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
+| Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
+| Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
+| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; a date is entered again while the field still objects), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
+| Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
-| Setup | `npm run setup` + agent-led onboarding, on-demand daemon that stops after 15 idle minutes, code-less pairing, install hints for TeX and git that work without a restart |
+| Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read in one Grep; `npm run usage:report` to measure |
+| Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), on-demand daemon that stops after 15 idle minutes, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
-- **Filling a signed-in Workday application.** Steps behind sign-in can't be reached without an account;
-  the first real application is the test. That includes the remove controls for skill pills and attached
-  files (`DELETE_charm`, `delete-file`), which come from knowledge of Workday's markup, not a live page.
-- **A real GitHub login** (tested only against a mock GitHub).
+- **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
+  was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
+  reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;
+  cause unknown, not yet re-run live). Not exercised yet: the remove controls for skill pills and attached
+  files (`DELETE_charm`, `delete-file`), repeatable rows (`panel-set-delete-button`) and the Back button
+  (`bottom-navigation-previous-button`), which come from
+  knowledge of Workday's markup, not a live page. On the first real application: `screenshot` plus a saved
+  snapshot of a step with a removable pill, file and row, turned into a live fixture.
+- **Capturing from embedded job boards** in a real browser: whether `allFrames` quietly skips frames the
+  click's `activeTab` grant doesn't cover (as expected) in both Chrome and Firefox, and the board opening in
+  its own tab when it can't be read. Tested with the frame-choice logic only.
+- **The review page in real browsers:** PDFs shown in an iframe by Chrome's and Firefox's viewers under the
+  page's CSP (tested over HTTP only).
+- **The reconnect alarm after a browser restart** in a real Chrome and Firefox (tested by loading the
+  background against a stubbed API).
+- **CI's `tex` and `firefox` jobs** haven't run on GitHub yet; locally, the TeX tests pass with MiKTeX with
+  `EZAPPLY_REQUIRE_TEX=1`, and `web-ext lint` reports no errors or warnings.
+- **A real GitHub login** (tested only against a mock GitHub), including connecting an existing app: adding a
+  callback URL and generating a second client secret on GitHub's settings page.
 - **Firefox in a real browser:** pairing, capture, the keepalive over several minutes, `tab.screenshot`.
   The first real load found the connection upgraded to `wss://` by Firefox's default CSP; fixed with an
   explicit CSP, awaiting a re-test.
@@ -31,29 +47,69 @@ As of 2026-09-26.
   while the daemon was down are tested against a fake extension; the daemon stopping by itself is verified
   with the real CLI.
 - **A full onboarding in Claude Code**, including installing MiKTeX through a tool hint.
+- **`ezapply chat` with a real Claude Code:** tested with a stub `claude`. Not yet seen: Claude Code passing
+  `EZAPPLY_CHAT_SESSION` on to its MCP relay (without it the session reads as unused and never restarts,
+  which fails safe), the terminal state after ending Claude in Windows Terminal, PowerShell and macOS
+  Terminal, and an npm-installed `claude.cmd` launched through the shell.
 
 ## Known issues
 - The TeX tests, including the default cover letter compiling to one page, pass with MiKTeX (latexmk) on
   Windows. Once, the default cover test failed while the other TeX tests passed. It didn't reproduce in
   four later runs, and the error wasn't captured. Possibly a MiKTeX first-use package download. If it
   recurs, capture the compile result's `hint` and diagnostics.
+- **Split dates on a live tenant:** why a batch-filled date that reads back correctly is still "required"
+  isn't known. The adapter now enters it again when the field still shows an error, which is what worked
+  by hand. Needs a live snapshot of that step to find the cause.
 
 ## Deferred
 **DecisionProvider (e.g. Jev).** Config has `decisions.provider: "none"`, and no decision tools are
-registered. The plan (`plan.md` §11) keeps the design: a `decide` interface with yes/no, choice and score
-questions; a `jev` implementation over TypeSafe's API; `suggest_answers` for answer-bank matching,
-polarity checks and option picking with confidence-based routing; later also claim and bullet checks.
-Before enabling it: build a labelled set of about 150 real screening questions from `form-log.jsonl`
-and tune thresholds. Guidance from research: batch one request per step, send only the needed profile
-slice, keep polarity as its own question, do arithmetic in code, never put posting text into its state,
-pin the model version.
+registered. The design, kept from the original plan:
+
+```ts
+interface DecisionProvider {
+  id: string;                                         // "none" | "jev" | ...
+  available(): Promise<boolean>;
+  decide(req: {
+    state: string | object;
+    questions: Record<string,
+      | { type: "yesno";  instructions: string | object; criteria?: { yes?: string; no?: string } }
+      | { type: "choice"; instructions: string | object; options: Record<string, string | null> }
+      | { type: "score";  instructions: string | object; levels: string[] }>;
+  }): Promise<Record<string,
+      | { type: "yesno";  p: number }
+      | { type: "choice"; choice: string; probabilities: Record<string, number>; confidence: number }
+      | { type: "score";  score: number; probabilities: Record<string, number>; confidence: number }>>;
+}
+```
+
+- **Adding a model** is one new file and one config change, with no changes to tools or skills. With
+  `none`, `available()` is false and the skills use Claude's own judgment. They'd be written as "if
+  `suggest_answers` is available, call it first and treat its output as advice".
+- **A `jev` implementation** over TypeSafe's `POST /v1/systemone` (yes/no, `choice`, `score`) through
+  `@typesafe-ai/sdk`. Notes from research:
+  - Choice takes up to 255 options and score up to 10 levels, with calibrated `probabilities` and
+    `confidence`. Questions in one request run in parallel, so batch one request per form step.
+  - The limit is 32k tokens for the state plus the longest question: send only the question and the
+    profile slice it needs.
+  - It reads literally and is weak on negation, numbers, dates and counting, so keep polarity as its own
+    question and do arithmetic in code.
+  - It isn't hardened against manipulative text: never put posting text into its state.
+  - Pin the model version once thresholds are tuned, and log which model answered.
+- **Where it plugs in:** `suggest_answers` (matching to the answer bank, the polarity check, picking the
+  option, with confidence-based routing to auto, Claude's review, or asking the user), then claim
+  verification in indexing, bullet checks in tailoring, and requirement × claim coverage.
+- **Before enabling it:** build a labelled set of about 150 real screening questions from
+  `form-log.jsonl` and tune the thresholds on it.
 
 ## Open questions
 1. **Resume page size:** Letter or A4 (sets the default for bundle normalization). *Assumed: Letter.*
 2. **Contributions to other people's public repos:** *assumed yes*, added by URL, with claims limited to the
    user's own commits.
 
-## Where the build departs from `plan.md`
+## Where the build departs from the original plan
+The original design plan (`plan.md`) was removed on 2026-09-27 and is in git history. This table keeps
+what changed from it, and each linked page gives the reason.
+
 | Plan | Built |
 |---|---|
 | GitHub device flow; user registers the app by hand | App Manifest flow (one click) + OAuth web flow with callbacks on the daemon ([github-and-repos](components/github-and-repos.md#github-app-githubservice)) |
@@ -63,8 +119,8 @@ pin the model version.
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
-| `remove_repeatable` tool | Not built |
 | Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; Playwright only in the recon script |
 | Changesets, per-package READMEs, `ezapply migrate` | Not used; migrations run in `ezapply init`; documentation lives here |
 | Cover letter template generated in onboarding | A shipped default, the user's LaTeX, or rebuilt from an example letter |
+| The user runs `claude` in the workspace | `ezapply chat` (the workspace launcher), which starts Claude and gives it a fresh session when another posting is captured, so finished work isn't re-sent every turn ([cli](components/cli.md#chat-chatts)) |
 | `docs/adr/` decision records | None: `references/` records the current design with its reasons |

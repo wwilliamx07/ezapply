@@ -1,10 +1,21 @@
 # MCP tools
 
 The `ezapply` MCP server's full surface, as registered in `companion/src/mcp/tools/`. Every tool validates
-its input with zod, returns JSON text (images for `pdf_render` and `screenshot`), and on failure returns
-`isError: true` with `{ error: { code, message, hint? } }`. Paths may be absolute or relative to the
+its input with zod, returns compact JSON text (images for `pdf_render` and `screenshot`), and on failure
+returns `isError: true` with `{ error: { code, message, hint? } }`. Paths may be absolute or relative to the
 workspace root and must fall under the folders listed for that tool (`path_not_allowed` otherwise).
 Read-only tools carry the MCP `readOnlyHint`.
+
+Results and descriptions are kept short because they cost context: results are serialized without
+indentation (indentation added a fifth to a third to large results), `get_form` leaves out default values,
+and descriptions say what Claude needs and no more (all of them sit in context for the whole session).
+
+**Naming.** The names grew up in two styles: most groups are `<noun>_<verb>` (`posting_activate`,
+`template_import`, `repo_sync`), the form tools read as commands (`fill_fields`, `go_next`). New tools follow
+their group's style, `<noun>_<verb>` everywhere except the form group. The odd ones out (`posting_active`
+vs `postings_list`, `repos_selection_get` vs `github_list_repos`, `claims_check` vs `knowledge_mark_indexed`)
+stay as they are: renaming would break every workspace's skills and habits for no gain. If a major version
+ever happens, rename with the old names kept as aliases for a while.
 
 ## Setup and status
 
@@ -19,9 +30,9 @@ Read-only tools carry the MCP `readOnlyHint`.
 
 | Tool | Input | Does |
 |---|---|---|
-| `posting_active` | — | Right after a daemon start, first waits (≤40 s) for the paired extension and any capture it queued. The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. None → `no_active_posting` |
-| `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active |
-| `posting_activate` | `id` | Make it active; returns its details |
+| `posting_active` | — | Also `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). Right after a daemon start, first waits (≤40 s) for the paired extension, if it was connected in the last 6 hours, and any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. When the extension wasn't waited for and hasn't reconnected yet, adds `extensionReconnecting` (a note: a capture made while ezapply was stopped may still arrive). None → `no_active_posting` (with the same note in the hint, if it applies) |
+| `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active. Settles like `posting_active`; with the extension still reconnecting the result is `{ postings, extensionReconnecting }` |
+| `posting_activate` | `id` (a plain folder name; anything with separators or `..` is `bad_request`) | Make it active; returns its details |
 | `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status |
 
 ## Documents
@@ -38,7 +49,10 @@ under `postings/` or `library/`. Details: [documents.md](components/documents.md
 | `pdf_merge` | `inputs[] { path, pages?, label? }`, `output`, `bookmarks` (true), `normalize` (`auto`/`none`/`letter`/`a4`), `title?`, `author?` | One PDF with bookmarks and consistent page sizes; returns sections with page ranges |
 | `pdf_from_images` | `images[]`, `output`, `pageSize` (`letter`/`a4`) | Images → PDF, one per page |
 | `pdf_compress` | `path`, `output?` (default overwrite), `targetBytes?` (default config, 5 MB) | Lossless, then Ghostscript if installed; before/after, method, target met |
-| `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens in the user's default app |
+| `review_open` | `files[]` (1–6 PDFs under one `postings/<id>/`) | Opens a review page in the user's browser showing those PDFs, each with a box for changes. `{ reviewId, url, postingId, files, openedBrowser, tell }`. A newer review of the same posting replaces an open one ([details](components/documents.md#review-before-attaching)) |
+| `review_wait` | `reviewId`, `timeoutSeconds` (5–900, default 600) | Waits for the user's answer: `{ done: true, approved[], changes[] { file, request } }`, or `{ done: false, url?, supersededBy?, hint }` |
+| `attach_mode_set` | `mode` (`after-approval` / `immediately`) | Saves `documents.attach` in `ezapply.config.json`, keeping everything else as written |
+| `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens in the user's default app (without waiting for it) |
 
 ## Profile and templates
 Details: [profile-and-templates.md](components/profile-and-templates.md).
@@ -47,17 +61,17 @@ Details: [profile-and-templates.md](components/profile-and-templates.md).
 |---|---|---|
 | `profile_check` | — | Validate `profile.yaml`: errors with paths, or commonly-needed fields still missing |
 | `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions and sources; sensitive ids |
-| `template_import` | `sourceDir` (absolute, outside the workspace), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/`; replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram` |
+| `template_import` | `sourceDir` (absolute, outside the workspace), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/`; replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram`. `contentFiles` lists the `.tex` files the main file `\input`s (tailored copies need them) |
 | `template_import_example` | `sourcePath` (absolute) | Copy a sample cover letter (PDF, PNG/JPG/WebP, TXT, MD; ≤20 MB) into `templates/cover/example/`; Word → hint to export PDF |
-| `template_set_main` | `kind`, `main` (relative to `templates/<kind>/`) | Record the main file; marks a non-imported template `custom` |
+| `template_set_main` | `kind`, `main` (relative to `templates/<kind>/`, must stay inside it and end in `.tex`) | Record the main file and its `contentFiles`; marks a non-imported template `custom`. Returns `{ kind, main, contentFiles }` |
 
 ## GitHub and knowledge base
 Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.md](components/knowledge-base.md).
 
 | Tool | Input | Does |
 |---|---|---|
-| `github_status` | — | App registered, slug, `manageUrl`, logged in, login, name, token expiry |
-| `github_login` | — | Opens the daemon's login page (creates the app the first time); returns the URL and a `tell` text for the user |
+| `github_status` | — | App registered, slug, `manageUrl`, logged in, login, name, token expiry, and `portMismatch { appUrl, daemonUrl, hint }` when the app's callback URLs point at another port than the daemon's |
+| `github_login` | `app?` (`new` / `existing`) | Opens the daemon's login page in the browser; returns the URL, `openedBrowser`, `firstTimeSetup`, and a `tell` text (when no browser opened, it gives the user the URL to open). Without `app`: the app registered here, or a new one. `new` creates an app from the manifest; `existing` connects an ezapply app the user already has, with the Client ID and a new client secret entered on the local page, never in chat, and returns the `callbackUrl` the app must list ([details](components/github-and-repos.md#reusing-an-existing-app)). Without `app`, refuses with the fix while `portMismatch` stands |
 | `github_login_wait` | `timeoutSeconds` (5–900, default 300) | Waits for the browser flow; times out with a hint |
 | `github_logout` | — | Revoke and delete the token |
 | `github_list_repos` | — | Every repo the app can read, newest push first, with `selected` |
@@ -65,26 +79,41 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `repos_selection_set` | `repos[] { fullName, source (app/public-url), note? }` | Replace `profile/repos.yaml` |
 | `repo_sync` | `repo` (must be selected) | Clone or update the read-only cache; `{ path, headSha, indexedSha, changedSince, fileCount }` |
 | `repo_contributions` | `repo` | The user's share of commits, dates, areas touched, top authors |
-| `claims_check` | `repo` | Validate `claims.yaml` and every evidence path and line range |
-| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; records the indexed commit |
+| `claims_check` | `repo` | Validate `claims.yaml`, every evidence path and line range, and that stamped lines haven't changed. `{ valid, claims, errors[], unstamped }` |
+| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; stamps a hash on evidence that has none, records the indexed commit. Returns the meta plus `stamped` |
 
 ## Forms
-Workday only; `tabId` defaults to the active Workday tab. Each call is an RPC to the extension
-([workday-adapter.md](components/workday-adapter.md)). Fills, uploads, steps and the confirmation page are
-appended to the active posting's `form-log.jsonl`, and the posting status moves forward automatically.
+Workday only. Each call is an RPC to the extension ([workday-adapter.md](components/workday-adapter.md)); the
+logic around it lives in `FormsService` (`companion/src/forms/service.ts`).
+
+- **Which tab:** `tabId` if given; otherwise a Workday tab on the active posting's tenant (the one the user
+  is looking at, else the most recently used), otherwise any Workday tab the same way. The companion picks
+  it from `browser.status` and always passes it explicitly.
+- **Which posting:** fills, removals, uploads, steps and the confirmation page are appended to the active
+  posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab is on that
+  posting's Workday tenant (or one of them has no tenant to compare, e.g. a posting captured on a job
+  board). Otherwise the action still happens, nothing is logged or moved, and the result carries
+  `postingMismatch { activePosting { id, company?, role?, tenant }, formTenant, hint }`. Without this, two open
+  applications or an old confirmation page on screen would credit the wrong posting, up to marking it
+  `submitted`.
 
 | Tool | Input | Does |
 |---|---|---|
-| `get_form` | `tabId?` | The page's `FormSchema`. Seeing `review` sets status `filled`; `confirmation` sets `submitted` |
-| `list_options` | `fieldId`, `tabId?` | Options of a dropdown or a typeahead's top level (`hasChildren` = nested menu) |
+| `get_form` | `onlyEmpty?`, `section?`, `tabId?` | The page's `FormSchema`, lean: `required` only when true, `multiple` only when true, `options` only when non-empty, no `automationId` or `optionsLazy` (dropdowns and typeaheads always list options on demand). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose id or title contains it. Adds `posting` (the id it's credited to) or `postingMismatch`. Seeing `review` sets status `filled`; `confirmation` sets `submitted` |
+| `list_options` | `fieldIds?` (or `fieldId?`), `tabId?` | Options of dropdowns or a typeahead's top level (`hasChildren` = nested menu). `fieldIds` → `{ <fieldId>: options \| { error } }`, one call for a whole step (the adapter opens them one after another); `fieldId` alone → that field's options. The description says a miss in `fill_fields` returns the options anyway, so listing first is only for questions whose wording decides the answer |
 | `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead and return matches |
-| `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. Per field: ok, read-back, error, available options |
-| `upload_file` | `fieldId`, `path` (under `postings/` or `library/`, ≤25 MB), `tabId?` | Attach a file; success needs a newly shown file (a same-named file left from a previous application doesn't count) and sets status `attached` |
-| `remove_items` | `fieldId`, `values?` (labels or file names; omit = all), `reason?`, `tabId?` | Remove selected entries from a multi-select (e.g. Skills) or attached files from a file field, typically what Workday carried over from the last application. `{ ok, removed, remaining, notFound?, error? }`; logged as `remove`. An extension without the method gets a "rebuild and reload the extension" hint |
+| `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. `{ results[], postingMismatch? }`. A clean success whose read-back equals the value exactly is just `{ fieldId, ok: true }` (`leanFillResult`); anything else keeps ok, read-back (e.g. the full text of a matched option), error and available options. The description asks for the whole step in one call |
+| `upload_file` | `fieldId`, `path` (under `postings/` or `library/`, ≤25 MB), `tabId?` | Attach a file; success needs a newly shown file (a same-named file left from a previous application doesn't count) and sets status `attached`. In the `after-approval` attach mode a file from `postings/` must be approved in its current version, or it's refused with a hint to review it; `library/` files never need approval |
+| `remove_items` | `fieldId`, `values?` (labels or file names; omit = all), `reason?`, `tabId?` | Remove selected entries from a multi-select (e.g. Skills) or attached files from a file field, typically what Workday carried over from the last application. `{ ok, removed, remaining, notFound?, error? }`; logged as `remove` |
 | `add_repeatable` | `addButtonId`, `tabId?` | Press an add button (another work or education row) |
+| `remove_repeatable` | `sectionId` (a section `get_form` marks `removable`), `reason?`, `tabId?` | Delete that repeatable row, e.g. a work-history entry carried over from the last application. `{ sectionId, ok, removed?, error? }`; logged as `remove-row`. Later rows' field ids change: `get_form` again |
 | `go_next` | `tabId?` | Next / Save and Continue. Refuses on review and on any submit control |
+| `go_back` | `tabId?` | Back to the previous step (`get_form` shows `backLabel` when there's a Back button), e.g. to fix an answer from the review page. `{ moved, pageKind, step?, errors, refusedReason? }`; refuses on the first step and after submitting; logged as `back`. Entries not saved with `go_next` may be lost |
 | `page_action` | `action` (`apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`), `tabId?` | Start-page buttons |
 | `screenshot` | `tabId?` | The visible part of the tab as an image (tab must be visible) |
+
+An extension built before `form.remove`, `form.removeRepeatable` or `form.back` existed answers "Unknown
+method"; the tools turn that into "rebuild and reload the extension".
 
 There is deliberately no general click, navigate or script tool, and no submit.
 

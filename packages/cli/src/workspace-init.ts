@@ -1,7 +1,7 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type DaemonConfig, defaultWorkspaceConfig, WORKSPACE_DIRS } from "@ezapply/companion";
+import { type DaemonConfig, defaultWorkspaceConfig, exists, WORKSPACE_DIRS } from "@ezapply/companion";
 
 const TEMPLATES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "templates");
 const CLI_MAIN = resolve(dirname(fileURLToPath(import.meta.url)), "main.js");
@@ -64,7 +64,25 @@ export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
     report.updated.push(".claude/skills/");
   }
   await removeLegacySkills(join(root, ".claude", "skills"), report);
+  await writeLauncher(root, report);
   return report;
+}
+
+/**
+ * `ezapply` in the workspace, so `ezapply chat` (how ezapply is used) runs from there without putting the CLI
+ * on PATH: a global `npm link` needs write access to npm's global folder, which many installs don't give.
+ * Absolute paths to this Node and this build, like `.mcp.json`; rewritten by every init.
+ */
+export async function writeLauncher(root: string, report: InitReport, platform = process.platform): Promise<string> {
+  const path = join(root, platform === "win32" ? "ezapply.cmd" : "ezapply");
+  const body =
+    platform === "win32"
+      ? `@echo off\r\n"${process.execPath}" "${CLI_MAIN}" %*\r\n`
+      : `#!/bin/sh\nexec "${process.execPath}" "${CLI_MAIN}" "$@"\n`;
+  const existed = await exists(path);
+  await writeFile(path, body, { encoding: "utf8", mode: 0o755 });
+  (existed ? report.updated : report.created).push(path);
+  return path;
 }
 
 /**
@@ -151,15 +169,6 @@ async function migrateWorkspaceConfig(path: string, report: InitReport): Promise
 
 function union(a: string[] | undefined, b: string[]): string[] {
   return [...new Set([...(a ?? []), ...b])];
-}
-
-async function exists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function writeIfMissing(path: string, content: string, report: InitReport): Promise<void> {

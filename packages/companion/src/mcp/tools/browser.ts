@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { newPairingToken } from "../../config/daemon.js";
 import type { Services } from "../../services.js";
+import { waitFor } from "../../util/wait.js";
 import { tool } from "../result.js";
 
 const PAIRING_MS = 15 * 60_000;
@@ -94,8 +95,7 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "extension_pair_wait", async ({ timeoutSeconds }: { timeoutSeconds: number }) => {
-      const deadline = Date.now() + timeoutSeconds * 1000;
-      while (!s.bridge.status().connected && Date.now() < deadline) await new Promise((r) => setTimeout(r, 500));
+      await waitFor(async () => (s.bridge.status().connected ? true : null), timeoutSeconds * 1000, 500);
       const status = s.bridge.status();
       return status.connected
         ? { connected: true, extension: status }

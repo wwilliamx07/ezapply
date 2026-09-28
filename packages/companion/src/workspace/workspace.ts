@@ -1,8 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 import { type WorkspaceConfig, WorkspaceConfig as WorkspaceConfigSchema } from "../config/workspace.js";
+import { readJson, writeJsonAtomic } from "../util/fs.js";
 
 /** Top-level folders of a workspace. Keep in sync with references/components/workspace.md. */
 export const WORKSPACE_DIRS = [
@@ -67,25 +67,4 @@ export class Workspace {
     await writeJsonAtomic(this.path("state.json"), next);
     return next;
   }
-}
-
-export async function readJson(path: string): Promise<unknown | null> {
-  try {
-    return JSON.parse(await readFile(path, "utf8"));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
-  }
-}
-
-/** Write via temp file + rename so a crash never leaves half-written JSON. */
-export async function writeJsonAtomic(path: string, data: unknown): Promise<void> {
-  await writeFileAtomic(path, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-export async function writeFileAtomic(path: string, content: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmp, content, "utf8");
-  await rename(tmp, path);
 }

@@ -1,8 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { EngineId } from "./documents/tex/engines.js";
 import { resolveEngine } from "./documents/tex/engines.js";
+import type { GitHubStatus } from "./github/service.js";
 import type { Services } from "./services.js";
-import { installHint } from "./util/install-hints.js";
+import { installCommand, installHint } from "./util/install-hints.js";
+import { which } from "./util/proc.js";
 
 export interface ChecklistItem {
   step: string;
@@ -30,6 +33,34 @@ export async function agentFileStatus(root: string): Promise<{ done: boolean; de
 }
 
 /**
+ * Whether a TeX engine is usable for the configured `tex.engine`. `audience` picks the wording: the install
+ * step as a hint for Claude (workspace_check), or as a command for a person (`ezapply doctor`).
+ */
+export async function texStatus(
+  configured: EngineId | "auto",
+  audience: "claude" | "user",
+): Promise<{ done: boolean; detail: string }> {
+  const engine = await resolveEngine(configured);
+  if (engine) {
+    const where = audience === "user" ? ` at ${which(engine.id) ?? "?"}` : "";
+    return { done: true, detail: `engine: ${engine.id}${configured === "auto" ? " (auto)" : ""}${where}` };
+  }
+  return audience === "claude"
+    ? { done: false, detail: `No TeX engine. ${installHint("tex")}` }
+    : { done: false, detail: `none usable for "${configured}"; install: ${installCommand("tex")}` };
+}
+
+/** One line on the GitHub connection, shared by workspace_check and `ezapply doctor`. */
+export function githubDetail(gh: GitHubStatus): string {
+  const base = gh.loggedIn
+    ? `logged in as ${gh.login}`
+    : gh.appRegistered
+      ? "app registered; not logged in"
+      : "not set up: ask whether to create a new ezapply GitHub App or connect an existing one (github_login app)";
+  return gh.portMismatch ? `${base}; ${gh.portMismatch.hint}` : base;
+}
+
+/**
  * Onboarding / readiness checklist, in the order the ezapply-onboard skill walks through it.
  * Each item is cheap to compute so Claude can call this freely.
  */
@@ -44,8 +75,8 @@ export async function workspaceStatus(
   add("agent_file", agent.done, agent.detail);
 
   const config = await s.workspace.readConfig();
-  const engine = await resolveEngine(config.tex.engine);
-  add("tex", Boolean(engine), engine ? `engine: ${engine.id}` : `No TeX engine. ${installHint("tex")}`);
+  const tex = await texStatus(config.tex.engine, "claude");
+  add("tex", tex.done, tex.detail);
 
   const bridge = s.bridge.status();
   add(
@@ -59,11 +90,7 @@ export async function workspaceStatus(
   );
 
   const gh = await s.github.status();
-  add(
-    "github_login",
-    gh.loggedIn,
-    gh.loggedIn ? `logged in as ${gh.login}` : gh.appRegistered ? "app registered; not logged in" : "not set up",
-  );
+  add("github_login", gh.loggedIn && !gh.portMismatch, githubDetail(gh));
 
   const repos = await s.profile.repos();
   const selected = repos.exists && repos.valid ? repos.value.repos.length : 0;
@@ -77,7 +104,7 @@ export async function workspaceStatus(
   const indexed = knowledge.filter((k) => !k.startsWith(".")).length;
   add("knowledge_indexed", selected > 0 && indexed >= selected, `${indexed} indexed of ${selected} selected`);
 
-  const resume = await s.profile.templateMain("resume");
+  const resume = await s.templates.templateMain("resume");
   add("resume_template", resume !== null, resume ?? "not imported (template_import kind=resume)");
 
   const profile = await s.profile.checkProfile();
@@ -93,8 +120,8 @@ export async function workspaceStatus(
         : `invalid: ${profile.errors?.length} issue(s); run profile_check`,
   );
 
-  const cover = await s.profile.templateMain("cover");
-  const coverMeta = await s.profile.templateMeta("cover");
+  const cover = await s.templates.templateMain("cover");
+  const coverMeta = await s.templates.templateMeta("cover");
   add(
     "cover_template",
     cover !== null,
@@ -127,6 +154,16 @@ export async function workspaceStatus(
     "preferences",
     prefs.words >= 10,
     prefs.exists ? `${prefs.words} words` : "profile/preferences.md missing",
+    false,
+  );
+
+  const attach = await s.reviews.attachMode();
+  add(
+    "attach_mode",
+    true,
+    attach === "after-approval"
+      ? "after-approval: documents are shown in the browser and attached once the user approves them"
+      : "immediately: documents are attached as soon as they're built",
     false,
   );
 

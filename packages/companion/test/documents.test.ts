@@ -2,7 +2,15 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PDFDocument, PDFName, StandardFonts } from "@cantoo/pdf-lib";
+import {
+  type PDFArray,
+  type PDFDict,
+  PDFDocument,
+  PDFName,
+  type PDFNumber,
+  PDFString,
+  StandardFonts,
+} from "@cantoo/pdf-lib";
 import { createCanvas } from "@napi-rs/canvas";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parsePageRanges } from "../src/documents/pdf/pages.js";
@@ -22,6 +30,7 @@ import { Workspace } from "../src/workspace/workspace.js";
 let root: string;
 let ws: Workspace;
 let docs: DocumentsService;
+const opened: string[] = [];
 
 async function makePdf(path: string, size: [number, number], lines: string[][]): Promise<void> {
   const doc = await PDFDocument.create();
@@ -39,7 +48,10 @@ async function makePdf(path: string, size: [number, number], lines: string[][]):
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "ezapply-docs-"));
   ws = new Workspace(root);
-  docs = new DocumentsService(ws, createLogger({ toFile: false, level: "silent" }));
+  docs = new DocumentsService(ws, createLogger({ toFile: false, level: "silent" }), {
+    file: async (path) => void opened.push(path),
+    url: async () => {},
+  });
   await makePdf(join(root, "postings/p1/cover.pdf"), [612, 792], [["Dear hiring manager", "Cover letter body"]]);
   await makePdf(join(root, "postings/p1/resume.pdf"), [612, 792], [["Jane Doe", "Experience", "Skills"]]);
   await makePdf(
@@ -98,6 +110,45 @@ describe("DocumentsService PDFs", () => {
     expect(text.map((t) => t.text)).toEqual(["Transcript page 1", "Transcript page 2"]);
   });
 
+  it("keeps a resized page's links, moved with its content", async () => {
+    // An A4 first document sets the size; the Letter resume with a clickable link gets resized to it.
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([612, 792]);
+    page.drawText("Jane Doe  github.com/jane", { x: 50, y: 705, size: 12, font });
+    const link = doc.context.register(
+      doc.context.obj({
+        Type: "Annot",
+        Subtype: "Link",
+        Rect: [50, 700, 250, 720],
+        Border: [0, 0, 0],
+        A: { Type: "Action", S: "URI", URI: PDFString.of("https://github.com/jane") },
+      }),
+    );
+    page.node.set(PDFName.of("Annots"), doc.context.obj([link]));
+    await writeFile(join(root, "postings/p1/linked-resume.pdf"), await doc.save());
+
+    const result = await docs.merge(
+      [{ path: "library/transcript.pdf", pages: "1" }, { path: "postings/p1/linked-resume.pdf" }],
+      "postings/p1/linked-bundle.pdf",
+      { normalize: "auto" },
+    );
+    expect(result.normalizedPages).toBe(1);
+    const merged = await PDFDocument.load(await readFile(result.output));
+    const resized = merged.getPage(1);
+    expect(resized.getSize()).toEqual({ width: 595.28, height: 841.89 });
+    const annots = resized.node.Annots();
+    expect(annots?.size()).toBe(1);
+    const annot = annots?.lookup(0) as PDFDict;
+    const s = 595.28 / 612;
+    const dy = (841.89 - 792 * s) / 2;
+    const rect = (annot.lookup(PDFName.of("Rect")) as PDFArray).asArray().map((n) => (n as PDFNumber).asNumber());
+    expect(rect.map((v) => Math.round(v * 10) / 10)).toEqual(
+      [50 * s, 700 * s + dy, 250 * s, 720 * s + dy].map((v) => Math.round(v * 10) / 10),
+    );
+    expect((await pdfText(result.output, "2"))[0]?.text).toContain("github.com/jane");
+  });
+
   it("renders a page to PNG and saves a preview", async () => {
     const { png, savedTo } = await docs.render("postings/p1/resume.pdf", 1, 1);
     expect(png.subarray(1, 4).toString()).toBe("PNG");
@@ -124,6 +175,12 @@ describe("DocumentsService PDFs", () => {
     const r = await docs.compress("library/transcript.pdf", "library/transcript-small.pdf", 1_000_000);
     expect(r.metTarget).toBe(true);
     expect(r.after).toBeLessThanOrEqual(r.before);
+  });
+
+  it("opens files for the user through the opener, only from allowed folders", async () => {
+    expect(await docs.open("postings/p1/resume.pdf")).toEqual({ opened: join(root, "postings/p1/resume.pdf") });
+    expect(opened).toEqual([join(root, "postings/p1/resume.pdf")]);
+    await expect(docs.open("profile/profile.yaml")).rejects.toMatchObject({ code: "path_not_allowed" });
   });
 
   it("refuses paths outside the allowed folders", async () => {
@@ -230,6 +287,15 @@ describe("tex_compile engine choice", () => {
 });
 
 const engine = await resolveEngine("auto");
+const hasPdflatex = await ENGINES.pdflatex.available();
+
+// CI's tex job sets this: there, a missing engine must fail rather than skip the compile tests.
+describe.runIf(process.env.EZAPPLY_REQUIRE_TEX === "1")("TeX for the compile tests", () => {
+  it("has an auto engine and pdflatex", () => {
+    expect(engine?.id).toBeDefined();
+    expect(hasPdflatex).toBe(true);
+  });
+});
 
 describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`, () => {
   it("compiles, counts pages, enforces the resume page limit and snapshots", async () => {
@@ -275,8 +341,6 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     await expect(stat(join(root, "postings/p2/pwned.txt"))).rejects.toThrow();
   }, 180_000);
 });
-
-const hasPdflatex = await ENGINES.pdflatex.available();
 
 describe.skipIf(!hasPdflatex)("tex_compile with % !TEX program = pdflatex", () => {
   it("builds a pdfTeX-only resume with pdflatex whatever tex.engine says", async () => {

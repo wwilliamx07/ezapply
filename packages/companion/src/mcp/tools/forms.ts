@@ -1,68 +1,40 @@
-import { appendFile, readFile, stat } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
-import { ErrorCode, EzError, FillValue, PageAction, type PostingStatus } from "@ezapply/protocol";
+import { ErrorCode, EzError, FillValue, PageAction } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { FillSource } from "../../forms/service.js";
 import type { Services } from "../../services.js";
 import { rawTool, tool } from "../result.js";
-
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const MIME: Record<string, string> = {
-  ".pdf": "application/pdf",
-  ".doc": "application/msword",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".txt": "text/plain",
-  ".rtf": "application/rtf",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-};
 
 const Source = z
   .enum(["profile", "answer-bank", "computed", "user", "judgment"])
   .describe(
-    "Where the value came from: profile.yaml, answers.yaml, computed from the profile, the user in chat, or your judgment.",
+    "Where the value came from: profile.yaml, answers.yaml, computed from the profile, the user, or your judgment.",
   );
 
-const tabId = z.number().int().optional().describe("Defaults to the active Workday tab.");
+const tabId = z.number().int().optional().describe("Defaults to the Workday tab of the active posting.");
 
+/**
+ * Workday form tools. Logging, status moves, tab choice and the posting check live in FormsService; a result
+ * carries `postingMismatch` when the tab is on another tenant than the active posting (nothing was logged).
+ */
 export function registerFormTools(server: McpServer, s: Services): void {
-  /** Append to the active posting's form-log.jsonl (the audit trail for "what did we submit"). */
-  const logEvent = async (event: Record<string, unknown>) => {
-    const id = await s.postings.activeId();
-    if (!id) return;
-    const line = JSON.stringify({ ts: new Date().toISOString(), ...event });
-    await appendFile(join(s.postings.folder(id), "form-log.jsonl"), `${line}\n`, "utf8");
-  };
-  const setStatus = async (status: PostingStatus) => {
-    const id = await s.postings.activeId();
-    if (!id) return;
-    const meta = await s.postings.get(id);
-    const order: PostingStatus[] = ["captured", "drafting", "attached", "filled", "submitted"];
-    if (order.indexOf(status) > order.indexOf(meta.status)) await s.postings.updateMeta(id, { status });
-  };
-
   server.registerTool(
     "get_form",
     {
       title: "Read application page",
       description:
-        "Read the current Workday page: pageKind (posting, auth, start-choice, step, review, confirmation), step title " +
-        "and progress, and every field grouped by section with id, label, kind, required, current value, known " +
-        "options, validation error and a profile hint for well-known fields. Also lists add buttons for repeatable " +
-        "sections and available page actions. Call at the start of every step and after anything changes the page.",
-      inputSchema: { tabId },
+        "Read the current Workday page: pageKind (posting, auth, start-choice, step, review, confirmation), step, " +
+        "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
+        "true; dropdowns and typeaheads list options on demand). Also add buttons, removable rows, page actions, " +
+        "and `posting` (the posting this is credited to). Call at the start of every step and after changes.",
+      inputSchema: {
+        onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),
+        section: z.string().optional().describe("Only sections whose id or title contains this."),
+        tabId,
+      },
       annotations: { readOnlyHint: true },
     },
-    tool(s.log, "get_form", async ({ tabId }: { tabId?: number }) => {
-      const form = await s.bridge.call("form.get", tabId === undefined ? {} : { tabId }, 20_000);
-      if (form.pageKind === "confirmation") {
-        await setStatus("submitted");
-        await logEvent({ event: "confirmation-seen", url: form.url });
-      }
-      if (form.pageKind === "review") await setStatus("filled");
-      return form;
-    }),
+    tool(s.log, "get_form", (args: { onlyEmpty?: boolean; section?: string; tabId?: number }) => s.forms.getForm(args)),
   );
 
   server.registerTool(
@@ -70,13 +42,25 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "List field options",
       description:
-        "Open a dropdown or typeahead and list its options (for typeahead, the top level; options with hasChildren " +
-        "open a sub-menu, so select them with a path like 'Job Board > LinkedIn').",
-      inputSchema: { fieldId: z.string(), tabId },
+        "List the options of dropdowns or typeaheads (for typeahead, the top level; options with hasChildren " +
+        "open a sub-menu, so select them with a path like 'Job Board > LinkedIn'). Pass every field you need " +
+        "on the step as fieldIds in one call: the result maps each id to its options. Not needed before " +
+        "fill_fields: a value that matches nothing returns the options.",
+      inputSchema: {
+        fieldId: z.string().optional().describe("One field; returns its options as a list."),
+        fieldIds: z.array(z.string()).min(1).optional().describe("Several fields; returns { fieldId: options }."),
+        tabId,
+      },
       annotations: { readOnlyHint: true },
     },
-    tool(s.log, "list_options", ({ fieldId, tabId }: { fieldId: string; tabId?: number }) =>
-      s.bridge.call("form.listOptions", { fieldId, ...(tabId === undefined ? {} : { tabId }) }, 20_000),
+    tool(
+      s.log,
+      "list_options",
+      async ({ fieldId, fieldIds, tabId }: { fieldId?: string; fieldIds?: string[]; tabId?: number }) => {
+        if (fieldIds) return s.forms.listOptionsMany(fieldId ? [fieldId, ...fieldIds] : fieldIds, tabId);
+        if (fieldId) return s.forms.listOptions(fieldId, tabId);
+        throw new EzError(ErrorCode.BadRequest, "Give fieldIds (or one fieldId).");
+      },
     ),
   );
 
@@ -89,7 +73,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "search_options", ({ fieldId, query, tabId }: { fieldId: string; query: string; tabId?: number }) =>
-      s.bridge.call("form.searchOptions", { fieldId, query, ...(tabId === undefined ? {} : { tabId }) }, 20_000),
+      s.forms.searchOptions(fieldId, query, tabId),
     ),
   );
 
@@ -98,11 +82,12 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Fill fields",
       description:
-        "Fill fields on the current step. Values: text for text/textarea; the option text for dropdown and radio " +
-        '(closest match is used); a string or array for typeahead ("Category > Item" for nested menus); true/false ' +
-        'for a checkbox; an array of labels for checkbox groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. ' +
-        "Returns per field: ok, the value read back, errors, and available options when nothing matched. Never " +
-        "use it for passwords or EEO answers the user has not provided. Each fill is logged with its source.",
+        "Fill fields on the current step. Values: text; the option text for dropdowns and radios (closest match); " +
+        'a string or array for typeaheads ("Category > Item" for nested menus); true/false for a checkbox; labels ' +
+        'for checkbox groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. ' +
+        "Returns `results` per field: { fieldId, ok: true } when the field reads back exactly the value, else " +
+        "the read-back, error, and options when nothing matched. Never passwords, or EEO answers the user " +
+        "hasn't given.",
       inputSchema: {
         fills: z
           .array(
@@ -120,32 +105,13 @@ export function registerFormTools(server: McpServer, s: Services): void {
     tool(
       s.log,
       "fill_fields",
-      async ({
+      ({
         fills,
         tabId,
       }: {
-        fills: { fieldId: string; value: z.infer<typeof FillValue>; source: string; answerId?: string }[];
+        fills: { fieldId: string; value: z.infer<typeof FillValue>; source: FillSource; answerId?: string }[];
         tabId?: number;
-      }) => {
-        const results = await s.bridge.call(
-          "form.fill",
-          { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), ...(tabId === undefined ? {} : { tabId }) },
-          120_000,
-        );
-        for (const f of fills) {
-          const r = results.find((x) => x.fieldId === f.fieldId);
-          await logEvent({
-            event: "fill",
-            fieldId: f.fieldId,
-            value: f.value,
-            source: f.source,
-            ...(f.answerId ? { answerId: f.answerId } : {}),
-            ok: r?.ok ?? false,
-            ...(r?.error ? { error: r.error } : {}),
-          });
-        }
-        return results;
-      },
+      }) => s.forms.fill(fills, tabId),
     ),
   );
 
@@ -159,33 +125,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
         "previous application (get_form shows them as its value), remove them with remove_items first.",
       inputSchema: { fieldId: z.string(), path: z.string().describe("Workspace-relative or absolute path."), tabId },
     },
-    tool(s.log, "upload_file", async ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) => {
-      const abs = s.workspace.resolveAllowed(path, ["postings", "library"]);
-      const size = (await stat(abs).catch(() => null))?.size;
-      if (size === undefined) throw new EzError(ErrorCode.NotFound, `File not found: ${abs}`);
-      if (size > MAX_UPLOAD_BYTES) {
-        throw new EzError(ErrorCode.BadRequest, `File is ${(size / 1e6).toFixed(1)} MB.`, "Use pdf_compress first.");
-      }
-      const file = {
-        name: basename(abs),
-        mimeType: MIME[extname(abs).toLowerCase()] ?? "application/octet-stream",
-        base64: (await readFile(abs)).toString("base64"),
-      };
-      const result = await s.bridge.call(
-        "form.upload",
-        { fieldId, file, ...(tabId === undefined ? {} : { tabId }) },
-        90_000,
-      );
-      await logEvent({
-        event: "upload",
-        fieldId,
-        file: abs,
-        ok: result.ok,
-        ...(result.error ? { error: result.error } : {}),
-      });
-      if (result.ok) await setStatus("attached");
-      return result;
-    }),
+    tool(s.log, "upload_file", ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) =>
+      s.forms.upload(fieldId, path, tabId),
+    ),
   );
 
   server.registerTool(
@@ -193,12 +135,10 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Remove selections or attachments",
       description:
-        "Remove selected entries from a multi-select field (kind typeahead, e.g. Skills) or attached files from a " +
-        "file field (e.g. Resume/CV, Cover Letter). Workday pre-fills both from the user's last application, so an " +
-        "old cover letter or another job's skills list may already be there: remove what doesn't belong to this " +
-        "application before uploading or filling. values: labels or file names as get_form shows them (matched " +
-        "like fill values); omit to remove everything in the field. Returns removed, remaining, and notFound. " +
-        "Logged in form-log.jsonl.",
+        "Remove entries from a multi-select (kind typeahead, e.g. Skills) or attached files from a file field. " +
+        "Workday pre-fills both from the user's last application: remove what doesn't belong before uploading or " +
+        "filling. values: labels or file names as get_form shows them; omit to clear the field. Returns removed, " +
+        "remaining, notFound.",
       inputSchema: {
         fieldId: z.string(),
         values: z.array(z.string()).min(1).optional().describe("Entries to remove; omit to clear the field."),
@@ -209,45 +149,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
     tool(
       s.log,
       "remove_items",
-      async ({
-        fieldId,
-        values,
-        reason,
-        tabId,
-      }: {
-        fieldId: string;
-        values?: string[];
-        reason?: string;
-        tabId?: number;
-      }) => {
-        const result = await s.bridge
-          .call(
-            "form.remove",
-            { fieldId, ...(values ? { values } : {}), ...(tabId === undefined ? {} : { tabId }) },
-            60_000,
-          )
-          .catch((err: unknown) => {
-            const e = EzError.from(err);
-            if (/Unknown method form\.remove/.test(e.message)) {
-              throw new EzError(
-                ErrorCode.BadRequest,
-                "The browser extension is older than this companion and can't remove items.",
-                "Ask the user to rebuild (npm run build) and reload the ezapply extension, then retry.",
-              );
-            }
-            throw e;
-          });
-        await logEvent({
-          event: "remove",
-          fieldId,
-          removed: result.removed,
-          remaining: result.remaining,
-          ...(reason ? { reason } : {}),
-          ok: result.ok,
-          ...(result.error ? { error: result.error } : {}),
-        });
-        return result;
-      },
+      ({ fieldId, values, reason, tabId }: { fieldId: string; values?: string[]; reason?: string; tabId?: number }) =>
+        s.forms.remove(fieldId, values, reason, tabId),
     ),
   );
 
@@ -260,7 +163,29 @@ export function registerFormTools(server: McpServer, s: Services): void {
       inputSchema: { addButtonId: z.string(), tabId },
     },
     tool(s.log, "add_repeatable", ({ addButtonId, tabId }: { addButtonId: string; tabId?: number }) =>
-      s.bridge.call("form.addRepeatable", { addButtonId, ...(tabId === undefined ? {} : { tabId }) }, 20_000),
+      s.forms.addRepeatable(addButtonId, tabId),
+    ),
+  );
+
+  server.registerTool(
+    "remove_repeatable",
+    {
+      title: "Remove a repeatable row",
+      description:
+        "Delete a repeatable row, by the id of a section get_form marks `removable` (e.g. a Work Experience entry " +
+        "carried over from the user's last application that the profile doesn't have). Field ids of later rows " +
+        "change afterwards: call get_form again.",
+      inputSchema: {
+        sectionId: z.string(),
+        reason: z.string().optional().describe("Why, for the log, e.g. 'not in the profile'."),
+        tabId,
+      },
+    },
+    tool(
+      s.log,
+      "remove_repeatable",
+      ({ sectionId, reason, tabId }: { sectionId: string; reason?: string; tabId?: number }) =>
+        s.forms.removeRepeatable(sectionId, reason, tabId),
     ),
   );
 
@@ -273,12 +198,20 @@ export function registerFormTools(server: McpServer, s: Services): void {
         "submits. Returns whether the step advanced, the new pageKind/step, and validation errors if it did not.",
       inputSchema: { tabId },
     },
-    tool(s.log, "go_next", async ({ tabId }: { tabId?: number }) => {
-      const r = await s.bridge.call("form.next", tabId === undefined ? {} : { tabId }, 60_000);
-      await logEvent({ event: "next", advanced: r.advanced, pageKind: r.pageKind, step: r.step?.title });
-      if (r.pageKind === "review") await setStatus("filled");
-      return r;
-    }),
+    tool(s.log, "go_next", ({ tabId }: { tabId?: number }) => s.forms.next(tabId)),
+  );
+
+  server.registerTool(
+    "go_back",
+    {
+      title: "Previous step",
+      description:
+        "Press Back to the previous step (get_form shows backLabel when there is one), e.g. to correct an answer " +
+        "from the review page, then get_form. Entries on the current step that weren't saved with go_next may " +
+        "be lost: check them when coming forward again.",
+      inputSchema: { tabId },
+    },
+    tool(s.log, "go_back", ({ tabId }: { tabId?: number }) => s.forms.back(tabId)),
   );
 
   server.registerTool(
@@ -291,7 +224,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
       inputSchema: { action: PageAction, tabId },
     },
     tool(s.log, "page_action", ({ action, tabId }: { action: z.infer<typeof PageAction>; tabId?: number }) =>
-      s.bridge.call("form.pageAction", { action, ...(tabId === undefined ? {} : { tabId }) }, 30_000),
+      s.forms.pageAction(action, tabId),
     ),
   );
 
@@ -305,7 +238,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
       annotations: { readOnlyHint: true },
     },
     rawTool(s.log, "screenshot", async ({ tabId }: { tabId?: number }) => {
-      const r = await s.bridge.call("tab.screenshot", tabId === undefined ? {} : { tabId }, 15_000);
+      const r = await s.forms.screenshot(tabId);
       return {
         content: [
           { type: "image", data: r.pngBase64, mimeType: "image/png" },

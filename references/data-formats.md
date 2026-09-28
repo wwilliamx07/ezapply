@@ -17,9 +17,21 @@ and adds a migration (run by `ezapply init`). Schemas are zod definitions in the
 | `workspace` | absolute workspace path |
 | `idleTimeoutMinutes?` | minutes without work before the daemon stops (default 15; 0 = never); kept by `ezapply init` |
 
+A running daemon writes only the pairing fields, into the file as it is at that moment, so edits made while
+it runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix it,
+or delete it and run `ezapply init`), not as a stack trace.
+
+### `daemon-state.json` (`companion/src/config/daemon.ts`)
+`{ schemaVersion: 1, extensionLastSeenAt? }`: when the extension was last connected (epoch ms), written when
+it connects or disconnects and when the daemon stops while it's connected. A freshly started daemon waits for
+the extension only if this is within 6 hours (or unknown). Unreadable means empty.
+
 ### `github-app.json` (`companion/src/github/service.ts`)
-`{ schemaVersion: 1, appId, slug, clientId, htmlUrl, owner?, createdAt }`: the public parts of the user's
-GitHub App.
+`{ schemaVersion: 1, appId?, slug, clientId, htmlUrl, owner?, createdAt, origin?, localBaseUrl? }`: the public
+parts of the user's GitHub App. `origin`: `created` (from the manifest on this machine) or `reused` (an app the
+user already had); `createdAt` is when this machine started using it. `appId` can be missing for a reused app
+not installed anywhere yet. `localBaseUrl` is `http://127.0.0.1:<port>` when it was set up here, where its
+callback URL points (absent for apps set up before it was recorded).
 
 ### OS keychain (service `ezapply`)
 - `github-app-client-secret`: the app's client secret.
@@ -27,7 +39,9 @@ GitHub App.
   (times in epoch ms, `null` when not expiring).
 
 ### `logs/companion.log`
-pino JSON lines. Page HTML and text, form values, tokens and authorization headers are redacted.
+pino JSON lines. Page HTML and text, form values, tokens and authorization headers are redacted. Rotated past
+5 MB (checked at start and every 10 minutes) to `companion.log.1`, the previous `.1` to `.2`, the oldest
+dropped.
 
 ## Workspace root
 
@@ -42,13 +56,20 @@ pino JSON lines. Page HTML and text, form values, tokens and authorization heade
     "timeoutSeconds": 120        // 10–600
   },
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
-  "decisions": { "provider": "none" }
+  "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
+  "decisions": { "provider": "none" },
+  "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
 ```
 Every field has a default; a missing file means all defaults. `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
+
+### `ezapply` / `ezapply.cmd` (workspace launcher, `cli/src/workspace-init.ts`)
+Written by every `ezapply init`, for this OS only. POSIX: `#!/bin/sh` and `exec "<node>" "<cli main.js>" "$@"`
+(mode 755). Windows: `@echo off` and `"<node>" "<cli main.js>" %*`. Lets `./ezapply chat` run from the
+workspace ([cli](components/cli.md#init-workspace-initts)).
 
 ### `state.json`
 `{ schemaVersion: 1, activePostingId? }`.
@@ -72,23 +93,28 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `notes.md` | Claude | starts with `## Application requirements` (the posting's instructions for applying), then job requirements, key terms, evidence map, gaps |
 | `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, daemon | tailored documents and bundles |
 | `form-log.jsonl` | daemon | autofill audit trail (below) |
+| `approvals.json` | daemon | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
 | `.build/<name>/` | daemon | TeX aux files and logs |
 | `.history/<timestamp>/` | daemon | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
 | `.previews/<name>-p<n>.png` | daemon | rendered pages |
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
-`schemaVersion` 1, `id`, `url`, `canonicalUrl`, `pageTitle`, `site` (`workday` | `generic`), `tenant?`,
-`company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
+`schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
+from), `pageTitle`, `site` (`workday` | `generic`, of the content), `tenant?` (the Workday tenant, read from
+the URL), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
 `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
-`archived`.
+`archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
 ### `form-log.jsonl`
-One JSON object per line, each with `ts`:
+One JSON object per line, each with `ts`. Written only for form activity on a tab of this posting's Workday
+tenant (or when either has no tenant):
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
   `computed`, `user`, `judgment`
 - `{ event: "upload", fieldId, file, ok, error? }`
 - `{ event: "remove", fieldId, removed, remaining, reason?, ok, error? }`
+- `{ event: "remove-row", sectionId, removed?, reason?, ok, error? }` (`removed`: the row's title)
 - `{ event: "next", advanced, pageKind, step? }`
+- `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 
 ## Profile (`companion/src/profile/schema.ts`)
@@ -129,7 +155,11 @@ Free text.
 ## Templates
 
 ### `templates/<kind>/template.json`
-`{ schemaVersion: 1, main: "<file>.tex", origin?: default | imported | custom, example?: "example/<file>", importedFrom?, importedAt? }`
+`{ schemaVersion: 1, main: "<file>.tex", origin?: default | imported | custom, contentFiles?: ["sections/x.tex", …], example?: "example/<file>", importedFrom?, importedAt? }`
+
+`contentFiles`: the `.tex` files the main file pulls in with `\input`, `\include` or `\subfile`, relative to
+the main file's folder; tailored copies need them beside the copied main file. Recorded by `template_import`
+and `template_set_main`.
 
 ### `templates/cover/format.md`
 Written by Claude from an example letter: the structure every letter follows (paragraphs and their roles,
@@ -141,7 +171,12 @@ salutation, sign-off, subject line, length). No quoted text.
 `{ schemaVersion: 1, repo, url, indexedSha, indexedAt, fileCount?, depthPolicy }`
 
 ### `knowledge/<owner>__<name>/claims.yaml`
-`{ schemaVersion: 1, repo, claims: [ { id (kebab-case), claim (≥10 chars), skills[], impact (string|null), evidence[] (≥1) { path, lines? ("12" or "12-40"), sha? (≥7) }, confidence (high|medium), user_edited } ] }`
+`{ schemaVersion: 1, repo, claims: [ { id (kebab-case), claim (≥10 chars), skills[], impact (string|null), evidence[] (≥1) { path, lines? ("12" or "12-40"), sha? (≥7), hash? (12 hex) }, confidence (high|medium), user_edited } ] }`
+
+`hash`: SHA-256 of the cited lines (line endings and trailing whitespace ignored), first 12 hex characters,
+written by `knowledge_mark_indexed` on evidence with `lines`; `claims_check` fails when the lines no longer
+match. Adding it didn't change `schemaVersion` (it's optional; older files are stamped on their next
+`knowledge_mark_indexed`).
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),

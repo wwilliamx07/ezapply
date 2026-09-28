@@ -1,8 +1,10 @@
 # Profile, answer bank and templates (`companion/src/profile/`)
 
-`ProfileService` reads, validates and writes the user's own data in `profile/` and `templates/`. YAML files
-are parsed with line-aware errors, so `profile_check` / `answers_check` report problems with field paths.
-Exact schemas: [data-formats.md](../data-formats.md).
+`ProfileService` reads, validates and writes the user's own data in `profile/` (and lists `library/`);
+`TemplateService` (`companion/src/templates/service.ts`) owns `templates/`. They were one service; templates
+(import, examples, the main file and its content files, the engine a template needs) are a separate concern
+from the profile and answers. YAML files are parsed with line-aware errors, so `profile_check` /
+`answers_check` report problems with field paths. Exact schemas: [data-formats.md](../data-formats.md).
 
 ## Profile (`profile/profile.yaml`)
 Everything forms ask that isn't a screening question: identity, contact (email, phone, address), links,
@@ -40,9 +42,20 @@ whether to write cover letters by default. Done at 10+ words.
 
 ## Templates (`templates/resume/`, `templates/cover/`)
 Each folder holds a LaTeX project and `template.json` naming its main file
-(`{ schemaVersion, main, origin?, example?, importedFrom?, importedAt? }`). Tailored documents are copies in
-the posting folder; the templates themselves are never edited while tailoring. Their folders are on the
-TeX search path, so the copies find class and style files.
+(`{ schemaVersion, main, origin?, contentFiles?, example?, importedFrom?, importedAt? }`). Tailored documents
+are copies in the posting folder; the templates themselves are never edited while tailoring. Their folders
+are on the TeX search path, so the copies find class and style files.
+
+**Content files.** Many resume templates keep their text in files the main file pulls in
+(`\input{sections/experience}`). Those would resolve from `templates/resume/` through the search path, so
+tailoring could only change the bullets by editing the template, which is forbidden. `contentFiles` lists
+them (`findContentFiles`): every `.tex` file reached through `\input`, `\include` or `\subfile` outside
+comments, directly or through each other, that exists inside the template, as paths relative to the main
+file's folder (packages like `\input{glyphtounicode}` aren't in the template, so they're left out). The
+skills copy them into the posting folder at the same relative paths beside the copied main file; the posting
+folder comes first on the search path, so the copies win. Recorded by `template_import` and
+`template_set_main`. (Flattening the document into one file was the alternative; copying keeps the user's
+file structure, so a diff against the template stays readable.)
 
 ### Importing a LaTeX template (`template_import`)
 - Source: an absolute folder outside the workspace. Build artifacts (`.aux`, `.log`, `.synctex.gz`…) and
@@ -60,7 +73,7 @@ TeX search path, so the copies find class and style files.
   untouched), so it and every tailored copy build with pdflatex whatever `tex.engine` says. The result's
   `texProgram` is `{ engine, added: true, note }`, or `{ engine, added: false }` when the file already
   names one; absent otherwise. See [documents](documents.md#tex-engines-texenginests).
-- Returns `{ folder, main, files, previous?, texProgram? }`.
+- Returns `{ folder, main, files, contentFiles?, previous?, texProgram? }`.
 
 ### The default cover letter
 `packages/cli/templates/cover/` ships `cover.tex` (XeLaTeX, US Letter, 11 pt, 1 in margins, Latin Modern
@@ -86,8 +99,9 @@ The user gives a sample letter whose **format** they like:
 Only the example's format carries over, never its sentences, claims or voice.
 
 ### `template_set_main`
-Records the entry point after Claude creates or reworks a template. It keeps `imported` as is and marks
-anything else `custom`.
+Records the entry point after Claude creates or reworks a template, and recomputes `contentFiles`. It keeps
+`imported` as is and marks anything else `custom`. `main` comes from Claude, so it must resolve inside
+`templates/<kind>/` (`path_not_allowed` otherwise, e.g. `../../x.tex`) and end in `.tex`.
 
 ## Library (`library/`)
 User-supplied documents (transcripts, certificates, writing samples) for bundles and uploads. Listed by

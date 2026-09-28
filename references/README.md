@@ -2,9 +2,9 @@
 
 The complete, current description of ezapply: what it's for, how it's built, and how every part works.
 **This folder is the source of truth**, including the reasons behind the design (there is no separate
-decision log). `plan.md` is the original design plan and is kept for its reasoning, but where the two
-disagree this folder is right. The repo's `CLAUDE.md` requires every change
-to keep this folder accurate and complete.
+decision log). The original design plan was removed once built; what changed from it is in
+[status.md](status.md#where-the-build-departs-from-the-original-plan). Planned work is in `todo.md`. The
+repo's `CLAUDE.md` requires every change to keep this folder accurate and complete.
 
 ## Contents
 
@@ -28,7 +28,7 @@ to keep this folder accurate and complete.
 | [data-formats.md](data-formats.md) | Every file ezapply reads or writes, with its schema |
 | [security.md](security.md) | Threat model and the controls against each threat |
 | [development.md](development.md) | Repo layout, build, tests, CI, conventions, how to extend |
-| [status.md](status.md) | What's done, what's unverified, what's deferred, open questions, where the build departs from the plan |
+| [status.md](status.md) | What's done, what's unverified, what's deferred, open questions, where the build departs from the original plan |
 
 ## Reading order
 New to the project: philosophy → architecture → flows. Then the component page for whatever you're

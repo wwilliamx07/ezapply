@@ -9,8 +9,12 @@ so a change here is a change to the contract between them.
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo`, `BrowserStatus`, `detectSite(url)` (Workday hosts: `*.myworkdayjobs.com`, `*.myworkdaysite.com`, `*.workday.com`) |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
+| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
+
+The package exports `.` (everything) and `./workday`. `detectSite` counts only candidate-facing Workday
+hosts as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
 
 ## Bridge handshake
 
@@ -65,16 +69,19 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 | `form.fill` | `{ tabId?, fills: FillAction[] }` → `FillResult[]` |
 | `form.upload` | `{ tabId?, fieldId, file: UploadFile }` → `FillResult` |
 | `form.remove` | `{ tabId?, fieldId, values? }` → `RemoveResult { fieldId, ok, removed, remaining, notFound?, error? }` (no `values` = all). Added without a version bump; an older extension answers "Unknown method" |
+| `form.removeRepeatable` | `{ tabId?, sectionId }` → `RemoveRowResult { sectionId, ok, removed?, error? }`. Added without a version bump, like `form.remove` |
 | `form.addRepeatable` | `{ tabId?, addButtonId }` → `{ ok, error? }` |
 | `form.next` | `{ tabId? }` → `NextResult` |
+| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
 
 ## Form schema
 
-What Claude sees of an application page (`FormSchema`): `adapter`, `tabId`, `url`, `tenant?`,
-`pageKind`, `step? { index?, total?, title }`, `sections[] { id, title, fields[] }`,
-`addButtons[] { id, label }`, `actions[]` (page actions available), `errors[]`, `nextLabel?`.
+What the adapter reports of an application page (`FormSchema`; Claude gets a leaner copy, see
+[mcp-tools](../mcp-tools.md#forms)): `adapter`, `tabId`, `url`, `tenant?`, `pageKind`,
+`step? { index?, total?, title }`, `sections[] { id, title, fields[], removable? }`,
+`addButtons[] { id, label }`, `actions[]` (page actions available), `errors[]`, `nextLabel?`, `backLabel?`.
 
 - `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown`.
 - `PageAction`: `apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`.
@@ -90,6 +97,7 @@ What Claude sees of an application page (`FormSchema`): `adapter`, `tabId`, `url
 ## Postings
 
 `CapturePayload`: `url`, `pageTitle`, `html` (body verbatim), `visibleHtml`, `visibleText`, `jsonLd[]`,
+`frameUrl?` (the content came from this embedded frame; `url` and `pageTitle` are still the tab's),
 `capturedAt`, `tabId`. `PostingMeta` and `PostingStatus` are described in
 [data-formats.md](../data-formats.md#postingsidmetajson-protocolsrcpostingsts).
 
@@ -103,7 +111,10 @@ What Claude sees of an application page (`FormSchema`): `adapter`, `tabId`, `url
 ## Changing the protocol
 - Additive, optional fields: no version bump (both sides ignore unknown fields). Examples: code-less
   pairing added the optional `welcome.pairingToken`, and idle shutdown added `hello.pendingCapture` and
-  close code 4005 (an older extension treats it as a plain disconnect); `PROTOCOL_VERSION` stayed 2.
+  close code 4005 (an older extension treats it as a plain disconnect); later `TabInfo.focused` and
+  `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
+  `form.removeRepeatable` and `form.back` methods.
+  `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its

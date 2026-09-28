@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./workday": {
+      "types": "./dist/workday.d.ts",
+      "default": "./dist/workday.js"
     }
   },
   "dependencies": {

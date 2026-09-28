@@ -1,7 +1,6 @@
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { openInDefaultApp } from "../../documents/pdf/toolkit.js";
 import { RepoService } from "../../repos/service.js";
 import type { Services } from "../../services.js";
 import { tool } from "../result.js";
@@ -11,7 +10,9 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
     "github_status",
     {
       title: "GitHub status",
-      description: "Whether the ezapply GitHub App exists and the user is logged in (login, token expiry, manage URL).",
+      description:
+        "Whether the ezapply GitHub App exists and the user is logged in (login, token expiry, manage URL). " +
+        "portMismatch means the app's callback URLs point at another port than the daemon's; follow its hint.",
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "github_status", () => s.github.status()),
@@ -22,24 +23,51 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
     {
       title: "Log in with GitHub",
       description:
-        "Open the GitHub sign-in in the user's browser. First time: GitHub asks them to create a private read-only " +
-        "ezapply app, then to choose which repositories it may read, then to authorize. Afterwards it is a single " +
-        "authorize click. Tell the user what to expect, then call github_login_wait.",
+        "Open the GitHub sign-in in the user's browser. When github_status shows no app registered, first ask the " +
+        "user whether they already have an ezapply GitHub App (from another computer or an earlier install): " +
+        'app "existing" connects it (they paste its Client ID and a new client secret into the local page, never ' +
+        'into chat); app "new" creates a private read-only app, then they choose repositories and authorize. ' +
+        "Omit app to use the one registered here. Tell the user what to expect, then call github_login_wait.",
+      inputSchema: {
+        app: z
+          .enum(["new", "existing"])
+          .optional()
+          .describe(
+            "Create a new app, or connect an existing one. Omit to use the app registered here (or create one).",
+          ),
+      },
     },
-    tool(s.log, "github_login", async () => {
-      const url = s.github.loginUrl();
-      const opened = await openInDefaultApp(url).then(
-        () => true,
-        () => false,
-      );
+    tool(s.log, "github_login", async ({ app }: { app?: "new" | "existing" }) => {
       const status = await s.github.status();
+      // Choosing an app replaces the registered one, so a mismatch with the old app's port doesn't matter.
+      if (status.portMismatch && !app) {
+        throw new EzError(ErrorCode.BadRequest, "The GitHub App points at another port.", status.portMismatch.hint);
+      }
+      const url = s.github.loginUrl(app);
+      const opened = await s.opener.url(url).then(
+        () => true,
+        (err: unknown) => {
+          s.log.warn({ err: (err as Error).message }, "github_login: could not open the browser");
+          return false;
+        },
+      );
+      const callbackUrl = s.github.callbackUrl();
+      const steps =
+        app === "existing"
+          ? "The page walks them through it: on github.com/settings/apps, edit their ezapply-… app, add " +
+            `${callbackUrl} as a Callback URL if it's missing, copy the Client ID, generate a new client secret, ` +
+            "paste the app name, Client ID and secret into the page (never into this chat), then Authorize."
+          : status.appRegistered && app !== "new"
+            ? "Click Authorize, then come back."
+            : "Click 'Continue to GitHub', then 'Create GitHub App', choose the repositories ezapply may read (All or Only select), Install, and finally Authorize.";
       return {
         url,
         openedBrowser: opened,
-        firstTimeSetup: !status.appRegistered,
-        tell: status.appRegistered
-          ? "A GitHub authorize page opened. Click Authorize, then come back."
-          : "A page opened: click 'Continue to GitHub', then 'Create GitHub App', choose the repositories ezapply may read (All or Only select), Install, and finally Authorize.",
+        firstTimeSetup: !status.appRegistered || app !== undefined,
+        ...(app === "existing" ? { callbackUrl } : {}),
+        tell: opened
+          ? `A page opened in the browser. ${steps}`
+          : `The browser didn't open by itself: ask the user to open ${url} (it's a page of the local ezapply daemon). ${steps}`,
       };
     }),
   );
