@@ -21,7 +21,7 @@ skills, languages, certifications, and optional EEO self-identification.
 ## Answer bank (`profile/answers.yaml`)
 Stored answers to screening questions.
 
-- **Seeded** on first daemon start with 33 common Workday questions (work authorization, sponsorship,
+- **Seeded** on the companion's first start with 33 common Workday questions (work authorization, sponsorship,
   export control, previous employment, relatives, referrals, government relationships, conflicts of
   interest, consents, relocation, travel, start date, salary, degree, criminal history…), all unanswered,
   some with a `suggested` default or a `source` in the profile.
@@ -80,9 +80,9 @@ file structure, so a diff against the template stays readable.)
 via fontspec) and `template.json` with `origin: "default"`. `ezapply init` copies it into
 `templates/cover/` only when that folder is empty. It has:
 - identity fields `\myname`, `\mycontact`, filled once from the profile;
-- per-letter fields `\letterdate`, `\addressee`, `\company`, `\role`;
-- a name header, contact line, date, addressee block, `Re:` line, salutation, the body between
-  `% BODY START` and `% BODY END`, and a sign-off.
+- per-letter fields `\letterdate`, `\addressee`, `\company`;
+- a name header, contact line, date, addressee block, salutation, the body between `% BODY START` and
+  `% BODY END`, and a sign-off. No subject (`Re:`) line: the opening paragraph names the role.
 
 ### Cover letter from an example (`template_import_example`)
 The user gives a sample letter whose **format** they like:

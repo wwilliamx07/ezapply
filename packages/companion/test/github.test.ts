@@ -172,7 +172,7 @@ describe("GitHub app setup and login", () => {
     expect(await svc.gitAuthHeader()).toMatch(/^Authorization: Basic /);
   });
 
-  it("connects an existing app from its Client ID and a new secret, entered on the daemon's page", async () => {
+  it("connects an existing app from its Client ID and a new secret, entered on ezapply's page", async () => {
     const svc = handle.services.github;
     const start = new URL(svc.loginUrl("existing"));
     const form = await local(start.pathname + start.search);
@@ -331,7 +331,7 @@ describe("GitHub app setup and login", () => {
     const status = await handle.services.github.status();
     expect(status.portMismatch).toMatchObject({
       appUrl: "http://127.0.0.1:1234",
-      daemonUrl: `http://127.0.0.1:${handle.port}`,
+      localUrl: `http://127.0.0.1:${handle.port}`,
       hint: expect.stringMatching(/ezapply init --port 1234/),
     });
   });

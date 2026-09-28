@@ -3,7 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { RepoService } from "../../repos/service.js";
 import type { Services } from "../../services.js";
-import { tool } from "../result.js";
+import { browserLabel } from "../../util/open.js";
+import { rawTool, tool } from "../result.js";
 
 export function registerGitHubTools(server: McpServer, s: Services): void {
   server.registerTool(
@@ -12,7 +13,7 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       title: "GitHub status",
       description:
         "Whether the ezapply GitHub App exists and the user is logged in (login, token expiry, manage URL). " +
-        "portMismatch means the app's callback URLs point at another port than the daemon's; follow its hint.",
+        "portMismatch means the app's callback URLs point at another port than ezapply's; follow its hint.",
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "github_status", () => s.github.status()),
@@ -44,13 +45,10 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
         throw new EzError(ErrorCode.BadRequest, "The GitHub App points at another port.", status.portMismatch.hint);
       }
       const url = s.github.loginUrl(app);
-      const opened = await s.opener.url(url).then(
-        () => true,
-        (err: unknown) => {
-          s.log.warn({ err: (err as Error).message }, "github_login: could not open the browser");
-          return false;
-        },
-      );
+      const openedIn = await s.opener.url(url).catch((err: unknown) => {
+        s.log.warn({ err: (err as Error).message }, "github_login: could not open the browser");
+        return null;
+      });
       const callbackUrl = s.github.callbackUrl();
       const steps =
         app === "existing"
@@ -62,12 +60,13 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
             : "Click 'Continue to GitHub', then 'Create GitHub App', choose the repositories ezapply may read (All or Only select), Install, and finally Authorize.";
       return {
         url,
-        openedBrowser: opened,
+        openedBrowser: openedIn !== null,
+        ...(openedIn ? { openedIn } : {}),
         firstTimeSetup: !status.appRegistered || app !== undefined,
         ...(app === "existing" ? { callbackUrl } : {}),
-        tell: opened
-          ? `A page opened in the browser. ${steps}`
-          : `The browser didn't open by itself: ask the user to open ${url} (it's a page of the local ezapply daemon). ${steps}`,
+        tell: openedIn
+          ? `A page opened in ${browserLabel(openedIn)}. ${steps}`
+          : `The browser didn't open by itself: ask the user to open ${url} (it's a page ezapply serves on this computer). ${steps}`,
       };
     }),
   );
@@ -196,6 +195,20 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "repo_contributions", ({ repo }: { repo: string }) => s.repos.contributions(repo)),
+  );
+
+  server.registerTool(
+    "claims_list",
+    {
+      title: "All claims",
+      description:
+        "Every project claim, compact: per repo, one `id: claim (impact: …)` line each. Call once, on the first " +
+        "request about a posting; this is the project knowledge to draw on.",
+      annotations: { readOnlyHint: true },
+    },
+    rawTool(s.log, "claims_list", async () => ({
+      content: [{ type: "text", text: await s.repos.allClaims() }],
+    })),
   );
 
   server.registerTool(

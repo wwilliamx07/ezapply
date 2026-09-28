@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 
 /**
- * A small HTML page from the daemon (GitHub setup, document review): no scripts, inline styles only, never
+ * A small HTML page from the companion (GitHub setup, document review): no scripts, inline styles only, never
  * framed. `csp` adds directives to `default-src 'none'; style-src 'unsafe-inline'`.
  */
 export function htmlPage(

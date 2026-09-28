@@ -52,7 +52,7 @@ Anything else fails with `path_not_allowed`.
 - **Availability** is re-checked until found: `which()` doesn't cache misses, and latexmk's Perl check
   only remembers success. A TeX install mid-session is picked up without a restart. The distribution check
   (MiKTeX or TeX Live, which spell some options differently) likewise remembers only a definite answer:
-  a daemon started before MiKTeX was installed would otherwise keep treating it as unknown and pass the TeX
+  an `ezapply chat` started before MiKTeX was installed would otherwise keep treating it as unknown and pass the TeX
   Live flag (harmless: MiKTeX accepts `-no-shell-escape`, but loses `--max-print-line`).
 - **No engine:** `not_found` with the install command for this OS (winget MiKTeX + package auto-install
   on Windows, `brew install --cask mactex-no-gui` on macOS, `texlive-xetex latexmk` on Linux).
@@ -97,7 +97,7 @@ approves exactly what they saw even if Claude rebuilds meanwhile. Answering reco
 empty box as approved and returns the others with the user's words; `review_wait` blocks until then (or its
 timeout). Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
-a review expires after 2 hours; while one is open the daemon doesn't stop as idle. Every URL needs the random
+a review expires after 2 hours, or when the chat ends. Every URL needs the random
 token, compared in constant time; wrong or missing tokens get a 404.
 
 **Approvals** go to `postings/<id>/approvals.json`: per document (path relative to the posting folder) the
@@ -142,8 +142,10 @@ MediaBox set to the target (other boxes dropped). A page that already has the ta
 orientation is left alone. It used to redraw such pages as form XObjects, which drops annotations, so a
 Letter resume bundled after an A4 transcript lost its clickable LinkedIn and GitHub links.
 
-`open_file` goes through the `Opener` (`util/open.ts`): `explorer.exe` / `open` / `xdg-open`, started
-detached without a shell and not waited for, so a viewer it launches is never killed by a timeout.
+`open_file` goes through the `Opener` (`util/open.ts`): a PDF, image or text file opens in the browser the
+extension runs in, anything else (and everything when that browser isn't known or found) through
+`explorer.exe` / `open` / `xdg-open`; started detached without a shell and not waited for, so a viewer it
+launches is never killed by a timeout ([companion](companion.md#opening-pages-and-files-utilopents)).
 
 Encrypted or unreadable PDFs fail with `bad_request` and a clear message rather than being skipped.
 Outputs are written atomically; a target another program holds open (Acrobat locks the PDFs it shows) fails

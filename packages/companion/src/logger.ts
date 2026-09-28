@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pino, { type Logger } from "pino";
-import { appDir } from "./config/daemon.js";
+import { appDir } from "./config/app.js";
 
 export type { Logger };
 
@@ -11,8 +11,9 @@ export const LOG_KEEP = 3;
 const ROTATE_CHECK_MS = 10 * 60_000;
 
 /**
- * Structured logs go to ~/.ezapply/logs/companion.log. Anything that could hold personal
- * data (page content, form values, tokens) is redacted by path; log ids and sizes instead.
+ * Structured logs go to ~/.ezapply/logs/companion.log, and only there: the companion runs inside
+ * `ezapply chat`, whose terminal belongs to Claude. Anything that could hold personal data (page content,
+ * form values, tokens) is redacted by path; log ids and sizes instead. `toFile: false` (tests) logs to stdout.
  */
 export function createLogger(opts: { level?: string; toFile?: boolean } = {}): Logger {
   const redact = {
@@ -33,14 +34,14 @@ export function createLogger(opts: { level?: string; toFile?: boolean } = {}): L
   const dir = join(appDir(), "logs");
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "companion.log");
-  // Every on-demand start appends to the same file, so check at start and then now and again.
+  // Every run appends to the same file, so check at start and then now and again.
   rotateLog(file);
   const dest = pino.destination({ dest: file, mkdir: true, sync: false });
   const timer = setInterval(() => {
     if (rotateLog(file)) dest.reopen();
   }, ROTATE_CHECK_MS);
   timer.unref();
-  return pino({ level, redact }, pino.multistream([{ stream: dest }, { stream: process.stderr }]));
+  return pino({ level, redact }, dest);
 }
 
 /**

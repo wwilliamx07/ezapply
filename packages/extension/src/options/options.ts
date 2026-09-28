@@ -42,7 +42,7 @@ function render(s: ConnState | undefined): void {
       status.textContent = s.hint ? `${s.message} ${s.hint}` : s.message;
       break;
     case "disconnected":
-      status.textContent = `Not connected: ${s.reason}. Open Claude Code in your ezapply workspace; it starts the companion.`;
+      status.textContent = `Not connected: ${s.reason}. In your ezapply workspace, run ./ezapply chat; it connects within 30 seconds.`;
       break;
     default:
       status.textContent =

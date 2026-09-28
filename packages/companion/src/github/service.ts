@@ -10,10 +10,10 @@ import type { SecretStore } from "./secrets.js";
 /**
  * GitHub access through a per-user GitHub App with read-only permissions.
  *
- * Setup (once): the daemon serves a page that posts an App Manifest to GitHub; the user clicks
+ * Setup (once): the companion serves a page that posts an App Manifest to GitHub; the user clicks
  * "Create", GitHub redirects back with a code we convert into app credentials, then the user installs
  * the app on the repos they choose. Login: standard OAuth web flow against the app, with the
- * callback on this daemon. Every browser-facing step is guarded by a one-time state value.
+ * callback on this companion. Every browser-facing step is guarded by a one-time state value.
  */
 
 const AppFile = z.object({
@@ -57,8 +57,8 @@ export interface GitHubStatus {
   login?: string;
   name?: string;
   tokenExpiresAt?: string;
-  /** The app's callback URLs point at another port than the daemon's: logins would redirect there. */
-  portMismatch?: { appUrl: string; daemonUrl: string; hint: string };
+  /** The app's callback URLs point at another port than the companion's: logins would redirect there. */
+  portMismatch?: { appUrl: string; localUrl: string; hint: string };
 }
 
 export interface RepoInfo {
@@ -240,17 +240,17 @@ export class GitHubService {
     return blob;
   }
 
-  /** Where the app's callbacks point, when that differs from where the daemon listens now. */
+  /** Where the app's callbacks point, when that differs from where the companion listens now. */
   private portMismatch(app: AppFile): GitHubStatus["portMismatch"] {
     const now = this.opts.localBaseUrl();
     if (!app.localBaseUrl || app.localBaseUrl === now) return undefined;
     return {
       appUrl: app.localBaseUrl,
-      daemonUrl: now,
+      localUrl: now,
       hint:
-        `The ezapply GitHub App was created while the daemon listened on ${app.localBaseUrl}, so GitHub sends ` +
-        `logins there. Either move the daemon back (\`ezapply init --port ${new URL(app.localBaseUrl).port}\`, ` +
-        `then \`ezapply restart\`), or have the user open ${this.webBase}/settings/apps/${app.slug} and change ` +
+        `The ezapply GitHub App was created while ezapply listened on ${app.localBaseUrl}, so GitHub sends ` +
+        `logins there. Either move ezapply back (\`ezapply init --port ${new URL(app.localBaseUrl).port}\`, ` +
+        `then restart \`ezapply chat\`), or have the user open ${this.webBase}/settings/apps/${app.slug} and change ` +
         `the Callback URL to ${now}/github/callback and the Setup URL to ${now}/github/installed.`,
     };
   }
@@ -439,7 +439,7 @@ export class GitHubService {
    * The page for connecting an app the user already has. GitHub offers no way to list a user's apps before
    * they sign in, and never shows an app's client secret again after creating it, so the user picks the app
    * on GitHub, copies its Client ID and generates a new client secret (older secrets keep working, e.g. on
-   * another computer). They paste them here, into the daemon's own page, so the secret never passes through
+   * another computer). They paste them here, into ezapply's own page, so the secret never passes through
    * the chat.
    */
   private reusePage(res: ServerResponse, error?: string): void {
@@ -465,7 +465,7 @@ export class GitHubService {
         <label>Client secret<br><input name="client_secret" type="password" required size="40"></label><br>
         <button type="submit">Continue to GitHub</button>
       </form>
-      <p>These go only to the ezapply daemon on this computer; the secret is stored in your OS keychain once
+      <p>These go only to ezapply on this computer; the secret is stored in your OS keychain once
       you've signed in.</p>`,
     );
   }
@@ -626,7 +626,7 @@ export class GitHubService {
     return parsed.success ? parsed.data : null;
   }
 
-  /** True while a login or app setup the user started in the browser can still complete (keeps the daemon up). */
+  /** True while a login or app setup the user started in the browser can still complete. */
   flowPending(): boolean {
     const now = Date.now();
     for (const p of this.states.values()) if (p.expires > now) return true;
@@ -686,7 +686,7 @@ function redirect(res: ServerResponse, location: string): void {
   res.end();
 }
 
-/** GitHub's pages post forms to GitHub (the app manifest) or back to this daemon (the existing-app form). */
+/** GitHub's pages post forms to GitHub (the app manifest) or back to this companion (the existing-app form). */
 function page(res: ServerResponse, status: number, title: string, body: string): void {
   htmlPage(res, status, title, body, { csp: "form-action 'self' https://github.com" });
 }

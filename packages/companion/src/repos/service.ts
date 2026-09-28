@@ -356,6 +356,37 @@ export class RepoService {
     return dir;
   }
 
+  /**
+   * Every claim of every indexed repo as compact text, for `claims_list`: the repo named once as a heading,
+   * then one line per claim, `id: claim`, with `(impact: …)` only when there is one. Evidence, skills and
+   * confidence are left out: they matter when writing claims (`claims_check`), not when choosing them. This
+   * is about half the size of a Grep over the files, which repeats the file path and a line number on every
+   * line and lists `impact: null`. A repo whose claims.yaml doesn't parse gets one line saying so.
+   */
+  async allClaims(): Promise<string> {
+    const keys = (await readdir(this.ws.path("knowledge")).catch(() => [] as string[]))
+      .filter((k) => k.includes("__"))
+      .sort();
+    const blocks: string[] = [];
+    let count = 0;
+    for (const key of keys) {
+      const repo = key.replace("__", "/");
+      if (!(await stat(join(this.knowledgePath(repo), "claims.yaml")).catch(() => null))) continue;
+      const loaded = await this.loadClaims(repo);
+      if ("errors" in loaded) {
+        blocks.push(`## ${repo}\n(claims.yaml has problems: run claims_check ${repo})`);
+        continue;
+      }
+      count += loaded.claims.length;
+      const lines = loaded.claims.map(
+        (c) => `- ${c.id}: ${oneLine(c.claim)}${c.impact ? ` (impact: ${oneLine(c.impact)})` : ""}`,
+      );
+      blocks.push(`## ${repo}\n${lines.join("\n")}`);
+    }
+    if (blocks.length === 0) return "No claims yet: no repo has been indexed (the ezapply-index-repo skill).";
+    return `${count} claims from knowledge/*/claims.yaml\n\n${blocks.join("\n\n")}`;
+  }
+
   async cachedRepos(): Promise<string[]> {
     const entries = await readdir(this.ws.path("repo-cache")).catch(() => [] as string[]);
     return entries.filter((e) => e.includes("__")).map((e) => e.replace("__", "/"));
@@ -383,6 +414,11 @@ export class RepoService {
 }
 
 /** "12" or "12-40" as [first, last]. */
+/** A claim's text on one line (YAML block scalars can carry line breaks). */
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 function lineRange(spec: string): [number, number] | null {
   const [a, b] = spec.split("-").map(Number);
   if (a === undefined || Number.isNaN(a)) return null;

@@ -4,10 +4,10 @@ import { z } from "zod";
 import type { Services } from "../../services.js";
 import { tool } from "../result.js";
 
-/** The daemon just started and the paired extension hasn't reconnected (and wasn't waited for). */
+/** `ezapply chat` just started and the paired extension hasn't reconnected (and wasn't waited for). */
 const RECONNECTING =
-  "The browser extension hasn't reconnected since the daemon started. A posting the user captured while " +
-  "ezapply was stopped arrives once it does (within about 30 s of the browser being open): if the user just " +
+  "The browser extension hasn't reconnected since ezapply started. A posting the user captured while " +
+  "ezapply wasn't running arrives once it does (within about 30 s of the browser being open): if the user just " +
   "captured one, ask them to check the browser is open, then call this again.";
 
 export function registerPostingTools(server: McpServer, s: Services): void {
@@ -24,7 +24,7 @@ export function registerPostingTools(server: McpServer, s: Services): void {
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "posting_active", async () => {
-      // A capture queued while the daemon was stopped lands first.
+      // A capture queued while ezapply wasn't running lands first.
       const { extensionReconnecting } = await s.bridge.settled();
       const id = await s.postings.requireActiveId().catch((err: unknown) => {
         const e = EzError.from(err);

@@ -6,12 +6,13 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 
 **Terminal (once, and after each update):**
 1. `npm run setup` in the repo: `npm install`, `npm run build`, then `ezapply init` ([cli](components/cli.md)).
-2. `init` writes `~/.ezapply/daemon.json` (keeping existing tokens and pairing) and creates or refreshes the
+2. `init` writes `~/.ezapply/config.json` (keeping existing tokens and pairing) and creates or refreshes the
    workspace: folders, `EZAPPLY.md`, `CLAUDE.md` stub, `.mcp.json`, `.claude/settings.json`, skills, and the
    default cover letter template if `templates/cover/` is empty.
 3. It also writes the `ezapply` launcher into the workspace, and prints: `cd` into the workspace, run
-   `./ezapply chat` (`.ezapply chat` on Windows), say "set me up". `ezapply chat` is how ezapply is run from
-   then on ([cli](components/cli.md#chat-chatts)).
+   `./ezapply chat` (`.\ezapply chat` on Windows), say "set me up". `ezapply chat` is how ezapply is run from
+   then on ([cli](components/cli.md#chat-chatts)): it hosts the companion and runs Claude Code, and ezapply
+   runs only while it's open. After an update, a chat that was open must be exited and started again.
 
 **In Claude Code** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, skips what's done):
 1. `workspace_check` returns the checklist: `agent_file`, `tex`, `extension`, `github_login`, `repos_selected`,
@@ -21,7 +22,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    and re-checks. No restart is needed.
 3. **Extension:** see [flow 2](#2-pairing-the-extension).
 4. **GitHub:** with no app registered here, Claude asks whether the user already has an ezapply GitHub App
-   (from another computer or an earlier install) or wants a new one. `github_login` opens a daemon page in
+   (from another computer or an earlier install) or wants a new one. `github_login` opens a page ezapply serves in
    the browser (or, when it can't, gives the user the URL to open). New: it creates a private, read-only
    GitHub App through the manifest flow, has the user install it on chosen repos, then authorizes. Existing:
    the page walks the user through adding the callback URL, copying the Client ID and generating a new
@@ -43,19 +44,19 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry).
 
 ## 2. Pairing the extension
-1. Claude calls `extension_pair`. The daemon opens a 15-minute pairing window and returns, per browser,
+1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
    the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
    `dist-firefox` for Firefox), plus a hint if the extension isn't built.
 2. Claude relays that for the user's browser. The user loads the unpacked extension: the one manual step.
 3. The extension has no pairing code yet, so it connects to the default port and sends `hello` with an
-   empty code. Because the window is open, the daemon accepts it, pins its id (Chrome extension id or
+   empty code. Because the window is open, the companion accepts it, pins its id (Chrome extension id or
    Firefox install UUID), closes the window, and returns the real code in `welcome`. The extension stores
    it and uses it from then on.
 4. `extension_pair_wait` returns once the extension is connected. The badge turns green.
 
 `extension_pair` with `replace: true` first forgets the pinned extension and rotates the code, so an old
-copy (for example in another browser) can't reconnect. `ezapply pair` does the same from a terminal, and
-a code typed on the options page still works for non-default ports.
+copy (for example in another browser) can't reconnect. A code typed on the options page still works for
+non-default ports.
 
 ## 3. Capturing a posting ("Set posting")
 1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page.
@@ -65,16 +66,16 @@ a code typed on the options page still works for non-default ports.
    frame holding the posting is chosen: the top one, unless an embedded job board frame has the `JobPosting`
    data or more text. A large embedded board it couldn't read opens in a new tab instead, for the user to
    capture there ([extension](components/extension.md#set-posting)).
-3. If the daemon isn't connected (e.g. it stopped after 15 idle minutes), the capture is stored as pending
-   (badge `…`) and sent on the next connection. Only the latest pending capture is kept. When Claude Code
-   next starts the daemon, `posting_active` waits for the extension to reconnect and deliver it.
-4. The daemon ([postings](components/postings.md)) canonicalizes the URL (for Workday, without the locale
+3. If ezapply isn't connected (no `ezapply chat` is open), the capture is stored as pending (badge `…`) and
+   sent on the next connection. Only the latest pending capture is kept. When the user next starts
+   `ezapply chat`, `posting_active` waits for the extension to reconnect and deliver it.
+4. The companion ([postings](components/postings.md)) canonicalizes the URL (for Workday, without the locale
    segment); a posting already captured at that URL reuses its folder. Otherwise it makes `postings/<date>_<company>_<role>/`. It writes the raw
    and visible captures, runs extraction to `posting.md`, writes `meta.json` (keeping fields Claude
    corrected earlier), and makes it the active posting.
 5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>".
-6. **A fresh Claude session.** `ezapply chat` sees a different active posting within a second. If the
-   running session has used a tool (and none is running), it ends that Claude and starts a new one in the
+6. **A fresh Claude session.** The companion tells `ezapply chat` that the active posting changed. If the
+   running session has used a tool (and none is running, or as soon as the running one ends), it ends that Claude and starts a new one in the
    same terminal, with one line saying so; the user types their next request there. So the earlier
    application (or the onboarding, at the first capture) isn't re-sent with every turn of the next one. A
    session that hasn't done anything, or a re-capture of the same posting, keeps going. Off with
@@ -86,8 +87,8 @@ The `ezapply-resume` skill:
    `notes.md` has no `## Application requirements`, write it (documents wanted, single PDF → `bundleRequired`,
    format, naming, limits, addressee, deadline) and mention them to the user. Every later skill (cover
    letter, bundle, apply) follows it. Any request about a posting does this first, per `EZAPPLY.md`.
-2. Read the profile, preferences, every claim (one Grep of the `id`/`claim`/`impact` lines of all
-   `claims.yaml`, per `EZAPPLY.md`) and the template; copy the template's main file to
+2. Read the profile, preferences, every claim (`claims_list`, already called at the first request per
+   `EZAPPLY.md`) and the template; copy the template's main file to
    `postings/<id>/resume.tex` if it isn't there (it keeps the template's `% !TEX program` comment, so it
    builds with the same engine), along with the files it `\input`s (`contentFiles` in `template.json`) at the
    same relative paths; set status `drafting`.

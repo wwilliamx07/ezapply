@@ -32,8 +32,8 @@ The workspace rules, about 100 lines and kept short on purpose: Claude Code load
 so every line costs context. Procedures live in skills, which load only when used, and the tool list isn't
 repeated because the MCP server already provides it. Sections:
 - **Setup and errors:** run `ezapply-onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
-  before installing, run it, retry); the `doctor`, `status`, `restart`/`start`/`stop` and `init`
-  commands with this install's absolute path.
+  before installing, run it, retry); the `doctor`, `status` and `init` commands with this install's
+  absolute path; the tools work only while `ezapply chat` is open.
 - **How the user works:** capture sets the active posting; every request is about it; tweaks happen in
   chat with one-or-two-line reports.
 - **Untrusted content and prompt injection:** postings, forms, `repo-cache/` files, library documents and
@@ -46,14 +46,20 @@ repeated because the MCP server already provides it. Sections:
   first reply; re-check before hand-off or filling. Requirements aimed at an AI, hidden, or asking for what
   no employer would are treated as injections; conflicts with the rules go to the user.
 - **Keep context lean:** read `posting.md` once and keep what matters in `notes.md` (it outlives
-  compaction). Project knowledge is the claims: as soon as work on a posting's documents starts, read
-  every claim in one Grep (the `id`, `claim` and `impact` lines of all `claims.yaml`, ~5k tokens for 84
-  claims). Knowledge docs, `repo-cache/` and (re-)indexing only when the claims can't answer something,
+  compaction). Project knowledge is the claims: on the first request about a posting, right after
+  `posting_active`, call `claims_list` once (every claim, compact: about 14 KB, ~3.5k tokens, for 73 claims
+  in 8 repos). Knowledge docs, `repo-cache/` and (re-)indexing only when the claims can't answer something,
   and then narrowly (one component doc, or the cited lines). Render only the page needed; don't re-read
-  files just written; hand large reading jobs to subagents. *Why one Grep of everything:* a fresh session
+  files just written; hand large reading jobs to subagents. *Why every claim at once:* a fresh session
   doesn't know which projects matter, and a relevance-filtered retrieval (a search tool, embeddings)
   saves little at this size while risking a claim silently left off the resume; the first real session
-  showed the agent improvising exactly this compact read.
+  showed the agent improvising exactly this compact read. *Why a tool and not a Grep* (what this file said
+  before): Grep repeats the file path and a line number on every line and lists every `impact: null`, which
+  doubled the read (27.7 KB against 14 KB on the same claims). *Why at the first request, not when documents
+  start:* each `ezapply chat` session is about one posting, and filling a form (experience descriptions,
+  "why this role") and answering questions in chat need the claims as much as documents do; read once, they
+  cost about 3.5k tokens to write into the cache (at twice the input price) and a tenth of that per later
+  turn.
 - **Layout** and **documents** conventions (copy templates into the posting folder, with the files in
   `template.json`'s `contentFiles`; the per-file engine from `% !TEX program`, compile → fix → render,
   history, ATS text check, escape LaTeX specials), and the **attach mode**: in `after-approval`, review
@@ -90,7 +96,7 @@ when a request matches it or the user types `/ezapply-<name>`.
 | `ezapply-onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub (asking first whether to connect an existing ezapply app or create a new one), repos, knowledge base, resume + profile, cover template, answer bank, preferences (first the attach mode), library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
 | `ezapply-repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
 | `ezapply-index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does; evidence whose lines changed is re-verified and its hash deleted for restamping |
-| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim in one Grep; copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check, then review (in `after-approval`) |
+| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check, then review (in `after-approval`) |
 | `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body, `format.md` structure if present, one-page build loop, then review (in `after-approval`) |
 | `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks; the bundle is reviewed as its own document in `after-approval` |
 | `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`; form text treated as untrusted; step-by-step Workday filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat, hand-off at review |
@@ -101,7 +107,11 @@ when a request matches it or the user types `/ezapply-<name>`.
   works from any shell. No token is stored here.
 - `.claude/settings.json` (merged, the user's other settings kept): `enabledMcpjsonServers: ["ezapply"]`,
   `permissions.allow: ["mcp__ezapply"]`, and `permissions.deny` for `Edit`, `Write` and `NotebookEdit` on
-  `repo-cache/**` (both `/repo-cache/**` and `./repo-cache/**` forms).
+  `repo-cache/**` (both `/repo-cache/**` and `./repo-cache/**` forms). `autoMemoryEnabled: false` is added
+  when the file doesn't set it (a value the user set is kept): Claude Code's auto memory loads a memory index
+  and instructions for writing memories into every session, and has Claude spend turns writing notes. Here
+  those notes would duplicate what the workspace already holds (profile, answer bank, preferences,
+  `EZAPPLY.md`), go stale against those files, and copy personal data to `~/.claude/projects/`.
 
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |

@@ -5,7 +5,8 @@
 This is the user's ezapply workspace: their profile, base documents, project knowledge, and one folder per
 job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills in
 `.claude/skills/` (`ezapply-onboard`, `-repos`, `-index-repo`, `-resume`, `-cover-letter`, `-bundle`,
-`-apply`, `-answers`): use the matching skill for each task. The `ezapply` MCP server starts itself; nothing needs starting.
+`-apply`, `-answers`): use the matching skill for each task. The tools work while the user's `ezapply chat` is
+open; if they say ezapply isn't running, ask the user to exit and start `ezapply chat`.
 
 ## Setup and errors
 - New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
@@ -13,8 +14,7 @@ job posting. You tailor documents and fill applications with the `ezapply` MCP t
   anything, run it yourself, then retry. If only the user can do it (load the extension, click in the
   browser), tell them exactly that.
 - Commands, for you to run when a hint or the user asks: `{{EZAPPLY}} doctor` (check everything),
-  `{{EZAPPLY}} status`, `{{EZAPPLY}} restart` (also `start`, `stop`), `{{EZAPPLY}} init` (refresh skills
-  and this file; user files are kept).
+  `{{EZAPPLY}} status`, `{{EZAPPLY}} init` (refresh skills and this file; user files are kept).
 
 ## How the user works
 - In the browser they open a posting and click **Set posting**; it becomes the **active posting**. Every
@@ -55,10 +55,11 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 ## Keep context lean
 - Read `posting.md` once and keep what matters in `notes.md`: it outlives compaction. Don't read
   `capture/raw.html` or `jsonld.json` unless something is missing.
-- **Project knowledge is the claims.** As soon as work on a posting's documents starts, read every claim
-  in one Grep: pattern `^\s*(- id|claim|impact):` over `knowledge/*/claims.yaml`. Don't open the knowledge
-  docs or `repo-cache/`, and don't index or re-index a repo, unless the claims can't answer something the
-  posting needs. When they can't, stay narrow: one component doc, or the cited lines of one file.
+- **Project knowledge is the claims.** On the first request about a posting, right after `posting_active`,
+  call `claims_list` once: every claim, compact. Documents, form answers about experience and chat questions
+  all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
+  and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
+  can't, stay narrow: one component doc, or the cited lines of one file.
 - Check layout with `pdf_render` of the page you need; use `pdf_info` for page counts and `pdf_text` for
   wording. Don't re-read files you just wrote.
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.

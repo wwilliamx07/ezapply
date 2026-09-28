@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BrowserStatus } from "./browser.js";
+import { BrowserInfo, BrowserStatus } from "./browser.js";
 import { ErrorPayload } from "./errors.js";
 import { FormMethods } from "./forms.js";
 import { CapturePayload, CaptureResult } from "./postings.js";
@@ -18,8 +18,6 @@ export const CloseCode = {
   ProtocolMismatch: 4002,
   Replaced: 4003,
   HandshakeTimeout: 4004,
-  /** The companion stopped after a period of inactivity; Claude Code starts it again when needed. */
-  Idle: 4005,
 } as const;
 
 export const HelloMessage = z.object({
@@ -30,6 +28,8 @@ export const HelloMessage = z.object({
   pairingToken: z.string(),
   /** A capture made while the companion was down follows right after `welcome`. */
   pendingCapture: z.boolean().optional(),
+  /** The browser the extension runs in; the companion opens pages and files there. */
+  browser: BrowserInfo.optional(),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 

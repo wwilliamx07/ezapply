@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { newPairingToken } from "../../config/daemon.js";
+import { newPairingToken } from "../../config/app.js";
 import type { Services } from "../../services.js";
 import { waitFor } from "../../util/wait.js";
 import { tool } from "../result.js";
@@ -15,7 +15,8 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
     {
       title: "Browser status",
       description:
-        "Check whether the browser extension is connected and list open tabs (with which ones are Workday). " +
+        "Check whether the browser extension is connected, which browser it runs in (`extension.browser`: where ezapply " +
+        "opens pages and PDFs for the user), and list open tabs (with which ones are Workday). " +
         "Call this first when a browser action fails, and relay the returned hint to the user.",
       annotations: { readOnlyHint: true },
     },

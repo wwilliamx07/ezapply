@@ -139,7 +139,7 @@ async function flushPendingCapture(): Promise<void> {
 /**
  * The reconnect alarm, created on every background start and not only at install: Firefox doesn't keep
  * alarms across browser sessions and Chrome may clear them on restart, and without it the extension stays
- * disconnected once the daemon (started later by Claude Code) comes up. Created only when missing, so a
+ * disconnected once `ezapply chat` (started later) brings the companion up. Created only when missing, so a
  * wake-up doesn't push the next firing back.
  */
 export async function ensureReconnectAlarm(): Promise<void> {

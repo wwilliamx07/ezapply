@@ -1,20 +1,21 @@
 import { join } from "node:path";
 import {
   agentFileStatus,
+  appConfigPath,
   appDir,
   createLogger,
-  daemonConfigPath,
   GitHubService,
   githubDetail,
+  HEALTH_MODE,
   installCommand,
   KeyringStore,
-  loadDaemonConfig,
+  loadAppConfig,
   texStatus,
   Workspace,
   which,
 } from "@ezapply/companion";
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
-import { fetchHealth } from "./daemonctl.js";
+import { fetchHealth } from "./health.js";
 
 interface Check {
   name: string;
@@ -33,13 +34,13 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
   const major = Number(process.versions.node.split(".")[0]);
   add("node", major >= 22, `v${process.versions.node} (need >= 22)`);
 
-  const config = await loadDaemonConfig().catch((e: Error) => {
-    add("daemon config", false, e.message);
+  const config = await loadAppConfig().catch((e: Error) => {
+    add("config", false, e.message);
     return null;
   });
   const wsConfig = config ? await new Workspace(config.workspace).readConfig().catch((e: Error) => e) : null;
   if (config) {
-    add("daemon config", true, daemonConfigPath());
+    add("config", true, appConfigPath());
     add(
       "workspace",
       !(wsConfig instanceof Error),
@@ -47,17 +48,23 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
     );
     const agent = await agentFileStatus(config.workspace);
     add("agent file", agent.done, agent.detail);
+    // Not running is normal outside a chat: the companion lives inside `ezapply chat`.
     const health = await fetchHealth(config);
+    const legacy = health !== null && health.mode !== HEALTH_MODE;
     add(
-      "daemon",
-      true,
-      health ? `v${health.version} on port ${config.port}` : "not running (Claude Code starts it; or ezapply start)",
+      "ezapply",
+      !legacy,
+      !health
+        ? "not running (it runs while `ezapply chat` is open)"
+        : legacy
+          ? `a background daemon from an earlier build holds port ${config.port}; \`ezapply chat\` stops it`
+          : `v${health.version} running in an \`ezapply chat\` on port ${config.port}`,
     );
-    if (health) {
+    if (health && !legacy) {
       add(
         "protocol",
         health.protocolVersion === PROTOCOL_VERSION,
-        `daemon v${health.protocolVersion}, cli v${PROTOCOL_VERSION}${health.protocolVersion === PROTOCOL_VERSION ? "" : " (ezapply restart)"}`,
+        `running v${health.protocolVersion}, cli v${PROTOCOL_VERSION}${health.protocolVersion === PROTOCOL_VERSION ? "" : " (exit the chat and start it again)"}`,
       );
       add(
         "extension",
@@ -65,9 +72,13 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
         health.extensionConnected ? "connected" : "not connected (open the browser / pair)",
       );
     }
-    add("extension paired", Boolean(config.pairedExtensionId), config.pairedExtensionId ?? "not yet (ezapply pair)");
-  } else if (!checks.some((c) => c.name === "daemon config")) {
-    add("daemon config", false, "missing (run ezapply init)");
+    add(
+      "extension paired",
+      Boolean(config.pairedExtensionId),
+      config.pairedExtensionId ?? 'not yet (in `ezapply chat`, say "set me up")',
+    );
+  } else if (!checks.some((c) => c.name === "config")) {
+    add("config", false, "missing (run ezapply init)");
   }
 
   // GitHub is optional until onboarding reaches it; only a broken setup (port mismatch) fails.
@@ -78,7 +89,7 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
     log: createLogger({ toFile: false, level: "silent" }),
   });
   const gh = await github.status();
-  // Without a daemon.json there's no daemon port to compare the app's callback port with.
+  // Without a config there's no ezapply port to compare the app's callback port with.
   if (!config) delete gh.portMismatch;
   add(
     "github",

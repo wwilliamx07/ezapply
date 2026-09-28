@@ -5,26 +5,25 @@ and adds a migration (run by `ezapply init`). Schemas are zod definitions in the
 
 ## Machine level (`~/.ezapply/`, or `$EZAPPLY_APP_DIR`)
 
-### `daemon.json` (`companion/src/config/daemon.ts`, mode 0600)
+### `config.json` (`companion/src/config/app.ts`, mode 0600)
 | Field | Meaning |
 |---|---|
 | `schemaVersion` | 1 |
 | `host` | always `127.0.0.1` |
 | `port` | default 17373 |
-| `mcpToken` | bearer token for `/mcp` and `/control/*` (43 base64url chars) |
+| `mcpToken` | bearer token for `/mcp` (43 base64url chars), presented by the relay |
 | `pairingToken` | the extension's code, `XXXX-XXXX-XXXX-XXXX` from an unambiguous alphabet; rotated when a paired extension is forgotten |
 | `pairedExtensionId?` | pinned Chrome extension id (stored bare, as before Firefox support, so older configs still match) or Firefox install UUID |
 | `workspace` | absolute workspace path |
-| `idleTimeoutMinutes?` | minutes without work before the daemon stops (default 15; 0 = never); kept by `ezapply init` |
 
-A running daemon writes only the pairing fields, into the file as it is at that moment, so edits made while
-it runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix it,
-or delete it and run `ezapply init`), not as a stack trace.
+A running companion writes only the pairing fields, into the file as it is at that moment, so edits made while
+a chat runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix
+it, or delete it and run `ezapply init`), not as a stack trace.
 
-### `daemon-state.json` (`companion/src/config/daemon.ts`)
-`{ schemaVersion: 1, extensionLastSeenAt? }`: when the extension was last connected (epoch ms), written when
-it connects or disconnects and when the daemon stops while it's connected. A freshly started daemon waits for
-the extension only if this is within 6 hours (or unknown). Unreadable means empty.
+**From earlier builds.** The file used to be `daemon.json`; loading the config moves it to `config.json` when
+there's no `config.json` yet, so the tokens and pairing carry over. Its `idleTimeoutMinutes` (the background
+daemon's idle stop) is dropped on the next write. `daemon-state.json` (when the extension was last connected,
+for the daemon's start-up wait) is deleted by `ezapply init`; nothing reads it.
 
 ### `github-app.json` (`companion/src/github/service.ts`)
 `{ schemaVersion: 1, appId?, slug, clientId, htmlUrl, owner?, createdAt, origin?, localBaseUrl? }`: the public
@@ -84,19 +83,19 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 
 | File | Written by | Contents |
 |---|---|---|
-| `meta.json` | daemon | `PostingMeta` (below) |
-| `capture/raw.html` | daemon | `document.body.innerHTML` at capture, verbatim |
-| `capture/visible.html` | daemon | body HTML with invisible elements removed |
-| `capture/visible.txt` | daemon | `document.body.innerText` |
-| `capture/jsonld.json` | daemon | array of the page's JSON-LD blocks (strings) |
-| `posting.md` | daemon | cleaned description with a header (role, company, location, requisition, URL) |
+| `meta.json` | companion | `PostingMeta` (below) |
+| `capture/raw.html` | companion | `document.body.innerHTML` at capture, verbatim |
+| `capture/visible.html` | companion | body HTML with invisible elements removed |
+| `capture/visible.txt` | companion | `document.body.innerText` |
+| `capture/jsonld.json` | companion | array of the page's JSON-LD blocks (strings) |
+| `posting.md` | companion | cleaned description with a header (role, company, location, requisition, URL) |
 | `notes.md` | Claude | starts with `## Application requirements` (the posting's instructions for applying), then job requirements, key terms, evidence map, gaps |
-| `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, daemon | tailored documents and bundles |
-| `form-log.jsonl` | daemon | autofill audit trail (below) |
-| `approvals.json` | daemon | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
-| `.build/<name>/` | daemon | TeX aux files and logs |
-| `.history/<timestamp>/` | daemon | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
-| `.previews/<name>-p<n>.png` | daemon | rendered pages |
+| `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, companion | tailored documents and bundles |
+| `form-log.jsonl` | companion | autofill audit trail (below) |
+| `approvals.json` | companion | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
+| `.build/<name>/` | companion | TeX aux files and logs |
+| `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
+| `.previews/<name>-p<n>.png` | companion | rendered pages |
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came

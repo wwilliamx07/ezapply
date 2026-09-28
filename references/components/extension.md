@@ -14,6 +14,7 @@ review UI: that happens in Claude Code and the PDF viewer.
 | `src/background/forms.ts` | Handlers for the form methods: choose the tab, check site access, inject and call the adapter |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
 | `src/background/badge.ts` | Toolbar badge and tooltip |
+| `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. Firefox from `runtime.getBrowserInfo()`; Chromium browsers from `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
 | `src/options/options.ts`, `static/options.html` | Options page: status, site access, manual pairing |
@@ -56,9 +57,11 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
   `welcome`, start RPC and the 20 s ping. On close: `Unauthorized`/`ProtocolMismatch` → error state
   showing the companion's message and hint (no backoff retries); `Replaced` → nothing; otherwise
-  "disconnected" and retry with backoff from 1 s up to 30 s. After `Idle` (4005) the reason reads "ezapply
-  is idle; it starts again with Claude Code (Set posting still works)" until the next `welcome`.
-- `hello` carries `pendingCapture: true` when a capture is queued, so a freshly started companion waits
+  "disconnected" with the reason "ezapply isn't running: start ezapply chat (Set posting still works)",
+  and retry with backoff from 1 s up to 30 s. The companion lives only while an `ezapply chat` is open, so a
+  refused or closed connection means no chat is running.
+- `hello` carries `browser` (`detectBrowser`), so the companion opens pages and PDFs in this browser, and
+  `pendingCapture: true` when a capture is queued, so a freshly started companion waits
   for it before answering `posting_active`.
 - **Without a code (not paired):** connect to the default port (17373) with an empty code. It succeeds
   only while pairing is open; the `welcome` then carries the code, which is saved without reconnecting.

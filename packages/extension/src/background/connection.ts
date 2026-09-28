@@ -13,6 +13,7 @@ import {
   RpcPeer,
 } from "@ezapply/protocol";
 import { ext, isFirefox } from "../ext.js";
+import { detectBrowser } from "./browser-id.js";
 import { type ConnState, DEFAULT_PORT, type Settings, store } from "./settings.js";
 
 // Chrome keeps the MV3 service worker alive while WebSocket traffic flows at least every 30s.
@@ -31,8 +32,6 @@ export class CompanionConnection {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private backoff = 1_000;
   private connecting = false;
-  /** The companion last went away because it was idle, so later failed reconnects say so too. */
-  private lastCloseWasIdle = false;
   /** Settings the current socket was opened with; an empty token means "asking to pair". */
   private active: Settings | null = null;
   private readonly listeners = new Set<(s: ConnState) => void>();
@@ -64,7 +63,7 @@ export class CompanionConnection {
   /**
    * Connect if not already connected or connecting. Safe to call often (alarms, startup, clicks).
    * Without a pairing code it asks the companion on the default port to pair; that only succeeds
-   * while pairing is open (extension_pair, or `ezapply pair`), and the alarm retries meanwhile.
+   * while pairing is open (extension_pair), and the alarm retries meanwhile.
    */
   async ensureConnected(): Promise<void> {
     if (this.socket || this.connecting) return;
@@ -75,6 +74,8 @@ export class CompanionConnection {
     this.connecting = true;
     // Tells a freshly started companion to wait for this capture before answering posting_active.
     const pendingCapture = (await store.pendingCapture()) !== null;
+    // So the companion opens pages and files in this browser rather than the system default.
+    const browser = await detectBrowser().catch(() => undefined);
     clearTimeout(this.retry);
     if (!pairing) await this.setState({ state: "connecting" });
 
@@ -98,6 +99,7 @@ export class CompanionConnection {
         extensionVersion: this.extensionVersion,
         pairingToken: settings.pairingToken,
         ...(pendingCapture ? { pendingCapture } : {}),
+        ...(browser ? { browser } : {}),
       });
     };
 
@@ -107,7 +109,6 @@ export class CompanionConnection {
       switch (msg.kind) {
         case "welcome":
           welcomed = true;
-          this.lastCloseWasIdle = false;
           this.connecting = false;
           this.backoff = 1_000;
           this.peer = new RpcPeer({
@@ -159,15 +160,10 @@ export class CompanionConnection {
         return;
       }
       if (ev.code === CloseCode.Replaced) return;
-      const idle = ev.code === CloseCode.Idle || (!welcomed && this.lastCloseWasIdle);
-      this.lastCloseWasIdle = idle;
+      // The companion runs inside `ezapply chat`: not reachable, or closed, means no chat is open.
       await this.setState({
         state: "disconnected",
-        reason: idle
-          ? "ezapply is idle; it starts again with Claude Code (Set posting still works)"
-          : welcomed
-            ? "companion closed the connection"
-            : "companion not reachable",
+        reason: "ezapply isn't running: start ezapply chat (Set posting still works)",
       });
       this.scheduleRetry();
     };

@@ -25,10 +25,10 @@ export function installCommand(tool: InstallableTool): string {
 
 /**
  * How to install a missing dependency, written for Claude: ask the user first, run it, retry the tool.
- * The daemon picks up newly installed tools on its own (see which()), so no restart is needed.
+ * ezapply picks up newly installed tools on its own (see which()), so no restart is needed.
  */
 export function installHint(tool: InstallableTool): string {
-  const retry = " Then retry; the daemon finds it without a restart.";
+  const retry = " Then retry; ezapply finds it without a restart.";
   const cmd = installCommand(tool);
   if (process.platform === "linux") {
     // Package managers differ between distributions: the command is an example, and needs sudo.

@@ -49,8 +49,11 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "ezapply-docs-"));
   ws = new Workspace(root);
   docs = new DocumentsService(ws, createLogger({ toFile: false, level: "silent" }), {
-    file: async (path) => void opened.push(path),
-    url: async () => {},
+    file: async (path) => {
+      opened.push(path);
+      return "firefox";
+    },
+    url: async () => "firefox",
   });
   await makePdf(join(root, "postings/p1/cover.pdf"), [612, 792], [["Dear hiring manager", "Cover letter body"]]);
   await makePdf(join(root, "postings/p1/resume.pdf"), [612, 792], [["Jane Doe", "Experience", "Skills"]]);
@@ -178,7 +181,10 @@ describe("DocumentsService PDFs", () => {
   });
 
   it("opens files for the user through the opener, only from allowed folders", async () => {
-    expect(await docs.open("postings/p1/resume.pdf")).toEqual({ opened: join(root, "postings/p1/resume.pdf") });
+    expect(await docs.open("postings/p1/resume.pdf")).toEqual({
+      opened: join(root, "postings/p1/resume.pdf"),
+      openedIn: "firefox",
+    });
     expect(opened).toEqual([join(root, "postings/p1/resume.pdf")]);
     await expect(docs.open("profile/profile.yaml")).rejects.toMatchObject({ code: "path_not_allowed" });
   });

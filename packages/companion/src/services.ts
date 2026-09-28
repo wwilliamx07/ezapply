@@ -26,7 +26,7 @@ export interface Services {
   repos: RepoService;
   forms: FormsService;
   bridge: ExtensionBridge;
-  /** Opens files and the daemon's own pages for the user (a stub in tests). */
+  /** Opens files and the companion's own pages for the user (a stub in tests). */
   opener: Opener;
   /** The extension package folder (holds dist/ and dist-firefox/), when known. */
   extensionDir?: string;

@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createWorkdayApi } from "../../extension/src/adapters/workday/api.js";
 import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
-import type { DaemonConfig } from "../src/config/daemon.js";
+import type { AppConfig } from "../src/config/app.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
 import { type CompanionHandle, type CompanionOptions, startCompanion } from "../src/main.js";
@@ -33,7 +33,7 @@ const MCP_TOKEN = "t".repeat(43);
 
 let dir: string;
 let handle: CompanionHandle;
-let saved: DaemonConfig | null;
+let saved: AppConfig | null;
 const sockets: WebSocket[] = [];
 
 beforeEach(async () => {
@@ -121,6 +121,7 @@ function fakeExtension(
     token?: string;
     protocolVersion?: number;
     pendingCapture?: boolean;
+    browser?: { name: string; version?: string };
     tabs?: FakeTab[];
   } = {},
 ) {
@@ -145,6 +146,7 @@ function fakeExtension(
           extensionVersion: "9.9.9",
           pairingToken: opts.token ?? PAIRING,
           ...(opts.pendingCapture ? { pendingCapture: true } : {}),
+          ...(opts.browser ? { browser: opts.browser } : {}),
         }),
       );
       ws.on("message", (data) => {
@@ -192,7 +194,13 @@ const LONG = "Design and operate payment services in Go and Postgres. ".repeat(1
 describe("http surface", () => {
   it("serves health without auth", async () => {
     const res = await fetch(`http://127.0.0.1:${handle.port}/health`);
-    expect(await res.json()).toMatchObject({ ok: true, protocolVersion: PROTOCOL_VERSION, extensionConnected: false });
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      name: "ezapply",
+      mode: "chat",
+      protocolVersion: PROTOCOL_VERSION,
+      extensionConnected: false,
+    });
   });
 
   it("rejects MCP without token, from browsers, and with foreign Host headers", async () => {
@@ -236,33 +244,48 @@ describe("extension bridge", () => {
     expect(saved?.pairedExtensionId).toBe(FIREFOX_UUID);
     expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: false, error: "403" });
   });
+
+  it("learns which browser the extension runs in, and keeps it after a disconnect", async () => {
+    const ext = fakeExtension({ browser: { name: "edge", version: "131" } });
+    expect((await ext.outcome).welcomed).toBe(true);
+    expect(handle.services.bridge.browser()).toEqual({ name: "edge", version: "131" });
+
+    const client = await mcpClient();
+    expect((await callJson(client, "browser_status")).data.extension).toMatchObject({
+      connected: true,
+      browser: { name: "edge" },
+    });
+    const check = await callJson(client, "workspace_check");
+    expect(check.data.items.find((i: { step: string }) => i.step === "extension").detail).toBe("connected in Edge");
+
+    const closed = new Promise((r) => ext.ws.on("close", r));
+    ext.ws.close();
+    await closed;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(handle.services.bridge.status()).toMatchObject({ connected: false, browser: { name: "edge" } });
+    await client.close();
+  });
 });
 
 describe("pairing without a code", () => {
-  const control = (path: string, method: "GET" | "POST", body?: unknown) =>
-    fetch(`http://127.0.0.1:${handle.port}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${MCP_TOKEN}`, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-
-  it("guards the control routes like MCP", async () => {
-    expect(await rawHttp("/control/pair", { "content-type": "application/json" })).toBe(401);
-    expect(await rawHttp("/control/shutdown", { "content-type": "application/json" })).toBe(401);
-    expect(
-      await rawHttp("/control/pair", { authorization: `Bearer ${MCP_TOKEN}`, origin: "https://evil.example" }),
-    ).toBe(403);
+  it("has no control routes: nothing outside Claude's tools opens pairing or stops the companion", async () => {
+    for (const path of ["/control/pair", "/control/shutdown", "/control/chat"]) {
+      expect(await rawHttp(path, { authorization: `Bearer ${MCP_TOKEN}`, "content-type": "application/json" })).toBe(
+        404,
+      );
+    }
   });
 
-  it("is refused until the CLI opens pairing, then pairs once and hands over the code", async () => {
+  it("is refused until extension_pair opens pairing, then pairs once and hands over the code", async () => {
     expect(await fakeExtension({ token: "" }).outcome).toMatchObject({ welcomed: false, closeCode: 4001 });
 
-    const opened = await (await control("/control/pair", "POST", { seconds: 60 })).json();
-    expect(opened).toMatchObject({ connected: false, openUntil: expect.any(String) });
+    const client = await mcpClient();
+    expect((await callJson(client, "extension_pair")).data).toMatchObject({ connected: false });
+    await client.close();
 
     expect(await fakeExtension({ token: "" }).outcome).toEqual({ welcomed: true, pairingToken: PAIRING });
     expect(saved?.pairedExtensionId).toBe(EXT_A);
-    expect(await (await control("/control/pair", "GET")).json()).toEqual({ pairedExtensionId: EXT_A, connected: true });
+    expect(handle.services.bridge.pairingStatus()).toEqual({ pairedExtensionId: EXT_A, connected: true });
 
     // The window closed with that pairing.
     expect(await fakeExtension({ token: "" }).outcome).toMatchObject({ welcomed: false, closeCode: 4001 });
@@ -270,7 +293,7 @@ describe("pairing without a code", () => {
 
   it("still pins: an open window doesn't let a different extension in", async () => {
     expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: true });
-    await control("/control/pair", "POST", { seconds: 60 });
+    handle.services.bridge.openPairing(60_000);
     expect(await fakeExtension({ id: EXT_B, token: "" }).outcome).toMatchObject({ welcomed: false, error: "403" });
   });
 
@@ -312,13 +335,12 @@ describe("pairing without a code", () => {
   });
 });
 
-describe("idle shutdown and on-demand start", () => {
+describe("after ezapply chat starts", () => {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  /** Replace the default companion with one that stops after `idleMs` (onShutdownRequest records it). */
-  async function restartWith(extra: { idleTimeoutMs?: number; pairedExtensionId?: string; reconnectGraceMs?: number }) {
+  /** Replace the default companion with a freshly started one. */
+  async function restartWith(extra: { pairedExtensionId?: string; reconnectGraceMs?: number }) {
     await handle.close();
-    let stoppedAt: number | undefined;
     handle = await startCompanion({
       config: {
         schemaVersion: 1,
@@ -333,55 +355,11 @@ describe("idle shutdown and on-demand start", () => {
       appDataDir: join(dir, "app"),
       secrets: new MemoryStore(),
       saveConfig: async () => {},
-      onShutdownRequest: () => {
-        stoppedAt ??= Date.now();
-      },
-      ...(extra.idleTimeoutMs ? { idleTimeoutMs: extra.idleTimeoutMs } : {}),
       ...(extra.reconnectGraceMs !== undefined ? { reconnectGraceMs: extra.reconnectGraceMs } : {}),
     });
-    return { stopped: () => stoppedAt };
   }
 
-  it("stops after the idle time even while the extension pings, and tells the extension why", async () => {
-    const d = await restartWith({ idleTimeoutMs: 300 });
-    const ext = fakeExtension();
-    expect((await ext.outcome).welcomed).toBe(true);
-    const closed = new Promise<number>((r) => ext.ws.on("close", (code) => r(code)));
-    const pinger = setInterval(() => ext.ws.send(JSON.stringify({ kind: "ping", t: Date.now() })), 50);
-    try {
-      expect(await closed).toBe(4005); // CloseCode.Idle
-      expect(d.stopped()).toBeDefined();
-    } finally {
-      clearInterval(pinger);
-    }
-  });
-
-  it("stays up during a request and an open pairing window, and counts idle time from their end", async () => {
-    const d = await restartWith({ idleTimeoutMs: 300 });
-    const client = await mcpClient();
-    // extension_pair_wait is in flight until the extension connects, well past the idle time.
-    const waiting = callJson(client, "extension_pair_wait", { timeoutSeconds: 5 });
-    await sleep(700);
-    expect(d.stopped()).toBeUndefined();
-    await fakeExtension().outcome;
-    expect((await waiting).data).toMatchObject({ connected: true });
-
-    const opened = Date.now();
-    const res = await fetch(`http://127.0.0.1:${handle.port}/control/pair`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${MCP_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ seconds: 1 }),
-    });
-    expect(res.status).toBe(200);
-    await sleep(900);
-    expect(d.stopped()).toBeUndefined(); // the window is still open
-    const deadline = Date.now() + 3000;
-    while (!d.stopped() && Date.now() < deadline) await sleep(25);
-    // Window (1 s) + idle time (300 ms), less up to one check interval (75 ms) of granularity.
-    expect((d.stopped() ?? 0) - opened).toBeGreaterThanOrEqual(1000 + 300 - 75);
-  });
-
-  it("after a start, posting_active waits for the paired extension and the capture it queued", async () => {
+  it("posting_active waits for the paired extension and the capture it queued", async () => {
     await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 5000 });
     const client = await mcpClient();
     const active = callJson(client, "posting_active");
@@ -407,13 +385,8 @@ describe("idle shutdown and on-demand start", () => {
     expect(result.data).toMatchObject({ id: capture.postingId, active: true });
   });
 
-  it("doesn't wait for an extension that hasn't been seen for hours, and says it may still come", async () => {
-    await mkdir(join(dir, "app"), { recursive: true });
-    await writeFile(
-      join(dir, "app", "daemon-state.json"),
-      JSON.stringify({ schemaVersion: 1, extensionLastSeenAt: Date.now() - 2 * 24 * 3600_000 }),
-    );
-    await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 5000 });
+  it("waits only for the grace period, then says the extension may still come", async () => {
+    await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 300 });
     const client = await mcpClient();
     const started = Date.now();
     const res = await callJson(client, "posting_active");
@@ -422,28 +395,43 @@ describe("idle shutdown and on-demand start", () => {
     await client.close();
   });
 
-  it("remembers when the extension was last connected", async () => {
-    await restartWith({});
+  it("tells ezapply chat when a capture or posting_activate changes the active posting", async () => {
+    let changes = 0;
+    const stop = handle.chat.onChange(() => changes++);
     const ext = fakeExtension();
     expect((await ext.outcome).welcomed).toBe(true);
-    const deadline = Date.now() + 2000;
-    let state: { extensionLastSeenAt?: number } = {};
-    while (!state.extensionLastSeenAt && Date.now() < deadline) {
-      state = JSON.parse(await readFile(join(dir, "app", "daemon-state.json"), "utf8").catch(() => "{}"));
-      await sleep(25);
-    }
-    expect(state.extensionLastSeenAt).toBeGreaterThan(Date.now() - 10_000);
+    const html = `<div data-automation-id="jobPostingHeader">Data Engineer</div><p>${LONG}</p>`;
+    const capture = await ext.peer.request("posting.capture", {
+      url: "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Data-Engineer_R-2",
+      pageTitle: "Data Engineer",
+      html,
+      visibleHtml: html,
+      visibleText: `Data Engineer\n${LONG}`,
+      jsonLd: [],
+      capturedAt: "2026-09-26T12:00:00.000Z",
+      tabId: 7,
+    });
+    expect(changes).toBe(1);
+    expect(await handle.chat.activePosting()).toMatchObject({ id: capture.postingId, role: "Data Engineer" });
+
+    const client = await mcpClient();
+    await callJson(client, "posting_activate", { id: capture.postingId });
+    expect(changes).toBe(2);
+    stop();
+    await callJson(client, "posting_activate", { id: capture.postingId });
+    expect(changes).toBe(2);
+    await client.close();
   });
 });
 
-describe("daemon.json", () => {
-  it("records pairing without undoing edits made while the daemon runs", async () => {
+describe("config.json", () => {
+  it("records pairing without undoing edits made while ezapply runs", async () => {
     await handle.close();
     const appDir = join(dir, "machine");
     const previous = process.env.EZAPPLY_APP_DIR;
     process.env.EZAPPLY_APP_DIR = appDir;
     try {
-      const config: DaemonConfig = {
+      const config: AppConfig = {
         schemaVersion: 1,
         host: "127.0.0.1",
         port: 0,
@@ -452,18 +440,18 @@ describe("daemon.json", () => {
         workspace: join(dir, "ws"),
       };
       await mkdir(appDir, { recursive: true });
-      await writeFile(join(appDir, "daemon.json"), JSON.stringify(config));
+      await writeFile(join(appDir, "config.json"), JSON.stringify(config));
       handle = await startCompanion({
         config,
         log: createLogger({ toFile: false, level: "silent" }),
         appDataDir: appDir,
         secrets: new MemoryStore(),
       });
-      // `ezapply init --port 18000` and an idle-timeout edit while the daemon runs:
-      await writeFile(join(appDir, "daemon.json"), JSON.stringify({ ...config, port: 18000, idleTimeoutMinutes: 0 }));
+      // `ezapply init --port 18000` while ezapply runs:
+      await writeFile(join(appDir, "config.json"), JSON.stringify({ ...config, port: 18000 }));
       expect(await fakeExtension({ id: EXT_A }).outcome).toMatchObject({ welcomed: true });
-      const onDisk = JSON.parse(await readFile(join(appDir, "daemon.json"), "utf8"));
-      expect(onDisk).toMatchObject({ port: 18000, idleTimeoutMinutes: 0, pairedExtensionId: EXT_A });
+      const onDisk = JSON.parse(await readFile(join(appDir, "config.json"), "utf8"));
+      expect(onDisk).toMatchObject({ port: 18000, pairedExtensionId: EXT_A });
     } finally {
       if (previous === undefined) delete process.env.EZAPPLY_APP_DIR;
       else process.env.EZAPPLY_APP_DIR = previous;
@@ -493,18 +481,28 @@ describe("github_login", () => {
     return mcpClient();
   }
 
-  it("opens the daemon's page in the browser and says so", async () => {
+  it("opens the companion's page in the browser and says so", async () => {
     const opened: string[] = [];
-    const client = await withOpener({ file: async () => {}, url: async (u) => void opened.push(u) });
+    const client = await withOpener({
+      file: async () => "default",
+      url: async (u) => {
+        opened.push(u);
+        return "chrome";
+      },
+    });
     const res = await callJson(client, "github_login");
     expect(opened).toEqual([res.data.url]);
     expect(res.data.url).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:${handle.port}/github/start\\?nonce=`));
-    expect(res.data).toMatchObject({ openedBrowser: true, tell: expect.stringMatching(/opened in the browser/) });
+    expect(res.data).toMatchObject({
+      openedBrowser: true,
+      openedIn: "chrome",
+      tell: expect.stringMatching(/opened in Chrome/),
+    });
     await client.close();
   });
 
   it("offers connecting an existing app, with the callback URL it needs", async () => {
-    const client = await withOpener({ file: async () => {}, url: async () => {} });
+    const client = await withOpener({ file: async () => "default", url: async () => "default" });
     const res = await callJson(client, "github_login", { app: "existing" });
     expect(res.data).toMatchObject({
       firstTimeSetup: true,
@@ -517,7 +515,7 @@ describe("github_login", () => {
 
   it("gives the URL to click when no browser opened", async () => {
     const client = await withOpener({
-      file: async () => {},
+      file: async () => "default",
       url: async () => {
         throw new Error("no xdg-open");
       },
@@ -525,7 +523,8 @@ describe("github_login", () => {
     const res = await callJson(client, "github_login");
     expect(res.data.openedBrowser).toBe(false);
     expect(res.data.tell).toContain(res.data.url);
-    expect(res.data.tell).not.toMatch(/opened in the browser/);
+    expect(res.data.tell).not.toMatch(/opened in/);
+    expect(res.data).not.toHaveProperty("openedIn");
     await client.close();
   });
 });
@@ -838,7 +837,13 @@ describe("form tools over MCP", () => {
       appDataDir: join(dir, "app"),
       secrets: new MemoryStore(),
       saveConfig: async () => {},
-      opener: { file: async () => {}, url: async (u) => void opened.push(u) },
+      opener: {
+        file: async () => "default",
+        url: async (u) => {
+          opened.push(u);
+          return "default";
+        },
+      },
     });
     const ext = fakeExtension();
     await ext.outcome;

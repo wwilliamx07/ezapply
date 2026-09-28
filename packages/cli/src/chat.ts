@@ -2,19 +2,21 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { CHAT_PATH, type DaemonConfig } from "@ezapply/companion";
-import { control } from "./daemonctl.js";
+import {
+  type AppConfig,
+  type ChatHost,
+  type CompanionHandle,
+  createLogger,
+  HEALTH_MODE,
+  type Logger,
+  type PostingRef,
+  startCompanion,
+  waitFor,
+} from "@ezapply/companion";
+import { fetchHealth } from "./health.js";
 
-/** Set for Claude and everything it starts; the MCP relay passes it to the daemon as a header. */
+/** Set for Claude and everything it starts; the MCP relay passes it to the companion as a header. */
 export const CHAT_SESSION_ENV = "EZAPPLY_CHAT_SESSION";
-
-/** What the daemon reports about a chat session (GET /control/chat). */
-export interface ChatState {
-  activePosting: { id: string; company?: string; role?: string } | null;
-  used: boolean;
-  inFlight: number;
-  restartOnCapture: boolean;
-}
 
 export interface ClaudeCommand {
   file: string;
@@ -38,16 +40,109 @@ export function findClaude(env: NodeJS.ProcessEnv = process.env, platform = proc
   return null;
 }
 
-export const fetchChatState = (config: DaemonConfig, session: string) =>
-  control<ChatState>(config, `${CHAT_PATH}?session=${encodeURIComponent(session)}`, "GET");
+export interface HostChatOptions {
+  config: AppConfig;
+  claude: ClaudeCommand;
+  /** Passed to the first `claude` only. */
+  args: string[];
+  /** The extension package folder, so extension_pair can say what to load. */
+  extensionDir?: string;
+  log?: Logger;
+  /** Where a failure to start is reported (before Claude owns the terminal). */
+  fail?: (line: string) => void;
+  /** Called once the companion listens, before Claude starts. */
+  onStarted?: (handle: CompanionHandle) => void;
+  /** Test hooks for runChat. */
+  chat?: Pick<ChatOptions, "say" | "newSession" | "resetTerminal" | "env" | "stdio">;
+  /** Test hooks for the companion. */
+  companion?: { appDataDir?: string; saveConfig?: (config: AppConfig) => Promise<void> };
+}
+
+/**
+ * `ezapply chat`: start the companion (MCP server and extension bridge) in this process, run Claude Code in
+ * the workspace as a child, and close the companion when Claude exits. There is no background process: the
+ * tools and the extension connection exist exactly while a chat is open. If the companion can't start,
+ * Claude isn't started either (it would have no tools).
+ */
+export async function hostChat(opts: HostChatOptions): Promise<number> {
+  const log = opts.log ?? createLogger();
+  const fail = opts.fail ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const started = await startHosted(opts, log);
+  if (typeof started === "string") {
+    fail(started);
+    return 1;
+  }
+  const handle = started;
+  // After listen, a server error doesn't reach anyone; log it. The relay then tells Claude ezapply is down.
+  handle.onServerError((err) => log.error({ err: err.message }, "chat: companion server error"));
+  opts.onStarted?.(handle);
+  try {
+    return await runChat({
+      ...opts.chat,
+      claude: opts.claude,
+      args: opts.args,
+      cwd: opts.config.workspace,
+      host: handle.chat,
+    });
+  } finally {
+    await handle.close();
+  }
+}
+
+/** The started companion, or what to tell the user when the port is taken. */
+async function startHosted(opts: HostChatOptions, log: Logger): Promise<CompanionHandle | string> {
+  const { config } = opts;
+  const start = async () => {
+    try {
+      return await startCompanion({
+        config,
+        log,
+        ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
+        ...(opts.companion?.appDataDir ? { appDataDir: opts.companion.appDataDir } : {}),
+        ...(opts.companion?.saveConfig ? { saveConfig: opts.companion.saveConfig } : {}),
+      });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") return null;
+      throw err;
+    }
+  };
+  const first = await start();
+  if (first) return first;
+
+  const health = await fetchHealth(config);
+  if (health?.mode === HEALTH_MODE) {
+    return `ezapply is already running in another terminal (port ${config.port}). Use that one, or exit it first.`;
+  }
+  if (health && (await stopLegacyDaemon(config))) {
+    log.info("chat: stopped a background daemon from an earlier build");
+    const second = await start();
+    if (second) return second;
+  }
+  return (
+    `Port ${config.port} is in use by another program. Close it, or move ezapply to a free port: ` +
+    "`ezapply init --port <n>`, then enter the same port in the extension's options."
+  );
+}
+
+/**
+ * Builds before this one ran the companion as a background daemon, which may still be up after an update.
+ * It answers POST /control/shutdown (with the MCP token) and exits. Returns whether the port came free.
+ */
+async function stopLegacyDaemon(config: AppConfig): Promise<boolean> {
+  await fetch(`http://${config.host}:${config.port}/control/shutdown`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${config.mcpToken}`, "content-type": "application/json" },
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => undefined);
+  return Boolean(await waitFor(async () => ((await fetchHealth(config)) ? null : true), 10_000));
+}
 
 export interface ChatOptions {
   claude: ClaudeCommand;
   /** Passed to the first `claude` only: a restart starts a plain new session. */
   args: string[];
   cwd: string;
-  state: (session: string) => Promise<ChatState | null>;
-  pollMs?: number;
+  host: ChatHost;
   /** Where to tell the user about a restart. */
   say?: (line: string) => void;
   newSession?: () => string;
@@ -63,52 +158,61 @@ export interface ChatOptions {
  * onboarding) into the next one pays for it on every turn: measured, about half the tokens of a fill.
  * Claude can't clear its own context and Claude Code hooks can't trigger /clear, so the wrapper restarts
  * the process. Nothing needs handing over: a posting's work finishes in one session, what carries over is on
- * disk, and the new session's relay attaches to the same daemon, which the extension stays connected to.
+ * disk, and the new session's relay attaches to the same companion, which the extension stays connected to.
  *
  * The restart happens only when the session has used a tool (an untouched session has nothing to drop) and
- * no tool call is running (a fill or a build is never cut in half). Claude's own text between calls can be
- * cut off; capturing the next posting is a deliberate act, and `claude --resume` reopens the old session.
+ * no tool call is running (a fill or a build is never cut in half). The companion reports a change of the
+ * active posting and the end of every tool call, and the rules are checked again on each, so a restart
+ * happens as soon as they allow it. Claude's own text between calls can be cut off; capturing the next
+ * posting is a deliberate act, and `claude --resume` reopens the old session.
  */
 export async function runChat(opts: ChatOptions): Promise<number> {
   const say = opts.say ?? ((line: string) => process.stdout.write(line));
+  const { host } = opts;
   let args = opts.args;
   for (;;) {
     const session = (opts.newSession ?? randomUUID)();
+    // The posting active now is this session's own.
+    let baseline = (await host.activePosting().catch(() => null))?.id ?? null;
+    let next: PostingRef | null = null;
     const child = startClaude(opts, args, session);
     const exited = new Promise<number>((resolve, reject) => {
       child.once("error", reject);
       child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
     });
 
-    // undefined until the daemon first answers: the posting active then is this session's own.
-    let baseline: string | null | undefined;
-    let next: ChatState["activePosting"] = null;
-    let polling = false;
-    const poll = async () => {
-      const s = await opts.state(session).catch(() => null);
-      if (!s || next) return;
-      const posting = s.activePosting?.id ?? null;
-      if (baseline === undefined || posting === null || posting === baseline) {
-        baseline ??= posting;
+    let checking = false;
+    let again = false;
+    const check = async () => {
+      if (checking) {
+        again = true; // a change during a check is looked at once the check ends
         return;
       }
-      if (!s.used || !s.restartOnCapture) {
-        baseline = posting; // nothing to drop, or turned off: this posting is the session's now
-        return;
+      checking = true;
+      try {
+        do {
+          again = false;
+          if (next) return;
+          const posting = await host.activePosting();
+          if (!posting || posting.id === baseline) continue;
+          const s = host.session(session);
+          if (!s.used || !(await host.restartOnCapture())) {
+            baseline = posting.id; // nothing to drop, or turned off: this posting is the session's now
+            continue;
+          }
+          if (s.inFlight > 0) continue; // checked again when the call ends
+          next = posting;
+          stopClaude(child);
+        } while (again);
+      } finally {
+        checking = false;
       }
-      if (s.inFlight > 0) return;
-      next = s.activePosting;
-      stopClaude(child);
     };
-    const timer = setInterval(() => {
-      if (polling) return;
-      polling = true;
-      void poll().finally(() => {
-        polling = false;
-      });
-    }, opts.pollMs ?? 1000);
+    const unsubscribe = host.onChange(() => {
+      check().catch(() => {});
+    });
 
-    const code = await exited.finally(() => clearInterval(timer));
+    const code = await exited.finally(unsubscribe);
     if (!next) return code;
     (opts.resetTerminal ?? resetTerminal)();
     say(
@@ -163,7 +267,7 @@ export function resetTerminal(): void {
   }
 }
 
-function postingLabel(p: NonNullable<ChatState["activePosting"]>): string {
+function postingLabel(p: PostingRef): string {
   return [p.company, p.role].filter(Boolean).join(": ") || p.id;
 }
 

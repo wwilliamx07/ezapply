@@ -42,6 +42,7 @@ const POSTING_ID = /^[\w.-]+$/;
 
 export class PostingsService {
   private readonly queue = new KeyedQueue();
+  private readonly activeListeners = new Set<() => void>();
 
   constructor(
     private readonly ws: Workspace,
@@ -122,7 +123,21 @@ export class PostingsService {
   async activate(id: string): Promise<PostingMeta> {
     const meta = await this.get(id);
     await this.ws.updateState({ activePostingId: id });
+    this.activeChanged();
     return meta;
+  }
+
+  /**
+   * Call `fn` after a capture or posting_activate sets the active posting (`ezapply chat` restarts Claude
+   * on a new one). Returns the function that stops it.
+   */
+  onActiveChange(fn: () => void): () => void {
+    this.activeListeners.add(fn);
+    return () => this.activeListeners.delete(fn);
+  }
+
+  private activeChanged(): void {
+    for (const fn of [...this.activeListeners]) fn();
   }
 
   updateMeta(id: string, patch: PostingMetaPatch): Promise<PostingMeta> {
@@ -193,6 +208,7 @@ export class PostingsService {
     await writeJsonAtomic(this.metaPath(id), meta);
     await this.ws.updateState({ activePostingId: id });
     this.log.info({ id, isNew: !existing, bytes: p.html.length, site: meta.site }, "posting captured");
+    this.activeChanged();
 
     return {
       postingId: id,

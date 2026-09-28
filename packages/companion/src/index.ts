@@ -1,22 +1,23 @@
-export { CHAT_SESSION_HEADER } from "./chat.js";
+export { CHAT_SESSION_HEADER, type ChatHost, type ChatSessionState, type PostingRef } from "./chat.js";
 export {
+  AppConfig,
+  appConfigPath,
   appDir,
-  DaemonConfig,
-  DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_PORT,
-  daemonConfigPath,
-  loadDaemonConfig,
+  LEGACY_CONFIG_FILE,
+  LEGACY_STATE_FILE,
+  loadAppConfig,
   newPairingToken,
   newToken,
-  saveDaemonConfig,
-} from "./config/daemon.js";
+  saveAppConfig,
+} from "./config/app.js";
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { ENGINES, type EngineId, resolveEngine } from "./documents/tex/engines.js";
 export { FormsService } from "./forms/service.js";
 export { KeyringStore } from "./github/secrets.js";
 export { GitHubService } from "./github/service.js";
-export { CHAT_PATH, HEALTH_PATH, MCP_PATH, PAIR_PATH, SHUTDOWN_PATH } from "./http.js";
-export { createLogger } from "./logger.js";
+export { HEALTH_MODE, HEALTH_PATH, MCP_PATH } from "./http.js";
+export { createLogger, type Logger } from "./logger.js";
 export { type CompanionHandle, type CompanionOptions, startCompanion } from "./main.js";
 export { ProfileService } from "./profile/service.js";
 export { agentFileStatus, githubDetail, texStatus } from "./status.js";

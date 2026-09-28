@@ -12,8 +12,8 @@ description: Write or revise a cover letter for the active job posting using the
   letter is wanted at all.
 - `profile/preferences.md` for tone, emphasis and things never to mention. `profile/profile.yaml`.
 - `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a quick
-  version: the top requirements and the matching claims, from every claim read with the one Grep in
-  EZAPPLY.md.
+  version: the top requirements and the matching claims, from the claims (`claims_list`, if not
+  already called in this session).
 - Template: `templates/cover/` main file (`template.json` names it). If there is none, ask the user to run
   `ezapply init`, which installs the default.
 - `templates/cover/format.md` if it exists: the structure taken from the user's example letter.

@@ -10,7 +10,7 @@ import { readJson, writeJsonAtomic } from "../util/fs.js";
 import { escapeHtml, htmlPage, readForm } from "../util/html.js";
 import type { Workspace } from "../workspace/workspace.js";
 
-/** A review waits this long for the user; the daemon stays up meanwhile. */
+/** A review waits this long for the user. */
 const REVIEW_TTL_MS = 2 * 60 * 60_000;
 const MAX_REVIEW_FILES = 6;
 
@@ -49,7 +49,7 @@ interface Session {
 
 /**
  * Document review in the browser. In the after-approval attach mode Claude shows the generated PDFs on a
- * page served by the daemon; the user approves each one or writes what should change. Approvals are recorded
+ * page served by the companion; the user approves each one or writes what should change. Approvals are recorded
  * per exact version (SHA-256), and upload_file attaches a document from postings/ only when its current
  * bytes match an approval, so an edited or rebuilt document needs approving again.
  *
@@ -163,7 +163,7 @@ export class ReviewService {
     };
   }
 
-  /** True while a review waits for the user (keeps the daemon from stopping as idle). */
+  /** True while a review waits for the user. */
   pending(): boolean {
     const now = Date.now();
     for (const s of this.sessions.values()) if (!s.result && !s.supersededBy && s.expires > now) return true;

@@ -1,57 +1,41 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { CloseCode } from "@ezapply/protocol";
 import { ExtensionBridge } from "./bridge/server.js";
-import { ChatSessions } from "./chat.js";
-import {
-  appDir,
-  type DaemonConfig,
-  daemonStatePath,
-  loadDaemonState,
-  saveDaemonState,
-  updateDaemonConfig,
-} from "./config/daemon.js";
+import { type ChatHost, ChatSessions, chatHost } from "./chat.js";
+import { type AppConfig, appDir, updateAppConfig } from "./config/app.js";
 import { ReviewService } from "./documents/review.js";
 import { DocumentsService } from "./documents/service.js";
 import { FormsService } from "./forms/service.js";
 import { KeyringStore, type SecretStore } from "./github/secrets.js";
 import { GitHubService } from "./github/service.js";
 import { createHttpServer } from "./http.js";
-import { IdleMonitor } from "./idle.js";
 import { createLogger, type Logger } from "./logger.js";
 import { PostingsService } from "./postings/service.js";
 import { ProfileService } from "./profile/service.js";
 import { RepoService } from "./repos/service.js";
 import type { Services } from "./services.js";
 import { TemplateService } from "./templates/service.js";
-import { desktopOpener, type Opener } from "./util/open.js";
+import { createDesktopOpener, type Opener } from "./util/open.js";
 import { COMPANION_VERSION } from "./version.js";
 import { Workspace } from "./workspace/workspace.js";
 
 export interface CompanionOptions {
-  config: DaemonConfig;
+  config: AppConfig;
   log?: Logger;
   /**
    * Persist config changes (extension pinning) with the whole new config (tests). By default only the changed
-   * fields are written into ~/.ezapply/daemon.json as it is on disk then.
+   * fields are written into ~/.ezapply/config.json as it is on disk then.
    */
-  saveConfig?: (config: DaemonConfig) => Promise<void>;
-  /** Machine-level data dir (GitHub app file, daemon-state.json). Defaults to ~/.ezapply. */
+  saveConfig?: (config: AppConfig) => Promise<void>;
+  /** Machine-level data dir (GitHub app file). Defaults to ~/.ezapply. */
   appDataDir?: string;
-  /** How files and the daemon's pages are opened for the user. Defaults to the OS opener. */
+  /** How files and the companion's pages are opened for the user. Defaults to the OS opener. */
   opener?: Opener;
   /** Defaults to the OS keychain. */
   secrets?: SecretStore;
   /** The extension package folder, so extension_pair can tell the user what to load. */
   extensionDir?: string;
-  /** Called when the CLI asks the daemon to stop (POST /control/shutdown), and after an idle timeout. */
-  onShutdownRequest?: () => void;
-  /**
-   * Stop (through onShutdownRequest) after this long without work. Unset or 0: never. The CLI's daemon
-   * passes daemon.json's idleTimeoutMinutes (default 15); Claude Code starts it again on demand.
-   */
-  idleTimeoutMs?: number;
-  /** Override how long a fresh daemon waits for the paired extension to reconnect (tests). */
+  /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
@@ -60,21 +44,29 @@ export interface CompanionOptions {
 export interface CompanionHandle {
   port: number;
   services: Services;
+  /** What `ezapply chat` reads to decide when to restart Claude. */
+  chat: ChatHost;
+  /** Called if the HTTP server fails after it started listening (`ezapply chat` logs it and carries on). */
+  onServerError(fn: (err: Error) => void): void;
   close(): Promise<void>;
 }
 
-/** Wire services together and start listening on the loopback interface. */
+/**
+ * Wire services together and start listening on the loopback interface. `ezapply chat` is the only caller
+ * outside tests: the companion lives exactly as long as the chat.
+ */
 export async function startCompanion(opts: CompanionOptions): Promise<CompanionHandle> {
   let config = opts.config;
   const log = opts.log ?? createLogger();
   const dataDir = opts.appDataDir ?? appDir();
-  const opener = opts.opener ?? desktopOpener;
+  // The browser the extension reports becomes known once it connects (the bridge is built below).
+  const opener = opts.opener ?? createDesktopOpener({ browser: () => bridge.browser() });
   let port = 0;
-  /** Apply a change to the in-memory config and persist just that change (see updateDaemonConfig). */
-  const persist = async (change: (c: DaemonConfig) => DaemonConfig) => {
+  /** Apply a change to the in-memory config and persist just that change (see updateAppConfig). */
+  const persist = async (change: (c: AppConfig) => AppConfig) => {
     config = change(config);
     if (opts.saveConfig) await opts.saveConfig(config);
-    else await updateDaemonConfig(change, config);
+    else await updateAppConfig(change, config);
   };
 
   const workspace = new Workspace(config.workspace);
@@ -85,8 +77,6 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   const profile = new ProfileService(workspace, log.child({ svc: "profile" }));
   const templates = new TemplateService(workspace, log.child({ svc: "templates" }));
   await profile.ensureAnswerSeed();
-  const statePath = daemonStatePath(dataDir);
-  const state = await loadDaemonState(statePath);
   const github = new GitHubService({
     secrets: opts.secrets ?? new KeyringStore(),
     appFilePath: join(dataDir, "github-app.json"),
@@ -97,37 +87,16 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   });
   const repos = new RepoService(workspace, github, log.child({ svc: "repos" }), opts.github?.cloneUrl);
 
-  const onShutdown = opts.onShutdownRequest;
-  const idle =
-    onShutdown && opts.idleTimeoutMs
-      ? new IdleMonitor({
-          timeoutMs: opts.idleTimeoutMs,
-          busy: () => bridge.pairingStatus().openUntil !== undefined || github.flowPending() || reviews.pending(),
-          onIdle: () => {
-            log.info({ minutes: Math.round((opts.idleTimeoutMs ?? 0) / 60_000) }, "idle: shutting down");
-            bridge.close(CloseCode.Idle, "idle");
-            onShutdown();
-          },
-        })
-      : undefined;
-
   const bridge = new ExtensionBridge({
     companionVersion: COMPANION_VERSION,
     pairingToken: config.pairingToken,
     pairedExtensionId: config.pairedExtensionId,
     onPaired: (extensionId) => persist((c) => ({ ...c, pairedExtensionId: extensionId })),
     onForgotten: (pairingToken) => persist(({ pairedExtensionId: _, ...rest }) => ({ ...rest, pairingToken })),
-    ...(state.extensionLastSeenAt !== undefined ? { extensionLastSeenAt: state.extensionLastSeenAt } : {}),
-    onSeen: (at) => {
-      saveDaemonState(statePath, { ...state, extensionLastSeenAt: at }).catch((err: Error) =>
-        log.warn({ err: err.message }, "could not save daemon-state.json"),
-      );
-    },
     handlers: {
       "posting.capture": (payload) => postings.capture(payload),
     },
     log: log.child({ svc: "bridge" }),
-    ...(idle ? { activity: idle } : {}),
     ...(opts.reconnectGraceMs !== undefined ? { reconnectGraceMs: opts.reconnectGraceMs } : {}),
   });
 
@@ -149,14 +118,13 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     opener,
     ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
   };
+  const sessions = new ChatSessions();
   const server = createHttpServer({
     services,
     bridge,
     mcpToken: config.mcpToken,
-    chat: new ChatSessions(),
+    chat: sessions,
     log: log.child({ svc: "http" }),
-    ...(opts.onShutdownRequest ? { onShutdown: opts.onShutdownRequest } : {}),
-    ...(idle ? { activity: idle } : {}),
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -172,8 +140,9 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   return {
     port,
     services,
+    chat: chatHost(postings, workspace, sessions),
+    onServerError: (fn) => server.on("error", fn),
     close: async () => {
-      idle?.stop();
       bridge.close();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type DaemonConfig, defaultWorkspaceConfig, exists, WORKSPACE_DIRS } from "@ezapply/companion";
+import { type AppConfig, defaultWorkspaceConfig, exists, WORKSPACE_DIRS } from "@ezapply/companion";
 
 const TEMPLATES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "templates");
 const CLI_MAIN = resolve(dirname(fileURLToPath(import.meta.url)), "main.js");
@@ -16,7 +16,7 @@ export interface InitReport {
  * Create or refresh a workspace. Idempotent: user-owned files are never overwritten; ezapply-managed
  * files (.mcp.json server entry, permission rules, skills) are updated in place.
  */
-export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
+export async function initWorkspace(config: AppConfig): Promise<InitReport> {
   const root = config.workspace;
   const report: InitReport = { created: [], updated: [], kept: [] };
 
@@ -40,7 +40,7 @@ export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
     ...cur,
     mcpServers: {
       ...(cur.mcpServers as object | undefined),
-      // `ezapply mcp` starts the daemon if needed and relays to it, so there is no daemon to start by hand.
+      // `ezapply mcp` relays to the companion inside `ezapply chat`; outside a chat every tool says so.
       ezapply: { type: "stdio", command: process.execPath, args: [CLI_MAIN, "mcp"] },
     },
   }));
@@ -48,6 +48,10 @@ export async function initWorkspace(config: DaemonConfig): Promise<InitReport> {
   await mergeJson(join(root, ".claude", "settings.json"), report, (cur) => {
     const perms = (cur.permissions as { allow?: string[]; deny?: string[] } | undefined) ?? {};
     return {
+      // Claude Code's auto memory loads a memory index and instructions into every session, and has Claude
+      // spend turns writing notes that duplicate the profile, answers and preferences (and can go stale
+      // against them). Off by default; a value the user set is kept.
+      autoMemoryEnabled: false,
       ...cur,
       enabledMcpjsonServers: union(cur.enabledMcpjsonServers as string[] | undefined, ["ezapply"]),
       permissions: {

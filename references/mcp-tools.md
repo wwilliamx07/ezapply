@@ -24,13 +24,13 @@ ever happens, rename with the old names kept as aliases for a while.
 | `workspace_check` | — | The onboarding checklist `{ ready, nextStep?, items[] }` ([details](components/companion.md#readiness-checklist-workspace_check)) |
 | `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code |
 | `extension_pair_wait` | `timeoutSeconds` (5–900, default 180) | Waits for the extension to connect; `{ connected, extension? , hint? }` |
-| `browser_status` | — | Companion version, bridge status, active posting id, and when connected the extension version and every tab with its site; when not, a hint |
+| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site; when not, a hint |
 
 ## Postings
 
 | Tool | Input | Does |
 |---|---|---|
-| `posting_active` | — | Also `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). Right after a daemon start, first waits (≤40 s) for the paired extension, if it was connected in the last 6 hours, and any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. When the extension wasn't waited for and hasn't reconnected yet, adds `extensionReconnecting` (a note: a capture made while ezapply was stopped may still arrive). None → `no_active_posting` (with the same note in the hint, if it applies) |
+| `posting_active` | — | Also `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). Within 40 s of `ezapply chat` starting, first waits for the paired extension to reconnect, and for any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. When the paired extension hasn't connected since the start (the wait ran out), adds `extensionReconnecting` (a note: a capture made while ezapply wasn't running may still arrive). None → `no_active_posting` (with the same note in the hint, if it applies) |
 | `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active. Settles like `posting_active`; with the extension still reconnecting the result is `{ postings, extensionReconnecting }` |
 | `posting_activate` | `id` (a plain folder name; anything with separators or `..` is `bad_request`) | Make it active; returns its details |
 | `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status |
@@ -49,10 +49,10 @@ under `postings/` or `library/`. Details: [documents.md](components/documents.md
 | `pdf_merge` | `inputs[] { path, pages?, label? }`, `output`, `bookmarks` (true), `normalize` (`auto`/`none`/`letter`/`a4`), `title?`, `author?` | One PDF with bookmarks and consistent page sizes; returns sections with page ranges |
 | `pdf_from_images` | `images[]`, `output`, `pageSize` (`letter`/`a4`) | Images → PDF, one per page |
 | `pdf_compress` | `path`, `output?` (default overwrite), `targetBytes?` (default config, 5 MB) | Lossless, then Ghostscript if installed; before/after, method, target met |
-| `review_open` | `files[]` (1–6 PDFs under one `postings/<id>/`) | Opens a review page in the user's browser showing those PDFs, each with a box for changes. `{ reviewId, url, postingId, files, openedBrowser, tell }`. A newer review of the same posting replaces an open one ([details](components/documents.md#review-before-attaching)) |
+| `review_open` | `files[]` (1–6 PDFs under one `postings/<id>/`) | Opens a review page in the user's browser showing those PDFs, each with a box for changes. `{ reviewId, url, postingId, files, openedBrowser, openedIn?, tell }` (`openedIn`: the browser it opened in, or `default`). A newer review of the same posting replaces an open one ([details](components/documents.md#review-before-attaching)) |
 | `review_wait` | `reviewId`, `timeoutSeconds` (5–900, default 600) | Waits for the user's answer: `{ done: true, approved[], changes[] { file, request } }`, or `{ done: false, url?, supersededBy?, hint }` |
 | `attach_mode_set` | `mode` (`after-approval` / `immediately`) | Saves `documents.attach` in `ezapply.config.json`, keeping everything else as written |
-| `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens in the user's default app (without waiting for it) |
+| `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens a PDF or image in the user's browser (the extension's), anything else in its default app, without waiting. `{ opened, openedIn }` (a browser name, or `default`) |
 
 ## Profile and templates
 Details: [profile-and-templates.md](components/profile-and-templates.md).
@@ -70,8 +70,8 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 
 | Tool | Input | Does |
 |---|---|---|
-| `github_status` | — | App registered, slug, `manageUrl`, logged in, login, name, token expiry, and `portMismatch { appUrl, daemonUrl, hint }` when the app's callback URLs point at another port than the daemon's |
-| `github_login` | `app?` (`new` / `existing`) | Opens the daemon's login page in the browser; returns the URL, `openedBrowser`, `firstTimeSetup`, and a `tell` text (when no browser opened, it gives the user the URL to open). Without `app`: the app registered here, or a new one. `new` creates an app from the manifest; `existing` connects an ezapply app the user already has, with the Client ID and a new client secret entered on the local page, never in chat, and returns the `callbackUrl` the app must list ([details](components/github-and-repos.md#reusing-an-existing-app)). Without `app`, refuses with the fix while `portMismatch` stands |
+| `github_status` | — | App registered, slug, `manageUrl`, logged in, login, name, token expiry, and `portMismatch { appUrl, localUrl, hint }` when the app's callback URLs point at another port than ezapply's |
+| `github_login` | `app?` (`new` / `existing`) | Opens ezapply's login page in the browser; returns the URL, `openedBrowser`, `openedIn` (when it opened), `firstTimeSetup`, and a `tell` text (when no browser opened, it gives the user the URL to open). Without `app`: the app registered here, or a new one. `new` creates an app from the manifest; `existing` connects an ezapply app the user already has, with the Client ID and a new client secret entered on the local page, never in chat, and returns the `callbackUrl` the app must list ([details](components/github-and-repos.md#reusing-an-existing-app)). Without `app`, refuses with the fix while `portMismatch` stands |
 | `github_login_wait` | `timeoutSeconds` (5–900, default 300) | Waits for the browser flow; times out with a hint |
 | `github_logout` | — | Revoke and delete the token |
 | `github_list_repos` | — | Every repo the app can read, newest push first, with `selected` |
@@ -79,12 +79,19 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `repos_selection_set` | `repos[] { fullName, source (app/public-url), note? }` | Replace `profile/repos.yaml` |
 | `repo_sync` | `repo` (must be selected) | Clone or update the read-only cache; `{ path, headSha, indexedSha, changedSince, fileCount }` |
 | `repo_contributions` | `repo` | The user's share of commits, dates, areas touched, top authors |
+| `claims_list` | — | Every claim of every indexed repo as compact text: `## owner/name`, then `- id: claim (impact: …)`, the impact only when set; evidence, skills and confidence left out. A repo whose `claims.yaml` doesn't parse gets one line pointing at `claims_check`. `EZAPPLY.md` has Claude call it once, at the first request about a posting ([why](components/workspace.md#the-agent-file-ezapplymd)) |
 | `claims_check` | `repo` | Validate `claims.yaml`, every evidence path and line range, and that stamped lines haven't changed. `{ valid, claims, errors[], unstamped }` |
 | `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; stamps a hash on evidence that has none, records the indexed commit. Returns the meta plus `stamped` |
 
 ## Forms
 Workday only. Each call is an RPC to the extension ([workday-adapter.md](components/workday-adapter.md)); the
 logic around it lives in `FormsService` (`companion/src/forms/service.ts`).
+
+- **One call per tab at a time:** Claude Code sends tool calls in parallel, and two acting on one page
+  interfere (two dropdown reads each open a listbox and both can read whichever is on screen; a fill can land
+  while `go_next` changes the step). After the tab is chosen, each form call waits for earlier ones on the
+  same tab and runs in order (`onTab`, a `KeyedQueue` per tab id); calls on other tabs aren't held up, and a
+  failed call doesn't stop the next.
 
 - **Which tab:** `tabId` if given; otherwise a Workday tab on the active posting's tenant (the one the user
   is looking at, else the most recently used), otherwise any Workday tab the same way. The companion picks

@@ -93,64 +93,42 @@ tokens) when the others stayed under 80k: a large component read whole, or re-re
 
 ---
 
-## Part 5: The daemon inside `ezapply chat` (next up)
+## Part 5: No daemon: done (2026-09-28)
 
-ezapply runs only through `ezapply chat`, so a separate background daemon no longer buys anything. Run the
-companion in the wrapper's own process instead: the same HTTP/MCP server and extension bridge on the same
-port, with `claude` as its child. This is a cleanup, not a token saving: it removes a background process, the
-on-demand start and the once-a-second polling, and lets restarts react to a capture at once.
+ezapply runs only through `ezapply chat`, so the background daemon went. The companion runs inside the
+`ezapply chat` process, with `claude` as its child; there is no daemon mode at all. Built, tested and described
+in `references/` (`architecture.md` has the why; `status.md` what's unverified with a real Claude Code).
 
-### What changes
-- **`ezapply chat` hosts the companion.** It calls `startCompanion` in-process (no idle monitor), then starts
-  `claude`. It ends when Claude ends, closing the server and the extension socket as `ezapply stop` does now.
-- **Restarts are driven by events, not polling.** The companion gets an `onActivePostingChanged` hook, fired
-  by a capture (`PostingsService.capture`) and by `posting_activate`, and `ChatSessions` is read in-process.
-  `GET /control/chat` and `fetchChatState` go. The restart rules stay as built: only after the session has
-  used a tool, never during a call, not for the same posting, `context.restartOnCapture` to turn it off.
-- **The relay stays but no longer starts a daemon.** Claude Code talks to MCP servers over stdio; its direct
-  HTTP transport would bring its own timeouts, and some tools wait up to 15 minutes. `ensureDaemon` leaves
-  `ezapply mcp`: an unreachable daemon answers every request with "ezapply isn't running: start it with
-  `ezapply chat`". The session header stays, so stray MCP clients aren't counted.
-- **`ezapply daemon` stays** as the foreground debug mode, with the idle monitor. `ezapply start`, `stop` and
-  `restart` go, or become "run `ezapply chat`" messages. `status` and `doctor` report "not running, start
-  `ezapply chat`" instead of treating a stopped daemon as normal.
-- **Code that only mattered for a background daemon** becomes debug-mode only or goes: the idle timeout,
-  `daemon-state.json` and the "wait for the extension only if it was seen in the last 6 hours" rule. Decide
-  per piece: after `ezapply chat` starts, the extension still takes up to 30 s to reconnect and deliver a
-  queued capture, so `settled()` still matters.
+```
+ezapply chat   one Node process: companion (HTTP + MCP + extension bridge) on 127.0.0.1:<port>
+  └─ claude    child, inherits the terminal
+       └─ ezapply mcp   stdio relay Claude Code starts; forwards to the companion over HTTP
+```
 
-### What has to be handled
-1. **Nothing may write to the terminal.** Claude's screen owns it. Today the logger writes to the file *and*
-   stderr (`companion/src/logger.ts`), `pdfjs-dist` prints warnings with `console.log`, and jsdom forwards page
-   errors to the console during extraction. In chat mode: file-only logging, pdfjs `verbosity` at errors
-   only, and the wrapper's own `console.*` and `process.stderr.write` redirected to the log. (Claude writes
-   to the inherited terminal, not the wrapper's streams, so it's unaffected.) Test: run a capture,
-   extraction and `pdf_render` in chat mode and assert nothing reached stdout or stderr.
-2. **A crash in companion code must not kill the wrapper.** Today the relay restarts a crashed daemon; in
-   process, an uncaught error would end `ezapply chat` and leave Claude without tools. Add
-   `uncaughtException` / `unhandledRejection` handlers that log and keep serving. If the server itself dies,
-   say so in one line and keep Claude running: the user can finish or exit.
-3. **One instance.** A second `ezapply chat` finds the port taken. If `/health` answers as ezapply in chat
-   mode (add `mode: "chat" | "daemon"` to `/health`), refuse with "ezapply is already running in another
-   terminal". If it's a debug `ezapply daemon`, ask it to shut down first, as `ensureDaemon` does now.
-4. **Picking up a new build** means restarting `ezapply chat` (and so Claude). `npm run setup` should say so.
-5. **Pages that need the daemon** (GitHub login, document review, pairing) work only while chat is open. That
-   matches how ezapply is run; the tools already run only from inside Claude.
+| Item | What was done |
+|---|---|
+| Hosting | `hostChat` starts the companion, then Claude; closes it when Claude exits; no Claude if the companion can't start |
+| Restarts by events | `PostingsService.onActiveChange` and `ChatSessions.onCallEnd` through `ChatHost`; `/control/chat`, `fetchChatState` and the poll gone |
+| Relay | Never starts anything; `NOT_RUNNING` for every request outside a chat; nothing re-sent |
+| Commands | `start`, `stop`, `restart`, `daemon`, `pair` gone (pairing is `extension_pair [replace]`); `status` and `doctor` report whether a chat runs; `/control/*` and `daemonctl.ts` gone |
+| Background-only code | `idle.ts`, `idleTimeoutMinutes`, `CloseCode.Idle` and the extension's idle state, `daemon-state.json` and the 6-hour rule gone; `extensionReconnecting` now means "not connected since the start" |
+| Naming | `~/.ezapply/config.json` (`AppConfig`, `config/app.ts`), moved from `daemon.json` on load; "daemon" gone from messages and tool results (`portMismatch.localUrl`) |
+| Terminal | Logger file-only; jsdom silent `VirtualConsole`; `quietProcess` sends `console.*` and stderr to the log |
+| Crashes | `guardProcess`: uncaught exceptions and rejections logged, the chat carries on |
+| One instance | `/health` `mode: "chat"`; a second chat refused; an earlier build's daemon asked to shut down; another program on the port named |
+| Tests | Chat host with a stub `claude` and the real companion, second instance, legacy daemon, port squatter, quiet child process, relay `NOT_RUNNING`, config move, change events; smoke-tested with the real CLI and a stand-in `claude` |
 
-### References to update
-`architecture.md` (processes, lifecycle, the diagram, transports), `components/cli.md` (`chat`, `mcp`,
-removed commands, `doctor`), `components/companion.md` (startup options, HTTP surface without
-`/control/chat`, idle shutdown in debug mode only, the capture hook), `security.md` (the daemon's port open
-only while chat runs), `flows.md` (setup, capture restarting the session), `data-formats.md`
-(`daemon-state.json` if it goes, `idleTimeoutMinutes`), `development.md` (tests), `status.md`, README.
+---
 
-### Tests
-- `ezapply chat` with the stub `claude`: the companion answers MCP while Claude runs; a capture delivered
-  over the bridge restarts Claude at once; the server closes when Claude exits.
-- A second instance is refused.
-- A thrown error in a tool handler doesn't end the wrapper.
-- Chat mode writes nothing to stdout or stderr (item 1).
-- The relay's "not running" answer.
+## Parts 6 and 7: done (2026-09-28)
+
+| Item | What was done |
+|---|---|
+| 6. Open in the user's browser | The extension reports its browser in `hello` (`detectBrowser`: `getBrowserInfo` in Firefox, `userAgentData` brands in Chromium browsers). The companion keeps it (`bridge.browser()`, in `browser_status` and `workspace_check`) and starts that browser's program itself (`findBrowser`: App Paths or install folders on Windows, `.app` bundles on macOS, PATH elsewhere) with the page, or a PDF/image as a `file://` URL. Other files, and everything when no browser is known or found, use the OS opener. Tools report `openedIn`. Not through the extension, which can't open local files without the user granting file access |
+| 7. Auto memory off | `ezapply init` sets `autoMemoryEnabled: false` in the workspace's `.claude/settings.json` unless the user set it |
+
+Still to see for real (`references/status.md`): each browser opening a new tab from its program, Opera's
+Windows path, Chrome with several profiles, and the context saved without auto memory (`npm run usage:report`).
 
 ---
 

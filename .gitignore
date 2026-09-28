@@ -5,3 +5,4 @@ coverage/
 .env
 recon-out/
 dist-firefox/
+references/.obsidian

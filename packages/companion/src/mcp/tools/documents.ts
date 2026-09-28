@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
+import { browserLabel } from "../../util/open.js";
 import { rawTool, tool } from "../result.js";
 
 const PATH_NOTE = "Paths may be absolute or relative to the workspace root.";
@@ -194,15 +195,13 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
     },
     tool(s.log, "review_open", async ({ files }: { files: string[] }) => {
       const review = await s.reviews.open(files);
-      const opened = await s.opener.url(review.url).then(
-        () => true,
-        () => false,
-      );
+      const openedIn = await s.opener.url(review.url).catch(() => null);
       return {
         ...review,
-        openedBrowser: opened,
-        tell: opened
-          ? "A review page opened in the browser: approve each document, or write what should change."
+        openedBrowser: openedIn !== null,
+        ...(openedIn ? { openedIn } : {}),
+        tell: openedIn
+          ? `A review page opened in ${browserLabel(openedIn)}: approve each document, or write what should change.`
           : `Ask the user to open ${review.url} to approve the documents or write what should change.`,
       };
     }),
@@ -246,7 +245,8 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
     {
       title: "Open for the user",
       description:
-        "Open a generated file (usually a PDF) in the user's default viewer so they can look at it. Use after producing " +
+        "Open a generated file (usually a PDF) for the user to look at: PDFs and images in the browser they use with " +
+        "the ezapply extension, other files in their default application. Use after producing " +
         `or changing a document the user will want to see. ${PATH_NOTE}`,
       inputSchema: { path: z.string() },
     },

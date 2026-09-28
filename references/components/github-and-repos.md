@@ -10,24 +10,25 @@ screen is the first layer of repo selection.
 
 **Why not the device flow:** a GitHub App registered from a manifest can't enable the device flow, and
 asking the user to register an app by hand is error-prone. So the app is created from a manifest and login
-uses the OAuth web flow with callbacks on the daemon. **For more users later:** publish one app; the same
+uses the OAuth web flow with callbacks on the companion. **For more users later:** publish one app; the same
 routes work with a shared client id (the secret kept server-side, or the device flow once a published app
 enables it).
 
 ### Login flow
-All browser-facing steps are pages served by the daemon under `/github/*`, each guarded by a one-time
+All browser-facing steps are pages served by the companion under `/github/*`, each guarded by a one-time
 state value that expires after 30 minutes.
 
 1. `github_login` returns a `/github/start?nonce=…` URL (the nonce is issued to Claude, so a web page can't
-   start the flow) and opens it in the default browser through the `Opener`, which accepts only
-   `http://127.0.0.1:<port>/` URLs. The result says whether that worked (`openedBrowser`), and its `tell`
+   start the flow) and opens it through the `Opener` in the browser the extension runs in (the system default until the
+   extension has connected), which accepts only `http://127.0.0.1:<port>/` URLs. The result says whether that
+   worked (`openedBrowser`, and `openedIn`), and its `tell`
    text gives the user the URL to open when it didn't (no `xdg-open` on a headless Linux, say). (It used to
    call the file opener, which checks that its argument exists on disk: a URL never does, so no browser
    ever opened while the text said one had.)
 2. **First time only** (`/github/start` with no app registered): a page posts an App Manifest to GitHub
-   (`ezapply-<random>`, private, read-only permissions, callback and setup URLs on the daemon). The user
+   (`ezapply-<random>`, private, read-only permissions, callback and setup URLs on the companion). The user
    clicks "Create".
-3. `/github/app-created`: the daemon converts the code into app credentials. The client secret goes to the
+3. `/github/app-created`: the companion converts the code into app credentials. The client secret goes to the
    OS keychain, the public parts to `~/.ezapply/github-app.json`. The private key and webhook secret are
    discarded (no server-to-server calls). Redirect to the install page.
 4. The user installs the app on chosen repos. `/github/installed` then redirects to the OAuth authorize
@@ -43,16 +44,16 @@ onboarding asks, and `github_login` with `app: "existing"` connects it (`app: "n
 even when an app is registered; neither given: the registered app, else a new one). GitHub offers no way to
 list a user's apps before they sign in, and never shows an app's client secret again, so:
 1. `/github/start` (with a nonce whose choice is `existing`) serves a form page with the steps: open
-   github.com/settings/apps and edit the ezapply-… app, add this daemon's callback URL
+   github.com/settings/apps and edit the ezapply-… app, add this companion's callback URL
    (`http://127.0.0.1:<port>/github/callback`) if it's missing, copy the Client ID, and generate a new client
    secret. GitHub keeps an app's older secrets valid, so other computers keep working.
 2. The user pastes the app's name (or its GitHub address), the Client ID and the secret into that page, which
-   posts to `POST /github/reuse` on the daemon, the only POST route. The secret never passes through the
-   chat. The form carries a one-time state of its own, so a web page can't post credentials to the daemon.
+   posts to `POST /github/reuse` on the companion, the only POST route. The secret never passes through the
+   chat. The form carries a one-time state of its own, so a web page can't post credentials to the companion.
    Malformed fields bring the form back with the problem (never echoing the secret) and a fresh state.
 3. The credentials are kept in memory with the OAuth state, and the user is sent to authorize with that
    Client ID. Nothing is written yet.
-4. `/github/callback` exchanges the code with those credentials. Only if that works does the daemon store
+4. `/github/callback` exchanges the code with those credentials. Only if that works does the companion store
    the secret in the keychain and write `github-app.json` (`origin: "reused"`). A user token only sees
    installations of the app that issued it, so `/user/installations` names the app for certain (its id and
    slug); the typed name is the fallback for an app not installed anywhere yet, and then the page links to
@@ -79,10 +80,10 @@ them). A port mismatch doesn't stop `github_login` when an app is chosen, since 
   `manageUrl` is where the user grants access to more repos.
 
 ### The app remembers its port
-The app's callback and setup URLs contain the daemon's port at creation time, so after
+The app's callback and setup URLs contain the companion's port at creation time, so after
 `ezapply init --port N` GitHub would redirect logins to the old port. `github-app.json` records
-`localBaseUrl` at creation; when it differs from where the daemon listens, `github_status` reports
-`portMismatch { appUrl, daemonUrl, hint }` (move the daemon back, or change the Callback URL and Setup URL
+`localBaseUrl` at creation; when it differs from where the companion listens, `github_status` reports
+`portMismatch { appUrl, localUrl, hint }` (move ezapply back and restart the chat, or change the Callback URL and Setup URL
 in the app's settings on GitHub), `github_login` refuses with that hint, and `workspace_check` counts
 `github_login` as not done. Apps created before this field existed can't be checked.
 

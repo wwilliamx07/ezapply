@@ -1,6 +1,6 @@
 import { detectSite, type SiteId, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
 
 export interface ExtractedPosting {
@@ -40,8 +40,10 @@ export function extractPosting(input: {
   // the company still comes from the page the user was on.
   const contentUrl = input.frameUrl ?? input.url;
   const site = detectSite(contentUrl);
+  // A silent console: by default jsdom prints the page's CSS parse errors to ours, and the terminal is Claude's.
   const dom = new JSDOM(`<!doctype html><html><head><title></title></head><body>${input.visibleHtml}</body></html>`, {
     url: contentUrl,
+    virtualConsole: new VirtualConsole(),
   });
   const doc = dom.window.document;
   doc.title = input.pageTitle;

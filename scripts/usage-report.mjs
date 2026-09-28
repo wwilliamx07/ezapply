@@ -156,8 +156,10 @@ function readJsonl(path) {
 
 /** Claude Code keeps a project's transcripts in ~/.claude/projects/<path with non-alphanumerics as "-">. */
 function latestWorkspaceTranscript() {
-  const config = join(homedir(), ".ezapply", "daemon.json");
-  if (!existsSync(config)) fail("No ~/.ezapply/daemon.json: pass a transcript path.");
+  // config.json; daemon.json until the CLI of this build first loads (and so renames) it.
+  const app = process.env.EZAPPLY_APP_DIR ?? join(homedir(), ".ezapply");
+  const config = ["config.json", "daemon.json"].map((f) => join(app, f)).find(existsSync);
+  if (!config) fail("No ~/.ezapply/config.json: pass a transcript path.");
   const { workspace } = JSON.parse(readFileSync(config, "utf8"));
   const dir = join(homedir(), ".claude", "projects", workspace.replace(/[^A-Za-z0-9]/g, "-"));
   if (!existsSync(dir)) fail(`No Claude Code transcripts for ${workspace} (looked in ${dir}).`);

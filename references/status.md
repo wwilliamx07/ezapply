@@ -6,10 +6,10 @@ As of 2026-09-27.
 | Area | State |
 |---|---|
 | Scaffold | Monorepo, protocol package, CI (Ubuntu and Windows checks, a TeX Live job, `web-ext lint` of the Firefox build), Biome, Vitest, `ezapply doctor` |
-| Daemon, bridge, capture | MCP over the stdio relay (retries only refused connections, no timeout); extension pairs, stays connected (alarm recreated on every start), captures, including from embedded job board frames; verified live in Chrome |
+| Companion, bridge, capture | The companion inside `ezapply chat` (no background process), MCP over the stdio relay (never re-sends, no timeout, "not running" outside a chat); extension pairs, stays connected (alarm recreated on every start), captures, including from embedded job board frames; verified live in Chrome |
 | Documents | TeX compile with page count, log parsing and history; per-file engine from `% !TEX program` (pdfTeX-only templates marked at import); multi-file templates (content files copied with the main file); render, text, info, merge (normalizing keeps links), images, compress, open, diff |
 | GitHub and repos | Per-user GitHub App via manifest, or an existing ezapply app connected from its Client ID and a new secret; OAuth login (browser opened, or the URL given), keychain tokens with single-flight refresh, port-mismatch detection, repo listing and selection, hardened read-only cache with the token in git's environment |
-| Knowledge base | `ezapply-index-repo` skill, `claims.yaml` with `claims_check`, evidence hashes that flag changed code, contributions, incremental re-index |
+| Knowledge base | `ezapply-index-repo` skill, `claims.yaml` with `claims_check`, `claims_list` read once per posting, evidence hashes that flag changed code, contributions, incremental re-index |
 | Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
 | Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
@@ -17,8 +17,9 @@ As of 2026-09-27.
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
-| Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read in one Grep; `npm run usage:report` to measure |
-| Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), on-demand daemon that stops after 15 idle minutes, code-less pairing, install hints for TeX and git that work without a restart |
+| Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time; `npm run usage:report` to measure |
+| Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
+| Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
 - **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
@@ -43,9 +44,16 @@ As of 2026-09-27.
 - **Firefox in a real browser:** pairing, capture, the keepalive over several minutes, `tab.screenshot`.
   The first real load found the connection upgraded to `wss://` by Firefox's default CSP; fixed with an
   explicit CSP, awaiting a re-test.
-- **Idle stop with a real browser:** reconnecting after an on-demand start and delivering a capture queued
-  while the daemon was down are tested against a fake extension; the daemon stopping by itself is verified
-  with the real CLI.
+- **Reconnecting a real browser after `ezapply chat` starts:** reconnecting within the grace period and
+  delivering a capture queued while no chat was open are tested against a fake extension; `ezapply chat` ending
+  with Claude, and nothing reaching the terminal, are verified with the real CLI and a stand-in `claude`.
+  Not yet seen with a real Claude Code: its screen staying clean through a capture, a document build and a
+  PDF render, and an earlier build's daemon being stopped on the first run after the update.
+- **Opening in the user's browser for real:** browser detection and finding the program are tested with
+  stubs. Not yet seen: each browser's program opening a new tab in the running window (Firefox with a
+  `file://` PDF in particular), Opera's Windows install path, and a Chrome user with several profiles (the
+  tab opens in the profile last used, which may not be the one with the extension).
+- **The saving from turning auto memory off:** measure with `npm run usage:report` on the next session.
 - **A full onboarding in Claude Code**, including installing MiKTeX through a tool hint.
 - **`ezapply chat` with a real Claude Code:** tested with a stub `claude`. Not yet seen: Claude Code passing
   `EZAPPLY_CHAT_SESSION` on to its MCP relay (without it the session reads as unused and never restarts,
@@ -62,6 +70,10 @@ As of 2026-09-27.
   by hand. Needs a live snapshot of that step to find the cause.
 
 ## Deferred
+**Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:
+moving `~/.ezapply/daemon.json` to `config.json` (and `init` deleting `daemon-state.json`), and `ezapply chat`
+shutting down an earlier build's daemon found on its port. Both can go once no such install is left.
+
 **DecisionProvider (e.g. Jev).** Config has `decisions.provider: "none"`, and no decision tools are
 registered. The design, kept from the original plan:
 
@@ -112,10 +124,10 @@ what changed from it, and each linked page gives the reason.
 
 | Plan | Built |
 |---|---|
-| GitHub device flow; user registers the app by hand | App Manifest flow (one click) + OAuth web flow with callbacks on the daemon ([github-and-repos](components/github-and-repos.md#github-app-githubservice)) |
+| GitHub device flow; user registers the app by hand | App Manifest flow (one click) + OAuth web flow with callbacks on the companion ([github-and-repos](components/github-and-repos.md#github-app-githubservice)) |
 | SQLite application log, `app_status` / `app_search` tools | Per-posting `meta.json` + `form-log.jsonl`; `postings_list` with a company filter ([postings](components/postings.md#no-database)) |
-| Long-running daemon started by hand or at login | Started on demand by `ezapply mcp` ([architecture](architecture.md#processes-and-lifecycle)) |
-| `ezapply init` then manual daemon, pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
+| Long-running daemon started by hand or at login | No daemon: the companion runs inside `ezapply chat` (after a stage where `ezapply mcp` started it on demand and it stopped when idle) ([architecture](architecture.md#processes-and-lifecycle)) |
+| `ezapply init` then a manual daemon start, a pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |

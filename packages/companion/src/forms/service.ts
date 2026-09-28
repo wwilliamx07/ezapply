@@ -18,6 +18,7 @@ import type { ExtensionBridge } from "../bridge/server.js";
 import type { ReviewService } from "../documents/review.js";
 import type { Logger } from "../logger.js";
 import type { PostingsService } from "../postings/service.js";
+import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -57,8 +58,13 @@ interface Target {
  * Every action is credited to the active posting only when the application tab is on that posting's
  * Workday tenant (or one of them has no tenant to compare). Otherwise, with two applications open or an
  * old confirmation page on screen, a fill or a `submitted` status would land on the wrong posting.
+ *
+ * Calls on one tab run one at a time (`onTab`).
  */
 export class FormsService {
+  /** One queue per tab id: the page can only do one thing at a time. */
+  private readonly pages = new KeyedQueue();
+
   constructor(
     private readonly ws: Workspace,
     private readonly postings: PostingsService,
@@ -68,23 +74,23 @@ export class FormsService {
   ) {}
 
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string } = {}) {
-    const t = await this.target(opts.tabId);
-    const form = await this.bridge.call("form.get", { tabId: t.tab.tabId }, 20_000);
-    if (form.pageKind === "confirmation") {
-      await this.setStatus(t, "submitted");
-      await this.logEvent(t, { event: "confirmation-seen", url: form.url });
-    }
-    if (form.pageKind === "review") await this.setStatus(t, "filled");
-    return {
-      ...leanForm(form, opts),
-      ...(t.posting ? { posting: t.posting.id } : {}),
-      ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
-    };
+    return this.onTab(opts.tabId, async (t) => {
+      const form = await this.bridge.call("form.get", { tabId: t.tab.tabId }, 20_000);
+      if (form.pageKind === "confirmation") {
+        await this.setStatus(t, "submitted");
+        await this.logEvent(t, { event: "confirmation-seen", url: form.url });
+      }
+      if (form.pageKind === "review") await this.setStatus(t, "filled");
+      return {
+        ...leanForm(form, opts),
+        ...(t.posting ? { posting: t.posting.id } : {}),
+        ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+      };
+    });
   }
 
   async listOptions(fieldId: string, tabId?: number) {
-    const t = await this.target(tabId);
-    return this.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000);
+    return this.onTab(tabId, (t) => this.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000));
   }
 
   /**
@@ -92,47 +98,50 @@ export class FormsService {
    * per field. The adapter opens them one after another; a field that fails reports its own error.
    */
   async listOptionsMany(fieldIds: string[], tabId?: number) {
-    const t = await this.target(tabId);
-    const out: Record<string, OptionInfo[] | { error: string }> = {};
-    for (const fieldId of fieldIds) {
-      out[fieldId] = await this.bridge
-        .call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000)
-        .catch((err: unknown) => ({ error: EzError.from(err).message }));
-    }
-    return out;
+    return this.onTab(tabId, async (t) => {
+      const out: Record<string, OptionInfo[] | { error: string }> = {};
+      for (const fieldId of fieldIds) {
+        out[fieldId] = await this.bridge
+          .call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000)
+          .catch((err: unknown) => ({ error: EzError.from(err).message }));
+      }
+      return out;
+    });
   }
 
   async searchOptions(fieldId: string, query: string, tabId?: number) {
-    const t = await this.target(tabId);
-    return this.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId }, 20_000);
+    return this.onTab(tabId, (t) =>
+      this.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId }, 20_000),
+    );
   }
 
   async fill(
     fills: { fieldId: string; value: FillValue; source: FillSource; answerId?: string }[],
     tabId?: number,
   ): Promise<{ results: FillResult[]; postingMismatch?: PostingMismatch }> {
-    const t = await this.target(tabId);
-    const results = await this.bridge.call(
-      "form.fill",
-      { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId },
-      120_000,
-    );
-    for (const f of fills) {
-      const r = results.find((x) => x.fieldId === f.fieldId);
-      await this.logEvent(t, {
-        event: "fill",
-        fieldId: f.fieldId,
-        value: f.value,
-        source: f.source,
-        ...(f.answerId ? { answerId: f.answerId } : {}),
-        ok: r?.ok ?? false,
-        ...(r?.error ? { error: r.error } : {}),
-      });
-    }
-    return {
-      results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)),
-      ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
-    };
+    return this.onTab(tabId, async (t) => {
+      const results = await this.bridge.call(
+        "form.fill",
+        { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId },
+        120_000,
+      );
+      for (const f of fills) {
+        const r = results.find((x) => x.fieldId === f.fieldId);
+        await this.logEvent(t, {
+          event: "fill",
+          fieldId: f.fieldId,
+          value: f.value,
+          source: f.source,
+          ...(f.answerId ? { answerId: f.answerId } : {}),
+          ok: r?.ok ?? false,
+          ...(r?.error ? { error: r.error } : {}),
+        });
+      }
+      return {
+        results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)),
+        ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+      };
+    });
   }
 
   async upload(fieldId: string, path: string, tabId?: number) {
@@ -156,84 +165,102 @@ export class FormsService {
       mimeType: MIME[extname(abs).toLowerCase()] ?? "application/octet-stream",
       base64: (await readFile(abs)).toString("base64"),
     };
-    const t = await this.target(tabId);
-    const result = await this.bridge.call("form.upload", { fieldId, file, tabId: t.tab.tabId }, 90_000);
-    await this.logEvent(t, {
-      event: "upload",
-      fieldId,
-      file: abs,
-      ok: result.ok,
-      ...(result.error ? { error: result.error } : {}),
+    return this.onTab(tabId, async (t) => {
+      const result = await this.bridge.call("form.upload", { fieldId, file, tabId: t.tab.tabId }, 90_000);
+      await this.logEvent(t, {
+        event: "upload",
+        fieldId,
+        file: abs,
+        ok: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+      if (result.ok) await this.setStatus(t, "attached");
+      return withMismatch(result, t);
     });
-    if (result.ok) await this.setStatus(t, "attached");
-    return withMismatch(result, t);
   }
 
   async remove(fieldId: string, values: string[] | undefined, reason: string | undefined, tabId?: number) {
-    const t = await this.target(tabId);
-    const result = await this.bridge
-      .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId }, 60_000)
-      .catch(olderExtension("form.remove", "remove items"));
-    await this.logEvent(t, {
-      event: "remove",
-      fieldId,
-      removed: result.removed,
-      remaining: result.remaining,
-      ...(reason ? { reason } : {}),
-      ok: result.ok,
-      ...(result.error ? { error: result.error } : {}),
+    return this.onTab(tabId, async (t) => {
+      const result = await this.bridge
+        .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId }, 60_000)
+        .catch(olderExtension("form.remove", "remove items"));
+      await this.logEvent(t, {
+        event: "remove",
+        fieldId,
+        removed: result.removed,
+        remaining: result.remaining,
+        ...(reason ? { reason } : {}),
+        ok: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+      return withMismatch(result, t);
     });
-    return withMismatch(result, t);
   }
 
   async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
-    const t = await this.target(tabId);
-    const result = await this.bridge
-      .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId }, 30_000)
-      .catch(olderExtension("form.removeRepeatable", "remove rows"));
-    await this.logEvent(t, {
-      event: "remove-row",
-      sectionId,
-      ...(result.removed ? { removed: result.removed } : {}),
-      ...(reason ? { reason } : {}),
-      ok: result.ok,
-      ...(result.error ? { error: result.error } : {}),
+    return this.onTab(tabId, async (t) => {
+      const result = await this.bridge
+        .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId }, 30_000)
+        .catch(olderExtension("form.removeRepeatable", "remove rows"));
+      await this.logEvent(t, {
+        event: "remove-row",
+        sectionId,
+        ...(result.removed ? { removed: result.removed } : {}),
+        ...(reason ? { reason } : {}),
+        ok: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+      return withMismatch(result, t);
     });
-    return withMismatch(result, t);
   }
 
   async addRepeatable(addButtonId: string, tabId?: number) {
-    const t = await this.target(tabId);
-    const result = await this.bridge.call("form.addRepeatable", { addButtonId, tabId: t.tab.tabId }, 20_000);
-    return withMismatch(result, t);
+    return this.onTab(tabId, async (t) => {
+      const result = await this.bridge.call("form.addRepeatable", { addButtonId, tabId: t.tab.tabId }, 20_000);
+      return withMismatch(result, t);
+    });
   }
 
   async next(tabId?: number) {
-    const t = await this.target(tabId);
-    const r = await this.bridge.call("form.next", { tabId: t.tab.tabId }, 60_000);
-    await this.logEvent(t, { event: "next", advanced: r.advanced, pageKind: r.pageKind, step: r.step?.title });
-    if (r.pageKind === "review") await this.setStatus(t, "filled");
-    return withMismatch(r, t);
+    return this.onTab(tabId, async (t) => {
+      const r = await this.bridge.call("form.next", { tabId: t.tab.tabId }, 60_000);
+      await this.logEvent(t, { event: "next", advanced: r.advanced, pageKind: r.pageKind, step: r.step?.title });
+      if (r.pageKind === "review") await this.setStatus(t, "filled");
+      return withMismatch(r, t);
+    });
   }
 
   async back(tabId?: number) {
-    const t = await this.target(tabId);
-    const r = await this.bridge
-      .call("form.back", { tabId: t.tab.tabId }, 60_000)
-      .catch(olderExtension("form.back", "go back"));
-    await this.logEvent(t, { event: "back", moved: r.moved, pageKind: r.pageKind, step: r.step?.title });
-    return withMismatch(r, t);
+    return this.onTab(tabId, async (t) => {
+      const r = await this.bridge
+        .call("form.back", { tabId: t.tab.tabId }, 60_000)
+        .catch(olderExtension("form.back", "go back"));
+      await this.logEvent(t, { event: "back", moved: r.moved, pageKind: r.pageKind, step: r.step?.title });
+      return withMismatch(r, t);
+    });
   }
 
   async pageAction(action: PageAction, tabId?: number) {
-    const t = await this.target(tabId);
-    const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId }, 30_000);
-    return withMismatch(r, t);
+    return this.onTab(tabId, async (t) => {
+      const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId }, 30_000);
+      return withMismatch(r, t);
+    });
   }
 
   async screenshot(tabId?: number) {
+    return this.onTab(tabId, (t) => this.bridge.call("tab.screenshot", { tabId: t.tab.tabId }, 15_000));
+  }
+
+  /**
+   * Choose the tab, then run `fn` on it after any earlier form call on the same tab has finished. Claude Code
+   * makes tool calls in parallel, and two calls acting on one page at once interfere: two dropdown reads
+   * each open a listbox, and both can read whichever is on screen; a fill can land while `go_next` changes
+   * the step. The page is one shared thing, so calls on a tab run one at a time, in the order they came;
+   * different tabs still run side by side.
+   */
+  private async onTab<T>(tabId: number | undefined, fn: (t: Target) => Promise<T>): Promise<T> {
     const t = await this.target(tabId);
-    return this.bridge.call("tab.screenshot", { tabId: t.tab.tabId }, 15_000);
+    return this.pages.run(String(t.tab.tabId), () => fn(t));
   }
 
   /**

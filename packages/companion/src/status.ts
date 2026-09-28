@@ -5,6 +5,7 @@ import { resolveEngine } from "./documents/tex/engines.js";
 import type { GitHubStatus } from "./github/service.js";
 import type { Services } from "./services.js";
 import { installCommand, installHint } from "./util/install-hints.js";
+import { browserLabel } from "./util/open.js";
 import { which } from "./util/proc.js";
 
 export interface ChecklistItem {
@@ -83,7 +84,7 @@ export async function workspaceStatus(
     "extension",
     bridge.connected,
     bridge.connected
-      ? "connected"
+      ? `connected${bridge.browser ? ` in ${browserLabel(bridge.browser.name)}` : ""}`
       : bridge.paired
         ? "paired but not connected: ask the user to open the browser (reload the extension if the badge stays grey)"
         : "not paired: call extension_pair",

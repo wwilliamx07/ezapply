@@ -72,7 +72,7 @@ const whichCache = new Map<string, string>();
 
 /**
  * Absolute path of an executable on PATH, or null. Hits are cached per process; misses are not, so a
- * tool the user installs while the daemon runs is found on the next call.
+ * tool the user installs while ezapply runs is found on the next call.
  */
 export function which(bin: string): string | null {
   const cached = whichCache.get(bin);

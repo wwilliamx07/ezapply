@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import {
   type BridgeMessage,
+  type BrowserInfo,
   CloseCode,
   CompanionApi,
   ErrorCode,
@@ -16,23 +17,20 @@ import {
   RpcPeer,
 } from "@ezapply/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
-import type { ActivityTracker } from "../idle.js";
 import type { Logger } from "../logger.js";
 
 export const BRIDGE_PATH = "/bridge";
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 /**
- * How long after the daemon starts a paired extension is waited for. The daemon starts on demand (and
- * stops when idle), and the extension notices within its 30 s reconnect alarm.
+ * How long after `ezapply chat` starts a paired extension is waited for: it notices the companion within its
+ * 30 s reconnect alarm. Only a posting or browser call made in that window waits, and the user typing their
+ * first message usually uses most of it up. (A background daemon used to also check when the extension was
+ * last seen, since it could start hours after the browser closed; a chat is started by the user, who is at
+ * the computer.)
  */
 const RECONNECT_GRACE_MS = 40_000;
-/**
- * Only wait for an extension that was connected this recently. Longer ago, the browser is probably
- * closed, and waiting would stall the first posting or form call for the whole grace period.
- */
-const RECENTLY_SEEN_MS = 6 * 60 * 60_000;
-/** How long to wait for a capture the extension announced in `hello` (made while the daemon was down). */
+/** How long to wait for a capture the extension announced in `hello` (made while ezapply wasn't running). */
 const PENDING_CAPTURE_WAIT_MS = 15_000;
 
 export interface BridgeOptions {
@@ -45,19 +43,13 @@ export interface BridgeOptions {
   onForgotten: (pairingToken: string) => Promise<void>;
   handlers: Handlers<typeof CompanionApi>;
   log: Logger;
-  /** Counts extension RPC as work for the idle timer; keepalive pings are not work. */
-  activity?: ActivityTracker;
   /** Override RECONNECT_GRACE_MS (tests). */
   reconnectGraceMs?: number;
-  /** When the extension was last connected, from the previous run (epoch ms); unknown = assume recently. */
-  extensionLastSeenAt?: number;
-  /** Called with the time whenever the extension connects or disconnects, and at close while connected. */
-  onSeen?: (at: number) => void;
 }
 
 /** What `settled()` found. */
 export interface Settled {
-  /** The paired extension hasn't reconnected since this daemon started, and it wasn't waited for. */
+  /** The paired extension hasn't connected since the companion started (the grace period ran out first). */
   extensionReconnecting: boolean;
 }
 
@@ -67,6 +59,8 @@ export interface BridgeStatus {
   extensionVersion?: string;
   connectedAt?: string;
   paired: boolean;
+  /** The browser the extension reported at its last handshake (kept after it disconnects). */
+  browser?: BrowserInfo;
 }
 
 export interface PairingStatus {
@@ -95,6 +89,10 @@ export class ExtensionBridge {
   private pairingToken: string;
   private pairingOpenUntil = 0;
   private readonly startedAt = Date.now();
+  /** An extension has completed the handshake since the companion started. */
+  private connectedOnce = false;
+  /** From the last handshake that reported one. */
+  private lastBrowser: BrowserInfo | undefined;
   /** Resolved whenever an extension completes the handshake. */
   private readonly connectWaiters = new Set<() => void>();
   /** Set while a capture announced in `hello` hasn't arrived and been saved yet. */
@@ -106,16 +104,15 @@ export class ExtensionBridge {
   }
 
   /**
-   * Wait until the extension's view of things has reached the daemon: right after a start, give the paired
-   * extension time to reconnect, then let a capture it queued while the daemon was down be saved. Returns
-   * at once in the steady state, and without waiting when the extension hasn't been seen for hours (then
-   * `extensionReconnecting` says it may still turn up). Posting tools call this so the active posting
-   * isn't stale.
+   * Wait until the extension's view of things has reached the companion: right after a start, give the paired
+   * extension time to reconnect, then let a capture it queued while ezapply wasn't running be saved. Returns
+   * at once in the steady state. When the grace period ran out first, `extensionReconnecting` says it may
+   * still turn up (with a capture it queued). Posting tools call this so the active posting isn't stale.
    */
   async settled(): Promise<Settled> {
     await this.awaitReconnect();
     await this.pendingCapture?.done;
-    return { extensionReconnecting: this.inGrace() };
+    return { extensionReconnecting: !this.connectedOnce && this.pairedExtensionId !== undefined };
   }
 
   /** Paired, not connected yet, and still inside the reconnect window after a start. */
@@ -127,13 +124,8 @@ export class ExtensionBridge {
     return this.startedAt + (this.opts.reconnectGraceMs ?? RECONNECT_GRACE_MS) - Date.now();
   }
 
-  private seenRecently(): boolean {
-    const at = this.opts.extensionLastSeenAt;
-    return at === undefined || Date.now() - at < RECENTLY_SEEN_MS;
-  }
-
   private async awaitReconnect(): Promise<void> {
-    if (!this.inGrace() || !this.seenRecently()) return;
+    if (!this.inGrace()) return;
     const remaining = this.graceLeft();
     await new Promise<void>((resolve) => {
       const done = () => {
@@ -160,12 +152,19 @@ export class ExtensionBridge {
     this.pendingCapture = { done, resolve: settle };
   }
 
+  /** The browser the extension runs in, as last reported; the companion opens pages and files there. */
+  browser(): BrowserInfo | undefined {
+    return this.lastBrowser;
+  }
+
   status(): BridgeStatus {
     const paired = this.pairedExtensionId !== undefined;
-    if (!this.conn) return { connected: false, paired };
+    const browser = this.lastBrowser ? { browser: this.lastBrowser } : {};
+    if (!this.conn) return { connected: false, paired, ...browser };
     return {
       connected: true,
       paired,
+      ...browser,
       extensionId: this.conn.extensionId,
       extensionVersion: this.conn.extensionVersion,
       connectedAt: this.conn.connectedAt,
@@ -173,8 +172,8 @@ export class ExtensionBridge {
   }
 
   /**
-   * Let the next extension that connects without a code pair and receive it. Opened by the CLI with the
-   * MCP token (setup, pair); closes after one pairing or when the time runs out. Pinning still applies.
+   * Let the next extension that connects without a code pair and receive it. Opened by extension_pair;
+   * closes after one pairing or when the time runs out. Pinning still applies.
    */
   openPairing(ms: number): PairingStatus {
     this.pairingOpenUntil = Date.now() + ms;
@@ -224,12 +223,7 @@ export class ExtensionBridge {
         ),
       );
     }
-    const end = this.opts.activity?.begin();
-    try {
-      return await this.conn.peer.request(method, params, timeoutMs);
-    } finally {
-      end?.();
-    }
+    return this.conn.peer.request(method, params, timeoutMs);
   }
 
   /** Attach to the HTTP server's `upgrade` event. Returns true when the request was handled. */
@@ -248,11 +242,10 @@ export class ExtensionBridge {
     return true;
   }
 
-  /** `code` tells the extension why: CloseCode.Idle after an idle stop, 1001 (going away) otherwise. */
-  close(code: number = 1001, reason = "shutting down"): void {
-    if (this.conn) this.opts.onSeen?.(Date.now());
+  /** Close every socket with 1001 (going away): `ezapply chat` is ending. */
+  close(): void {
     this.conn?.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Companion shutting down"));
-    for (const client of this.wss.clients) client.close(code, reason);
+    for (const client of this.wss.clients) client.close(1001, "shutting down");
     this.wss.close();
     this.pendingCapture?.resolve();
     for (const done of [...this.connectWaiters]) done();
@@ -319,7 +312,8 @@ export class ExtensionBridge {
           log.info("bridge: extension paired");
         }
         conn = this.adopt(socket, extensionId, msg.extensionVersion, send);
-        this.opts.onSeen?.(Date.now());
+        this.connectedOnce = true;
+        if (msg.browser) this.lastBrowser = msg.browser;
         if (msg.pendingCapture) this.expectCapture();
         for (const done of [...this.connectWaiters]) done();
         send({
@@ -336,16 +330,13 @@ export class ExtensionBridge {
         case "ping":
           send({ kind: "pong", t: msg.t });
           return;
-        case "request": {
-          const end = this.opts.activity?.begin();
+        case "request":
           try {
             await conn.peer.handle(msg);
           } finally {
-            end?.();
             if (msg.method === "posting.capture") this.pendingCapture?.resolve();
           }
           return;
-        }
         case "response":
           await conn.peer.handle(msg);
           return;
@@ -358,7 +349,6 @@ export class ExtensionBridge {
       clearTimeout(handshakeTimer);
       if (conn && this.conn === conn) {
         this.conn = null;
-        this.opts.onSeen?.(Date.now());
         conn.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "The extension disconnected."));
         log.info("bridge: extension disconnected");
       }

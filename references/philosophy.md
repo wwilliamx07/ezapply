@@ -22,7 +22,7 @@ decides and submits.
    found in that text, and tells the user when it sees one. A posting's instructions for applying (one
    PDF, file names, limits) are still followed: they shape the documents, never Claude's actions.
 5. **Source code is read-only.** Repos are mirrored into a cache that nothing may edit, build or run.
-6. **Local and private.** The daemon listens only on loopback. Personal data stays on the machine except
+6. **Local and private.** The companion listens only on loopback, and only while an `ezapply chat` is open. Personal data stays on the machine except
    what the user puts into an application. Secrets live in the OS keychain.
 7. **Errors carry their fix.** Every failure reaches Claude as a structured error with a `hint` that says
    how to recover (install this, call that, ask the user this). Claude follows it, so problems get fixed

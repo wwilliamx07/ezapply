@@ -130,6 +130,30 @@ describe("RepoService", () => {
     expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [], unstamped: 0 });
   });
 
+  it("lists every claim compactly: repo once, id and claim, impact only when there is one", async () => {
+    const other = repos.knowledgePath("acme/app");
+    await mkdir(other, { recursive: true });
+    await writeFile(
+      join(other, "claims.yaml"),
+      "schemaVersion: 1\nrepo: acme/app\nclaims:\n  - id: payments\n    claim: >-\n      Integrated Stripe\n      Checkout\n" +
+        '    impact: "$20k processed"\n    evidence:\n      - path: a.ts\n    confidence: high\n',
+    );
+    const broken = repos.knowledgePath("acme/broken");
+    await mkdir(broken, { recursive: true });
+    await writeFile(join(broken, "claims.yaml"), "schemaVersion: 1\nclaims: [");
+    await mkdir(repos.knowledgePath("acme/docs-only"), { recursive: true }); // no claims.yaml: left out
+
+    expect(await repos.allClaims()).toBe(
+      "2 claims from knowledge/*/claims.yaml\n\n" +
+        "## acme/app\n- payments: Integrated Stripe Checkout (impact: $20k processed)\n\n" +
+        "## acme/broken\n(claims.yaml has problems: run claims_check acme/broken)\n\n" +
+        "## jane/proj\n- rate-limiter: Implemented a sliding-window rate limiter",
+    );
+    await rm(other, { recursive: true });
+    await rm(broken, { recursive: true });
+    await rm(repos.knowledgePath("acme/docs-only"), { recursive: true });
+  });
+
   it("reports only files changed since the last index", async () => {
     await commit("Jane Doe", "123+jane@users.noreply.github.com", { "src/limiter.ts": "a\nb\nc\nd\ne\n" }, "tweak");
     const r = await repos.sync("jane/proj", "public-url");

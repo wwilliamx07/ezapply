@@ -9,7 +9,8 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 1. `posting_active`, then read `posting.md`. If the capture-time company or role is wrong, fix it with
    `posting_update_meta`. If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
    and follow it: a required format, page limit or single PDF changes what you produce.
-2. Read `profile/profile.yaml`, `profile/preferences.md`, every claim (the one Grep in EZAPPLY.md), and
+2. Read `profile/profile.yaml`, `profile/preferences.md`, every claim (`claims_list`, if not already
+   called in this session), and
    the template (template main from `workspace_check` or `templates/resume/template.json`).
 3. If `postings/<id>/resume.tex` does not exist, copy the template main file there. If `template.json`
    lists `contentFiles` (files the main file `\input`s, e.g. `sections/experience.tex`), copy each to the same

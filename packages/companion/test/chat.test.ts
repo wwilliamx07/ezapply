@@ -16,6 +16,20 @@ describe("chat sessions", () => {
     expect(chat.state("session-b")).toEqual({ used: false, inFlight: 0 });
   });
 
+  it("tells listeners when a call ends, once per call", () => {
+    const chat = new ChatSessions();
+    let ended = 0;
+    const stop = chat.onCallEnd(() => ended++);
+    const end = chat.beginToolCall("session-a");
+    expect(ended).toBe(0);
+    end();
+    end();
+    expect(ended).toBe(1);
+    stop();
+    chat.beginToolCall("session-a")();
+    expect(ended).toBe(1);
+  });
+
   it("counts only tools/call in a message or batch, and accepts only plain session ids", () => {
     expect(toolCallCount({ method: "tools/call" })).toBe(1);
     expect(toolCallCount([{ method: "tools/call" }, { method: "tools/list" }, { method: "tools/call" }])).toBe(2);

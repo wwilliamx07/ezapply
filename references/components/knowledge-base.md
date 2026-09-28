@@ -1,7 +1,7 @@
 # Project knowledge base
 
 The only source of project facts for resumes and cover letters. Built by Claude with the `ezapply-index-repo` skill
-from the read-only [repo cache](github-and-repos.md), checked by the daemon (`companion/src/repos/`).
+from the read-only [repo cache](github-and-repos.md), checked by the companion (`companion/src/repos/`).
 Accuracy matters more than coverage: every claim must cite the lines that prove it.
 
 ## Layout (`knowledge/<owner>__<name>/`)
@@ -33,6 +33,12 @@ claims:
     user_edited: false              # true = the user edited it; re-indexing keeps it verbatim
 ```
 5–20 claims per repo, each one resume-bullet sized. Numbers only when the evidence contains them.
+
+## Reading them
+`claims_list` returns every repo's claims as compact text (`RepoService.allClaims`): the repo once as a
+heading, then `- id: claim`, with `(impact: …)` only when there is one. It's how Claude reads the knowledge
+base at the start of work on a posting; the knowledge docs and the repo cache are opened only when a claim
+can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
 
 ## Checks
 - **`claims_check`** validates the schema, unique ids, that every evidence path exists in the cached repo

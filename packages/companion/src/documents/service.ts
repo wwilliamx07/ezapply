@@ -225,10 +225,10 @@ export class DocumentsService {
     return pdfCompress(src, dest, target);
   }
 
-  async open(input: string): Promise<{ opened: string }> {
+  /** `openedIn`: the browser it opened in, or `default` (the file's default application). */
+  async open(input: string): Promise<{ opened: string; openedIn: string }> {
     const path = this.pdfPath(input, "open");
-    await this.opener.file(path);
-    return { opened: path };
+    return { opened: path, openedIn: await this.opener.file(path) };
   }
 
   /** Copy files into <dir>/.history/<timestamp>/ and prune old snapshots. */

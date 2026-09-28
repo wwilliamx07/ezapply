@@ -20,10 +20,12 @@ hosts as Workday: `www.workday.com` is marketing and `*.myworkday.com` are emplo
 
 WebSocket, JSON text frames, one message per frame.
 
-1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture? }`. An empty
+1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture?, browser? }`. An empty
    `pairingToken` asks to pair; it's accepted only while a pairing window is open. `pendingCapture: true`
    says a capture made while the companion was down follows right after `welcome` (the companion holds
-   `posting_active` until it's saved).
+   `posting_active` until it's saved). `browser { name, version? }` is the browser the extension runs in
+   (`BrowserInfo`; `name` one of `BROWSER_NAMES`: chrome, edge, brave, opera, vivaldi, chromium, firefox, or
+   something newer the companion ignores); the companion opens pages and files there.
 2. Companion → `welcome { protocolVersion, companionVersion, pairingToken? }` (the code is included only
    when the extension paired without one), or `reject { error }` followed by a close.
 3. Then either side sends `request` / `response`; the extension sends `ping` every 20 s and gets `pong`.
@@ -36,7 +38,6 @@ The companion closes the socket if no `hello` arrives within 5 s.
 | 4002 | `ProtocolMismatch` | Versions differ; the error hint names the side to rebuild | Error state, as above |
 | 4003 | `Replaced` | A newer connection from the same extension took over | Stays quiet |
 | 4004 | `HandshakeTimeout` | No `hello` in time | Retries with backoff |
-| 4005 | `Idle` | The companion stopped after its idle timeout | "Disconnected: ezapply is idle; it starts again with Claude Code", retries with backoff and the alarm |
 
 Upgrades from an unexpected `Origin` (not `chrome-extension://<32 a–p>` or `moz-extension://<uuid>`, or not
 the pinned id) are refused with HTTP 403 before any message is exchanged.
@@ -111,9 +112,10 @@ What the adapter reports of an application page (`FormSchema`; Claude gets a lea
 ## Changing the protocol
 - Additive, optional fields: no version bump (both sides ignore unknown fields). Examples: code-less
   pairing added the optional `welcome.pairingToken`, and idle shutdown added `hello.pendingCapture` and
-  close code 4005 (an older extension treats it as a plain disconnect); later `TabInfo.focused` and
+  close code 4005 (4005 went again with the background daemon; the companion now closes with 1001 when its
+  chat ends, which every extension treats as a plain disconnect); later `TabInfo.focused` and
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
-  `form.removeRepeatable` and `form.back` methods.
+  `form.removeRepeatable` and `form.back` methods, and `hello.browser`.
   `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.

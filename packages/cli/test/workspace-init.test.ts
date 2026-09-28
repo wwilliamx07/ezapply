@@ -1,12 +1,12 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { agentFileStatus, type DaemonConfig } from "@ezapply/companion";
+import { type AppConfig, agentFileStatus } from "@ezapply/companion";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { initWorkspace, writeLauncher } from "../src/workspace-init.js";
 
 let root: string;
-let config: DaemonConfig;
+let config: AppConfig;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "ezapply-init-"));
@@ -35,6 +35,21 @@ describe("Claude Code config", () => {
     expect(raw).not.toContain(config.mcpToken);
   });
 
+  it("turns Claude Code's auto memory off, unless the user set it, and keeps their other settings", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, ".claude", "settings.json");
+    const read = async () => JSON.parse(await readFile(path, "utf8"));
+    expect(await read()).toMatchObject({ autoMemoryEnabled: false, enabledMcpjsonServers: ["ezapply"] });
+
+    await writeFile(path, JSON.stringify({ ...(await read()), autoMemoryEnabled: true, model: "opus" }));
+    await initWorkspace(config);
+    expect(await read()).toMatchObject({ autoMemoryEnabled: true, model: "opus" });
+
+    await writeFile(path, JSON.stringify({ model: "opus" }));
+    await initWorkspace(config);
+    expect(await read()).toMatchObject({ autoMemoryEnabled: false, model: "opus" });
+  });
+
   it("writes a launcher so `ezapply chat` runs from the workspace", async () => {
     const report = await initWorkspace(config);
     const launcher = join(config.workspace, process.platform === "win32" ? "ezapply.cmd" : "ezapply");
@@ -54,6 +69,9 @@ describe("Claude Code config", () => {
     const doc = await readFile(join(config.workspace, "EZAPPLY.md"), "utf8");
     expect(doc).not.toContain("{{EZAPPLY}}");
     expect(doc).toMatch(/node ".+main\.js" doctor/);
+    // No background daemon: nothing to start, stop or restart.
+    expect(doc).not.toMatch(/main\.js" (start|stop|restart)|`(start|stop|restart)`/);
+    expect(doc).toMatch(/first request about a posting, right after `posting_active`,\s+call `claims_list`/);
     expect(doc).toContain("## Untrusted content and prompt injection");
     expect(doc).toContain("## Application requirements");
   });
