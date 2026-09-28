@@ -31,11 +31,14 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 - Adjust the skills line to what the posting asks for **and** the evidence supports.
 - Put a `% src: <claim-id or profile path>` comment on each changed or added bullet.
 - Escape LaTeX specials in text taken from the posting.
-- Numbers: use only numbers that appear in the evidence or profile.
+- Numbers: use only numbers that appear in the evidence or profile. That includes the ones already in
+  the template's bullets you keep: the base resume can be older than the claims (a live run found "2200+"
+  where the claim said 2,168). Correct a number the claims don't back, and tell the user.
 
 ## Build and check (loop until clean)
 1. `tex_compile`. Fix errors first. Treat overfull boxes and missing glyphs as defects.
-2. It must be **exactly one page**. On overflow, tighten wording, then drop the weakest bullet. Never
+2. It must be **exactly one page**. On overflow, `overflow` says how many lines spilled over and which:
+   cut about that much in one pass, tightening wording first, then dropping the weakest bullet. Never
    shrink fonts, margins or spacing below the template's. If it's clearly under a page, consider adding
    the next strongest evidence-backed bullet.
 3. `pdf_render` page 1 and look at it: alignment, orphaned lines, uneven sections.

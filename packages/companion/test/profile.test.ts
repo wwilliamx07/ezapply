@@ -29,9 +29,40 @@ describe("answer bank", () => {
     ).toBe(true);
   });
 
+  it("adds newer seed questions to an older answer bank once, keeping answers, comments and deletions", async () => {
+    const path = join(root, "ws/profile/answers.yaml");
+    await mkdir(join(root, "ws/profile"), { recursive: true });
+    await writeFile(
+      path,
+      [
+        "# my notes",
+        "schemaVersion: 1",
+        "entries:",
+        "  - id: how_heard",
+        "    canonical: How did you hear about us?",
+        '    answer: "Job Board" # confirmed',
+        "",
+      ].join("\n"),
+    );
+    const first = await svc.ensureAnswerSeed();
+    expect(first.created).toBe(false);
+    expect(first.added).toEqual(expect.arrayContaining(["year_of_study", "expected_graduation", "full_time_interest"]));
+    expect(first.added).not.toContain("criminal_conviction"); // a version-1 question the file doesn't have
+    const text = await readFile(path, "utf8");
+    expect(text).toContain("# my notes");
+    expect(text).toContain('answer: "Job Board" # confirmed');
+    expect(text).toMatch(/seedVersion: 2/);
+    expect(await svc.checkAnswers()).toMatchObject({ valid: true, answered: 1 });
+
+    await writeFile(path, text.replace(/ {2}- id: year_of_study[\s\S]*?(?= {2}- id:)/, ""));
+    expect(await svc.ensureAnswerSeed()).toEqual({ created: false, added: [] });
+    expect(await readFile(path, "utf8")).not.toContain("year_of_study");
+    await rm(path);
+  });
+
   it("writes the seed once with a header, then reports unanswered questions", async () => {
-    expect(await svc.ensureAnswerSeed()).toBe(true);
-    expect(await svc.ensureAnswerSeed()).toBe(false);
+    expect(await svc.ensureAnswerSeed()).toEqual({ created: true, added: [] });
+    expect(await svc.ensureAnswerSeed()).toEqual({ created: false, added: [] });
     const text = await readFile(join(root, "ws/profile/answers.yaml"), "utf8");
     expect(text.startsWith("# Screening-question answer bank")).toBe(true);
     const check = await svc.checkAnswers();
@@ -79,5 +110,17 @@ describe("profile", () => {
     );
     const check = await svc.checkProfile();
     expect(check.errors?.[0]).toMatchObject({ path: "work.0.start", message: "use YYYY-MM" });
+  });
+
+  it("takes an education date with a day, such as an expected graduation date", async () => {
+    const base =
+      "schemaVersion: 1\nidentity: { firstName: J, lastName: D }\ncontact: { email: j@x.com, address: { city: A, country: B } }\neducation:\n";
+    await writeFile(
+      join(root, "ws/profile/profile.yaml"),
+      `${base}  - { school: Example U, degree: BSc, start: 2025-09, end: 2030-04-30 }\n`,
+    );
+    expect(await svc.checkProfile()).toMatchObject({ valid: true });
+    await writeFile(join(root, "ws/profile/profile.yaml"), `${base}  - { school: Example U, degree: BSc, start: 2025 }\n`);
+    expect((await svc.checkProfile()).errors?.[0]).toMatchObject({ path: "education.0.start" });
   });
 });

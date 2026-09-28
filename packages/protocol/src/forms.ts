@@ -64,11 +64,16 @@ export const FormSchema = z.object({
     .object({ index: z.number().int().optional(), total: z.number().int().optional(), title: z.string() })
     .optional(),
   sections: z.array(Section),
-  /** Buttons that add rows to repeatable sections ("Add Work Experience"). */
-  addButtons: z.array(z.object({ id: z.string(), label: z.string() })),
+  /**
+   * Buttons that add rows to repeatable sections. `section` is the heading the button sits under ("Work
+   * Experience", "Websites"), since live Workday labels them all just "Add" or "Add Another".
+   */
+  addButtons: z.array(z.object({ id: z.string(), label: z.string(), section: z.string().optional() })),
   /** Page-level actions available (start-choice / posting pages). */
   actions: z.array(PageAction),
   errors: z.array(z.string()),
+  /** Notices that aren't errors, such as "resume.pdf successfully uploaded". */
+  messages: z.array(z.string()).optional(),
   /** Label of the forward button (e.g. "Save and Continue", "Submit"). */
   nextLabel: z.string().optional(),
   /** Label of the button back to the previous step, when there is one. */
@@ -89,6 +94,10 @@ export const FillResult = z.object({
   error: z.string().optional(),
   /** Options seen when the requested one could not be matched. */
   availableOptions: z.array(z.string()).optional(),
+  /** Typeahead entries that matched no option, each with the options its search showed. */
+  unmatched: z.array(z.object({ value: z.string(), suggestions: z.array(z.string()) })).optional(),
+  /** Typeahead entries for which Workday selected an option itself that isn't an exact match. */
+  inexact: z.array(z.object({ value: z.string(), selected: z.string() })).optional(),
 });
 export type FillResult = z.infer<typeof FillResult>;
 
@@ -124,12 +133,14 @@ export const OptionInfo = z.object({
 export type OptionInfo = z.infer<typeof OptionInfo>;
 
 export const NextResult = z.object({
+  /** The step index, title or page kind changed. */
   advanced: z.boolean(),
   pageKind: PageKind,
   step: z
     .object({ index: z.number().int().optional(), total: z.number().int().optional(), title: z.string() })
     .optional(),
   errors: z.array(z.string()),
+  messages: z.array(z.string()).optional(),
   refusedReason: z.string().optional(),
 });
 export type NextResult = z.infer<typeof NextResult>;
@@ -142,6 +153,7 @@ export const BackResult = z.object({
     .object({ index: z.number().int().optional(), total: z.number().int().optional(), title: z.string() })
     .optional(),
   errors: z.array(z.string()),
+  messages: z.array(z.string()).optional(),
   refusedReason: z.string().optional(),
 });
 export type BackResult = z.infer<typeof BackResult>;

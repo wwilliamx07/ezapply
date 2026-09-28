@@ -5,6 +5,13 @@ import { z } from "zod";
  * screening question lives here. Bump schemaVersion and add a migration on breaking change.
  */
 const YearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "use YYYY-MM");
+/**
+ * A month, or a day when it's known: some forms want a full date (an expected graduation date as MM/DD/YYYY),
+ * and a month alone made the agent guess the day.
+ */
+const MonthOrDay = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/, 'use "YYYY-MM" or "YYYY-MM-DD" (quoted)');
 const Url = z.string().url();
 
 export const Profile = z.object({
@@ -79,8 +86,8 @@ export const Profile = z.object({
         school: z.string().min(1),
         degree: z.string().min(1).describe("e.g. Bachelor of Science"),
         field: z.string().optional(),
-        start: YearMonth.optional(),
-        end: YearMonth.optional().describe("Graduation or expected graduation"),
+        start: MonthOrDay.optional(),
+        end: MonthOrDay.optional().describe("Graduation or expected graduation"),
         gpa: z.string().optional(),
         honors: z.array(z.string()).default([]),
         coursework: z.array(z.string()).default([]),
@@ -157,7 +164,12 @@ export const AnswerEntry = z.object({
 export type AnswerEntry = z.infer<typeof AnswerEntry>;
 
 export const AnswersFile = z
-  .object({ schemaVersion: z.literal(1), entries: z.array(AnswerEntry) })
+  .object({
+    schemaVersion: z.literal(1),
+    /** Which version of ezapply's seed questions the file has had (1 when absent). See seed-answers.ts. */
+    seedVersion: z.number().int().optional(),
+    entries: z.array(AnswerEntry),
+  })
   .superRefine((f, ctx) => {
     const seen = new Set<string>();
     f.entries.forEach((e, i) => {

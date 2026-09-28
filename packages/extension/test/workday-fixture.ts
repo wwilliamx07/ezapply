@@ -30,10 +30,44 @@ export const LISTBOX_LINGER_MS = 150;
  * It is not Workday: live verification against real tenants is still required (plan M7 recon). The
  * companion's e2e tests drive it through the real adapter too, so there is one model of a Workday step.
  */
-export function buildWorkdayStep(
-  doc: Document,
-  opts: { coverUploadsWork?: boolean; dateNeedsSecondPass?: boolean } = {},
-): { submitClicks: () => number } {
+export interface StepOptions {
+  coverUploadsWork?: boolean;
+  dateNeedsSecondPass?: boolean;
+  /** Start Date keeps its "required" error whatever is entered. */
+  dateErrorSticks?: boolean;
+  /**
+   * Start Date as Workday's split date widget: each part a spinbutton that takes digits in keydown and shows
+   * its value in a display element; "stuck" ignores synthetic keys, so only the input's value changes.
+   */
+  dateWidget?: "keys" | "stuck";
+  /**
+   * Dropdowns as seen live: no aria-expanded, Escape doesn't close a listbox, and a press elsewhere while one
+   * is open only closes it (the press itself is swallowed).
+   */
+  liveDropdowns?: boolean;
+  /** Every step in the progress bar is titled "Application", as on some live tenants. */
+  sameStepTitles?: boolean;
+}
+
+/** Search delay of the Skills prompt, which shows "No Items." until its results arrive. */
+export const SKILLS_SEARCH_MS = 400;
+
+const SKILLS = [
+  "Python (Programming Language)",
+  "Python Development",
+  "Structured Query Language (SQL)",
+  "U-SQL",
+  "Nginx Web Server",
+  "NGINX Plus",
+  "JavaScript",
+  "TypeScript",
+  "C++ Programming Language",
+  "C (Programming Language)",
+  "React.js",
+  "React Native",
+];
+
+export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submitClicks: () => number } {
   doc.body.innerHTML = `
   <div data-automation-id="applyFlowPage">
     <ol data-automation-id="progressBar">
@@ -105,6 +139,7 @@ export function buildWorkdayStep(
       </div>
       <button data-automation-id="Add" aria-label="Add Work Experience">Add Another</button>
     </div>
+    <div><div><h3>Websites</h3></div><button data-automation-id="add-button">Add</button></div>
     <div data-automation-id="pageFooter">
       <button data-automation-id="bottom-navigation-previous-button" hidden>Back</button>
       <button data-automation-id="bottom-navigation-next-button">Save and Continue</button>
@@ -114,6 +149,30 @@ export function buildWorkdayStep(
   // Dropdowns: clicking the button renders a listbox portal at the end of <body>. A closed listbox stays on
   // screen for LISTBOX_LINGER_MS while it animates away, as on live Workday. Country's button names its
   // listbox with aria-controls; Degree Level's doesn't (live buttons don't).
+  const live = opts.liveDropdowns === true;
+  let current: { ul: HTMLElement; close: () => void } | null = null;
+  let swallowClick = false;
+  if (live) {
+    doc.addEventListener(
+      "mousedown",
+      (e) => {
+        if (current && !current.ul.contains(e.target as Node)) {
+          current.close();
+          swallowClick = true;
+        }
+      },
+      true,
+    );
+    doc.addEventListener(
+      "click",
+      (e) => {
+        if (!swallowClick) return;
+        swallowClick = false;
+        e.stopImmediatePropagation();
+      },
+      true,
+    );
+  }
   const dropdown = (automationId: string, options: string[], listId?: string) => {
     const button = doc.querySelector<HTMLButtonElement>(
       `[data-automation-id="${automationId}"] button[aria-haspopup="listbox"]`,
@@ -122,7 +181,8 @@ export function buildWorkdayStep(
     const close = () => {
       const ul = open;
       open = null;
-      button.setAttribute("aria-expanded", "false");
+      if (current?.ul === ul) current = null;
+      if (!live) button.setAttribute("aria-expanded", "false");
       setTimeout(() => ul?.remove(), LISTBOX_LINGER_MS);
     };
     button.addEventListener("click", () => {
@@ -141,21 +201,23 @@ export function buildWorkdayStep(
         ul.append(li);
       }
       ul.addEventListener("keydown", (e) => {
-        if ((e as KeyboardEvent).key === "Escape" && open === ul) close();
+        if (!live && (e as KeyboardEvent).key === "Escape" && open === ul) close();
       });
       doc.body.append(ul);
       open = ul;
-      button.setAttribute("aria-expanded", "true");
+      current = { ul, close };
+      if (!live) button.setAttribute("aria-expanded", "true");
     });
     button.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).key === "Escape" && open) close();
+      if (!live && (e as KeyboardEvent).key === "Escape" && open) close();
     });
   };
   dropdown("formField-countryDropdown", ["Canada", "United States of America", "United Kingdom"], "lb-country");
   dropdown("formField-degreeLevel", ["Undergraduate", "Masters", "Ph.D"]);
 
   // Split date: with opts.dateNeedsSecondPass, Start Date shows a "required" error (as after a failed Next)
-  // that only clears on the second entry of its month, as seen live.
+  // that only clears on the second entry of its month, as seen live. An entry is an input event that leaves
+  // the month with two digits (typing "1" then "2" is one entry).
   if (opts.dateNeedsSecondPass) {
     const date = doc.querySelector('[data-automation-id="formField-startDate"]') as HTMLElement;
     const err = doc.createElement("div");
@@ -163,10 +225,79 @@ export function buildWorkdayStep(
     err.textContent = "Error: The field Available Start Date is required and must have a value.";
     date.append(err);
     let entries = 0;
-    date.querySelector('input[aria-label="Month"]')?.addEventListener("change", () => {
-      if (++entries === 2) err.remove();
+    const month = date.querySelector('input[aria-label="Month"]') as HTMLInputElement;
+    month.addEventListener("input", () => {
+      if (month.value.length === 2 && ++entries === 2) err.remove();
     });
   }
+
+  if (opts.dateErrorSticks) {
+    const err = doc.createElement("div");
+    err.setAttribute("data-automation-id", "errorMessage");
+    err.textContent = "Error: The field Available Start Date is required and must have a value.";
+    doc.querySelector('[data-automation-id="formField-startDate"]')?.append(err);
+  }
+
+  if (opts.dateWidget) {
+    const date = doc.querySelector('[data-automation-id="formField-startDate"]') as HTMLElement;
+    date.innerHTML = `<label>Available Start Date</label>
+      <div data-automation-id="dateSectionMonth"><div data-automation-id="dateSectionMonth-display">MM</div><input data-automation-id="dateSectionMonth-input" aria-label="Month" role="spinbutton" type="text"></div>
+      <div data-automation-id="dateSectionYear"><div data-automation-id="dateSectionYear-display">YYYY</div><input data-automation-id="dateSectionYear-input" aria-label="Year" role="spinbutton" type="text"></div>`;
+    for (const input of date.querySelectorAll<HTMLInputElement>("input")) {
+      const display = input.previousElementSibling as HTMLElement;
+      const max = input.getAttribute("aria-label") === "Year" ? 4 : 2;
+      let typed = "";
+      input.addEventListener("focus", () => {
+        typed = "";
+      });
+      input.addEventListener("keydown", (e) => {
+        if (!/^\d$/.test(e.key) || opts.dateWidget === "stuck") return;
+        e.preventDefault();
+        typed = (typed + e.key).slice(-max);
+        display.textContent = typed;
+        input.value = typed;
+      });
+    }
+  }
+
+  // Skills prompt: Enter shows "No Items." at once and the results SKILLS_SEARCH_MS later, each option as
+  // promptLeafNode around promptOption (as live), so both option hooks match it.
+  const skillsInput = doc.querySelector<HTMLInputElement>("#ms-skills input") as HTMLInputElement;
+  const skillsSelected = doc.querySelector(
+    '[data-automation-id="formField-skills"] [data-automation-id="selectedItemList"]',
+  ) as HTMLElement;
+  const skillsPopup = (labels: string[]) => {
+    doc.querySelector("#skills-popup")?.remove();
+    const popup = doc.createElement("div");
+    popup.id = "skills-popup";
+    popup.setAttribute("data-automation-widget", "wd-popup");
+    const inner = doc.createElement("div");
+    inner.setAttribute("data-associated-widget", "ms-skills");
+    popup.append(inner);
+    for (const label of labels.length ? labels : ["No Items."]) {
+      const leaf = doc.createElement("div");
+      leaf.setAttribute("data-automation-id", "promptLeafNode");
+      leaf.innerHTML = `<div data-automation-id="promptOption">${label}</div>`;
+      if (labels.length) {
+        leaf.addEventListener("click", () => {
+          const li = doc.createElement("li");
+          li.setAttribute("data-automation-id", "selectedItem");
+          li.innerHTML = `<div data-automation-id="promptSelectionLabel">${label}</div>`;
+          skillsSelected.append(li);
+          popup.remove();
+        });
+      }
+      inner.append(leaf);
+    }
+    doc.body.append(popup);
+  };
+  skillsInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") doc.querySelector("#skills-popup")?.remove();
+    if (e.key !== "Enter") return;
+    const q = skillsInput.value.toLowerCase();
+    skillsPopup([]);
+    setTimeout(() => skillsPopup(SKILLS.filter((s) => s.toLowerCase().includes(q))), SKILLS_SEARCH_MS);
+  });
 
   // Prompt: Enter in the input opens a popup with matching options (and a nested category).
   const sourceInput = doc.querySelector<HTMLInputElement>("#ms-source input") as HTMLInputElement;
@@ -223,7 +354,8 @@ export function buildWorkdayStep(
     const name = fileInput.files?.[0]?.name;
     if (name) {
       const shown = doc.querySelector('[data-automation-id="uploaded"]') as HTMLElement;
-      shown.innerHTML = `<div data-automation-id="file-upload-item-name">${name}</div>`;
+      // Live Workday announces the upload in an alert region, like an error.
+      shown.innerHTML = `<div data-automation-id="file-upload-item-name">${name}</div><div role="alert">${name} successfully uploaded</div>`;
     }
   });
 
@@ -303,6 +435,10 @@ export function buildWorkdayStep(
   const next = doc.querySelector('[data-automation-id="bottom-navigation-next-button"]') as HTMLButtonElement;
   const back = doc.querySelector('[data-automation-id="bottom-navigation-previous-button"]') as HTMLButtonElement;
   const bar = doc.querySelector('[data-automation-id="progressBar"]') as HTMLElement;
+  const title = (t: string) => (opts.sameStepTitles ? "Application" : t);
+  if (opts.sameStepTitles) {
+    bar.innerHTML = `<li data-automation-id="progressBarActiveStep"><label>current step 1 of 3</label>Application</li><li>Application</li><li>Application</li>`;
+  }
   const firstStepBar = bar.innerHTML;
   back.addEventListener("click", () => {
     bar.innerHTML = firstStepBar;
@@ -323,7 +459,7 @@ export function buildWorkdayStep(
       doc.querySelector('[data-automation-id="formField-legalName--firstName"]')?.append(err);
       return;
     }
-    bar.innerHTML = `<li>My Information</li><li>Application Questions</li><li data-automation-id="progressBarActiveStep">Review</li>`;
+    bar.innerHTML = `<li>${title("My Information")}</li><li>${title("Application Questions")}</li><li data-automation-id="progressBarActiveStep">${title("Review")}</li>`;
     for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = true;
     next.textContent = "Submit";
     back.hidden = false;

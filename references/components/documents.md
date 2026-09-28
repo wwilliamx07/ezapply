@@ -70,11 +70,14 @@ Anything else fails with `path_not_allowed`.
 4. On failure: `ok: false`, the diagnostics, and a hint: fix the first error; or the timeout; or the tail of
    the engine output when the log has nothing parsable.
 5. On success: copy the PDF to `<dir>/<name>.pdf`, count pages, check the page limit, snapshot, and return
-   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, diagnostics, logPath, durationMs, snapshot }`.
+   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, diagnostics, logPath, durationMs, snapshot }`.
    Failures also carry `engine` and `engineFrom`.
 
 - **Page limit:** files whose name contains `resume` or `cv` are checked against `resume.pageLimit`
-  (default 1); `maxPages` overrides it for any file.
+  (default 1); `maxPages` overrides it for any file. Over the limit, `overflow { lines, text }` holds the text of
+  the pages past it (`pdfText`, first 400 characters) and its non-empty line count, and the hint says how
+  many lines to cut. A live resume took five compiles to fit when the result said only "2 pages": three lines
+  of skills had spilled over.
 - **History:** each successful build copies the `.tex` and `.pdf` to `<dir>/.history/<timestamp>/`. The
   newest 30 snapshots are kept. "Go back to the previous version" restores from there.
 

@@ -112,7 +112,8 @@ tenant (or when either has no tenant):
 - `{ event: "upload", fieldId, file, ok, error? }`
 - `{ event: "remove", fieldId, removed, remaining, reason?, ok, error? }`
 - `{ event: "remove-row", sectionId, removed?, reason?, ok, error? }` (`removed`: the row's title)
-- `{ event: "next", advanced, pageKind, step? }`
+- `{ event: "next", advanced, pageKind, step?, stepIndex? }` (`step`: the title, `stepIndex` its place in the
+  progress bar; live titles are often all "Application")
 - `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 
@@ -126,7 +127,9 @@ tenant (or when either has no tenant):
 - `workAuthorization { authorizedIn[], requiresSponsorshipNow?, requiresSponsorshipFuture?, citizenship[], securityClearance? }`
 - `jobPreferences { relocate?, workMode? (remote/hybrid/onsite/any), desiredLocations[], earliestStart?, willingToTravelPercent? }`
 - `work[] { company, title, location?, employmentType?, start (YYYY-MM), end (YYYY-MM or null = current), highlights[] }`
-- `education[] { school, degree, field?, start?, end?, gpa?, honors[], coursework[] }`
+- `education[] { school, degree, field?, start?, end?, gpa?, honors[], coursework[] }`; `start` and `end` are
+  `YYYY-MM` or `YYYY-MM-DD`, quoted (a form may want the expected graduation day as MM/DD/YYYY; with the month
+  only, the agent had to pick a day)
 - `skills[] { category, items[] }`, `languages[] { language, proficiency }`,
   `certifications[] { name, issuer?, date?, url? }`
 - `eeo { gender?, race?, hispanicOrLatino?, veteranStatus?, disability?, sexualOrientation? }`
@@ -134,6 +137,7 @@ tenant (or when either has no tenant):
 ### `profile/answers.yaml`
 ```yaml
 schemaVersion: 1
+seedVersion: 2                          # the seed questions this file has had; see below
 entries:
   - id: sponsorship_future              # lowercase, digits, underscores; unique
     canonical: "Will you now or in the future require visa sponsorship?"

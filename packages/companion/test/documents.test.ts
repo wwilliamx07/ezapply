@@ -316,7 +316,9 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     await writeFile(join(root, "postings/p2/resume.tex"), twoPages);
     const long = await docs.compile("postings/p2/resume.tex");
     expect(long).toMatchObject({ ok: true, pages: 2, pageLimitExceeded: true });
-    expect(long.hint).toMatch(/limit is 1/);
+    expect(long.hint).toMatch(/limit is 1\. \d+ lines run past it/);
+    expect(long.overflow?.text).toContain("Two");
+    expect(long.overflow?.lines).toBeGreaterThanOrEqual(1);
   }, 180_000);
 
   it("reports errors with line numbers", async () => {

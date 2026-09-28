@@ -41,7 +41,10 @@ export const SEL = {
   chipLabel: any("promptSelectionLabel", "selectedItemLabel"),
   /** The pill's remove icon ("charm"); some tenants only label it. Unverified on a live tenant. */
   chipRemove: `${any("DELETE_charm", "deleteButton", "removeButton")},[role="button"][aria-label*="delete" i],[role="button"][aria-label*="remove" i],button[aria-label*="delete" i],button[aria-label*="remove" i]`,
+  /** Live Workday nests one hook in the other, so both match one option; fill.ts keeps the innermost. */
   promptOption: any("promptOption", "promptLeafNode"),
+  /** The text a split date part shows (the widget's own state), next to its input. Unverified on a live tenant. */
+  datePartDisplay: '[data-automation-id$="-display"]',
   popup: '[data-automation-widget="wd-popup"]',
   fileDropZone: any("file-upload-drop-zone"),
   fileInput: `${A("file-upload-input-ref")},input[type="file"]`,

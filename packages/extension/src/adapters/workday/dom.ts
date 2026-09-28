@@ -152,14 +152,66 @@ export async function waitFor<T>(fn: () => T | null | undefined | false, maxMs =
   }
 }
 
-/** Best match of `wanted` among `options`: exact, case-insensitive, prefix, then unique substring. */
+/** A decline-to-answer option ("I do not wish to self-identify", "I prefer not to identify", "Decline"). */
+const DECLINE =
+  /prefer not|do not wish|don't wish|not wish to|decline|choose not|rather not|not to (say|disclose|answer)/i;
+
+/**
+ * Best match of `wanted` among `options`, case-insensitive: exact; the label without a trailing parenthetical,
+ * or the parenthetical itself ("Python" → "Python (Programming Language)", "SQL" → "Structured Query Language
+ * (SQL)"); a prefix either way; a substring. Each rule after the exact one must single out one label: Workday
+ * lists some options twice, so labels are counted once. "decline" (the profile's EEO value) or any
+ * decline-worded value matches the form's one decline-to-answer option, whatever its wording.
+ */
 export function matchOption(wanted: string, options: string[]): number {
   const w = norm(wanted).toLowerCase();
   const n = options.map((o) => norm(o).toLowerCase());
-  let i = n.indexOf(w);
-  if (i >= 0) return i;
-  i = n.findIndex((o) => o.startsWith(w) || w.startsWith(o));
-  if (i >= 0 && n.filter((o) => o.startsWith(w) || w.startsWith(o)).length === 1) return i;
-  const contains = n.map((o, idx) => (o.includes(w) ? idx : -1)).filter((x) => x >= 0);
-  return contains.length === 1 ? (contains[0] as number) : -1;
+  const exact = n.indexOf(w);
+  if (exact >= 0 || !w) return exact;
+  const unique = (pred: (o: string) => boolean): number => {
+    const hits = n.map((o, i) => (o && pred(o) ? i : -1)).filter((i) => i >= 0);
+    return new Set(hits.map((i) => n[i])).size === 1 ? (hits[0] as number) : -1;
+  };
+  const bare = (o: string) => o.replace(/\s*\([^)]*\)$/, "");
+  const paren = (o: string) => /\(([^)]*)\)$/.exec(o)?.[1];
+  const rules: ((o: string) => boolean)[] = [
+    (o) => bare(o) === w || paren(o) === w,
+    (o) => o.startsWith(w) || w.startsWith(o),
+    (o) => o.includes(w),
+  ];
+  if (w === "decline" || DECLINE.test(w)) rules.unshift((o) => DECLINE.test(o));
+  for (const rule of rules) {
+    const i = unique(rule);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Type one character as a browser would: keydown and keypress, then, unless the page handled the key itself
+ * (widgets such as Workday's date parts take digits in keydown and prevent the default), beforeinput and
+ * input with the character inserted, then keyup. `replace` starts over instead of appending, as typing
+ * into a selected value does.
+ */
+export function typeChar(el: HTMLInputElement, ch: string, replace: boolean): void {
+  const w = win(el);
+  const code = /\d/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`;
+  const keyCode = ch.toUpperCase().charCodeAt(0);
+  const opts = { bubbles: true, cancelable: true, key: ch, code, keyCode, which: keyCode, charCode: 0 };
+  const down = new w.KeyboardEvent("keydown", opts);
+  const handled = !el.dispatchEvent(down);
+  const press = new w.KeyboardEvent("keypress", { ...opts, charCode: ch.charCodeAt(0) });
+  const handledPress = !el.dispatchEvent(press);
+  if (!handled && !handledPress) {
+    const Input = (w as unknown as { InputEvent?: typeof InputEvent }).InputEvent ?? w.Event;
+    const init = { bubbles: true, cancelable: true, inputType: "insertText", data: ch };
+    if (el.dispatchEvent(new Input("beforeinput", init))) {
+      const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value")?.set;
+      const next = replace ? ch : el.value + ch;
+      if (setter) setter.call(el, next);
+      else el.value = next;
+      el.dispatchEvent(new Input("input", { ...init, cancelable: false }));
+    }
+  }
+  el.dispatchEvent(new w.KeyboardEvent("keyup", opts));
 }

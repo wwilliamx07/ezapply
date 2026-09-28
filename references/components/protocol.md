@@ -73,7 +73,7 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 | `form.removeRepeatable` | `{ tabId?, sectionId }` → `RemoveRowResult { sectionId, ok, removed?, error? }`. Added without a version bump, like `form.remove` |
 | `form.addRepeatable` | `{ tabId?, addButtonId }` → `{ ok, error? }` |
 | `form.next` | `{ tabId? }` → `NextResult` |
-| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
+| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], messages?, refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
 
@@ -82,7 +82,9 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 What the adapter reports of an application page (`FormSchema`; Claude gets a leaner copy, see
 [mcp-tools](../mcp-tools.md#forms)): `adapter`, `tabId`, `url`, `tenant?`, `pageKind`,
 `step? { index?, total?, title }`, `sections[] { id, title, fields[], removable? }`,
-`addButtons[] { id, label }`, `actions[]` (page actions available), `errors[]`, `nextLabel?`, `backLabel?`.
+`addButtons[] { id, label, section? }` (`section`: the heading the button sits under), `actions[]` (page
+actions available), `errors[]`, `messages?` (notices such as "resume.pdf successfully uploaded", which live
+Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
 
 - `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown`.
 - `PageAction`: `apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`.
@@ -92,8 +94,12 @@ What the adapter reports of an application page (`FormSchema`; Claude gets a lea
 - `FieldKind`: `text`, `textarea`, `number`, `password`, `date`, `dropdown`, `typeahead`, `radio`,
   `checkbox`, `checkbox-group`, `file`.
 - `FillValue`: a string, a string array, or a boolean. `FillResult`: `{ fieldId, ok, readBack?, error?,
-  availableOptions? }`. `OptionInfo`: `{ label, hasChildren? }` (children = a nested menu).
-- `NextResult`: `{ advanced, pageKind, step?, errors[], refusedReason? }`.
+  availableOptions?, unmatched?, inexact? }`: `unmatched[] { value, suggestions[] }` lists typeahead entries
+  that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which
+  Workday selected an option itself. `OptionInfo`: `{ label, hasChildren? }` (children = a nested menu).
+- `NextResult`: `{ advanced, pageKind, step?, errors[], messages?, refusedReason? }`; `advanced` = the step
+  index, title or page kind changed. `BackResult`: `{ moved, pageKind, step?, errors[], messages?,
+  refusedReason? }`.
 
 ## Postings
 
@@ -115,7 +121,8 @@ What the adapter reports of an application page (`FormSchema`; Claude gets a lea
   close code 4005 (4005 went again with the background daemon; the companion now closes with 1001 when its
   chat ends, which every extension treats as a plain disconnect); later `TabInfo.focused` and
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
-  `form.removeRepeatable` and `form.back` methods, and `hello.browser`.
+  `form.removeRepeatable` and `form.back` methods, `hello.browser`, and `addButtons[].section`,
+  `FormSchema.messages`, `NextResult`/`BackResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.

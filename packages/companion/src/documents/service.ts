@@ -52,6 +52,8 @@ export interface CompileResult {
   pages?: number;
   pageLimit?: number;
   pageLimitExceeded?: boolean;
+  /** Past the page limit: how many text lines run over, and (the start of) that text. */
+  overflow?: { lines: number; text: string };
   diagnostics: TexDiagnostic[];
   logPath: string;
   durationMs: number;
@@ -127,6 +129,7 @@ export class DocumentsService {
     const pages = (await pdfInfo(pdf)).pages;
     const pageLimit = opts.maxPages ?? (/resume|cv/i.test(name) ? config.resume.pageLimit : undefined);
     const pageLimitExceeded = pageLimit !== undefined && pages > pageLimit;
+    const overflow = pageLimitExceeded ? await overflowOf(pdf, pageLimit, pages) : undefined;
     const snapshot = await this.snapshot(dir, [texPath, pdf]);
 
     return {
@@ -136,13 +139,16 @@ export class DocumentsService {
       pdf,
       pages,
       ...(pageLimit !== undefined ? { pageLimit, pageLimitExceeded } : {}),
+      ...(overflow ? { overflow } : {}),
       diagnostics,
       logPath,
       durationMs,
       snapshot,
       ...(pageLimitExceeded
         ? {
-            hint: `The document is ${pages} pages; the limit is ${pageLimit}. Tighten wording or drop the weakest content. Do not shrink fonts or margins.`,
+            hint:
+              `The document is ${pages} pages; the limit is ${pageLimit}. ${overflow ? `${overflow.lines} lines run past it (overflow.text). ` : ""}` +
+              "Cut about that much: tighten wording or drop the weakest content. Do not shrink fonts or margins.",
           }
         : {}),
     };
@@ -285,6 +291,18 @@ function missingProgram(program: TexProgram, texPath: string): EzError {
     `${program.engine} is not installed (named by the % !TEX program comment on line ${program.line} of ${basename(texPath)}).`,
     `${install} Don't change or remove the comment to build with another engine: fonts and the page count can change.`,
   );
+}
+
+/**
+ * The text on the pages past the limit, so the agent can size its cuts in one go: a live resume took five
+ * compiles, partly because the result said only "2 pages" and not that three lines had spilled over.
+ */
+async function overflowOf(pdf: string, limit: number, pages: number): Promise<CompileResult["overflow"]> {
+  const extra = await pdfText(pdf, `${limit + 1}-${pages}`).catch(() => null);
+  if (!extra) return undefined;
+  const text = extra.map((p) => p.text).join("\n");
+  const lines = text.split("\n").filter((l) => l.trim()).length;
+  return { lines, text: text.length > 400 ? `${text.slice(0, 400)}…` : text };
 }
 
 function noEngine(configured: EngineId | "auto"): EzError {

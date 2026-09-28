@@ -93,6 +93,39 @@ tokens) when the others stayed under 80k: a large component read whole, or re-re
 
 ---
 
+## Part 8: The second live run (Monarch, 2026-09-28): done
+
+It reached the review page. About 25 of ~70 tool calls went on retries, probes and recovery, and the user
+stepped in four times beyond the designed approvals (typing five dates, choosing to write a resume
+mid-form, asking for the cover letter, an unanswered question). Sources: the session transcript, the agent's
+own report in the workspace's `reports/`, and `form-log.jsonl`. All built, tested (each adapter test fails on
+the old code) and described in `references/`; none re-run live yet (`references/status.md`).
+
+| Finding | What was done |
+|---|---|
+| Multi-part dates never taken; `ok: true` anyway | Digits typed as key events; parts read from the widget's display, `aria-valuenow` or value; `MM/YYYY` accepted; a field still showing an error is `ok: false`; an untaken date fails with the value for the user |
+| "Could not open the dropdown" after a miss | A listbox left open is dismissed (Escape on it and the focus, then a click-away); opening presses again after closing strays |
+| Skills list stopped at the first miss; options listed twice | Entries matched one by one (`unmatched` with suggestions, `inexact`); innermost option hook only; `matchOption` counts labels once and matches bare names and acronyms in parentheses |
+| `search_options` one query behind | Waits for options that differ from those before the query, or a settled "No Items." |
+| `go_next` always `advanced: false`, 12 s waits | Step index, title or page kind; errors already shown end the wait after 2.5 s |
+| Upload notices as errors | `messages`, not `errors`, in `get_form`, `go_next`, `go_back` and field errors |
+| Add buttons all "Add" | Named by the section heading (`add.work-experience`, `section`) |
+| `resume-cv.` field id | The label when the automation id is bare |
+| EEO decline wording guessed | `decline` resolves to the form's decline option |
+| Documents written mid-form | `ezapply-apply` offers the resume and cover letter before the form, reviewed together |
+| Year of study guessed; option text stated unseen | `ezapply-apply`: ask for facts the profile lacks; describe only options seen |
+| Student questions not in the bank | Seed version 2: six student and co-op questions, added once to existing banks |
+| Graduation day not storable; no education start | Education dates take `YYYY-MM-DD`; onboarding asks for `start` |
+| Five compiles to fit one page | `tex_compile` `overflow { lines, text }` |
+| Template number the claims don't back | `ezapply-resume`: check numbers kept from the template too |
+| `python`, `sed` escaping, duplicate text | `EZAPPLY.md`: edit `.tex` with the Edit tool, whole bullets |
+
+The report also suggested mapping "Yes" to any option starting with "Yes": not done, since the
+work-eligibility question had two ("citizen or permanent resident", "temporary work permit") and the choice
+is the user's.
+
+---
+
 ## Part 5: No daemon: done (2026-09-28)
 
 ezapply runs only through `ezapply chat`, so the background daemon went. The companion runs inside the

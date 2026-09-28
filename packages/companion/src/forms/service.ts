@@ -224,7 +224,13 @@ export class FormsService {
   async next(tabId?: number) {
     return this.onTab(tabId, async (t) => {
       const r = await this.bridge.call("form.next", { tabId: t.tab.tabId }, 60_000);
-      await this.logEvent(t, { event: "next", advanced: r.advanced, pageKind: r.pageKind, step: r.step?.title });
+      await this.logEvent(t, {
+        event: "next",
+        advanced: r.advanced,
+        pageKind: r.pageKind,
+        step: r.step?.title,
+        ...(r.step?.index ? { stepIndex: r.step.index } : {}),
+      });
       if (r.pageKind === "review") await this.setStatus(t, "filled");
       return withMismatch(r, t);
     });
@@ -348,10 +354,11 @@ function pickTab(tabs: TabInfo[]): TabInfo | undefined {
 
 /**
  * A clean success that reads back exactly what was asked for says nothing new, so it's just `{ fieldId, ok }`.
- * A read-back that differs (a matched option's full text, a changed case) or any error is kept whole.
+ * A read-back that differs (a matched option's full text, a changed case), any error, and typeahead entries
+ * that matched nothing or only roughly are kept whole.
  */
 export function leanFillResult(r: FillResult, value: FillValue | undefined): FillResult {
-  if (!r.ok || r.error || r.availableOptions || value === undefined) return r;
+  if (!r.ok || r.error || r.availableOptions || r.unmatched || r.inexact || value === undefined) return r;
   const back = r.readBack;
   const same = Array.isArray(value)
     ? Array.isArray(back) && back.length === value.length && value.every((v, i) => back[i] === v)

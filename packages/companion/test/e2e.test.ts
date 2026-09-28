@@ -697,7 +697,7 @@ describe("form tools over MCP", () => {
     });
     expect(outside.data.error.code).toBe("path_not_allowed");
 
-    expect((await callJson(client, "add_repeatable", { addButtonId: "add.add-work-experience" })).data).toEqual({
+    expect((await callJson(client, "add_repeatable", { addButtonId: "add.work-experience" })).data).toEqual({
       ok: true,
     });
     const row = await callJson(client, "remove_repeatable", {

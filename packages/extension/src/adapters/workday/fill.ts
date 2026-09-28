@@ -12,10 +12,21 @@ import {
   settle,
   sleep,
   text,
+  typeChar,
   waitFor,
   win,
 } from "./dom.js";
-import { attachedFiles, type FieldRef, fieldError, fieldKind, isSubmitControl, optionLabel } from "./extract.js";
+import {
+  attachedFiles,
+  datePartInput,
+  datePartValue,
+  dateValue,
+  type FieldRef,
+  fieldError,
+  fieldKind,
+  isSubmitControl,
+  optionLabel,
+} from "./extract.js";
 import { SEL, within } from "./selectors.js";
 
 type Result = Omit<FillResult, "fieldId">;
@@ -122,10 +133,33 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
   if (button.getAttribute("aria-expanded") !== "true") press(button);
   let opened = await waitFor(listFor, 2000);
   if (!opened) {
+    // Seen live: with another listbox still open, the press only closed that one (a click-away) and the next
+    // call opened fine. So close whatever is open and press again.
+    for (const l of visibleListboxes(doc)) await dismiss(l);
+    press(button);
+    opened = await waitFor(listFor, 1500);
+  }
+  if (!opened) {
     callReact(button, "onClick", {});
-    opened = await waitFor(listFor, 2000);
+    opened = await waitFor(listFor, 1500);
   }
   return opened;
+}
+
+/**
+ * Close a listbox that is still open, and wait until it has gone: Escape on the listbox and on whatever has
+ * focus, then a click elsewhere on the page. Live Workday doesn't always close on Escape at the button.
+ */
+async function dismiss(list: HTMLElement): Promise<void> {
+  const doc = list.ownerDocument;
+  const gone = () => !list.isConnected || !isVisible(list);
+  if (gone()) return;
+  key(list, "Escape");
+  const focused = doc.activeElement;
+  if (focused && focused !== doc.body) key(focused, "Escape");
+  if (await waitFor(gone, 600)) return;
+  press(doc.body);
+  await waitFor(gone, 800);
 }
 
 /** Close the listbox and wait until it has gone, so the next dropdown can't mistake it for its own. */
@@ -135,7 +169,10 @@ async function closeListbox({ button, list }: OpenListbox): Promise<void> {
     await sleep(50);
     if (button.getAttribute("aria-expanded") === "true") press(button);
   }
-  await waitFor(() => !list.isConnected || !isVisible(list), 1000);
+  // A listbox animates away for a moment after closing; one that stays longer was never closed (seen live
+  // after an option matched nothing, and the next dropdown then failed to open).
+  if (await waitFor(() => !list.isConnected || !isVisible(list), 600)) return;
+  await dismiss(list);
 }
 
 export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
@@ -153,7 +190,9 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
   const idx = matchOption(value, labels);
   if (idx < 0) {
     await closeListbox(opened);
-    return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
+    return fail(`No option matches "${value}".`, {
+      availableOptions: [...new Set(labels.filter(Boolean))].slice(0, 80),
+    });
   }
   const option = opened.options[idx] as HTMLElement;
   const wanted = labels[idx] as string;
@@ -181,10 +220,26 @@ function promptPopup(c: HTMLElement): HTMLElement | null {
   return [...doc.querySelectorAll<HTMLElement>(SEL.popup)].find(isVisible) ?? null;
 }
 
+/** Workday's placeholder row when a search finds nothing (or hasn't finished). Not an option. */
+const NO_ITEMS = /^no items\.?$/i;
+
+/**
+ * The options on screen, once each. Both option hooks match one live option (one element inside the other),
+ * which listed every option twice and made unique matches look ambiguous; the innermost is kept, since a
+ * press on it reaches the outer one's handlers too.
+ */
 function promptOptions(c: HTMLElement): HTMLElement[] {
   const popup = promptPopup(c);
   const scope: ParentNode = popup ?? c.ownerDocument;
-  return [...scope.querySelectorAll<HTMLElement>(SEL.promptOption)].filter(isVisible);
+  const all = [...scope.querySelectorAll<HTMLElement>(SEL.promptOption)].filter(isVisible);
+  return all.filter((el) => !all.some((o) => o !== el && el.contains(o)) && !NO_ITEMS.test(text(el)));
+}
+
+const promptSignature = (c: HTMLElement) => promptOptions(c).map(text).join("\u0001");
+
+function noItemsShown(c: HTMLElement): boolean {
+  const scope: ParentNode = promptPopup(c) ?? c.ownerDocument;
+  return [...scope.querySelectorAll<HTMLElement>(SEL.promptOption)].some((o) => isVisible(o) && NO_ITEMS.test(text(o)));
 }
 
 function selectedItems(c: HTMLElement): string[] {
@@ -200,24 +255,50 @@ function optionInfo(el: HTMLElement): OptionInfo {
   return { label: text(el), ...(hasChildren ? { hasChildren: true } : {}) };
 }
 
+/**
+ * Type a query and wait for its results. Results count only once the options on screen differ from those
+ * before the query: live Workday renders search results a moment after the page goes quiet, and reading on
+ * quiet returned the previous query's results (or none), one call behind.
+ */
 async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElement | null> {
   const input = c.querySelector<HTMLInputElement>(`${within(SEL.multiSelect, "input")}, input`);
   if (!input) return null;
   input.focus();
   press(input);
+  await settle(c.ownerDocument, 150, 1000);
+  const before = promptSignature(c);
+  // Done when new options show, or when "No Items." has stayed for a while (a search that found nothing:
+  // it also shows briefly while results load).
+  let emptySince = 0;
+  const done = () => {
+    if (promptOptions(c).length > 0 && promptSignature(c) !== before) return true;
+    if (!noItemsShown(c)) {
+      emptySince = 0;
+      return false;
+    }
+    emptySince ||= Date.now();
+    return Date.now() - emptySince > 2000;
+  };
   setNativeValue(input, query);
   key(input, "Enter");
-  await settle(c.ownerDocument, 300, 2500);
-  if (promptOptions(c).length === 0) {
+  if (!(await waitFor(done, 4000, 100))) {
     callReact(input, "onKeyDown", { key: "Enter", target: { value: query } });
-    await settle(c.ownerDocument, 300, 2500);
+    await waitFor(done, 2000, 100);
   }
+  await settle(c.ownerDocument, 150, 1500);
   return input;
+}
+
+/** Options by label, once each. */
+function uniqueOptions(c: HTMLElement): OptionInfo[] {
+  const seen = new Map<string, OptionInfo>();
+  for (const o of promptOptions(c).map(optionInfo)) if (o.label && !seen.has(o.label)) seen.set(o.label, o);
+  return [...seen.values()];
 }
 
 export async function searchTypeahead(c: HTMLElement, query: string): Promise<OptionInfo[]> {
   await typeQuery(c, query);
-  const out = promptOptions(c).map(optionInfo);
+  const out = uniqueOptions(c);
   key(c.querySelector("input") ?? c, "Escape");
   return out;
 }
@@ -227,61 +308,91 @@ export async function listTypeahead(c: HTMLElement): Promise<OptionInfo[]> {
   if (!input) return [];
   press(input);
   await settle(c.ownerDocument, 300, 2500);
-  const out = promptOptions(c).map(optionInfo);
+  const out = uniqueOptions(c);
   key(input, "Escape");
   return out;
 }
 
+const lower = (s: string) => norm(s).toLowerCase();
+
 /**
- * Each value may be a path through nested menus: "Job Board > LinkedIn". The last segment is the
- * item to select; earlier ones open categories.
+ * Select one value. The value may be a path through nested menus: "Job Board > LinkedIn"; the last segment is
+ * the item to select, earlier ones open categories. Returns the selected label, or the options seen when a
+ * segment matched nothing.
+ */
+async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: string } | { options: string[] }> {
+  if (path.length > 1) {
+    const input = c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
+    if (input) press(input);
+    await settle(c.ownerDocument, 300, 2500);
+  } else {
+    await typeQuery(c, path[0] as string);
+  }
+  let selected = "";
+  for (const [i, segment] of path.entries()) {
+    const options = await waitFor(() => {
+      const o = promptOptions(c);
+      return o.length ? o : null;
+    }, 2500);
+    if (!options) return { options: [] };
+    const labels = options.map(text);
+    const idx = matchOption(segment, labels);
+    if (idx < 0) return { options: [...new Set(labels)] };
+    const option = options[idx] as HTMLElement;
+    selected = labels[idx] as string;
+    press(option);
+    await settle(c.ownerDocument, 250, 2000);
+    if (i === path.length - 1 && !selectedItems(c).some((s) => norm(s) === norm(selected))) {
+      callReact(option, "onClick", {});
+      await settle(c.ownerDocument, 250, 2000);
+    }
+  }
+  return { selected };
+}
+
+/**
+ * Select each value on its own: one that matches nothing is reported in `unmatched` with the options its search
+ * showed, and the rest are still selected (seen live: a skills list stopped at its first unmatched entry).
+ * When Workday selects an option itself on Enter (single-select prompts do), it's reported in `inexact`.
  */
 async function fillTypeahead(c: HTMLElement, values: string[]): Promise<Result> {
+  const unmatched: { value: string; suggestions: string[] }[] = [];
+  const inexact: { value: string; selected: string }[] = [];
+  const input = () => c.querySelector("input") ?? c;
   for (const value of values) {
     const path = value
       .split(/\s*>\s*/)
       .map((s) => s.trim())
       .filter(Boolean);
     const leaf = path.at(-1) ?? value;
-    if (selectedItems(c).some((s) => norm(s).toLowerCase() === norm(leaf).toLowerCase())) continue;
-
-    if (path.length > 1) {
-      const input = c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
-      if (input) press(input);
-      await settle(c.ownerDocument, 300, 2500);
-    } else {
-      await typeQuery(c, leaf);
-    }
-
-    for (const [i, segment] of path.entries()) {
-      const options = await waitFor(() => {
-        const o = promptOptions(c);
-        return o.length ? o : null;
-      }, 2500);
-      if (!options) return fail(`No options appeared while selecting "${value}".`, { readBack: selectedItems(c) });
-      const labels = options.map(text);
-      const idx = matchOption(segment, labels);
-      if (idx < 0) {
-        return fail(`No option matches "${segment}".`, {
-          availableOptions: labels.slice(0, 80),
-          readBack: selectedItems(c),
-        });
+    if (path.length === 0 || selectedItems(c).some((s) => lower(s) === lower(leaf))) continue;
+    const before = new Set(selectedItems(c).map(lower));
+    const outcome = await selectPath(c, path);
+    if ("selected" in outcome) {
+      if (!selectedItems(c).some((s) => lower(s) === lower(outcome.selected))) {
+        unmatched.push({ value, suggestions: [] });
       }
-      const option = options[idx] as HTMLElement;
-      press(option);
-      await settle(c.ownerDocument, 250, 2000);
-      if (i === path.length - 1 && !selectedItems(c).some((s) => norm(s) === norm(labels[idx]))) {
-        callReact(option, "onClick", {});
-        await settle(c.ownerDocument, 250, 2000);
-      }
+      continue;
     }
+    key(input(), "Escape");
+    await settle(c.ownerDocument, 150, 1000);
+    const added = selectedItems(c).filter((s) => !before.has(lower(s)));
+    if (added.length) inexact.push({ value, selected: added.join(", ") });
+    else unmatched.push({ value, suggestions: outcome.options.slice(0, 15) });
   }
-  key(c.querySelector("input") ?? c, "Escape");
+  key(input(), "Escape");
   const readBack = selectedItems(c);
-  const missing = values
-    .map((v) => v.split(/\s*>\s*/).at(-1) ?? v)
-    .filter((leaf) => !readBack.some((s) => norm(s).toLowerCase().includes(norm(leaf).toLowerCase())));
-  return missing.length === 0 ? { ok: true, readBack } : fail(`Not selected: ${missing.join(", ")}`, { readBack });
+  const extra = {
+    readBack,
+    ...(unmatched.length ? { unmatched } : {}),
+    ...(inexact.length ? { inexact } : {}),
+  };
+  if (!unmatched.length) return { ok: true, ...extra };
+  const only = unmatched.length === 1 && values.length === 1 ? unmatched[0] : undefined;
+  return fail(`No option matches: ${unmatched.map((u) => `"${u.value}"`).join(", ")}.`, {
+    ...extra,
+    ...(only?.suggestions.length ? { availableOptions: only.suggestions } : {}),
+  });
 }
 
 // ---- radio / checkbox ---------------------------------------------------------------------------
@@ -336,47 +447,76 @@ async function fillCheckboxGroup(c: HTMLElement, wanted: string[]): Promise<Resu
 
 // ---- date ---------------------------------------------------------------------------------------
 
+/** "YYYY", "YYYY-MM", "YYYY-MM-DD", "MM/YYYY" or "MM/DD/YYYY" → its parts. */
+export function parseDate(value: string): { year: string; month?: string; day?: string } | null {
+  const v = value.trim();
+  const iso = /^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(v);
+  if (iso) return { year: iso[1] as string, ...(iso[2] ? { month: iso[2] } : {}), ...(iso[3] ? { day: iso[3] } : {}) };
+  const us = /^(\d{1,2})\/(?:(\d{1,2})\/)?(\d{4})$/.exec(v);
+  if (us) return { year: us[3] as string, month: us[1] as string, ...(us[2] ? { day: us[2] } : {}) };
+  return null;
+}
+
+/**
+ * Enter one date part the way a person does: click it, type the digits, leave it. Live Workday's parts take
+ * digits in their key handlers and keep the value in their own state; setting the input's value (what this
+ * did before) showed the digits while Workday still called the field empty, however often it was repeated.
+ * When typing leaves the part without the value (a plain input that ignores synthetic keys), the value is set
+ * directly as a last resort.
+ */
+async function enterDatePart(input: HTMLInputElement, v: string): Promise<void> {
+  const display = input.parentElement?.querySelector<HTMLElement>(SEL.datePartDisplay);
+  press(display ?? input);
+  input.focus();
+  const start = input.value;
+  for (const [i, ch] of [...v].entries()) {
+    typeChar(input, ch, i === 0);
+    await sleep(15);
+  }
+  if (Number(datePartValue(input)) !== Number(v)) {
+    setNativeValue(input, v);
+    if (Number(input.value) !== Number(v)) callReact(input, "onChange", { target: { ...input, value: v } });
+  } else if (input.value !== start) {
+    // A browser fires change when a typed-in input loses focus.
+    input.dispatchEvent(new (win(input).Event)("change", { bubbles: true }));
+  }
+  blur(input);
+  await sleep(40);
+}
+
 async function fillDate(c: HTMLElement, value: string): Promise<Result> {
-  const m = value.match(/^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/);
-  if (!m) return fail('Dates must be "YYYY", "YYYY-MM" or "YYYY-MM-DD".');
-  const [, year, month, day] = m;
+  const date = parseDate(value);
+  if (!date) return fail('Dates must be "YYYY-MM-DD", "YYYY-MM" or "YYYY" (or "MM/YYYY", "MM/DD/YYYY").');
+  const month = date.month?.padStart(2, "0");
+  const day = date.day?.padStart(2, "0");
   const parts: [HTMLInputElement, string][] = [];
   for (const [label, v] of [
-    ["Month", month?.padStart(2, "0")],
-    ["Day", day?.padStart(2, "0")],
-    ["Year", year],
+    ["Month", month],
+    ["Day", day],
+    ["Year", date.year],
   ] as const) {
-    const input = c.querySelector<HTMLInputElement>(`input[aria-label="${label}" i]`);
+    const input = datePartInput(c, label);
     if (!input) continue;
     if (v === undefined) return fail(`This date needs a ${label.toLowerCase()}.`);
     parts.push([input, v]);
   }
   const enter = async () => {
-    for (const [input, v] of parts) {
-      input.focus();
-      setNativeValue(input, v);
-      if (Number(input.value) !== Number(v)) {
-        callReact(input, "onChange", { target: { ...input, value: v } });
-      }
-      blur(input);
-      await sleep(40);
-    }
+    for (const [input, v] of parts) await enterDatePart(input, v);
     await settle(c.ownerDocument, 150, 1500);
   };
   await enter();
-  // Seen live: dates filled in a batch showed the right digits while Workday still called them required,
-  // and entering them again was accepted. So one more pass when the field still shows an error.
+  // Seen live: a date field showing a "required" error took a second entry. One more pass when it still does.
   if (fieldError(c)) await enter();
-  const readBack = [
-    c.querySelector<HTMLInputElement>('input[aria-label="Year" i]')?.value,
-    c.querySelector<HTMLInputElement>('input[aria-label="Month" i]')?.value,
-    c.querySelector<HTMLInputElement>('input[aria-label="Day" i]')?.value,
-  ]
-    .filter((p) => p)
-    .map((p) => (p as string).padStart(2, "0"))
-    .join("-");
-  const want = [year, month?.padStart(2, "0"), day?.padStart(2, "0")].filter(Boolean).join("-");
-  return readBack === want ? { ok: true, readBack } : fail("The date was not accepted.", { readBack });
+  const readBack = dateValue(c) ?? "";
+  const has = (p: "Month" | "Day" | "Year") => Boolean(datePartInput(c, p));
+  const want = [has("Year") && date.year, has("Month") && month, has("Day") && day].filter(Boolean).join("-");
+  return readBack === want
+    ? { ok: true, readBack }
+    : fail(
+        "The page didn't take the date: its parts show " +
+          `"${readBack || "nothing"}". Ask the user to type it (${parts.map(([, v]) => v).join("/")}).`,
+        { readBack },
+      );
 }
 
 // ---- file ---------------------------------------------------------------------------------------

@@ -87,13 +87,30 @@ function cleanStepTitle(s: string): string {
     .trim();
 }
 
-export function pageErrors(doc: Document): string[] {
+/**
+ * A notice in an alert region that isn't an error. Live Workday announces "resume.pdf successfully uploaded" in
+ * the same `role="alert"` region as validation errors; counted as an error it ended go_next's wait at once.
+ */
+export function isNotice(t: string): boolean {
+  return /\bsuccess(fully)?\b/i.test(t) && !/\b(fail|error|could not|unable|invalid|required)/i.test(t);
+}
+
+function alerts(doc: Document): string[] {
   const out = new Set<string>();
   for (const el of doc.querySelectorAll(SEL.errors)) {
     const t = text(el);
     if (t && isVisible(el)) out.add(t.slice(0, 300));
   }
   return [...out];
+}
+
+export function pageErrors(doc: Document): string[] {
+  return alerts(doc).filter((t) => !isNotice(t));
+}
+
+/** Notices shown in alert regions (see isNotice). */
+export function pageMessages(doc: Document): string[] {
+  return alerts(doc).filter(isNotice);
 }
 
 export function pageActions(doc: Document): PageAction[] {
@@ -152,7 +169,8 @@ export function extract(doc: Document, url: string): Extraction {
     const label = fieldLabel(container, kind);
     const sectionTitle = sectionTitleOf(container);
     const sectionId = slug(sectionTitle);
-    const baseKey = automationId ? automationId.replace(/^formField-/, "") : slug(label);
+    // A bare "formField-" (seen live on the Resume/CV field) gives no key: use the label.
+    const baseKey = automationId?.replace(/^formField-/, "") || slug(label);
     let id = `${sectionId}.${baseKey}`;
     const seen = repeats.get(id) ?? 0;
     repeats.set(id, seen + 1);
@@ -196,18 +214,25 @@ export function extract(doc: Document, url: string): Extraction {
     section.removable = true;
   }
 
+  // Live Workday labels every add button "Add" (or "Add Another" once a row exists), so each is named by the
+  // section heading above it: add.work-experience, add.websites.
   const addButtons = new Map<string, HTMLElement>();
+  const addSections = new Map<HTMLElement, string>();
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.addButton)) {
     if (!isVisible(b)) continue;
     const label = norm(b.getAttribute("aria-label")) || text(b) || "Add";
-    let id = `add.${slug(label)}`;
-    for (let n = 2; addButtons.has(id); n++) id = `add.${slug(label)}#${n}`;
+    const section = addButtonSection(b);
+    const key = slug(section ?? label);
+    let id = `add.${key}`;
+    for (let n = 2; addButtons.has(id); n++) id = `add.${key}#${n}`;
     addButtons.set(id, b);
+    if (section) addSections.set(b, section);
   }
 
   const next = nextButton(doc);
   const back = backButton(doc);
   const step = stepInfo(doc);
+  const messages = pageMessages(doc);
   const tenant = workdayTenant(url);
   const schema: PageSchema = {
     adapter: "workday",
@@ -216,16 +241,37 @@ export function extract(doc: Document, url: string): Extraction {
     pageKind: detectPage(doc, fields.size),
     ...(step ? { step } : {}),
     sections: [...sections.values()],
-    addButtons: [...addButtons.entries()].map(([id, el]) => ({
-      id,
-      label: norm(el.getAttribute("aria-label")) || text(el),
-    })),
+    addButtons: [...addButtons.entries()].map(([id, el]) => {
+      const section = addSections.get(el);
+      return { id, label: norm(el.getAttribute("aria-label")) || text(el), ...(section ? { section } : {}) };
+    }),
     actions: pageActions(doc),
     errors: pageErrors(doc),
+    ...(messages.length ? { messages } : {}),
     ...(next ? { nextLabel: text(next) } : {}),
     ...(back ? { backLabel: text(back) } : {}),
   };
   return { schema, fields, addButtons, rows };
+}
+
+const HEADING = "h1,h2,h3,h4,h5,legend,[role='heading']";
+
+/**
+ * The section an add button belongs to: the last heading before it in the page, outside any field, with a row
+ * number dropped ("Work Experience 2" → "Work Experience"). None when that is the step's own title.
+ */
+function addButtonSection(b: HTMLElement): string | undefined {
+  const doc = b.ownerDocument;
+  const before = [...doc.querySelectorAll<HTMLElement>(HEADING)].filter(
+    (h) =>
+      Boolean(h.compareDocumentPosition(b) & 4 /* FOLLOWING */) &&
+      !h.closest(SEL.fieldContainer) &&
+      !h.closest(SEL.progressBar) &&
+      isVisible(h),
+  );
+  const title = norm(text(before.at(-1)).replace(/\s+\d+$/, ""));
+  const stepTitle = stepInfo(doc)?.title;
+  return title && title !== stepTitle ? title.slice(0, 80) : undefined;
 }
 
 /**
@@ -341,13 +387,8 @@ function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
       return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
         .filter((b) => b.checked || b.getAttribute("aria-checked") === "true")
         .map(optionLabel);
-    case "date": {
-      const part = (l: string) =>
-        (c.querySelector(`input[aria-label="${l}" i]`) as HTMLInputElement | null)?.value?.trim() ?? "";
-      const [y, m, d] = [part("Year"), part("Month"), part("Day")];
-      if (!y && !m && !d) return null;
-      return [y, m?.padStart(2, "0"), d?.padStart(2, "0")].filter(Boolean).join("-");
-    }
+    case "date":
+      return dateValue(c);
     case "file":
       return attachedFiles(c).map((f) => f.name);
   }
@@ -382,6 +423,41 @@ function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
   return undefined;
 }
 
+/**
+ * What one part of a split date holds as far as the page is concerned. Live Workday keeps the part's value in
+ * its own state and shows it in a display element next to the input; setting the input's value changes the
+ * input but not that state (seen live: the input read "12" while Workday said the field was empty). So the
+ * display counts when there is one, then `aria-valuenow`, then the input's value.
+ */
+export function datePartValue(input: HTMLInputElement): string {
+  const display = input.parentElement?.querySelector(SEL.datePartDisplay);
+  if (display) {
+    const t = text(display);
+    return /^\d+$/.test(t) ? t : "";
+  }
+  const now = input.getAttribute("aria-valuenow");
+  if (now !== null) return /^\d+$/.test(now.trim()) ? now.trim() : "";
+  return input.value.trim();
+}
+
+export function datePartInput(c: HTMLElement, part: "Month" | "Day" | "Year"): HTMLInputElement | null {
+  return c.querySelector<HTMLInputElement>(`input[aria-label="${part}" i]`);
+}
+
+/** The date as YYYY, YYYY-MM or YYYY-MM-DD from the parts the field has; null when all are empty. */
+export function dateValue(c: HTMLElement): string | null {
+  const part = (p: "Month" | "Day" | "Year") => {
+    const input = datePartInput(c, p);
+    return input ? datePartValue(input) : "";
+  };
+  const [y, m, d] = [part("Year"), part("Month"), part("Day")];
+  if (!y && !m && !d) return null;
+  return [y, m, d]
+    .filter(Boolean)
+    .map((v, i) => (i === 0 ? v : v.padStart(2, "0")))
+    .join("-");
+}
+
 function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
   const has = (l: string) => Boolean(c.querySelector(`input[aria-label="${l}" i]`));
   return [
@@ -401,8 +477,8 @@ function isMultiple(c: HTMLElement, kind: FieldKind): boolean {
 }
 
 export function fieldError(c: HTMLElement): string | undefined {
-  const err = c.querySelector(SEL.errors);
-  if (err && text(err)) return text(err).slice(0, 300);
+  const err = [...c.querySelectorAll(SEL.errors)].map(text).find((t) => t && !isNotice(t));
+  if (err) return err.slice(0, 300);
   const invalid = c.querySelector('[aria-invalid="true"]');
   const describedBy = invalid?.getAttribute("aria-describedby");
   if (describedBy) {

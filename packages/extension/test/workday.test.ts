@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWorkdayApi, installSubmitGuard } from "../src/adapters/workday/api.js";
-import { press } from "../src/adapters/workday/dom.js";
+import { matchOption, press } from "../src/adapters/workday/dom.js";
 import { buildWorkdayStep, installDomShims } from "./workday-fixture.js";
 
 installDomShims(document.defaultView as Window);
@@ -23,7 +23,10 @@ describe("extraction", () => {
       pageKind: "step",
       step: { title: "My Information", index: 1, total: 3 },
       nextLabel: "Save and Continue",
-      addButtons: [{ id: "add.add-work-experience", label: "Add Work Experience" }],
+      addButtons: [
+        { id: "add.work-experience", label: "Add Work Experience", section: "Work Experience" },
+        { id: "add.websites", label: "Add", section: "Websites" },
+      ],
     });
     const fields = Object.fromEntries(form.sections.flatMap((s) => s.fields).map((f) => [f.automationId, f]));
     expect(fields["formField-legalName--firstName"]).toMatchObject({
@@ -111,24 +114,117 @@ describe("filling", () => {
     expect(document.querySelectorAll('[role="listbox"]')).toHaveLength(0);
   });
 
+  /** Count entries of the month: input events that leave it with two digits. */
+  const countMonthEntries = () => {
+    const month = document.querySelector(
+      '[data-automation-id="formField-startDate"] input[aria-label="Month"]',
+    ) as HTMLInputElement;
+    const entries = vi.fn();
+    month.addEventListener("input", () => {
+      if (month.value.length === 2) entries();
+    });
+    return entries;
+  };
+
   it("enters a date a second time when the field still shows an error", async () => {
     fixture = buildWorkdayStep(document, { dateNeedsSecondPass: true });
     api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
-    const month = document.querySelector('[data-automation-id="formField-startDate"] input[aria-label="Month"]');
-    const changes = vi.fn();
-    month?.addEventListener("change", changes);
+    const entries = countMonthEntries();
     const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
     expect(r).toEqual({ fieldId: id("formField-startDate"), ok: true, readBack: "2024-12" });
-    expect(changes).toHaveBeenCalledTimes(2);
+    expect(entries).toHaveBeenCalledTimes(2);
   });
 
   it("enters a date once when the page accepts it", async () => {
-    const month = document.querySelector('[data-automation-id="formField-startDate"] input[aria-label="Month"]');
-    const changes = vi.fn();
-    month?.addEventListener("change", changes);
+    const entries = countMonthEntries();
     const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
     expect(r).toMatchObject({ ok: true, readBack: "2024-12" });
-    expect(changes).toHaveBeenCalledTimes(1);
+    expect(entries).toHaveBeenCalledTimes(1);
+  });
+
+  describe("dates in Workday's split widget", () => {
+    const build = (dateWidget: "keys" | "stuck") => {
+      fixture = buildWorkdayStep(document, { dateWidget });
+      api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    };
+    const displays = () => [...document.querySelectorAll('[data-automation-id$="-display"]')].map((d) => d.textContent);
+
+    it("types the digits so the widget takes them", async () => {
+      build("keys");
+      const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "2024-12" });
+      expect(displays()).toEqual(["12", "2024"]);
+      const [again] = await api.fill([{ fieldId: id("formField-startDate"), value: "06/2023" }]);
+      expect(again).toMatchObject({ ok: true, readBack: "2023-06" });
+      expect(displays()).toEqual(["06", "2023"]);
+    });
+
+    it("reports a date the widget didn't take, and get_form shows it empty", async () => {
+      build("stuck");
+      const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
+      expect(r).toMatchObject({ ok: false, readBack: "" });
+      expect(r?.error).toMatch(/didn't take the date.*12\/2024/);
+      const field = api
+        .getForm()
+        .sections.flatMap((s) => s.fields)
+        .find((f) => f.automationId === "formField-startDate");
+      expect(field?.currentValue).toBeNull();
+    });
+  });
+
+  it("says a field that still shows an error wasn't filled", async () => {
+    fixture = buildWorkdayStep(document, { dateErrorSticks: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
+    expect(r).toMatchObject({ ok: false, readBack: "2024-12" });
+    expect(r?.error).toMatch(/^The page still reports: .*required/);
+  });
+
+  it("opens the next dropdown after one that matched nothing, with live listbox behaviour", async () => {
+    fixture = buildWorkdayStep(document, { liveDropdowns: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const res = await api.fill([
+      { fieldId: id("formField-degreeLevel"), value: "Diploma" },
+      { fieldId: id("formField-countryDropdown"), value: "Canada" },
+    ]);
+    expect(res.map((r) => [r.ok, r.readBack ?? r.availableOptions])).toEqual([
+      [false, ["Undergraduate", "Masters", "Ph.D"]],
+      [true, "Canada"],
+    ]);
+    const [next] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Masters" }]);
+    expect(next).toMatchObject({ ok: true, readBack: "Masters" });
+  });
+
+  it("fills a skills list entry by entry, waiting for each search's results", async () => {
+    await api.remove(id("formField-skills"));
+    const [r] = await api.fill([
+      { fieldId: id("formField-skills"), value: ["Python", "SQL", "Nginx", "C++", "Lua", "React.js"] },
+    ]);
+    expect(r).toMatchObject({
+      ok: false,
+      readBack: [
+        "Python (Programming Language)",
+        "Structured Query Language (SQL)",
+        "C++ Programming Language",
+        "React.js",
+      ],
+      unmatched: [
+        { value: "Nginx", suggestions: ["Nginx Web Server", "NGINX Plus"] },
+        { value: "Lua", suggestions: [] },
+      ],
+    });
+    expect(r?.error).toBe('No option matches: "Nginx", "Lua".');
+  }, 30_000);
+
+  it("searches once the results are in, listing each option once", async () => {
+    expect((await api.searchOptions(id("formField-skills"), "python")).map((o) => o.label)).toEqual([
+      "Python (Programming Language)",
+      "Python Development",
+    ]);
+    expect((await api.searchOptions(id("formField-skills"), "sql")).map((o) => o.label)).toEqual([
+      "Structured Query Language (SQL)",
+      "U-SQL",
+    ]);
   });
 
   it("reports unmatched options with the choices available", async () => {
@@ -207,7 +303,7 @@ describe("filling", () => {
   });
 
   it("adds a repeatable row with its own field ids", async () => {
-    expect(await api.addRepeatable("add.add-work-experience")).toEqual({ ok: true });
+    expect(await api.addRepeatable("add.work-experience")).toEqual({ ok: true });
     const ids = api
       .getForm()
       .sections.flatMap((s) => s.fields)
@@ -225,7 +321,7 @@ describe("filling", () => {
   });
 
   it("removes a repeatable row, confirming the dialog, and later rows move up", async () => {
-    await api.addRepeatable("add.add-work-experience");
+    await api.addRepeatable("add.work-experience");
     const title = () =>
       api
         .getForm()
@@ -239,6 +335,31 @@ describe("filling", () => {
     expect(title().map((f) => [f.id, f.currentValue])).toEqual([["work-experience-1.jobTitle", "Engineer"]]);
 
     expect(await api.removeRepeatable("my-information")).toMatchObject({ ok: false, error: /No removable row/ });
+  });
+});
+
+describe("matching option text", () => {
+  const pick = (wanted: string, options: string[]) => options[matchOption(wanted, options)];
+
+  it("matches a bare name or an acronym in parentheses, counting repeated labels once", () => {
+    const skills = ["Python (Programming Language)", "Python (Programming Language)", "Python Development"];
+    expect(pick("python", skills)).toBe("Python (Programming Language)");
+    expect(pick("SQL", ["Structured Query Language (SQL)", "U-SQL", "SQLCLR"])).toBe("Structured Query Language (SQL)");
+    expect(pick("JavaScript", ["JavaScript", "JavaScript", "JScript"])).toBe("JavaScript");
+    expect(matchOption("Nginx", ["Nginx Web Server", "NGINX Plus"])).toBe(-1);
+  });
+
+  it("doesn't guess between two options that both fit", () => {
+    const eligible = ["Yes, I am a citizen or permanent resident of Canada", "Yes, I possess a temporary work permit"];
+    expect(matchOption("Yes", eligible)).toBe(-1);
+  });
+
+  it("resolves decline to the form's own decline wording", () => {
+    expect(pick("decline", ["Female", "Male", "I do not wish to self-identify"])).toBe(
+      "I do not wish to self-identify",
+    );
+    expect(pick("I prefer not to respond", ["Yes", "No", "I prefer not to identify"])).toBe("I prefer not to identify");
+    expect(matchOption("decline", ["Yes", "No"])).toBe(-1);
   });
 });
 
@@ -266,6 +387,32 @@ describe("navigation and the submit guard", () => {
     const r = await api.next();
     expect(r.advanced).toBe(false);
     expect(r.errors).toContain("Error: First Name is required");
+  });
+
+  it("keeps upload notices out of errors", async () => {
+    const resume = api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === "formField-resume")?.id as string;
+    await api.upload(resume, { name: "resume.pdf", mimeType: "application/pdf", base64: btoa("%PDF") });
+    const form = api.getForm();
+    expect(form.messages).toEqual(["resume.pdf successfully uploaded"]);
+    expect(form.errors).toEqual([]);
+    expect(form.sections.flatMap((s) => s.fields).find((f) => f.id === resume)?.error).toBeUndefined();
+    const r = await api.next();
+    expect(r).toMatchObject({ advanced: false, messages: ["resume.pdf successfully uploaded"] });
+    expect(r.errors).toEqual(["Error: First Name is required"]);
+  });
+
+  it("counts a move to the next step when every step has the same title", async () => {
+    fixture = buildWorkdayStep(document, { sameStepTitles: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const fn = api.getForm().sections[0]?.fields[0]?.id as string;
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    const started = Date.now();
+    const r = await api.next();
+    expect(r).toMatchObject({ advanced: true, pageKind: "review", step: { index: 3, title: "Application" } });
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it("advances to review, then refuses to go further", async () => {

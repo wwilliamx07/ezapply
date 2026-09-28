@@ -14,7 +14,7 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       description:
         "Compile a .tex file (under postings/ or templates/) to a PDF next to it, without shell escape. Returns the " +
         "PDF, page count, and diagnostics with line numbers (overfull boxes, missing glyphs). *resume*/*cv* files are " +
-        "checked against the page limit. Successful builds are snapshotted to .history/. Engine: the file's " +
+        "checked against the page limit; over it, `overflow` gives the lines past it and their text. Successful builds are snapshotted to .history/. Engine: the file's " +
         `\`% !TEX program\` comment, else tex.engine (engine, engineFrom say which). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),

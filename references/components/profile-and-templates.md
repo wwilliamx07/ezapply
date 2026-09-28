@@ -8,8 +8,8 @@ from the profile and answers. YAML files are parsed with line-aware errors, so `
 
 ## Profile (`profile/profile.yaml`)
 Everything forms ask that isn't a screening question: identity, contact (email, phone, address), links,
-work authorization, job preferences, work history (`YYYY-MM`, `end: null` for current), education,
-skills, languages, certifications, and optional EEO self-identification.
+work authorization, job preferences, work history (`YYYY-MM`, `end: null` for current), education (`start`
+and `end` as `YYYY-MM` or `YYYY-MM-DD`: some forms want the expected graduation day), skills, languages, certifications, and optional EEO self-identification.
 
 - Written by Claude during onboarding from the user's resume, then completed in chat.
 - `profile_check` validates it and lists commonly needed fields still missing: phone, region, postal code,
@@ -21,10 +21,17 @@ skills, languages, certifications, and optional EEO self-identification.
 ## Answer bank (`profile/answers.yaml`)
 Stored answers to screening questions.
 
-- **Seeded** on the companion's first start with 33 common Workday questions (work authorization, sponsorship,
+- **Seeded** on the companion's first start with 39 common Workday questions (work authorization, sponsorship,
   export control, previous employment, relatives, referrals, government relationships, conflicts of
-  interest, consents, relocation, travel, start date, salary, degree, criminal history…), all unanswered,
-  some with a `suggested` default or a `source` in the profile.
+  interest, consents, relocation, travel, start date, salary, degree, criminal history, and for students:
+  enrolment, year of study, expected graduation, available work terms, returning to school, full-time
+  interest…), all unanswered, some with a `suggested` default or a `source` in the profile.
+- **Seed versions.** The file records `seedVersion` (`SEED_VERSION` in `seed-answers.ts`, now 2; absent =
+  1). On start, a file with an older version gets the entries added since, once, as unanswered questions,
+  written through the YAML document so comments and answers are kept; the version then moves up, so a
+  question the user deleted isn't added back. Version 2 added the student and co-op questions after a
+  campus application had to work them out mid-form (the agent guessed a year of study from an unrelated
+  certificate date).
 - Entry: `id`, `canonical` question, `answer` (a string; `null` = always ask; or
   `{ default, byCompany }`), `suggested` (never used on a form until confirmed), `source`, `sensitive`
   (always ask even when answered), `variants` (other wordings seen), `notes`.

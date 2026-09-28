@@ -25,8 +25,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
       description:
         "Read the current Workday page: pageKind (posting, auth, start-choice, step, review, confirmation), step, " +
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
-        "true; dropdowns and typeaheads list options on demand). Also add buttons, removable rows, page actions, " +
-        "and `posting` (the posting this is credited to). Call at the start of every step and after changes.",
+        "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
+        "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
+        "`posting` (the posting this is credited to). Call at the start of every step and after changes.",
       inputSchema: {
         onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),
         section: z.string().optional().describe("Only sections whose id or title contains this."),
@@ -82,12 +83,15 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Fill fields",
       description:
-        "Fill fields on the current step. Values: text; the option text for dropdowns and radios (closest match); " +
-        'a string or array for typeaheads ("Category > Item" for nested menus); true/false for a checkbox; labels ' +
-        'for checkbox groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. ' +
-        "Returns `results` per field: { fieldId, ok: true } when the field reads back exactly the value, else " +
-        "the read-back, error, and options when nothing matched. Never passwords, or EEO answers the user " +
-        "hasn't given.",
+        "Fill fields on the current step. Values: text; the option text for dropdowns and radios (closest match; " +
+        '"Python" finds "Python (Programming Language)"); "decline" for the form\'s decline-to-answer option, ' +
+        'whatever its wording; a string or array for typeaheads ("Category > Item" for nested menus; each entry ' +
+        "is matched on its own); true/false for a checkbox; labels for checkbox groups; " +
+        '"YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns `results` per ' +
+        "field: { fieldId, ok: true } when the field reads back exactly the value; else the read-back, error, " +
+        "options when nothing matched, `unmatched` (typeahead entries with the options their search showed) " +
+        "and `inexact` (an option Workday chose itself: check it). ok is false while the field still shows an " +
+        "error. Never passwords, or EEO answers the user hasn't given.",
       inputSchema: {
         fills: z
           .array(
@@ -159,7 +163,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Add a repeatable row",
       description:
-        "Press an add button from get_form.addButtons (e.g. another Work Experience), then call get_form again.",
+        "Press an add button from get_form.addButtons (each names its `section`, e.g. add.work-experience, " +
+        "add.websites), then call get_form again.",
       inputSchema: { addButtonId: z.string(), tabId },
     },
     tool(s.log, "add_repeatable", ({ addButtonId, tabId }: { addButtonId: string; tabId?: number }) =>
@@ -195,7 +200,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Next step",
       description:
         "Press Next / Save and Continue. Refuses on the review page and on any Submit button: the user always " +
-        "submits. Returns whether the step advanced, the new pageKind/step, and validation errors if it did not.",
+        "submits. Returns whether the step advanced (its index, title or page kind changed), the new " +
+        "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`.",
       inputSchema: { tabId },
     },
     tool(s.log, "go_next", ({ tabId }: { tabId?: number }) => s.forms.next(tabId)),
