@@ -138,3 +138,17 @@ describe("default cover letter template", () => {
     expect(report.kept).toContain(join(config.workspace, "templates", "cover"));
   });
 });
+
+describe("autofill-timing.yaml", () => {
+  it("is written once, with every wait commented out at its default, and the user's edits are kept", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, "autofill-timing.yaml");
+    const text = await readFile(path, "utf8");
+    expect(text).toContain("scale: 1");
+    expect(text).toMatch(/^# dropdownOpenMs: 2000 +# dropdown: wait for its list to appear/m);
+    await writeFile(path, "scale: 0.5\n");
+    const report = await initWorkspace(config);
+    expect(report.kept).toContain(path);
+    expect(await readFile(path, "utf8")).toBe("scale: 0.5\n");
+  });
+});

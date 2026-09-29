@@ -11,6 +11,7 @@ ezapply-home/
   EZAPPLY.md               agent file (managed by ezapply; rewritten by init)
   CLAUDE.md                the user's own notes; imports @EZAPPLY.md
   ezapply.config.json      settings: resume page limit and size, TeX engine, PDF size limit, decisions provider
+  autofill-timing.yaml     how long the Workday adapter waits (the user's to tune)
   state.json               the active posting id
   .mcp.json                Claude Code → `node <cli>/main.js mcp`
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/
@@ -116,4 +117,4 @@ when a request matches it or the user types `/ezapply-<name>`.
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |
 |---|---|
-| `EZAPPLY.md`, the `ezapply` launcher, `.claude/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json`, ezapply's entries in `.claude/settings.json` | `CLAUDE.md` (beyond the import line), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed |
+| `EZAPPLY.md`, the `ezapply` launcher, `.claude/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json`, ezapply's entries in `.claude/settings.json` | `CLAUDE.md` (beyond the import line), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |

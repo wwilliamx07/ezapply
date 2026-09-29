@@ -14,6 +14,7 @@ export {
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { ENGINES, type EngineId, resolveEngine } from "./documents/tex/engines.js";
 export { FormsService } from "./forms/service.js";
+export { loadTiming, TIMING_FILE, timingFileTemplate } from "./forms/timing.js";
 export { KeyringStore } from "./github/secrets.js";
 export { GitHubService } from "./github/service.js";
 export { HEALTH_MODE, HEALTH_PATH, MCP_PATH } from "./http.js";

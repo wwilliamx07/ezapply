@@ -28,6 +28,7 @@ import {
   optionLabel,
 } from "./extract.js";
 import { SEL, within } from "./selectors.js";
+import { T } from "./timing.js";
 
 type Result = Omit<FillResult, "fieldId">;
 
@@ -72,13 +73,13 @@ async function fillText(c: HTMLElement, value: string): Promise<Result> {
   input.focus();
   setNativeValue(input, value);
   blur(input);
-  await sleep(30);
+  await sleep(T.textCheckMs);
   if (input.value !== value) {
     // Fallback: drive React's handlers directly.
     input.value = value;
     callReact(input, "onChange", { target: input });
     callReact(input, "onBlur", { target: input });
-    await sleep(30);
+    await sleep(T.textCheckMs);
   }
   return input.value === value
     ? { ok: true, readBack: input.value }
@@ -116,9 +117,9 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
   const button = dropdownButton(c);
   if (!button) return null;
   const doc = c.ownerDocument;
-  if (!(await waitFor(() => visibleListboxes(doc).length === 0, 1000))) {
+  if (!(await waitFor(() => visibleListboxes(doc).length === 0, T.dropdownOthersClosedMs))) {
     for (const l of visibleListboxes(doc)) key(l, "Escape");
-    await waitFor(() => visibleListboxes(doc).length === 0, 500);
+    await waitFor(() => visibleListboxes(doc).length === 0, T.dropdownAfterEscapeMs);
   }
   const stale = new Map(visibleListboxes(doc).map((l) => [l, optionsSignature(l)]));
   const fresh = (l: HTMLElement | null): l is HTMLElement =>
@@ -131,10 +132,10 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
     return list && options.length ? { button, list, options } : null;
   };
   if (button.getAttribute("aria-expanded") !== "true") press(button);
-  let opened = await waitFor(listFor, 2000);
+  let opened = await waitFor(listFor, T.dropdownOpenMs);
   if (!opened) {
     callReact(button, "onClick", {});
-    opened = await waitFor(listFor, 2000);
+    opened = await waitFor(listFor, T.dropdownOpenRetryMs);
   }
   return opened;
 }
@@ -143,10 +144,10 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
 async function closeListbox({ button, list }: OpenListbox): Promise<void> {
   if (button.getAttribute("aria-expanded") === "true") {
     key(button, "Escape");
-    await sleep(50);
+    await sleep(T.dropdownCloseKeyMs);
     if (button.getAttribute("aria-expanded") === "true") press(button);
   }
-  await waitFor(() => !list.isConnected || !isVisible(list), 1000);
+  await waitFor(() => !list.isConnected || !isVisible(list), T.dropdownClosedMs);
 }
 
 export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
@@ -169,10 +170,10 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
   const option = opened.options[idx] as HTMLElement;
   const wanted = labels[idx] as string;
   press(option);
-  const ok = await waitFor(() => norm(text(opened.button)) === norm(wanted), 1500);
+  const ok = await waitFor(() => norm(text(opened.button)) === norm(wanted), T.dropdownSelectMs);
   if (!ok) {
     callReact(option, "onClick", {});
-    await waitFor(() => norm(text(opened.button)) === norm(wanted), 1500);
+    await waitFor(() => norm(text(opened.button)) === norm(wanted), T.dropdownSelectRetryMs);
   }
   await closeListbox(opened);
   const readBack = text(opened.button);
@@ -237,7 +238,7 @@ async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElemen
   if (!input) return null;
   input.focus();
   press(input);
-  await settle(c.ownerDocument, 150, 1000);
+  await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
   const before = promptSignature(c);
   // Done when new options show, or when "No Items." has stayed for a while (a search that found nothing:
   // it also shows briefly while results load).
@@ -249,15 +250,15 @@ async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElemen
       return false;
     }
     emptySince ||= Date.now();
-    return Date.now() - emptySince > 2000;
+    return Date.now() - emptySince > T.typeaheadNoResultsMs;
   };
   setNativeValue(input, query);
   key(input, "Enter");
-  if (!(await waitFor(done, 4000, 100))) {
+  if (!(await waitFor(done, T.typeaheadResultsMs, 100))) {
     callReact(input, "onKeyDown", { key: "Enter", target: { value: query } });
-    await waitFor(done, 2000, 100);
+    await waitFor(done, T.typeaheadResultsRetryMs, 100);
   }
-  await settle(c.ownerDocument, 150, 1500);
+  await settle(c.ownerDocument, T.typeaheadResultsQuietMs, T.typeaheadResultsMaxMs);
   return input;
 }
 
@@ -279,7 +280,7 @@ export async function listTypeahead(c: HTMLElement): Promise<OptionInfo[]> {
   const input = c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
   if (!input) return [];
   press(input);
-  await settle(c.ownerDocument, 300, 2500);
+  await settle(c.ownerDocument, T.typeaheadMenuQuietMs, T.typeaheadMenuMaxMs);
   const out = uniqueOptions(c);
   key(input, "Escape");
   return out;
@@ -296,7 +297,7 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
   if (path.length > 1) {
     const input = c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
     if (input) press(input);
-    await settle(c.ownerDocument, 300, 2500);
+    await settle(c.ownerDocument, T.typeaheadMenuQuietMs, T.typeaheadMenuMaxMs);
   } else {
     await typeQuery(c, path[0] as string);
   }
@@ -305,7 +306,7 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
     const options = await waitFor(() => {
       const o = promptOptions(c);
       return o.length ? o : null;
-    }, 2500);
+    }, T.typeaheadOptionsMs);
     if (!options) return { options: [] };
     const labels = options.map(text);
     const idx = matchOption(segment, labels);
@@ -313,10 +314,10 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
     const option = options[idx] as HTMLElement;
     selected = labels[idx] as string;
     press(option);
-    await settle(c.ownerDocument, 250, 2000);
+    await settle(c.ownerDocument, T.typeaheadSelectQuietMs, T.typeaheadSelectMaxMs);
     if (i === path.length - 1 && !selectedItems(c).some((s) => norm(s) === norm(selected))) {
       callReact(option, "onClick", {});
-      await settle(c.ownerDocument, 250, 2000);
+      await settle(c.ownerDocument, T.typeaheadSelectQuietMs, T.typeaheadSelectMaxMs);
     }
   }
   return { selected };
@@ -347,7 +348,7 @@ async function fillTypeahead(c: HTMLElement, values: string[]): Promise<Result> 
       continue;
     }
     key(input(), "Escape");
-    await settle(c.ownerDocument, 150, 1000);
+    await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
     const added = selectedItems(c).filter((s) => !before.has(lower(s)));
     if (added.length) inexact.push({ value, selected: added.join(", ") });
     else unmatched.push({ value, suggestions: outcome.options.slice(0, 15) });
@@ -380,10 +381,10 @@ async function fillRadio(c: HTMLElement, value: string): Promise<Result> {
   if (idx < 0) return fail(`No option matches "${value}".`, { availableOptions: labels });
   const radio = radios[idx] as HTMLInputElement;
   press(radio);
-  if (!(await waitFor(() => isChecked(radio), 1000))) {
+  if (!(await waitFor(() => isChecked(radio), T.checkMs))) {
     callReact(radio, "onChange", { target: { ...radio, checked: true, value: radio.value } });
     callReact(radio, "onClick", {});
-    await waitFor(() => isChecked(radio), 1000);
+    await waitFor(() => isChecked(radio), T.checkMs);
   }
   return isChecked(radio) ? { ok: true, readBack: labels[idx] as string } : fail("Selection did not stick.");
 }
@@ -391,9 +392,9 @@ async function fillRadio(c: HTMLElement, value: string): Promise<Result> {
 async function setCheckbox(box: HTMLInputElement, want: boolean): Promise<boolean> {
   if (isChecked(box) === want) return true;
   press(box);
-  if (await waitFor(() => isChecked(box) === want, 1000)) return true;
+  if (await waitFor(() => isChecked(box) === want, T.checkMs)) return true;
   callReact(box, "onChange", { target: { ...box, checked: want } });
-  return Boolean(await waitFor(() => isChecked(box) === want, 1000));
+  return Boolean(await waitFor(() => isChecked(box) === want, T.checkMs));
 }
 
 async function fillCheckbox(c: HTMLElement, want: boolean): Promise<Result> {
@@ -443,7 +444,7 @@ async function enterDatePart(input: HTMLInputElement, v: string): Promise<void> 
   const start = input.value;
   for (const [i, ch] of [...v].entries()) {
     typeChar(input, ch, i === 0);
-    await sleep(15);
+    await sleep(T.dateDigitMs);
   }
   if (Number(datePartValue(input)) !== Number(v)) {
     setNativeValue(input, v);
@@ -453,7 +454,7 @@ async function enterDatePart(input: HTMLInputElement, v: string): Promise<void> 
     input.dispatchEvent(new (win(input).Event)("change", { bubbles: true }));
   }
   blur(input);
-  await sleep(40);
+  await sleep(T.datePartMs);
 }
 
 async function fillDate(c: HTMLElement, value: string): Promise<Result> {
@@ -474,7 +475,7 @@ async function fillDate(c: HTMLElement, value: string): Promise<Result> {
   }
   const enter = async () => {
     for (const [input, v] of parts) await enterDatePart(input, v);
-    await settle(c.ownerDocument, 150, 1500);
+    await settle(c.ownerDocument, T.dateQuietMs, T.dateMaxMs);
   };
   await enter();
   // Seen live: a date field showing a "required" error took a second entry. One more pass when it still does.
@@ -512,13 +513,13 @@ export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
     input.dispatchEvent(new w.Event("input", { bubbles: true }));
     input.dispatchEvent(new w.Event("change", { bubbles: true }));
   }
-  if (!(await waitFor(done, 8000, 200))) {
+  if (!(await waitFor(done, T.uploadMs, 200))) {
     const zone = c.querySelector<HTMLElement>(SEL.fileDropZone);
     if (zone) {
       const handled = callReact(zone, "onDrop", { dataTransfer: dt });
       if (!handled) zone.dispatchEvent(new w.DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
     }
-    await waitFor(done, 20000, 250);
+    await waitFor(done, T.uploadDropMs, 250);
   }
   return done()
     ? { ok: true, readBack: names() }
@@ -571,7 +572,7 @@ export async function confirmRemoval(doc: Document): Promise<void> {
     : undefined;
   if (button && !isSubmitControl(button)) {
     press(button);
-    await settle(doc, 150, 1500);
+    await settle(doc, T.removeQuietMs, T.removeMaxMs);
   }
 }
 
@@ -579,18 +580,18 @@ async function removeOne(c: HTMLElement, item: Item, gone: () => boolean): Promi
   const doc = c.ownerDocument;
   if (item.remove && !isSubmitControl(item.remove)) {
     press(item.remove);
-    if (await waitFor(gone, 1500)) return true;
+    if (await waitFor(gone, T.removeMs)) return true;
     await confirmRemoval(doc);
-    if (await waitFor(gone, 1500)) return true;
+    if (await waitFor(gone, T.removeMs)) return true;
     callReact(item.remove, "onClick", {});
-    if (await waitFor(gone, 1500)) return true;
+    if (await waitFor(gone, T.removeMs)) return true;
   }
   // Keyboard fallback: a focused pill is removed with Delete or Backspace.
   item.el.focus?.();
   key(item.el, "Delete");
-  if (await waitFor(gone, 800)) return true;
+  if (await waitFor(gone, T.removeKeyMs)) return true;
   key(item.el, "Backspace");
-  return Boolean(await waitFor(gone, 800));
+  return Boolean(await waitFor(gone, T.removeKeyMs));
 }
 
 /**
@@ -628,7 +629,7 @@ export async function removeItems(ref: FieldRef, values?: string[] | null): Prom
     if (!item) continue;
     if (await removeOne(c, item, () => matching().length < before)) removed.push(label);
     else failed.push(label);
-    await settle(c.ownerDocument, 150, 1500);
+    await settle(c.ownerDocument, T.removeQuietMs, T.removeMaxMs);
   }
 
   const remaining = items().map((i) => i.label);

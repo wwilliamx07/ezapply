@@ -7,6 +7,8 @@
  * a Node test that isn't a DOM environment at all.
  */
 
+import { T } from "./timing.js";
+
 /** The window a node belongs to. */
 export function win(node: Node): Window & typeof globalThis {
   const view = (node.ownerDocument ?? (node as Document)).defaultView;
@@ -142,7 +144,11 @@ export function settle(doc: Document, quietMs = 250, maxMs = 4000): Promise<void
 }
 
 /** Poll for a condition (cheap and robust against portals re-rendering). */
-export async function waitFor<T>(fn: () => T | null | undefined | false, maxMs = 3000, stepMs = 50): Promise<T | null> {
+export async function waitFor<R>(
+  fn: () => R | null | undefined | false,
+  maxMs = 3000,
+  stepMs = T.pollMs,
+): Promise<R | null> {
   const end = Date.now() + maxMs;
   for (;;) {
     const v = fn();

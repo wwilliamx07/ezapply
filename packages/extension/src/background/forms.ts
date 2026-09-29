@@ -52,18 +52,25 @@ async function requireSiteAccess(tabId: number): Promise<void> {
   );
 }
 
-/** Inject the adapter (idempotent) and call one of its methods in the page's MAIN world. */
-async function callAdapter<T>(tabId: number, method: string, args: unknown[]): Promise<T> {
+type Timing = Record<string, number> | undefined;
+
+/**
+ * Inject the adapter (idempotent) and call one of its methods in the page's MAIN world, with the waits the
+ * companion sent (from the workspace's autofill-timing.yaml) set first; none restores the defaults.
+ */
+async function callAdapter<T>(tabId: number, method: string, args: unknown[], timing?: Timing): Promise<T> {
   await requireSiteAccess(tabId);
   await ext.scripting.executeScript({ target: { tabId }, files: [ADAPTER_FILE], world: "MAIN" });
   const [res] = await ext.scripting.executeScript({
     target: { tabId },
     world: "MAIN",
-    args: [method, args],
-    func: async (m: string, a: unknown[]) => {
+    // executeScript args must be JSON-serializable: null, not undefined.
+    args: [method, args, timing ?? null],
+    func: async (m: string, a: unknown[], t: Timing | null) => {
       const api = (window as unknown as Record<string, Record<string, (...x: unknown[]) => unknown>>).__ezapplyWorkday;
       if (!api) return { __error: "adapter not loaded" };
       try {
+        api.setTiming?.(t);
         return { __ok: await api[m]?.(...a) };
       } catch (err) {
         return { __error: (err as Error).message };
@@ -77,30 +84,31 @@ async function callAdapter<T>(tabId: number, method: string, args: unknown[]): P
 }
 
 export const formHandlers: FormHandlers = {
-  "form.get": async ({ tabId }) => {
+  "form.get": async ({ tabId, timing }) => {
     const tab = await resolveTab(tabId);
     const id = requireWorkday(tab);
-    const schema = await callAdapter<Record<string, unknown>>(id, "getForm", []);
+    const schema = await callAdapter<Record<string, unknown>>(id, "getForm", [], timing);
     return { ...schema, tabId: id } as never;
   },
-  "form.listOptions": async ({ tabId, fieldId }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "listOptions", [fieldId]),
-  "form.searchOptions": async ({ tabId, fieldId, query }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "searchOptions", [fieldId, query]),
-  "form.fill": async ({ tabId, fills }) => callAdapter(requireWorkday(await resolveTab(tabId)), "fill", [fills]),
-  "form.upload": async ({ tabId, fieldId, file }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "upload", [fieldId, file]),
+  "form.listOptions": async ({ tabId, fieldId, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "listOptions", [fieldId], timing),
+  "form.searchOptions": async ({ tabId, fieldId, query, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "searchOptions", [fieldId, query], timing),
+  "form.fill": async ({ tabId, fills, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "fill", [fills], timing),
+  "form.upload": async ({ tabId, fieldId, file, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "upload", [fieldId, file], timing),
   // executeScript args must be JSON-serializable: send null rather than undefined for "all values".
-  "form.remove": async ({ tabId, fieldId, values }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "remove", [fieldId, values ?? null]),
-  "form.removeRepeatable": async ({ tabId, sectionId }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "removeRepeatable", [sectionId]),
-  "form.addRepeatable": async ({ tabId, addButtonId }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "addRepeatable", [addButtonId]),
-  "form.next": async ({ tabId }) => callAdapter(requireWorkday(await resolveTab(tabId)), "next", []),
-  "form.back": async ({ tabId }) => callAdapter(requireWorkday(await resolveTab(tabId)), "back", []),
-  "form.pageAction": async ({ tabId, action }) =>
-    callAdapter(requireWorkday(await resolveTab(tabId)), "pageAction", [action]),
+  "form.remove": async ({ tabId, fieldId, values, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "remove", [fieldId, values ?? null], timing),
+  "form.removeRepeatable": async ({ tabId, sectionId, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "removeRepeatable", [sectionId], timing),
+  "form.addRepeatable": async ({ tabId, addButtonId, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "addRepeatable", [addButtonId], timing),
+  "form.next": async ({ tabId, timing }) => callAdapter(requireWorkday(await resolveTab(tabId)), "next", [], timing),
+  "form.back": async ({ tabId, timing }) => callAdapter(requireWorkday(await resolveTab(tabId)), "back", [], timing),
+  "form.pageAction": async ({ tabId, action, timing }) =>
+    callAdapter(requireWorkday(await resolveTab(tabId)), "pageAction", [action], timing),
   "tab.screenshot": async ({ tabId }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");

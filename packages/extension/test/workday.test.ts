@@ -422,3 +422,35 @@ describe("navigation and the submit guard", () => {
     expect(api.blockedSubmitAttempts().length).toBeGreaterThan(0);
   });
 });
+
+describe("timing", () => {
+  const id = (automationId: string) =>
+    api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === automationId)?.id as string;
+  afterEach(() => api.setTiming(null));
+
+  it("uses the waits the companion sends, and the defaults again without them", async () => {
+    const { T } = await import("../src/adapters/workday/timing.js");
+    const { DEFAULT_TIMING } = await import("@ezapply/protocol");
+    // A search that finds nothing waits typeaheadNoResultsMs for "No Items." to stay (2 s by default).
+    api.setTiming({ ...DEFAULT_TIMING, typeaheadNoResultsMs: 100 });
+    let started = Date.now();
+    expect(await api.searchOptions(id("formField-skills"), "lua")).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1500);
+
+    api.setTiming(null);
+    expect(T).toEqual(DEFAULT_TIMING);
+    started = Date.now();
+    expect(await api.searchOptions(id("formField-skills"), "lua")).toEqual([]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
+  }, 20_000);
+
+  it("ignores unknown keys and bad values", async () => {
+    const { T } = await import("../src/adapters/workday/timing.js");
+    const { DEFAULT_TIMING } = await import("@ezapply/protocol");
+    api.setTiming({ dropdownOpenMs: 700, bogus: 1, stepMs: -5 } as never);
+    expect(T).toEqual({ ...DEFAULT_TIMING, dropdownOpenMs: 700 });
+  });
+});

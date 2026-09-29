@@ -80,7 +80,12 @@ As of 2026-09-27.
   each field, dropdown open and close waits, the typeahead's waits for its own results), the Workday tab
   hidden behind the review page (browsers slow hidden tabs), and a throttled laptop. A timed-out fill keeps
   running in the page and isn't logged. The unverified dropdown changes were reverted; the typeahead's
-  waits were kept because its fix worked. Next: per-field timings in fill results.
+  waits were kept because its fix worked. The fifth run (after the revert) reached the review page with
+  fills of about 2.5–3 s per dropdown; every wait is now tunable in `autofill-timing.yaml`
+  ([waits](components/workday-adapter.md#waits-autofill-timingyaml)), not yet tried live. Next: per-field
+  timings in fill results.
+- **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
+  extra calls ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
 
 ## Deferred
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:

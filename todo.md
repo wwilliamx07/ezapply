@@ -113,7 +113,17 @@ Suspected sources of the time, not yet measured:
 - Opening every dropdown twice (`list_options` then `fill_fields`) on a step whose wording didn't need it.
 - Screenshots fail in Chrome ("Either the '<all_urls>' or 'activeTab' permission is required").
 
+The fifth run (after the revert) reached the review page in 330 s: form tools 210 s, `fill_fields` 135 s.
+Dropdowns took about 2.5–3 s each when they worked. "Could not open the dropdown" failed 9 fields (about 5.5 s
+of waiting each) and cost 4 extra calls, about 80 s of the 135 s. See `references/components/workday-adapter.md`
+("Finding a dropdown's listbox") for the pattern.
+
+- [x] Every adapter wait tunable in the workspace's `autofill-timing.yaml` (read per call, `scale`, fill timeout).
+
 Next:
+- [ ] "Could not open the dropdown": when a listbox is still open after Escape (reading options, or a miss),
+  press its own button again to close it, as a person would. Live buttons have no `aria-expanded`, so the
+  current close never does.
 - [ ] Per-field timings in fill results (and the slow paths taken), logged by the companion, then one live run.
 - [ ] Bring the application tab to the front before each form call (`tab.show`, `tabHidden`): built and
   tested, kept in a git stash ("tab.show: bring the application tab to the front") until a live run can

@@ -65,6 +65,18 @@ without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
 
+### `autofill-timing.yaml` (`companion/src/forms/timing.ts`)
+The Workday adapter's waits, for the user to tune. Written by `ezapply init` if missing and never
+overwritten; read for every form call, so a saved edit applies to the next one.
+```yaml
+scale: 1                  # multiplies the defaults of the waits left unset (not pollMs; 0.1–10)
+# fillTimeoutSeconds: 120 # how long the companion waits for one fill_fields (10–600)
+# dropdownOpenMs: 2000    # every wait, commented out at its default, with a line on what it does
+```
+Keys and defaults: `DEFAULT_TIMING` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A
+missing file or key means the default. A mistake (bad YAML, an unknown key, a value out of range) falls back
+to the default for that part, is logged, and shows in `get_form` as `timingIssues`; it never fails a call.
+
 ### `ezapply` / `ezapply.cmd` (workspace launcher, `cli/src/workspace-init.ts`)
 Written by every `ezapply init`, for this OS only. POSIX: `#!/bin/sh` and `exec "<node>" "<cli main.js>" "$@"`
 (mode 755). Windows: `@echo off` and `"<node>" "<cli main.js>" %*`. Lets `./ezapply chat` run from the

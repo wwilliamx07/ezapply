@@ -33,6 +33,7 @@ import {
   uploadFile,
 } from "./fill.js";
 import { SEL } from "./selectors.js";
+import { setTiming, T } from "./timing.js";
 
 declare const __ADAPTER_VERSION__: string | undefined;
 
@@ -67,6 +68,11 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
   return {
     version: ADAPTER_VERSION,
 
+    /** The waits for the calls that follow (see timing.ts); null or absent restores the defaults. */
+    setTiming(timing?: Record<string, number> | null): void {
+      setTiming(timing);
+    },
+
     getForm(): PageSchema {
       return refresh().schema;
     },
@@ -94,7 +100,7 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
         } catch (err) {
           out.push({ fieldId: f.fieldId, ok: false, error: (err as Error).message });
         }
-        await settle(doc, 120, 1500);
+        await settle(doc, T.afterFieldQuietMs, T.afterFieldMaxMs);
       }
       // Surface validation errors that appeared as a result of filling.
       const after = refresh();
@@ -146,11 +152,11 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       const before = count();
       row.button.scrollIntoView?.({ block: "center" });
       press(row.button);
-      if (!(await waitFor(() => count() < before, 1500))) {
+      if (!(await waitFor(() => count() < before, T.removeRowMs))) {
         await confirmRemoval(doc);
-        await waitFor(() => count() < before, 2500);
+        await waitFor(() => count() < before, T.removeRowConfirmMs);
       }
-      await settle(doc, 200, 2000);
+      await settle(doc, T.rowQuietMs, T.rowMaxMs);
       return count() < before
         ? { sectionId, ok: true, removed: row.title }
         : { sectionId, ok: false, error: `"${row.title}" is still there.` };
@@ -163,8 +169,8 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       if (isSubmitControl(b)) return { ok: false, error: "Refusing to press a submit control." };
       const before = doc.querySelectorAll(SEL.fieldContainer).length;
       press(b);
-      const grew = await waitFor(() => doc.querySelectorAll(SEL.fieldContainer).length > before, 4000);
-      await settle(doc, 200, 2000);
+      const grew = await waitFor(() => doc.querySelectorAll(SEL.fieldContainer).length > before, T.addRowMs);
+      await settle(doc, T.rowQuietMs, T.rowMaxMs);
       return grew ? { ok: true } : { ok: false, error: "No new fields appeared." };
     },
 
@@ -203,8 +209,8 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       };
       const keyBefore = stepKey();
       press(button);
-      await waitFor(() => stepKey() !== keyBefore || pageErrors(doc).length > 0, 12000, 150);
-      await settle(doc, 300, 4000);
+      await waitFor(() => stepKey() !== keyBefore || pageErrors(doc).length > 0, T.stepMs, 150);
+      await settle(doc, T.stepQuietMs, T.stepMaxMs);
       const after = summary(false);
       return { ...after, advanced: stepKey() !== keyBefore || after.pageKind !== kind };
     },
@@ -233,8 +239,8 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       if (isSubmitControl(button)) return summary(false, { refusedReason: "Refusing to press a submit control." });
       const stepBefore = before.schema.step?.title ?? "";
       press(button);
-      const changed = await waitFor(() => (stepInfo(doc)?.title ?? "") !== stepBefore, 12000, 150);
-      await settle(doc, 300, 4000);
+      const changed = await waitFor(() => (stepInfo(doc)?.title ?? "") !== stepBefore, T.stepMs, 150);
+      await settle(doc, T.stepQuietMs, T.stepMaxMs);
       return summary(Boolean(changed));
     },
 
@@ -250,7 +256,7 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       if (isSubmitControl(el))
         return { ok: false, pageKind: detectPage(doc, 0), error: "Refusing to press a submit control." };
       press(el);
-      await settle(doc, 400, 8000);
+      await settle(doc, T.pageActionQuietMs, T.pageActionMaxMs);
       return { ok: true, pageKind: detectPage(doc, extract(doc, getUrl()).fields.size) };
     },
 

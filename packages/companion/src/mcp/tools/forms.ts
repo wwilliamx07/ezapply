@@ -27,7 +27,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
         "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
-        "`posting` (the posting this is credited to). Call at the start of every step and after changes.",
+        "`posting` (the posting this is credited to). Call at the start of every step and after changes. " +
+        "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user.",
       inputSchema: {
         onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),
         section: z.string().optional().describe("Only sections whose id or title contains this."),

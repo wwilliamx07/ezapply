@@ -12,6 +12,7 @@ content scripts can't reach.
 | `extract.ts` | Page detection, field extraction, step info, errors, page actions, `isSubmitControl`, `nextButton` |
 | `fill.ts` | One filler per field kind, option listing and search, uploads |
 | `dom.ts` | DOM helpers: text normalization, visibility, native value setter, pointer/keyboard sequences, `typeChar` (one typed character), `settle`, `waitFor`, `matchOption`, React prop access, `win(node)` |
+| `timing.ts` | `T`, the waits in use, and `setTiming` ([waits](#waits-autofill-timingyaml)) |
 | `selectors.ts` | **Every Workday-specific string of the adapter**: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS`. The posting-page hooks the companion reads too, the Workday hosts and tenant parsing come from `@ezapply/protocol/workday` ([protocol](protocol.md)) |
 
 **No globals.** Event, observer, `File`, `DataTransfer` and element-prototype constructors come from the
@@ -22,7 +23,8 @@ drive it.
 ## API (`window.__ezapplyWorkday`)
 `getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
 `remove(fieldId, values?)`, `addRepeatable(addButtonId)`, `removeRepeatable(sectionId)`, `next()`, `back()`,
-`pageAction(action)`, `blockedSubmitAttempts()`. The field registry from the last extraction is kept; a
+`pageAction(action)`, `blockedSubmitAttempts()`, `setTiming(timing)` (the background calls it before every
+method). The field registry from the last extraction is kept; a
 lookup whose element went stale re-extracts, and an unknown id fails with "call get_form again".
 
 ## Page detection (`detectPage`), in order
@@ -121,7 +123,13 @@ The fixture models the live behaviour (the portal lingers 150 ms, and Degree Lev
 **Known problem, not fixed:** in the second live run, after a value matched nothing, the *next* dropdown
 failed with "Could not open the dropdown" (the listbox seemed to stay open, and the press on the next button
 only closed it); the call after that worked. A fix (dismissing a listbox that stays open, pressing again)
-was tried and reverted: it wasn't shown to work live, and dropdown fills had become much slower.
+was tried and reverted: it wasn't shown to work live, and dropdown fills had become much slower. The fifth
+live run hit it 9 times: the first dropdown after `list_options` had read that step's dropdowns, five after
+a value that matched nothing (in one call), the first dropdown of two later calls, and one mid-call after a
+successful dropdown. Each failure waits out the open (1 s + 0.5 s + 2 s + 2 s by default). Likely cause, unconfirmed:
+closing a listbox without choosing (after reading options, or after a miss) presses Escape and then presses
+the button only if it says `aria-expanded="true"`, which live buttons don't (the fixture's live-dropdown
+model was built from that), so the list stays open.
 
 ### Typeahead searches and lists
 - **Waiting for results.** Typing a query waits until the options on screen differ from those before it
@@ -187,6 +195,23 @@ knowledge of Workday's markup, unverified on a live tenant.
 **Attached files** (`attachedFiles` in `extract.ts`) are listed once each: the `file-upload-item-name` elements
 with their row (`file-upload-item` / `file-upload-successful`), or the rows themselves when a tenant has no
 name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
+
+## Waits (`autofill-timing.yaml`)
+Every wait the adapter makes (about 45: after each field, opening and closing a dropdown, a typeahead's
+search, typing a date, uploads, rows, steps) is a named value in `T` (`timing.ts`), with its default and a
+line on what it's for in `DEFAULT_TIMING` / `TIMING_DOCS` (`protocol/src/timing.ts`). The companion reads
+the user's `autofill-timing.yaml` for every form call ([format](../data-formats.md#autofill-timingyaml)),
+resolves it against the defaults (`scale` multiplies the defaults of the waits it leaves unset; a wait it
+sets is used as written) and sends the result as the call's `timing`; the background
+calls `setTiming` before the method, so an edit applies to the next call. No `timing` (an older companion) or
+`null` restores the defaults, since `T` lives on in the page between calls. Of the poll intervals only
+`waitFor`'s default is configurable (`pollMs`); the waits with their own interval (typeahead results
+100 ms, uploads 200/250 ms, steps 150 ms) keep it.
+
+**Why:** the fourth live run completed but slowly: dropdowns about 2.5–3 s each, a 15-dropdown step 49 s.
+Most waits end as soon as their condition holds, but some cost their full length on every field when the
+page never goes quiet or a check never matches (the settle after each field, a dropdown's closed and selected
+checks). Which ones isn't measured yet; the file lets the user shorten them and see what breaks.
 
 ## Removing values and attachments (`remove`)
 Workday pre-fills from the candidate's last application, so a Skills multi-select or a Cover Letter field can

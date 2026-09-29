@@ -164,7 +164,14 @@ export const UploadFile = z.object({
 });
 export type UploadFile = z.infer<typeof UploadFile>;
 
-const TabParam = z.object({ tabId: z.number().int().optional() });
+/**
+ * `timing`: the adapter's waits for this call (see timing.ts), resolved by the companion from the workspace's
+ * `autofill-timing.yaml`. Absent (an older companion): the adapter's defaults.
+ */
+const TabParam = z.object({
+  tabId: z.number().int().optional(),
+  timing: z.record(z.string(), z.number()).optional(),
+});
 
 /** Extension-served form methods (added to ExtensionApi). */
 export const FormMethods = {

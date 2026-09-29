@@ -1,9 +1,14 @@
-import type { TabInfo } from "@ezapply/protocol";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_TIMING, type TabInfo } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
 import { FormsService } from "../src/forms/service.js";
+import { loadTiming, TIMING_FILE, timingFileTemplate } from "../src/forms/timing.js";
 import { createLogger } from "../src/logger.js";
 import type { PostingsService } from "../src/postings/service.js";
+import type { Workspace } from "../src/workspace/workspace.js";
 
 const tab = (tabId: number): TabInfo => ({
   tabId,
@@ -33,9 +38,13 @@ function slowBridge() {
   return { bridge: { call } as unknown as ExtensionBridge, most, order };
 }
 
-function forms(bridge: ExtensionBridge) {
+/** A workspace whose files live in `dir` (by default one without autofill-timing.yaml). */
+const workspaceAt = (dir = join(tmpdir(), "ezapply-no-such-workspace")) =>
+  ({ path: (...p: string[]) => join(dir, ...p) }) as unknown as Workspace;
+
+function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
   const postings = { activeId: async () => null } as unknown as PostingsService;
-  return new FormsService({} as never, postings, bridge, {} as never, createLogger({ toFile: false, level: "silent" }));
+  return new FormsService(ws, postings, bridge, {} as never, createLogger({ toFile: false, level: "silent" }));
 }
 
 describe("form calls on one tab", () => {
@@ -80,5 +89,96 @@ describe("form calls on one tab", () => {
     const [first, second] = await Promise.allSettled([f.listOptions("broken", 7), f.listOptions("gender", 7)]);
     expect(first.status).toBe("rejected");
     expect(second).toMatchObject({ status: "fulfilled", value: [{ label: "options of gender" }] });
+  });
+});
+
+describe("autofill-timing.yaml", () => {
+  /** A bridge that records each call's params and timeout. */
+  function recordingBridge() {
+    const calls: { method: string; params: Record<string, unknown>; timeoutMs?: number }[] = [];
+    const call = async (method: string, params: Record<string, unknown>, timeoutMs?: number) => {
+      if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
+      calls.push({ method, params, ...(timeoutMs ? { timeoutMs } : {}) });
+      if (method === "form.get") {
+        return {
+          adapter: "workday",
+          tabId: 7,
+          url: tab(7).url,
+          pageKind: "step",
+          sections: [],
+          addButtons: [],
+          actions: [],
+          errors: [],
+        };
+      }
+      return [{ fieldId: "a", ok: true, readBack: "x" }];
+    };
+    return { bridge: { call } as unknown as ExtensionBridge, calls };
+  }
+
+  async function withFile(content: string | null, fn: (ws: Workspace) => Promise<void>) {
+    const dir = await mkdtemp(join(tmpdir(), "ezapply-timing-"));
+    try {
+      if (content !== null) await writeFile(join(dir, TIMING_FILE), content, "utf8");
+      await fn(workspaceAt(dir));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("sends the defaults without a file, and the template changes nothing", async () => {
+    await withFile(null, async (ws) => {
+      expect(await loadTiming(ws)).toEqual({ timing: DEFAULT_TIMING, fillTimeoutMs: 120_000, issues: [] });
+    });
+    await withFile(timingFileTemplate(), async (ws) => {
+      expect(await loadTiming(ws)).toEqual({ timing: DEFAULT_TIMING, fillTimeoutMs: 120_000, issues: [] });
+    });
+  });
+
+  it("sends the file's waits with every call, scaled, and its fill timeout", async () => {
+    await withFile("scale: 0.5\ndropdownOpenMs: 800\npollMs: 20\nfillTimeoutSeconds: 300\n", async (ws) => {
+      const b = recordingBridge();
+      const f = forms(b.bridge, ws);
+      await f.getForm({ tabId: 7 });
+      await f.fill([{ fieldId: "a", value: "x", source: "profile" }], 7);
+      const [get, fill] = b.calls;
+      expect(get?.params.timing).toMatchObject({
+        dropdownOpenMs: 800,
+        afterFieldMaxMs: 750,
+        dropdownClosedMs: 500,
+        pollMs: 20,
+      });
+      expect(fill?.params.timing).toEqual(get?.params.timing);
+      expect(fill?.timeoutMs).toBe(300_000);
+    });
+  });
+
+  it("reads the file for every call, so an edit applies to the next one", async () => {
+    await withFile("dropdownOpenMs: 800\n", async (ws) => {
+      const b = recordingBridge();
+      const f = forms(b.bridge, ws);
+      await f.getForm({ tabId: 7 });
+      await writeFile(ws.path(TIMING_FILE), "dropdownOpenMs: 300\n", "utf8");
+      await f.getForm({ tabId: 7 });
+      expect(b.calls.map((c) => (c.params.timing as Record<string, number>).dropdownOpenMs)).toEqual([800, 300]);
+    });
+  });
+
+  it("falls back to the default for each mistake and says so in get_form, without failing the call", async () => {
+    await withFile("dropdownOpenMs: fast\nbogusMs: 5\nscale: 50\n", async (ws) => {
+      const f = forms(recordingBridge().bridge, ws);
+      const form = await f.getForm({ tabId: 7 });
+      expect(form.pageKind).toBe("step");
+      expect(form.timingIssues).toEqual([
+        "autofill-timing.yaml: dropdownOpenMs must be a number from 0 to 120000; using the default.",
+        'autofill-timing.yaml: unknown key "bogusMs" ignored.',
+        "autofill-timing.yaml: scale must be a number from 0.1 to 10; using the default.",
+      ]);
+    });
+    await withFile("dropdownOpenMs: [\n", async (ws) => {
+      const loaded = await loadTiming(ws);
+      expect(loaded.timing).toEqual(DEFAULT_TIMING);
+      expect(loaded.issues[0]).toMatch(/couldn't be read, so the defaults are used/);
+    });
   });
 });

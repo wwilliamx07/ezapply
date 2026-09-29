@@ -17,7 +17,7 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `mcp/server.ts` | Creates the `McpServer` and registers the tool groups |
 | `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `templates.ts`, `github.ts`, `forms.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
 | `mcp/result.ts` | `tool()` / `rawTool()`: turn results into compact JSON text and errors into `{ error }` results |
-| `forms/service.ts` | `FormsService`: tab choice, one call per tab at a time, crediting form activity to the posting on the tab's tenant, `form-log.jsonl`, status moves, reading files for upload, the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)) |
+| `forms/service.ts` | `FormsService`: tab choice, one call per tab at a time, crediting form activity to the posting on the tab's tenant, `form-log.jsonl`, status moves, reading files for upload, the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/timing.ts`: `loadTiming` (reads `autofill-timing.yaml` for every call) and `timingFileTemplate` |
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
 | `postings/` | Capture ingest and extraction → [postings.md](postings.md) |

@@ -59,7 +59,10 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 |---|---|
 | `posting.capture` | `CapturePayload` → `CaptureResult { postingId, isNew, company?, role? }` |
 
-`ExtensionApi` (served by the extension):
+`ExtensionApi` (served by the extension). Every `form.*` and `tab.*` method also takes `timing?` (name → ms):
+the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml`; the keys and
+defaults are `DEFAULT_TIMING` in `timing.ts` ([waits](workday-adapter.md#waits-autofill-timingyaml)). Unknown
+keys are ignored and an older extension strips the field, so it came without a version bump.
 
 | Method | Params → result |
 |---|---|
@@ -121,7 +124,7 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   close code 4005 (4005 went again with the background daemon; the companion now closes with 1001 when its
   chat ends, which every extension treats as a plain disconnect); later `TabInfo.focused` and
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
-  `form.removeRepeatable` and `form.back` methods, `hello.browser`, and `addButtons[].section`,
+  `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides

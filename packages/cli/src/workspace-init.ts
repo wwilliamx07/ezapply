@@ -1,7 +1,14 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type AppConfig, defaultWorkspaceConfig, exists, WORKSPACE_DIRS } from "@ezapply/companion";
+import {
+  type AppConfig,
+  defaultWorkspaceConfig,
+  exists,
+  TIMING_FILE,
+  timingFileTemplate,
+  WORKSPACE_DIRS,
+} from "@ezapply/companion";
 
 const TEMPLATES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "templates");
 const CLI_MAIN = resolve(dirname(fileURLToPath(import.meta.url)), "main.js");
@@ -28,6 +35,8 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
     report,
   );
   await migrateWorkspaceConfig(join(root, "ezapply.config.json"), report);
+  // The user's to tune; every setting starts commented out, so defaults changed in a later build still apply.
+  await writeIfMissing(join(root, TIMING_FILE), timingFileTemplate(), report);
 
   // EZAPPLY.md is ours and always refreshed; CLAUDE.md belongs to the user and only imports it.
   const agentDoc = await readFile(join(TEMPLATES, "workspace", "EZAPPLY.md"), "utf8");

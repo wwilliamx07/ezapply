@@ -12,6 +12,7 @@ import {
   type PostingMeta,
   type PostingStatus,
   type TabInfo,
+  type Timing,
   workdayTenant,
 } from "@ezapply/protocol";
 import type { ExtensionBridge } from "../bridge/server.js";
@@ -20,6 +21,7 @@ import type { Logger } from "../logger.js";
 import type { PostingsService } from "../postings/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MIME: Record<string, string> = {
@@ -49,6 +51,12 @@ interface Target {
   /** The active posting, when this tab may belong to it (same tenant, or no tenant to compare). */
   posting: PostingMeta | null;
   mismatch?: PostingMismatch;
+  /** The adapter's waits for this call, from autofill-timing.yaml. */
+  timing?: Timing;
+  /** How long to wait for one form.fill (autofill-timing.yaml's fillTimeoutSeconds). */
+  fillTimeoutMs: number;
+  /** Problems in autofill-timing.yaml (those settings fell back to their defaults). */
+  timingIssues: string[];
 }
 
 /**
@@ -75,7 +83,7 @@ export class FormsService {
 
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string } = {}) {
     return this.onTab(opts.tabId, async (t) => {
-      const form = await this.bridge.call("form.get", { tabId: t.tab.tabId }, 20_000);
+      const form = await this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
       if (form.pageKind === "confirmation") {
         await this.setStatus(t, "submitted");
         await this.logEvent(t, { event: "confirmation-seen", url: form.url });
@@ -85,12 +93,15 @@ export class FormsService {
         ...leanForm(form, opts),
         ...(t.posting ? { posting: t.posting.id } : {}),
         ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+        ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
       };
     });
   }
 
   async listOptions(fieldId: string, tabId?: number) {
-    return this.onTab(tabId, (t) => this.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000));
+    return this.onTab(tabId, (t) =>
+      this.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000),
+    );
   }
 
   /**
@@ -102,7 +113,7 @@ export class FormsService {
       const out: Record<string, OptionInfo[] | { error: string }> = {};
       for (const fieldId of fieldIds) {
         out[fieldId] = await this.bridge
-          .call("form.listOptions", { fieldId, tabId: t.tab.tabId }, 20_000)
+          .call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000)
           .catch((err: unknown) => ({ error: EzError.from(err).message }));
       }
       return out;
@@ -111,7 +122,7 @@ export class FormsService {
 
   async searchOptions(fieldId: string, query: string, tabId?: number) {
     return this.onTab(tabId, (t) =>
-      this.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId }, 20_000),
+      this.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId, timing: t.timing }, 20_000),
     );
   }
 
@@ -122,8 +133,8 @@ export class FormsService {
     return this.onTab(tabId, async (t) => {
       const results = await this.bridge.call(
         "form.fill",
-        { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId },
-        120_000,
+        { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId, timing: t.timing },
+        t.fillTimeoutMs,
       );
       for (const f of fills) {
         const r = results.find((x) => x.fieldId === f.fieldId);
@@ -166,7 +177,11 @@ export class FormsService {
       base64: (await readFile(abs)).toString("base64"),
     };
     return this.onTab(tabId, async (t) => {
-      const result = await this.bridge.call("form.upload", { fieldId, file, tabId: t.tab.tabId }, 90_000);
+      const result = await this.bridge.call(
+        "form.upload",
+        { fieldId, file, tabId: t.tab.tabId, timing: t.timing },
+        90_000,
+      );
       await this.logEvent(t, {
         event: "upload",
         fieldId,
@@ -182,7 +197,7 @@ export class FormsService {
   async remove(fieldId: string, values: string[] | undefined, reason: string | undefined, tabId?: number) {
     return this.onTab(tabId, async (t) => {
       const result = await this.bridge
-        .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId }, 60_000)
+        .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.remove", "remove items"));
       await this.logEvent(t, {
         event: "remove",
@@ -200,7 +215,7 @@ export class FormsService {
   async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
     return this.onTab(tabId, async (t) => {
       const result = await this.bridge
-        .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId }, 30_000)
+        .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId, timing: t.timing }, 30_000)
         .catch(olderExtension("form.removeRepeatable", "remove rows"));
       await this.logEvent(t, {
         event: "remove-row",
@@ -216,14 +231,18 @@ export class FormsService {
 
   async addRepeatable(addButtonId: string, tabId?: number) {
     return this.onTab(tabId, async (t) => {
-      const result = await this.bridge.call("form.addRepeatable", { addButtonId, tabId: t.tab.tabId }, 20_000);
+      const result = await this.bridge.call(
+        "form.addRepeatable",
+        { addButtonId, tabId: t.tab.tabId, timing: t.timing },
+        20_000,
+      );
       return withMismatch(result, t);
     });
   }
 
   async next(tabId?: number) {
     return this.onTab(tabId, async (t) => {
-      const r = await this.bridge.call("form.next", { tabId: t.tab.tabId }, 60_000);
+      const r = await this.bridge.call("form.next", { tabId: t.tab.tabId, timing: t.timing }, 60_000);
       await this.logEvent(t, {
         event: "next",
         advanced: r.advanced,
@@ -239,7 +258,7 @@ export class FormsService {
   async back(tabId?: number) {
     return this.onTab(tabId, async (t) => {
       const r = await this.bridge
-        .call("form.back", { tabId: t.tab.tabId }, 60_000)
+        .call("form.back", { tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.back", "go back"));
       await this.logEvent(t, { event: "back", moved: r.moved, pageKind: r.pageKind, step: r.step?.title });
       return withMismatch(r, t);
@@ -248,13 +267,15 @@ export class FormsService {
 
   async pageAction(action: PageAction, tabId?: number) {
     return this.onTab(tabId, async (t) => {
-      const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId }, 30_000);
+      const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
       return withMismatch(r, t);
     });
   }
 
   async screenshot(tabId?: number) {
-    return this.onTab(tabId, (t) => this.bridge.call("tab.screenshot", { tabId: t.tab.tabId }, 15_000));
+    return this.onTab(tabId, (t) =>
+      this.bridge.call("tab.screenshot", { tabId: t.tab.tabId, timing: t.timing }, 15_000),
+    );
   }
 
   /**
@@ -262,11 +283,16 @@ export class FormsService {
    * makes tool calls in parallel, and two calls acting on one page at once interfere: two dropdown reads
    * each open a listbox, and both can read whichever is on screen; a fill can land while `go_next` changes
    * the step. The page is one shared thing, so calls on a tab run one at a time, in the order they came;
-   * different tabs still run side by side.
+   * different tabs still run side by side. The waits come from autofill-timing.yaml, read for every call so an
+   * edit applies to the next one.
    */
   private async onTab<T>(tabId: number | undefined, fn: (t: Target) => Promise<T>): Promise<T> {
     const t = await this.target(tabId);
-    return this.pages.run(String(t.tab.tabId), () => fn(t));
+    return this.pages.run(String(t.tab.tabId), async () => {
+      const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws);
+      if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
+      return fn({ ...t, timing, fillTimeoutMs, timingIssues: issues });
+    });
   }
 
   /**
@@ -274,7 +300,7 @@ export class FormsService {
    * is looking at, else the most recently used); else any Workday tab, the same way. Then decide whether
    * the active posting may be credited with what happens there.
    */
-  private async target(tabId?: number): Promise<Target> {
+  private async target(tabId?: number): Promise<Omit<Target, "fillTimeoutMs" | "timingIssues">> {
     const { tabs } = await this.bridge.call("browser.status", {}, 5_000);
     const activeId = await this.postings.activeId();
     const active = activeId ? await this.postings.get(activeId).catch(() => null) : null;
