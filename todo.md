@@ -122,7 +122,7 @@ of waiting each) and cost 4 extra calls, about 80 s of the 135 s. See `reference
 
 Next:
 - [x] "Could not open the dropdown": when a listbox is still open after Escape (reading options, or a miss),
-  press its own button to close it, as a person would (branch `fix/dropdown-close-after-no-choice`). Live
+  press its own button to close it, as a person would. Live
   buttons have no `aria-expanded`, so the old close did nothing. Fixture tests fail on the old code; not yet
   run live. 3 of the 9 failures don't fit this cause.
 - [ ] Per-field timings in fill results (and the slow paths taken), logged by the companion, then one live run.
