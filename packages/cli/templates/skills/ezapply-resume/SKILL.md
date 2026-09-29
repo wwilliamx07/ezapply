@@ -31,9 +31,7 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 - Adjust the skills line to what the posting asks for **and** the evidence supports.
 - Put a `% src: <claim-id or profile path>` comment on each changed or added bullet.
 - Escape LaTeX specials in text taken from the posting.
-- Numbers: use only numbers that appear in the evidence or profile. That includes the ones already in
-  the template's bullets you keep: the base resume can be older than the claims (a live run found "2200+"
-  where the claim said 2,168). Correct a number the claims don't back, and tell the user.
+- Numbers: use only numbers that appear in the evidence or profile.
 
 ## Build and check (loop until clean)
 1. `tex_compile`. Fix errors first. Treat overfull boxes and missing glyphs as defects.

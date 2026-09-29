@@ -82,15 +82,14 @@ the DOM listeners the submit guard relies on.
 |---|---|
 | text, number, textarea | Native prototype setter + `input`/`change`, blur; fallback: React `onChange`/`onBlur` |
 | password | Refused: the user types passwords |
-| dropdown | Open the listbox (a portal under `body`; [finding it](#finding-a-dropdowns-listbox)), pick the best match, check the button label; fallback: React `onClick` on the option. No match → `availableOptions` (each label once). Closing makes sure the listbox has gone |
+| dropdown | Open the listbox (a portal under `body`; [finding it](#finding-a-dropdowns-listbox)), pick the best match, check the button label; fallback: React `onClick` on the option. No match → `availableOptions`. Closing waits until the listbox has gone |
 | typeahead | Per value: type the query, wait for its results ([searching](#typeahead-searches-and-lists)) and pick the match; a value like `"Job Board > LinkedIn"` walks nested menus; already-selected values are skipped; chips are read back. Each value is matched on its own: one that matches nothing goes to `unmatched` with the options its search showed and the rest are still selected; one where Workday selected an option itself (single-select prompts select on Enter) goes to `inexact`. `ok` is false while anything is unmatched |
 | radio, checkbox, checkbox-group | Click the label or input; check `checked`/`aria-checked` |
 | date | `YYYY`, `YYYY-MM` or `YYYY-MM-DD` (also `MM/YYYY`, `MM/DD/YYYY`), typed into the Month/Day/Year parts present ([dates](#dates-typed-into-workdays-split-widget)); errors if the form needs a part not given. Read back from what the parts hold for the page; a mismatch fails with "the page didn't take the date … ask the user to type it" |
 | file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`; else a drop on the drop zone; confirmed only by a **newly shown** file whose name matches, so a same-named file left from a previous application doesn't pass |
 
-**Honest results.** After a batch the page is re-read, and a field that still shows an error is `ok: false`
-with "The page still reports: …", whatever it reads back. Before, the result was `ok: true` with a
-"Filled, but…" note, and in the first live run the agent trusted it and found out only at `go_next`.
+**After a batch** the page is re-read, and a validation error on a field that was filled is added to its
+result as "Filled, but the page reports: …" (`ok` stays true).
 
 **Option matching** (`matchOption`, whitespace-normalized and case-insensitive): exact; then the label
 without a trailing parenthetical, or the parenthetical itself ("Python" → "Python (Programming Language)",
@@ -98,10 +97,9 @@ without a trailing parenthetical, or the parenthetical itself ("Python" → "Pyt
 exact one must single out one **label** (a label listed twice counts once: live Workday listed every
 typeahead option twice, which made unique matches look ambiguous); otherwise no match, never a guess between
 several. A work-eligibility question with "Yes, I am a citizen…" and "Yes, I possess a temporary work
-permit" doesn't match "Yes", by design. **Decline:** `"decline"` (the profile's EEO value) or any
-decline-worded value ("I prefer not to respond") first looks for the one option worded as a decline ("prefer
-not", "do not wish", "decline", "choose not", "rather not", "not to say/disclose/answer"), since each form
-words it differently: "I do not wish to self-identify", "I prefer not to identify".
+permit" doesn't match "Yes", by design. The bare-name and parenthetical rules and counting labels once
+worked live: 12 of 15 skills given as plain names ("Java", "SQL", "AWS") were selected under Workday's own
+names.
 
 ### Finding a dropdown's listbox
 Live Workday gives the dropdown button no usable `aria-controls`, and a closed listbox stays on screen for a
@@ -114,18 +112,16 @@ Now:
 - Before opening, wait (up to 1 s) for no such listbox to be visible, pressing Escape on any still there.
 - After the press, accept `aria-controls`' target when it exists, or else a listbox that wasn't visible
   before the press, or one that was but whose options changed (a reused portal).
-- **A listbox that stays open.** Closing waits up to 600 ms for the listbox to go (the animation); one
-  still there was never closed, so it's dismissed: Escape on the listbox and on the focused element, then a
-  press on the page body (a click-away). In the second live run, after a value matched nothing the listbox
-  stayed open, and the *next* dropdown then failed with "Could not open the dropdown" (5 times; once it took
-  four more fields in the same call with it) while the call after that worked: the press on the next button
-  had only closed the stray listbox.
-- **Opening again.** When no listbox appears after the press, stray listboxes are dismissed and the button
-  pressed once more, then React's `onClick` as a last resort.
+- When no listbox appears after the press, React's `onClick` is tried.
+- Closing waits (up to 1 s) until the listbox is hidden or removed.
 
-The fixture models both behaviours: the portal lingers 150 ms and Degree Level's button has no
-`aria-controls`; with `liveDropdowns`, buttons have no `aria-expanded`, Escape closes nothing, and a press
-outside an open listbox only closes it (the press is swallowed). Each test fails on the old logic.
+The fixture models the live behaviour (the portal lingers 150 ms, and Degree Level's button has no
+`aria-controls`); its test fails on the old logic.
+
+**Known problem, not fixed:** in the second live run, after a value matched nothing, the *next* dropdown
+failed with "Could not open the dropdown" (the listbox seemed to stay open, and the press on the next button
+only closed it); the call after that worked. A fix (dismissing a listbox that stays open, pressing again)
+was tried and reverted: it wasn't shown to work live, and dropdown fills had become much slower.
 
 ### Typeahead searches and lists
 - **Waiting for results.** Typing a query waits until the options on screen differ from those before it
@@ -154,8 +150,9 @@ empty in both the fill result and `get_form`. When the field still shows an erro
 entered, they're entered once more (the first live run saw a date accepted on the second entry). A date the
 page still doesn't take fails with the value for the user to type.
 
-The display and spinbutton hooks are best knowledge of Workday's markup; the typing approach is unverified
-on a live tenant. The fixture's `dateWidget: "keys"` models parts that take digits only in keydown (typing
+Typing worked on a live tenant: in the third and fourth runs four `MM/YYYY` dates and two `YYYY` dates were
+taken and the step advanced. Which read-back hook the live widget answers to (display element,
+`aria-valuenow` or value) isn't known. The fixture's `dateWidget: "keys"` models parts that take digits only in keydown (typing
 works; the old setter didn't), and `"stuck"` parts that ignore synthetic keys (the fill fails honestly and
 `get_form` shows the date empty).
 
@@ -163,17 +160,17 @@ works; the old setter didn't), and `"stuck"` parts that ignore synthetic keys (t
 Apply Manually, Autofill with Resume or Use My Last Application.
 
 **Going forward** (`next()`): presses the forward button and waits (up to 12 s) until the step changes (its
-index or title) or validation errors show: new ones at once, ones already on screen after 2.5 s. `advanced`
-is true when the step index, title or page kind changed. Live step titles are often all "Application", so
-comparing titles alone reported `advanced: false` on every move of the second live run, and waited the full
-12 s on two of them. Notices go to `messages`, not `errors`. Returns
+index or title) or a validation error shows. `advanced` is true when the step index, title or page kind
+changed. Live step titles are often all "Application", so comparing titles alone reported `advanced: false`
+on every move of the second live run, and waited the full 12 s on two of them; the next runs reported every
+move. Notices go to `messages`, not `errors`. Returns
 `{ advanced, pageKind, step?, errors, messages?, refusedReason? }`.
 
 **Going back** (`back()`): presses the footer's Back button (`backButton`: `bottom-navigation-previous-button`,
 `pageFooterBackButton`, `wd-CommandButton_back`, else a visible button reading Back or Previous) and waits for
-the step index or title to change. It's allowed from any step with a Back button, including review (to
-correct an answer before the user submits), refused on the first step and on the confirmation page, and never
-presses a submit control. Returns `{ moved, pageKind, step?, errors, messages?, refusedReason? }`. What Workday keeps of
+the step title to change. It's allowed from any step with a Back button, including review (to correct an
+answer before the user submits), refused on the first step and on the confirmation page, and never presses
+a submit control. Returns `{ moved, pageKind, step?, errors, refusedReason? }`. What Workday keeps of
 unsaved entries on the step being left isn't verified; the skill re-checks steps when coming forward. The
 Back hooks are best knowledge of Workday's markup, unverified on a live tenant (Back appears from step 2,
 behind sign-in); the fixture's review page has one that returns to the step with its entries.

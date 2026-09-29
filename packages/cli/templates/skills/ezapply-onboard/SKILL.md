@@ -53,9 +53,6 @@ them in parallel with subagents (one repo each) and summarize when all finish.
 3. Read the resume source and write `profile/profile.yaml`: identity, contact, links, work history
    (YYYY-MM dates, `end: null` for current), education, skills, languages, certifications. Run
    `profile_check` until it is valid.
-   Education needs `start` too (forms ask "From", and the year of study is computed from it), and `end` as
-   `YYYY-MM-DD` when the user knows the expected graduation day: some forms want a full date. Ask for both
-   if the resume doesn't show them.
 4. Ask for everything `profile_check` lists as missing in **one** message: phone, full address, work
    authorization countries, sponsorship now and in the future, relocation, work mode, earliest start. Ask
    whether they want to store EEO answers (gender, race/ethnicity, veteran, disability). "decline" is a
@@ -81,10 +78,6 @@ Call `answers_check`. Go through the unanswered questions in groups of 6–8. Fo
 Ask them to confirm or correct, e.g. "reply 'all good' or give the numbers to change". Write confirmed
 answers into `answer` in `profile/answers.yaml` (leave `suggested` as is). Leave sensitive ones `null`
 unless they insist. Run `answers_check` after each group.
-
-For a student, include the student and co-op questions (`currently_enrolled`, `year_of_study`,
-`expected_graduation`, `available_work_terms`, `returning_to_school`, `full_time_interest`): campus postings
-ask them all. For someone not in school, skip them.
 
 ## 7. Preferences
 First ask how documents should reach applications, and save it with `attach_mode_set`:

@@ -93,32 +93,65 @@ tokens) when the others stayed under 80k: a large component read whole, or re-re
 
 ---
 
-## Part 8: The second live run (Monarch, 2026-09-28): done
+## Part 9: Slow fills after Part 8; Part 8 partly reverted (2026-09-28): open
+
+The next two live runs (same Monarch posting) were several times slower. One dropdown took 10.5 s (2.9 s
+before). Step 2 (38 to 43 fields: 18 or 19 dropdowns, a 15-entry skills list, 6 dates) outran the
+companion's 120 s `form.fill` timeout both times, and 9 dropdowns on step 3 ran past 110 s. The Part 8
+change was reverted except the fixes those runs showed working (marked **kept** in Part 8's table).
+
+Suspected sources of the time, not yet measured:
+- Fixed waits in the adapter: settling after every field (up to 1.5 s), a dropdown selection checked by
+  exact button text (two 1.5 s waits when long labels don't match), the typeahead's waits for its own
+  results (kept: they worked).
+- The Workday tab hidden behind the review page: browsers run a hidden tab's timers about once a second.
+  In the second run, 4 dates took 28 s right after the review page opened, against 16 fields in 6.7 s before.
+- A throttled laptop (at 8% battery, loading jsdom took 32 s instead of 1.3 s).
+- Large batches: a timed-out fill keeps running in the page, isn't logged, and the tab's queue lets the next
+  call in.
+- Dropdown options that load late: step 1's "How did you hear" returned only "Select One".
+- Opening every dropdown twice (`list_options` then `fill_fields`) on a step whose wording didn't need it.
+- Screenshots fail in Chrome ("Either the '<all_urls>' or 'activeTab' permission is required").
+
+Next:
+- [ ] Per-field timings in fill results (and the slow paths taken), logged by the companion, then one live run.
+- [ ] Bring the application tab to the front before each form call (`tab.show`, `tabHidden`): built and
+  tested, kept in a git stash ("tab.show: bring the application tab to the front") until a live run can
+  confirm it.
+- [ ] A time budget per fill and a way to stop one in the page (on cancel or timeout), with partial results
+  logged.
+- [ ] Wait for a dropdown's options to stop changing before reading them.
+- [ ] Fix the screenshot permission.
+
+---
+
+## Part 8: The second live run (Monarch, 2026-09-28): partly reverted
 
 It reached the review page. About 25 of ~70 tool calls went on retries, probes and recovery, and the user
 stepped in four times beyond the designed approvals (typing five dates, choosing to write a resume
 mid-form, asking for the cover letter, an unanswered question). Sources: the session transcript, the agent's
 own report in the workspace's `reports/`, and `form-log.jsonl`. All built, tested (each adapter test fails on
-the old code) and described in `references/`; none re-run live yet (`references/status.md`).
+the old code) and described in `references/`. After the slow runs in Part 9, only the fixes those runs
+showed working were kept.
 
 | Finding | What was done |
 |---|---|
-| Multi-part dates never taken; `ok: true` anyway | Digits typed as key events; parts read from the widget's display, `aria-valuenow` or value; `MM/YYYY` accepted; a field still showing an error is `ok: false`; an untaken date fails with the value for the user |
-| "Could not open the dropdown" after a miss | A listbox left open is dismissed (Escape on it and the focus, then a click-away); opening presses again after closing strays |
-| Skills list stopped at the first miss; options listed twice | Entries matched one by one (`unmatched` with suggestions, `inexact`); innermost option hook only; `matchOption` counts labels once and matches bare names and acronyms in parentheses |
-| `search_options` one query behind | Waits for options that differ from those before the query, or a settled "No Items." |
-| `go_next` always `advanced: false`, 12 s waits | Step index, title or page kind; errors already shown end the wait after 2.5 s |
-| Upload notices as errors | `messages`, not `errors`, in `get_form`, `go_next`, `go_back` and field errors |
-| Add buttons all "Add" | Named by the section heading (`add.work-experience`, `section`) |
-| `resume-cv.` field id | The label when the automation id is bare |
-| EEO decline wording guessed | `decline` resolves to the form's decline option |
-| Documents written mid-form | `ezapply-apply` offers the resume and cover letter before the form, reviewed together |
-| Year of study guessed; option text stated unseen | `ezapply-apply`: ask for facts the profile lacks; describe only options seen |
-| Student questions not in the bank | Seed version 2: six student and co-op questions, added once to existing banks |
-| Graduation day not storable; no education start | Education dates take `YYYY-MM-DD`; onboarding asks for `start` |
-| Five compiles to fit one page | `tex_compile` `overflow { lines, text }` |
-| Template number the claims don't back | `ezapply-resume`: check numbers kept from the template too |
-| `python`, `sed` escaping, duplicate text | `EZAPPLY.md`: edit `.tex` with the Edit tool, whole bullets |
+| Multi-part dates never taken; `ok: true` anyway | **Kept:** digits typed as key events; parts read from the widget's display, `aria-valuenow` or value; `MM/YYYY` accepted; an untaken date fails with the value for the user. Reverted: `ok: false` while a field shows an error |
+| "Could not open the dropdown" after a miss | Reverted (unverified, suspected in the slowdown): dismissing a listbox left open, pressing again. Still open |
+| Skills list stopped at the first miss; options listed twice | **Kept:** entries matched one by one (`unmatched` with suggestions, `inexact`); innermost option hook only; `matchOption` counts labels once and matches bare names and acronyms in parentheses |
+| `search_options` one query behind | **Kept:** waits for options that differ from those before the query, or a settled "No Items." |
+| `go_next` always `advanced: false`, 12 s waits | **Kept:** step index, title or page kind. Reverted: errors already shown ending the wait after 2.5 s |
+| Upload notices as errors | **Kept:** `messages`, not `errors`, in `get_form`, `go_next` and field errors. Reverted: `go_back` changes |
+| Add buttons all "Add" | **Kept:** named by the section heading (`add.work-experience`, `section`) |
+| `resume-cv.` field id | **Kept:** the label when the automation id is bare |
+| EEO decline wording guessed | Reverted (never exercised): `decline` resolving to the form's decline option |
+| Documents written mid-form | Reverted: the review page then opened in front of the form tab, a suspect in the slowdown |
+| Year of study guessed; option text stated unseen | Reverted (unverified) |
+| Student questions not in the bank | Reverted (unverified). Existing banks keep the six questions already added; the `seedVersion` key is ignored |
+| Graduation day not storable; no education start | Reverted (unverified) |
+| Five compiles to fit one page | **Kept:** `tex_compile` `overflow { lines, text }` (a live resume fitted in one more compile) |
+| Template number the claims don't back | Reverted (unverified) |
+| `python`, `sed` escaping, duplicate text | Reverted (unverified) |
 
 The report also suggested mapping "Yes" to any option starting with "Yes": not done, since the
 work-eligibility question had two ("citizen or permanent resident", "temporary work permit") and the choice

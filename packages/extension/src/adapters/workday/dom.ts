@@ -152,16 +152,11 @@ export async function waitFor<T>(fn: () => T | null | undefined | false, maxMs =
   }
 }
 
-/** A decline-to-answer option ("I do not wish to self-identify", "I prefer not to identify", "Decline"). */
-const DECLINE =
-  /prefer not|do not wish|don't wish|not wish to|decline|choose not|rather not|not to (say|disclose|answer)/i;
-
 /**
  * Best match of `wanted` among `options`, case-insensitive: exact; the label without a trailing parenthetical,
  * or the parenthetical itself ("Python" → "Python (Programming Language)", "SQL" → "Structured Query Language
  * (SQL)"); a prefix either way; a substring. Each rule after the exact one must single out one label: Workday
- * lists some options twice, so labels are counted once. "decline" (the profile's EEO value) or any
- * decline-worded value matches the form's one decline-to-answer option, whatever its wording.
+ * lists some options twice, so labels are counted once.
  */
 export function matchOption(wanted: string, options: string[]): number {
   const w = norm(wanted).toLowerCase();
@@ -179,7 +174,6 @@ export function matchOption(wanted: string, options: string[]): number {
     (o) => o.startsWith(w) || w.startsWith(o),
     (o) => o.includes(w),
   ];
-  if (w === "decline" || DECLINE.test(w)) rules.unshift((o) => DECLINE.test(o));
   for (const rule of rules) {
     const i = unique(rule);
     if (i >= 0) return i;

@@ -171,30 +171,6 @@ describe("filling", () => {
       expect(field?.currentValue).toBeNull();
     });
   });
-
-  it("says a field that still shows an error wasn't filled", async () => {
-    fixture = buildWorkdayStep(document, { dateErrorSticks: true });
-    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
-    const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2024-12" }]);
-    expect(r).toMatchObject({ ok: false, readBack: "2024-12" });
-    expect(r?.error).toMatch(/^The page still reports: .*required/);
-  });
-
-  it("opens the next dropdown after one that matched nothing, with live listbox behaviour", async () => {
-    fixture = buildWorkdayStep(document, { liveDropdowns: true });
-    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
-    const res = await api.fill([
-      { fieldId: id("formField-degreeLevel"), value: "Diploma" },
-      { fieldId: id("formField-countryDropdown"), value: "Canada" },
-    ]);
-    expect(res.map((r) => [r.ok, r.readBack ?? r.availableOptions])).toEqual([
-      [false, ["Undergraduate", "Masters", "Ph.D"]],
-      [true, "Canada"],
-    ]);
-    const [next] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Masters" }]);
-    expect(next).toMatchObject({ ok: true, readBack: "Masters" });
-  });
-
   it("fills a skills list entry by entry, waiting for each search's results", async () => {
     await api.remove(id("formField-skills"));
     const [r] = await api.fill([
@@ -352,14 +328,6 @@ describe("matching option text", () => {
   it("doesn't guess between two options that both fit", () => {
     const eligible = ["Yes, I am a citizen or permanent resident of Canada", "Yes, I possess a temporary work permit"];
     expect(matchOption("Yes", eligible)).toBe(-1);
-  });
-
-  it("resolves decline to the form's own decline wording", () => {
-    expect(pick("decline", ["Female", "Male", "I do not wish to self-identify"])).toBe(
-      "I do not wish to self-identify",
-    );
-    expect(pick("I prefer not to respond", ["Yes", "No", "I prefer not to identify"])).toBe("I prefer not to identify");
-    expect(matchOption("decline", ["Yes", "No"])).toBe(-1);
   });
 });
 

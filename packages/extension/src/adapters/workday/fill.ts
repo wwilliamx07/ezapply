@@ -133,33 +133,10 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
   if (button.getAttribute("aria-expanded") !== "true") press(button);
   let opened = await waitFor(listFor, 2000);
   if (!opened) {
-    // Seen live: with another listbox still open, the press only closed that one (a click-away) and the next
-    // call opened fine. So close whatever is open and press again.
-    for (const l of visibleListboxes(doc)) await dismiss(l);
-    press(button);
-    opened = await waitFor(listFor, 1500);
-  }
-  if (!opened) {
     callReact(button, "onClick", {});
-    opened = await waitFor(listFor, 1500);
+    opened = await waitFor(listFor, 2000);
   }
   return opened;
-}
-
-/**
- * Close a listbox that is still open, and wait until it has gone: Escape on the listbox and on whatever has
- * focus, then a click elsewhere on the page. Live Workday doesn't always close on Escape at the button.
- */
-async function dismiss(list: HTMLElement): Promise<void> {
-  const doc = list.ownerDocument;
-  const gone = () => !list.isConnected || !isVisible(list);
-  if (gone()) return;
-  key(list, "Escape");
-  const focused = doc.activeElement;
-  if (focused && focused !== doc.body) key(focused, "Escape");
-  if (await waitFor(gone, 600)) return;
-  press(doc.body);
-  await waitFor(gone, 800);
 }
 
 /** Close the listbox and wait until it has gone, so the next dropdown can't mistake it for its own. */
@@ -169,10 +146,7 @@ async function closeListbox({ button, list }: OpenListbox): Promise<void> {
     await sleep(50);
     if (button.getAttribute("aria-expanded") === "true") press(button);
   }
-  // A listbox animates away for a moment after closing; one that stays longer was never closed (seen live
-  // after an option matched nothing, and the next dropdown then failed to open).
-  if (await waitFor(() => !list.isConnected || !isVisible(list), 600)) return;
-  await dismiss(list);
+  await waitFor(() => !list.isConnected || !isVisible(list), 1000);
 }
 
 export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
@@ -190,9 +164,7 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
   const idx = matchOption(value, labels);
   if (idx < 0) {
     await closeListbox(opened);
-    return fail(`No option matches "${value}".`, {
-      availableOptions: [...new Set(labels.filter(Boolean))].slice(0, 80),
-    });
+    return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
   }
   const option = opened.options[idx] as HTMLElement;
   const wanted = labels[idx] as string;

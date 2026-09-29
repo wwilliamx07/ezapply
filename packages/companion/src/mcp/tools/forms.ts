@@ -84,14 +84,13 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Fill fields",
       description:
         "Fill fields on the current step. Values: text; the option text for dropdowns and radios (closest match; " +
-        '"Python" finds "Python (Programming Language)"); "decline" for the form\'s decline-to-answer option, ' +
-        'whatever its wording; a string or array for typeaheads ("Category > Item" for nested menus; each entry ' +
-        "is matched on its own); true/false for a checkbox; labels for checkbox groups; " +
-        '"YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns `results` per ' +
-        "field: { fieldId, ok: true } when the field reads back exactly the value; else the read-back, error, " +
-        "options when nothing matched, `unmatched` (typeahead entries with the options their search showed) " +
-        "and `inexact` (an option Workday chose itself: check it). ok is false while the field still shows an " +
-        "error. Never passwords, or EEO answers the user hasn't given.",
+        '"Python" finds "Python (Programming Language)"); a string or array for typeaheads ("Category > Item" ' +
+        "for nested menus; each entry is matched on its own); true/false for a checkbox; labels for checkbox " +
+        'groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns ' +
+        "`results` per field: { fieldId, ok: true } when the field reads back exactly the value; else the " +
+        "read-back, error, options when nothing matched, `unmatched` (typeahead entries with the options their " +
+        "search showed) and `inexact` (an option Workday chose itself: check it). Never passwords, or EEO " +
+        "answers the user hasn't given.",
       inputSchema: {
         fills: z
           .array(

@@ -6,7 +6,7 @@ import type { Logger } from "../logger.js";
 import { exists } from "../util/fs.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { type AnswerEntry, AnswersFile, missingProfileFields, Profile, ReposFile } from "./schema.js";
-import { SEED_VERSION, seedAnswers } from "./seed-answers.js";
+import { seedAnswers } from "./seed-answers.js";
 
 export interface Issue {
   path: string;
@@ -49,34 +49,13 @@ export class ProfileService {
     await this.writeYaml(this.ws.path("profile", "repos.yaml"), ReposFile.parse(file), header);
   }
 
-  /**
-   * Create answers.yaml from the seed list if it does not exist. An existing file with an older `seedVersion`
-   * gets the entries added since, once, as unanswered questions; its comments and answers are kept, and
-   * entries the user deleted aren't added back.
-   */
-  async ensureAnswerSeed(): Promise<{ created: boolean; added: string[] }> {
+  /** Create answers.yaml from the seed list if it does not exist. Returns true when created. */
+  async ensureAnswerSeed(): Promise<boolean> {
     const path = this.ws.path("profile", "answers.yaml");
-    if (!(await exists(path))) {
-      await this.writeYaml(
-        path,
-        { schemaVersion: 1, seedVersion: SEED_VERSION, entries: seedAnswers() },
-        ANSWERS_HEADER,
-      );
-      this.log.info("seeded answers.yaml");
-      return { created: true, added: [] };
-    }
-    const doc = parseDocument(await readFile(path, "utf8"));
-    const js = doc.errors.length ? null : (doc.toJS() as { seedVersion?: unknown; entries?: unknown });
-    if (!js || !Array.isArray(js.entries)) return { created: false, added: [] };
-    const had = typeof js.seedVersion === "number" ? js.seedVersion : 1;
-    if (had >= SEED_VERSION) return { created: false, added: [] };
-    const ids = new Set(js.entries.map((e) => (e as { id?: unknown } | null)?.id));
-    const added = seedAnswers(had).filter((e) => !ids.has(e.id));
-    for (const entry of added) doc.addIn(["entries"], doc.createNode(entry));
-    doc.set("seedVersion", SEED_VERSION);
-    await writeFile(path, doc.toString({ lineWidth: 110 }), "utf8");
-    this.log.info({ added: added.map((e) => e.id) }, "added newer seed questions to answers.yaml");
-    return { created: false, added: added.map((e) => e.id) };
+    if (await exists(path)) return false;
+    await this.writeYaml(path, { schemaVersion: 1, entries: seedAnswers() }, ANSWERS_HEADER);
+    this.log.info("seeded answers.yaml");
+    return true;
   }
 
   async checkProfile() {

@@ -10,10 +10,10 @@ As of 2026-09-27.
 | Documents | TeX compile with page count, log parsing and history; per-file engine from `% !TEX program` (pdfTeX-only templates marked at import); multi-file templates (content files copied with the main file); render, text, info, merge (normalizing keeps links), images, compress, open, diff |
 | GitHub and repos | Per-user GitHub App via manifest, or an existing ezapply app connected from its Client ID and a new secret; OAuth login (browser opened, or the URL given), keychain tokens with single-flight refresh, port-mismatch detection, repo listing and selection, hardened read-only cache with the token in git's environment |
 | Knowledge base | `ezapply-index-repo` skill, `claims.yaml` with `claims_check`, `claims_list` read once per posting, evidence hashes that flag changed code, contributions, incremental re-index |
-| Profile | Profile, answer bank (39 seeded questions, new ones added to existing banks once), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
+| Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
 | Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
-| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen, and a listbox left open is dismissed; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in; `decline` resolved to the form's wording; `ok: false` while a field shows an error), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
+| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
@@ -26,11 +26,15 @@ As of 2026-09-27.
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
   reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;
   cause unknown, not yet re-run live). The second (2026-09-28, Monarch) reached the review page too and found
-  six more adapter bugs, all fixed with fixture tests that fail on the old code, none yet re-run live:
-  multi-part dates never taken (five typed by the user; now typed digit by digit), a dropdown failing to open
-  after one that matched nothing, skills lists stopping at the first miss and every typeahead option listed
-  twice, `search_options` one query behind, `go_next` reporting `advanced: false` on every move, and upload
-  notices reported as errors. Not exercised yet: the remove controls for skill pills and attached
+  more adapter bugs. The fixes the next two live runs (same posting) showed working were kept: split dates
+  typed digit by digit (four `MM/YYYY` and two `YYYY` dates taken, the step advanced), typeahead entries
+  matched one by one with bare names (12 of 15 skills under Workday's own names, the misses not stopping the
+  rest), `go_next` noticing a move when every step is titled "Application", upload notices out of `errors`,
+  add buttons named by section, and the Resume/CV field id taken from its label. The other fixes in that
+  change (dismissing a listbox left open after a miss, `ok: false` while a field shows an error, `decline`
+  matching, education dates with a day, the student seed questions, documents written before the form) were
+  reverted: they were unverified, and fills had become several times slower (see Known issues). Not
+  exercised yet: the remove controls for skill pills and attached
   files (`DELETE_charm`, `delete-file`), repeatable rows (`panel-set-delete-button`) and the Back button
   (`bottom-navigation-previous-button`), which come from
   knowledge of Workday's markup, not a live page. On the first real application: `screenshot` plus a saved
@@ -70,11 +74,13 @@ As of 2026-09-27.
   Windows. Once, the default cover test failed while the other TeX tests passed. It didn't reproduce in
   four later runs, and the error wasn't captured. Possibly a MiKTeX first-use package download. If it
   recurs, capture the compile result's `hint` and diagnostics.
-- **Split dates on a live tenant:** in the second live run, setting the parts' input values never reached
-  Workday's state. The adapter now types the digits as key events and reads each part from its display
-  element, `aria-valuenow` or value, but the display and spinbutton hooks and whether Workday takes
-  synthetic key events are unverified. If it still doesn't take, the fill now fails with the value for the
-  user to type instead of claiming success. A saved snapshot of a step with a date would settle it.
+- **Slow fills on a live tenant.** In the third and fourth live runs (2026-09-28) a step with many
+  dropdowns and a long skills list ran past the companion's 120 s `form.fill` timeout, and nine dropdowns
+  took over 110 s. Suspected causes, none measured yet: the adapter's fixed waits per field (settling after
+  each field, dropdown open and close waits, the typeahead's waits for its own results), the Workday tab
+  hidden behind the review page (browsers slow hidden tabs), and a throttled laptop. A timed-out fill keeps
+  running in the page and isn't logged. The unverified dropdown changes were reverted; the typeahead's
+  waits were kept because its fix worked. Next: per-field timings in fill results.
 
 ## Deferred
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:

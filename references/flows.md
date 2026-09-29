@@ -94,8 +94,7 @@ The `ezapply-resume` skill:
    same relative paths; set status `drafting`.
 3. Write `notes.md`: requirements, key terms, an **evidence map** from each requirement to claim ids or
    profile entries, and gaps (never presented as skills).
-4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet,
-   using only numbers the evidence backs, including those already in the template's bullets.
+4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet.
 5. Loop: `tex_compile` (must be exactly one page; `*resume*`/`*cv*` files are checked against the page
    limit, and `overflow` says how much ran over) → `pdf_render` to look → `pdf_text` for ATS order → self-check each bullet against its evidence.
 6. Report the changes and gaps in a few lines; `tex_diff` on request. Then the attach mode decides: see
@@ -118,16 +117,11 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the [Wo
 1. `posting_active`; read the profile and answer bank. The form tools act on the Workday tab of this posting's
    tenant and credit everything to it; a tab of another company's tenant comes back with `postingMismatch`
    and nothing is logged, and Claude stops to sort it out with the user.
-2. **Documents before the form:** without a tailored resume, or without a cover letter that `preferences.md`
-   or the posting wants, Claude offers to write them first and reviews them together in one `review_open`.
-   (In the second live run the missing resume came up at the Resume/CV field mid-form, and the cover letter
-   later still, each with its own review.)
-3. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in and says when
+2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in and says when
    done; `start-choice` → `page_action apply_manually`; `review` → hand-off; `confirmation` → done.
-4. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
-   by meaning, with an explicit polarity check; numbers computed; facts the profile lacks, unknown,
-   sensitive, EEO or salary asked in one message per step; `decline` for EEO questions the profile
-   declines; the skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a
+3. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
+   by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
+   in one message per step; the skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
    field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
    doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in
@@ -136,9 +130,9 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the [Wo
    application are cleared first: attached files this application didn't upload (per `form-log.jsonl`) and
    multi-select entries such as skills that don't belong go through `remove_items`, extra work-history,
    education or website rows through `remove_repeatable`, then the current documents and values are added.
-5. **Hand-off** at the review page: summarize what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
+4. **Hand-off** at the review page: summarize what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
    judgment, and what couldn't be filled. The user reviews and presses Submit.
-6. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on
+5. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on
    a successful upload, `filled` at the review page, `submitted` when the confirmation page is seen.
    After an interruption, `get_form` shows where things stand and filling continues from there.
 

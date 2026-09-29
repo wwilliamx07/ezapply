@@ -96,15 +96,11 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
         }
         await settle(doc, 120, 1500);
       }
-      // A field that still shows an error wasn't taken, whatever it reads back. Seen live: dates read back
-      // right while Workday called them empty, and `ok: true` hid that until go_next.
+      // Surface validation errors that appeared as a result of filling.
       const after = refresh();
       for (const res of out) {
         const e = after.fields.get(res.fieldId)?.field.error;
-        if (e && res.ok) {
-          res.ok = false;
-          res.error = `The page still reports: ${e}`;
-        }
+        if (e && res.ok) res.error = `Filled, but the page reports: ${e}`;
       }
       return out;
     },
@@ -175,8 +171,8 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
     /**
      * Press Next and report whether the step changed: its index, title or page kind. Live step titles are often
      * all "Application", so comparing titles alone said `advanced: false` on every move and waited out the
-     * full timeout. The wait ends on a new step, or on validation errors (new ones at once, ones already shown
-     * after a moment); notices such as "successfully uploaded" don't count as errors.
+     * full timeout. The wait ends on a new step or on validation errors; notices such as "successfully
+     * uploaded" don't count as errors.
      */
     async next(): Promise<NextResult> {
       const before = refresh();
@@ -206,19 +202,8 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
         return `${s?.index ?? ""}|${s?.title ?? ""}`;
       };
       const keyBefore = stepKey();
-      const errorsBefore = pageErrors(doc).join("\u0001");
-      const started = Date.now();
       press(button);
-      await waitFor(
-        () => {
-          if (stepKey() !== keyBefore) return true;
-          const errors = pageErrors(doc);
-          if (!errors.length) return false;
-          return errors.join("\u0001") !== errorsBefore || Date.now() - started > 2500;
-        },
-        12000,
-        150,
-      );
+      await waitFor(() => stepKey() !== keyBefore || pageErrors(doc).length > 0, 12000, 150);
       await settle(doc, 300, 4000);
       const after = summary(false);
       return { ...after, advanced: stepKey() !== keyBefore || after.pageKind !== kind };
@@ -232,13 +217,11 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       const before = refresh();
       const summary = (moved: boolean, extra: Partial<BackResult> = {}): BackResult => {
         const s = stepInfo(doc);
-        const messages = pageMessages(doc);
         return {
           moved,
           pageKind: detectPage(doc, extract(doc, getUrl()).fields.size),
           ...(s ? { step: s } : {}),
           errors: pageErrors(doc),
-          ...(messages.length ? { messages } : {}),
           ...extra,
         };
       };
@@ -248,15 +231,11 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       const button = backButton(doc);
       if (!button) return summary(false, { refusedReason: "No Back button on this page (it's the first step)." });
       if (isSubmitControl(button)) return summary(false, { refusedReason: "Refusing to press a submit control." });
-      const stepKey = () => {
-        const s = stepInfo(doc);
-        return `${s?.index ?? ""}|${s?.title ?? ""}`;
-      };
-      const keyBefore = stepKey();
+      const stepBefore = before.schema.step?.title ?? "";
       press(button);
-      await waitFor(() => stepKey() !== keyBefore, 12000, 150);
+      const changed = await waitFor(() => (stepInfo(doc)?.title ?? "") !== stepBefore, 12000, 150);
       await settle(doc, 300, 4000);
-      return summary(stepKey() !== keyBefore);
+      return summary(Boolean(changed));
     },
 
     async pageAction(action: PageAction): Promise<{ ok: boolean; pageKind: PageKind; error?: string }> {

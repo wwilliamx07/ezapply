@@ -33,18 +33,11 @@ export const LISTBOX_LINGER_MS = 150;
 export interface StepOptions {
   coverUploadsWork?: boolean;
   dateNeedsSecondPass?: boolean;
-  /** Start Date keeps its "required" error whatever is entered. */
-  dateErrorSticks?: boolean;
   /**
    * Start Date as Workday's split date widget: each part a spinbutton that takes digits in keydown and shows
    * its value in a display element; "stuck" ignores synthetic keys, so only the input's value changes.
    */
   dateWidget?: "keys" | "stuck";
-  /**
-   * Dropdowns as seen live: no aria-expanded, Escape doesn't close a listbox, and a press elsewhere while one
-   * is open only closes it (the press itself is swallowed).
-   */
-  liveDropdowns?: boolean;
   /** Every step in the progress bar is titled "Application", as on some live tenants. */
   sameStepTitles?: boolean;
 }
@@ -149,30 +142,6 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
   // Dropdowns: clicking the button renders a listbox portal at the end of <body>. A closed listbox stays on
   // screen for LISTBOX_LINGER_MS while it animates away, as on live Workday. Country's button names its
   // listbox with aria-controls; Degree Level's doesn't (live buttons don't).
-  const live = opts.liveDropdowns === true;
-  let current: { ul: HTMLElement; close: () => void } | null = null;
-  let swallowClick = false;
-  if (live) {
-    doc.addEventListener(
-      "mousedown",
-      (e) => {
-        if (current && !current.ul.contains(e.target as Node)) {
-          current.close();
-          swallowClick = true;
-        }
-      },
-      true,
-    );
-    doc.addEventListener(
-      "click",
-      (e) => {
-        if (!swallowClick) return;
-        swallowClick = false;
-        e.stopImmediatePropagation();
-      },
-      true,
-    );
-  }
   const dropdown = (automationId: string, options: string[], listId?: string) => {
     const button = doc.querySelector<HTMLButtonElement>(
       `[data-automation-id="${automationId}"] button[aria-haspopup="listbox"]`,
@@ -181,8 +150,7 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     const close = () => {
       const ul = open;
       open = null;
-      if (current?.ul === ul) current = null;
-      if (!live) button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-expanded", "false");
       setTimeout(() => ul?.remove(), LISTBOX_LINGER_MS);
     };
     button.addEventListener("click", () => {
@@ -201,15 +169,14 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
         ul.append(li);
       }
       ul.addEventListener("keydown", (e) => {
-        if (!live && (e as KeyboardEvent).key === "Escape" && open === ul) close();
+        if ((e as KeyboardEvent).key === "Escape" && open === ul) close();
       });
       doc.body.append(ul);
       open = ul;
-      current = { ul, close };
-      if (!live) button.setAttribute("aria-expanded", "true");
+      button.setAttribute("aria-expanded", "true");
     });
     button.addEventListener("keydown", (e) => {
-      if (!live && (e as KeyboardEvent).key === "Escape" && open) close();
+      if ((e as KeyboardEvent).key === "Escape" && open) close();
     });
   };
   dropdown("formField-countryDropdown", ["Canada", "United States of America", "United Kingdom"], "lb-country");
@@ -229,13 +196,6 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     month.addEventListener("input", () => {
       if (month.value.length === 2 && ++entries === 2) err.remove();
     });
-  }
-
-  if (opts.dateErrorSticks) {
-    const err = doc.createElement("div");
-    err.setAttribute("data-automation-id", "errorMessage");
-    err.textContent = "Error: The field Available Start Date is required and must have a value.";
-    doc.querySelector('[data-automation-id="formField-startDate"]')?.append(err);
   }
 
   if (opts.dateWidget) {

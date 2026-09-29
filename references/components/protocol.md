@@ -73,7 +73,7 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 | `form.removeRepeatable` | `{ tabId?, sectionId }` → `RemoveRowResult { sectionId, ok, removed?, error? }`. Added without a version bump, like `form.remove` |
 | `form.addRepeatable` | `{ tabId?, addButtonId }` → `{ ok, error? }` |
 | `form.next` | `{ tabId? }` → `NextResult` |
-| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], messages?, refusedReason? }`. Added without a version bump |
+| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
 
@@ -98,7 +98,7 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which
   Workday selected an option itself. `OptionInfo`: `{ label, hasChildren? }` (children = a nested menu).
 - `NextResult`: `{ advanced, pageKind, step?, errors[], messages?, refusedReason? }`; `advanced` = the step
-  index, title or page kind changed. `BackResult`: `{ moved, pageKind, step?, errors[], messages?,
+  index, title or page kind changed. `BackResult`: `{ moved, pageKind, step?, errors[],
   refusedReason? }`.
 
 ## Postings
@@ -122,7 +122,7 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   chat ends, which every extension treats as a plain disconnect); later `TabInfo.focused` and
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
   `form.removeRepeatable` and `form.back` methods, `hello.browser`, and `addButtons[].section`,
-  `FormSchema.messages`, `NextResult`/`BackResult.messages` and `FillResult.unmatched`/`inexact`.
+  `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.

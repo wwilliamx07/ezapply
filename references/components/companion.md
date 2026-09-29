@@ -22,7 +22,7 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
 | `postings/` | Capture ingest and extraction → [postings.md](postings.md) |
 | `documents/` | `service.ts`, `review.ts` (the review page, approvals, the attach mode), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
-| `profile/` | `service.ts` (profile, answers, repo selection, preferences, library), `schema.ts`, `seed-answers.ts` (the 39 seeded screening questions, versioned) → [profile-and-templates.md](profile-and-templates.md) |
+| `profile/` | `service.ts` (profile, answers, repo selection, preferences, library), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
 | `templates/service.ts` | `TemplateService`: template import, example letters, the main file and its content files, the engine a template needs → [profile-and-templates.md](profile-and-templates.md#templates-templatesresume-templatescover) |
 | `github/` | `service.ts` (App, login, tokens, repo listing), `secrets.ts` (`SecretStore`: OS keychain, or memory in tests) → [github-and-repos.md](github-and-repos.md) |
 | `repos/` | Read-only repo cache, contributions, claims, knowledge meta → [github-and-repos.md](github-and-repos.md), [knowledge-base.md](knowledge-base.md) |
@@ -41,8 +41,7 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 
 ## Startup (`startCompanion`)
 1. Read and validate the workspace config (fails fast on an invalid `ezapply.config.json`).
-2. Build services; seed `profile/answers.yaml` if it doesn't exist, or add the seed questions of newer seed
-   versions to an existing one ([answer bank](profile-and-templates.md#answer-bank-profileanswersyaml)).
+2. Build services; seed `profile/answers.yaml` if it doesn't exist.
 3. Build the bridge with the pairing code, the pinned id, and `onPaired` / `onForgotten`, which persist the
    pairing.
 4. Build `FormsService` over postings and the bridge, `ChatSessions`, and the HTTP server; listen on

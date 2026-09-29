@@ -153,7 +153,6 @@ export const BackResult = z.object({
     .object({ index: z.number().int().optional(), total: z.number().int().optional(), title: z.string() })
     .optional(),
   errors: z.array(z.string()),
-  messages: z.array(z.string()).optional(),
   refusedReason: z.string().optional(),
 });
 export type BackResult = z.infer<typeof BackResult>;

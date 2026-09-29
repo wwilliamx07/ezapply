@@ -1,16 +1,6 @@
 import type { AnswerEntry } from "./schema.js";
 
-type Seed = Omit<AnswerEntry, "variants" | "sensitive"> &
-  Partial<Pick<AnswerEntry, "variants" | "sensitive">> & {
-    /** The seed version that added the entry (1 when absent). */
-    since?: number;
-  };
-
-/**
- * The seed's version, stored as `seedVersion` in answers.yaml. An existing answer bank gets the entries of
- * later versions once (ProfileService.ensureAnswerSeed), so questions the user deleted aren't added back.
- */
-export const SEED_VERSION = 2;
+type Seed = Omit<AnswerEntry, "variants" | "sensitive"> & Partial<Pick<AnswerEntry, "variants" | "sensitive">>;
 
 /**
  * Screening questions that recur across Workday tenants. Every answer starts as null: onboarding
@@ -226,63 +216,8 @@ const SEED: Seed[] = [
     sensitive: true,
     notes: "Always ask. Rules vary by jurisdiction.",
   },
-
-  // Students and co-op (version 2): campus postings ask these, and a live run had to work them out or ask
-  // mid-form (the agent guessed the year of study from an unrelated certificate date).
-  {
-    since: 2,
-    id: "currently_enrolled",
-    canonical: "Are you currently enrolled in a post-secondary program?",
-    answer: null,
-    source: "profile.education",
-    notes: "Yes while an education entry's end is in the future.",
-  },
-  {
-    since: 2,
-    id: "year_of_study",
-    canonical: "What year of study are you currently in?",
-    answer: null,
-    source: "profile.education",
-    notes:
-      "Compute from education[].start: first year until the next September, then one more each September. " +
-      "Ask when start is missing; don't infer it from other dates.",
-  },
-  {
-    since: 2,
-    id: "expected_graduation",
-    canonical: "What is your expected graduation date?",
-    answer: null,
-    source: "profile.education",
-    notes: "education[].end. A form that wants a day needs end as YYYY-MM-DD: ask for the day rather than pick one.",
-  },
-  {
-    since: 2,
-    id: "available_work_terms",
-    canonical: "Which work terms are you available for?",
-    answer: null,
-    notes: 'For example "Winter 2027 (January–April), Summer 2027". Update it each term.',
-  },
-  {
-    since: 2,
-    id: "returning_to_school",
-    canonical: "Will you return to school after this work term?",
-    answer: null,
-    source: "profile.education",
-  },
-  {
-    since: 2,
-    id: "full_time_interest",
-    canonical: "Are you interested in full-time opportunities after graduation?",
-    answer: null,
-    suggested: "Yes",
-  },
 ];
 
-/** The seed entries, or only those added after seed version `after`. */
-export function seedAnswers(after = 0): AnswerEntry[] {
-  return SEED.filter((s) => (s.since ?? 1) > after).map(({ since: _since, ...s }) => ({
-    ...s,
-    variants: s.variants ?? [],
-    sensitive: s.sensitive ?? false,
-  }));
+export function seedAnswers(): AnswerEntry[] {
+  return SEED.map((s) => ({ variants: [], sensitive: false, ...s }));
 }
