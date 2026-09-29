@@ -7,13 +7,14 @@ import {
   type FillResult,
   type FillValue,
   type FormSchema,
+  isFormSite,
   type OptionInfo,
   type PageAction,
   type PostingMeta,
   type PostingStatus,
+  siteTenant,
   type TabInfo,
   type Timing,
-  workdayTenant,
 } from "@ezapply/protocol";
 import type { ExtensionBridge } from "../bridge/server.js";
 import type { ReviewService } from "../documents/review.js";
@@ -64,7 +65,7 @@ interface Target {
  * trail, automatic status moves, reading files for upload, and trimming get_form for Claude's context.
  *
  * Every action is credited to the active posting only when the application tab is on that posting's
- * Workday tenant (or one of them has no tenant to compare). Otherwise, with two applications open or an
+ * tenant: its Workday tenant or Oracle career site (or one of them has no tenant to compare). Otherwise, with two applications open or an
  * old confirmation page on screen, a fill or a `submitted` status would land on the wrong posting.
  *
  * Calls on one tab run one at a time (`onTab`).
@@ -296,9 +297,9 @@ export class FormsService {
   }
 
   /**
-   * Choose the tab: the one asked for; else a Workday tab on the active posting's tenant (the one the user
-   * is looking at, else the most recently used); else any Workday tab, the same way. Then decide whether
-   * the active posting may be credited with what happens there.
+   * Choose the tab: the one asked for; else an application tab (Workday or Oracle) on the active posting's
+   * tenant (the one the user is looking at, else the most recently used); else any application tab, the same
+   * way. Then decide whether the active posting may be credited with what happens there.
    */
   private async target(tabId?: number): Promise<Omit<Target, "fillTimeoutMs" | "timingIssues">> {
     const { tabs } = await this.bridge.call("browser.status", {}, 5_000);
@@ -313,19 +314,18 @@ export class FormsService {
         throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
       }
     } else {
-      const workday = tabs.filter((t) => t.site === "workday");
-      tab =
-        pickTab(postingTenant ? workday.filter((t) => workdayTenant(t.url) === postingTenant) : []) ?? pickTab(workday);
+      const forms = tabs.filter((t) => isFormSite(t.site));
+      tab = pickTab(postingTenant ? forms.filter((t) => siteTenant(t.url) === postingTenant) : []) ?? pickTab(forms);
       if (!tab) {
         throw new EzError(
           ErrorCode.NotFound,
-          "No Workday tab is open.",
+          "No Workday or Oracle application tab is open.",
           "Ask the user to open the application (click Apply on the posting) in the browser.",
         );
       }
     }
 
-    const formTenant = workdayTenant(tab.url);
+    const formTenant = siteTenant(tab.url);
     if (active && postingTenant && formTenant && postingTenant !== formTenant) {
       const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
       return {
@@ -340,7 +340,7 @@ export class FormsService {
           },
           formTenant,
           hint:
-            `This tab is on Workday tenant "${formTenant}", but the active posting (${label}) is on ` +
+            `This tab is on "${formTenant}", but the active posting (${label}) is on ` +
             `"${postingTenant}", so nothing was logged and no status changed. If the user is applying to ` +
             "another job, activate its posting (postings_list with a company filter, then posting_activate) " +
             "or have them capture it with Set posting; otherwise switch to the right tab.",
@@ -368,9 +368,9 @@ export class FormsService {
   }
 }
 
-/** The tenant a posting belongs to: read from its URL when it's a Workday page, else as stored. */
+/** The tenant a posting belongs to: read from its URL when it's a Workday or Oracle page, else as stored. */
 function postingTenantOf(meta: PostingMeta): string | undefined {
-  return workdayTenant(meta.url) ?? meta.tenant;
+  return siteTenant(meta.url) ?? meta.tenant;
 }
 
 function pickTab(tabs: TabInfo[]): TabInfo | undefined {

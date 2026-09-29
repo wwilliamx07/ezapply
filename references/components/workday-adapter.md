@@ -8,12 +8,18 @@ content scripts can't reach.
 | File | Role |
 |---|---|
 | `main.ts` | Bundle entry: defines `window.__ezapplyWorkday` (non-enumerable) unless the same `ADAPTER_VERSION` is already there. The build stamps it with a hash of the bundle ([extension builds](extension.md#builds-npm-run-build--w-ezapplyextension)); unbundled, in tests, it's `"dev"` |
-| `api.ts` | `createWorkdayApi(doc, getUrl)`: the methods the background calls, plus `installSubmitGuard` |
+| `api.ts` | `createWorkdayApi(doc, getUrl)`: the methods the background calls, plus `installSubmitGuard` (the shared guard with Workday's submit test) |
 | `extract.ts` | Page detection, field extraction, step info, errors, page actions, `isSubmitControl`, `nextButton` |
 | `fill.ts` | One filler per field kind, option listing and search, uploads |
-| `dom.ts` | DOM helpers: text normalization, visibility, native value setter, pointer/keyboard sequences, `typeChar` (one typed character), `settle`, `waitFor`, `matchOption`, React prop access, `win(node)` |
-| `timing.ts` | `T`, the waits in use, and `setTiming` ([waits](#waits-autofill-timingyaml)) |
 | `selectors.ts` | **Every Workday-specific string of the adapter**: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS`. The posting-page hooks the companion reads too, the Workday hosts and tenant parsing come from `@ezapply/protocol/workday` ([protocol](protocol.md)) |
+
+Shared with the [Oracle adapter](oracle-adapter.md), in `adapters/common/`:
+
+| File | Role |
+|---|---|
+| `dom.ts` | DOM helpers: text normalization, visibility (in jsdom: `hidden`, `aria-hidden` or an inline `display: none` up the tree), native value setter, pointer/keyboard sequences, `typeChar` (one typed character), `settle`, `waitFor`, `matchOption`, `parseDate`, React prop access, `win(node)` |
+| `timing.ts` | `T`, the waits in use, and `setTiming` ([waits](#waits-autofill-timingyaml)); the defaults come from `@ezapply/protocol/timing`, not the protocol's index, which would bring zod into the bundle |
+| `guard.ts` | `installSubmitGuard(doc, isSubmit)`: the [submit guard](#never-submitting), given the adapter's own submit test |
 
 **No globals.** Event, observer, `File`, `DataTransfer` and element-prototype constructors come from the
 element's own window (`win(node)`), never from globals. The adapter behaves the same in the page, in a jsdom
@@ -251,7 +257,8 @@ renumbers the rest.
 - There is no general click or script tool in the MCP surface.
 
 ## Updating for Workday changes
-Change `selectors.ts` (keep every Workday string of the adapter there; posting-page hooks and hosts shared
+Change `selectors.ts` (keep every Workday string of the adapter there; what both adapters share is in
+`adapters/common/`; posting-page hooks and hosts shared
 with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` with
 `npm run recon:workday -- <careers-url>`, and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom

@@ -11,10 +11,14 @@ const Source = z
     "Where the value came from: profile.yaml, answers.yaml, computed from the profile, the user, or your judgment.",
   );
 
-const tabId = z.number().int().optional().describe("Defaults to the Workday tab of the active posting.");
+const tabId = z
+  .number()
+  .int()
+  .optional()
+  .describe("Defaults to the application tab (Workday or Oracle) of the active posting.");
 
 /**
- * Workday form tools. Logging, status moves, tab choice and the posting check live in FormsService; a result
+ * Application form tools (Workday and Oracle Recruiting Cloud). Logging, status moves, tab choice and the posting check live in FormsService; a result
  * carries `postingMismatch` when the tab is on another tenant than the active posting (nothing was logged).
  */
 export function registerFormTools(server: McpServer, s: Services): void {
@@ -23,7 +27,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Read application page",
       description:
-        "Read the current Workday page: pageKind (posting, auth, start-choice, step, review, confirmation), step, " +
+        "Read the current application page (Workday or Oracle Recruiting Cloud; `adapter` says which): pageKind " +
+        "(posting, auth, start-choice, step, review, confirmation), step, " +
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
         "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
@@ -70,7 +75,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
     "search_options",
     {
       title: "Search typeahead",
-      description: "Type a query into a typeahead field (school, field of study, source…) and return matching options.",
+      description:
+        "Type a query into a typeahead field (school, field of study, source…) or, on Oracle pages, a dropdown (long " +
+        "lists such as countries and cities search as you type), and return matching options.",
       inputSchema: { fieldId: z.string(), query: z.string().min(1), tabId },
       annotations: { readOnlyHint: true },
     },
@@ -90,7 +97,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
         'groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns ' +
         "`results` per field: { fieldId, ok: true } when the field reads back exactly the value; else the " +
         "read-back, error, options when nothing matched, `unmatched` (typeahead entries with the options their " +
-        "search showed) and `inexact` (an option Workday chose itself: check it). Never passwords, or EEO " +
+        "search showed) and `inexact` (an option the page chose itself: check it). Never passwords, or EEO " +
         "answers the user hasn't given.",
       inputSchema: {
         fills: z
@@ -139,8 +146,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Remove selections or attachments",
       description:
-        "Remove entries from a multi-select (kind typeahead, e.g. Skills) or attached files from a file field. " +
-        "Workday pre-fills both from the user's last application: remove what doesn't belong before uploading or " +
+        "Remove entries from a multi-select (kind typeahead, e.g. Skills; on Oracle a checkbox-group) or attached " +
+        "files from a file field. Workday and Oracle pre-fill both from the user's last application or profile: " +
+        "remove what doesn't belong before uploading or " +
         "filling. values: labels or file names as get_form shows them; omit to clear the field. Returns removed, " +
         "remaining, notFound.",
       inputSchema: {
@@ -164,7 +172,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Add a repeatable row",
       description:
         "Press an add button from get_form.addButtons (each names its `section`, e.g. add.work-experience, " +
-        "add.websites), then call get_form again.",
+        "add.websites), then call get_form again. On Oracle an add button opens an inline form: fill it, then " +
+        "press its save.<section> button the same way, which adds the item (an error says what the page wants).",
       inputSchema: { addButtonId: z.string(), tabId },
     },
     tool(s.log, "add_repeatable", ({ addButtonId, tabId }: { addButtonId: string; tabId?: number }) =>
@@ -178,8 +187,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Remove a repeatable row",
       description:
         "Delete a repeatable row, by the id of a section get_form marks `removable` (e.g. a Work Experience entry " +
-        "carried over from the user's last application that the profile doesn't have). Field ids of later rows " +
-        "change afterwards: call get_form again.",
+        "carried over from the user's last application that the profile doesn't have; on Oracle a saved item " +
+        "such as a language or a timeline entry). Field ids of later rows change afterwards: call get_form again.",
       inputSchema: {
         sectionId: z.string(),
         reason: z.string().optional().describe("Why, for the log, e.g. 'not in the profile'."),
@@ -200,7 +209,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Next step",
       description:
         "Press Next / Save and Continue. Refuses on the review page and on any Submit button: the user always " +
-        "submits. Returns whether the step advanced (its index, title or page kind changed), the new " +
+        "submits (Oracle's single-page applications have only Submit: fill every section, then hand over). Returns whether the step advanced (its index, title or page kind changed), the new " +
         "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`.",
       inputSchema: { tabId },
     },
@@ -226,7 +235,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Start-page action",
       description:
         "On a posting or start-choice page: apply (the Apply button), apply_manually (preferred), " +
-        "autofill_with_resume, or use_last_application.",
+        "autofill_with_resume, or use_last_application (on Oracle: Use My Profile, for a returning candidate).",
       inputSchema: { action: PageAction, tabId },
     },
     tool(s.log, "page_action", ({ action, tabId }: { action: z.infer<typeof PageAction>; tabId?: number }) =>

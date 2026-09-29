@@ -105,5 +105,6 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
    margins below the template's.
 4. **Ask, don't guess** on EEO, disability, veteran and salary questions, and on any answer-bank entry
    marked `sensitive` or with a `null` answer.
-5. **Never submit an application.** Stop at the review page; the user presses Submit.
+5. **Never submit an application.** Stop at the review page (on a single-page Oracle application, once every
+   section is filled); the user presses Submit.
 6. **Repos are read-only.**

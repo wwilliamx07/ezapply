@@ -1,6 +1,6 @@
 # ezapply
 
-Tailor resumes and cover letters and fill Workday applications from Claude Code. A browser extension (Chrome or
+Tailor resumes and cover letters and fill Workday and Oracle Recruiting Cloud applications from Claude Code. A browser extension (Chrome or
 Firefox) captures the posting, and `ezapply chat` runs Claude Code together with a local companion that gives
 it the tools over MCP. Claude never submits. The complete, current reference (philosophy, architecture, every component, tools, data formats,
 and the reasons behind them) is in [references/](references/README.md).
@@ -12,7 +12,7 @@ and the reasons behind them) is in [references/](references/README.md).
 | `packages/protocol` | Shared zod schemas: the extension↔companion wire protocol (`PROTOCOL_VERSION`), form schema, and a typed RPC peer. |
 | `packages/companion` | Runs inside `ezapply chat`: MCP server (Streamable HTTP), extension bridge (WebSocket), plus postings, documents (TeX/PDF), profile, GitHub, repos and forms. |
 | `packages/cli` | The `ezapply` command (`chat`, how you run ezapply; `init`, `status`, `doctor`, and `mcp`, the stdio server Claude Code runs) plus the workspace agent file (`EZAPPLY.md`), templates and Claude Code skills. |
-| `packages/extension` | MV3 extension for Chrome (`dist/`) and Firefox 128+ (`dist-firefox/`): the Set posting button, the bridge client, and the Workday adapter (`workday-main.js`, injected into the page's own JavaScript context). |
+| `packages/extension` | MV3 extension for Chrome (`dist/`) and Firefox 128+ (`dist-firefox/`): the Set posting button, the bridge client, and the site adapters (`workday-main.js`, `oracle-main.js`, injected into the page's own JavaScript context). |
 
 ## Setup
 
@@ -60,10 +60,11 @@ runs).
 |---|---|
 | `npm run setup` | install, build, and `ezapply init` (safe to re-run) |
 | `npm run build` | tsc project build plus the extension bundles |
-| `npm test` | build, then vitest: unit tests, companion and `ezapply chat` end-to-end, mock GitHub, real git, TeX (when installed), and the Workday adapter against fixtures and live snapshots |
+| `npm test` | build, then vitest: unit tests, companion and `ezapply chat` end-to-end, mock GitHub, real git, TeX (when installed), and the Workday and Oracle adapters against fixtures and live snapshots |
 | `npm run typecheck` | all packages and tests |
 | `npm run lint` / `npm run format` | Biome |
 | `npm run recon:workday -- <careers-url> [outDir]` | headless check of the Workday adapter on a public tenant, saving page snapshots |
+| `npm run recon:oracle -- <job-url> [outDir]` | the same for an Oracle job, up to its email step |
 | `npm run usage:report [-- <transcript.jsonl>]` | token usage of a Claude Code session in the workspace (default: the latest): turns, context, per prompt, per tool, per subagent |
 
 TypeScript 7 note: if type errors look stale after changing a `tsconfig`, delete `packages/*/tsconfig.tsbuildinfo`.

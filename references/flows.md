@@ -59,7 +59,9 @@ copy (for example in another browser) can't reconnect. A code typed on the optio
 non-default ports.
 
 ## 3. Capturing a posting ("Set posting")
-1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page.
+1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page. On an Oracle career site the
+   browser also asks, once per site, to let ezapply read and change it: that's what lets Claude fill the
+   application there later ([site access](components/oracle-adapter.md#site-access)).
 2. The extension injects `capturePage` into the tab's frames it may read (the `activeTab` grant, so no host
    permission is needed). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
    the live DOM with `checkVisibility`), `innerText`, JSON-LD blocks, URL, title and its visible iframes. The
@@ -70,7 +72,7 @@ non-default ports.
    sent on the next connection. Only the latest pending capture is kept. When the user next starts
    `ezapply chat`, `posting_active` waits for the extension to reconnect and deliver it.
 4. The companion ([postings](components/postings.md)) canonicalizes the URL (for Workday, without the locale
-   segment); a posting already captured at that URL reuses its folder. Otherwise it makes `postings/<date>_<company>_<role>/`. It writes the raw
+   segment; for Oracle, without the language or the application pages after the job id); a posting already captured at that URL reuses its folder. Otherwise it makes `postings/<date>_<company>_<role>/`. It writes the raw
    and visible captures, runs extraction to `posting.md`, writes `meta.json` (keeping fields Claude
    corrected earlier), and makes it the active posting.
 5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>".
@@ -113,12 +115,17 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 (form limit, else 5 MB).
 
 ## 7. Autofill ("fill out the application")
-The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the [Workday adapter](components/workday-adapter.md):
-1. `posting_active`; read the profile and answer bank. The form tools act on the Workday tab of this posting's
-   tenant and credit everything to it; a tab of another company's tenant comes back with `postingMismatch`
+The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
+([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md)):
+1. `posting_active`; read the profile and answer bank. The form tools act on the application tab (Workday or
+   Oracle) of this posting's tenant and credit everything to it; a tab of another company's tenant comes back with `postingMismatch`
    and nothing is logged, and Claude stops to sort it out with the user.
-2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in and says when
-   done; `start-choice` → `page_action apply_manually`; `review` → hand-off; `confirmation` → done.
+2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
+   email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
+   Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
+   `confirmation` → done. An Oracle application is often one page with only Submit: every section is filled,
+   then hand-off. Oracle's work, education, language and license items are added through an inline form and
+   its `save.<block>` button.
 3. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    in one message per step; the skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a
@@ -130,10 +137,11 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the [Wo
    application are cleared first: attached files this application didn't upload (per `form-log.jsonl`) and
    multi-select entries such as skills that don't belong go through `remove_items`, extra work-history,
    education or website rows through `remove_repeatable`, then the current documents and values are added.
-4. **Hand-off** at the review page: summarize what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
+4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next): summarize what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
    judgment, and what couldn't be filled. The user reviews and presses Submit.
 5. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on
-   a successful upload, `filled` at the review page, `submitted` when the confirmation page is seen.
+   a successful upload, `filled` at the review page, `submitted` when the confirmation page is seen. Oracle has
+   no review page, so there `filled` isn't set automatically.
    After an interruption, `get_form` shows where things stand and filling continues from there.
 
 ## 8. Review and attach

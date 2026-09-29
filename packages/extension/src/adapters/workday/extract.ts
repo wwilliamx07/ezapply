@@ -1,6 +1,6 @@
 import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
 import { workdayTenant } from "@ezapply/protocol/workday";
-import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "./dom.js";
+import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../common/dom.js";
 import { hintKey, PROFILE_HINTS, SEL } from "./selectors.js";
 
 export type PageSchema = Omit<FormSchema, "tabId">;

@@ -10,7 +10,9 @@ import type {
   RemoveRowResult,
   UploadFile,
 } from "@ezapply/protocol";
-import { press, settle, text, waitFor, win } from "./dom.js";
+import { press, settle, text, waitFor, win } from "../common/dom.js";
+import { installSubmitGuard as installGuard } from "../common/guard.js";
+import { setTiming, T } from "../common/timing.js";
 import {
   backButton,
   detectPage,
@@ -33,7 +35,6 @@ import {
   uploadFile,
 } from "./fill.js";
 import { SEL } from "./selectors.js";
-import { setTiming, T } from "./timing.js";
 
 declare const __ADAPTER_VERSION__: string | undefined;
 
@@ -269,31 +270,7 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
 
 export type WorkdayApi = ReturnType<typeof createWorkdayApi>;
 
-/**
- * Hard guarantee that nothing but a real user gesture can submit: synthetic (untrusted) events aimed
- * at a submit control are cancelled before the page sees them. Real clicks are always trusted.
- */
+/** The submit guard (common/guard.ts) with Workday's idea of a submit control. */
 export function installSubmitGuard(doc: Document): string[] {
-  const marker = "__ezapplySubmitGuard";
-  const holder = doc as unknown as Record<string, string[] | undefined>;
-  const existing = holder[marker];
-  if (existing) return existing;
-  const log: string[] = [];
-  holder[marker] = log;
-  const block = (e: Event) => {
-    if (e.isTrusted) return;
-    const target = e.target as Element | null;
-    const isKey = e.type === "keydown" || e.type === "keyup";
-    if (isKey && !["Enter", " "].includes((e as KeyboardEvent).key)) return;
-    if (!isSubmitControl(target)) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    log.push(
-      `${new Date().toISOString()} blocked synthetic ${e.type} on "${text(target?.closest("button,[role=button],a,input") ?? null)}"`,
-    );
-  };
-  for (const type of ["click", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "keyup", "submit"]) {
-    doc.addEventListener(type, block, true);
-  }
-  return log;
+  return installGuard(doc, isSubmitControl);
 }

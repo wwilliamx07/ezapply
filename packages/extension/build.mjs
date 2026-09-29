@@ -32,26 +32,28 @@ await build({
   outfile: join(dist, "options.js"),
   format: "iife",
 });
-// Injected into Workday pages' MAIN world on demand. Keep it small and self-contained (no zod).
-// ADAPTER_VERSION is a hash of the bundle itself, so any change reaches tabs that hold an older copy without
-// anyone remembering to bump a number. The placeholder has the hash's length, keeping the source map exact.
+// The site adapters, injected into application pages' MAIN world on demand. Keep them small and self-contained
+// (no zod). ADAPTER_VERSION is a hash of each bundle itself, so any change reaches tabs that hold an older copy
+// without anyone remembering to bump a number. The placeholder has the hash's length, keeping the source map exact.
 const VERSION_PLACEHOLDER = "@ADAPTER_VER"; // 12 characters, like the hash
-const adapter = await build({
-  ...common,
-  entryPoints: [join(root, "src/adapters/workday/main.ts")],
-  outfile: join(dist, "workday-main.js"),
-  format: "iife",
-  define: { __ADAPTER_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },
-  write: false,
-});
-for (const file of adapter.outputFiles) {
-  let text = file.text;
-  if (file.path.endsWith(".js")) {
-    if (!text.includes(VERSION_PLACEHOLDER)) throw new Error("adapter build: version placeholder missing");
-    const hash = createHash("sha256").update(text).digest("hex").slice(0, VERSION_PLACEHOLDER.length);
-    text = text.replaceAll(VERSION_PLACEHOLDER, hash);
+for (const site of ["workday", "oracle"]) {
+  const adapter = await build({
+    ...common,
+    entryPoints: [join(root, `src/adapters/${site}/main.ts`)],
+    outfile: join(dist, `${site}-main.js`),
+    format: "iife",
+    define: { __ADAPTER_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },
+    write: false,
+  });
+  for (const file of adapter.outputFiles) {
+    let text = file.text;
+    if (file.path.endsWith(".js")) {
+      if (!text.includes(VERSION_PLACEHOLDER)) throw new Error(`${site} adapter build: version placeholder missing`);
+      const hash = createHash("sha256").update(text).digest("hex").slice(0, VERSION_PLACEHOLDER.length);
+      text = text.replaceAll(VERSION_PLACEHOLDER, hash);
+    }
+    await writeFile(file.path, text);
   }
-  await writeFile(file.path, text);
 }
 
 const manifest = JSON.parse(await readFile(join(root, "static/manifest.json"), "utf8"));

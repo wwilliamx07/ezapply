@@ -6,3 +6,5 @@ coverage/
 recon-out/
 dist-firefox/
 references/.obsidian
+tmp
+scripts

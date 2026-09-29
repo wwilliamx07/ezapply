@@ -1,6 +1,6 @@
 /**
- * DOM helpers for driving React-controlled widgets. This code runs in the page's MAIN world so it
- * can reach React's handlers when plain DOM events are not enough.
+ * DOM helpers for driving React- and Knockout-controlled widgets, shared by the site adapters. This code runs
+ * in the page's MAIN world so it can reach React's handlers when plain DOM events are not enough.
  *
  * Constructors (events, observers, element prototypes) come from the element's own window, never from
  * globals, so the adapter works on any document: the page's, a jsdom test window, or a jsdom created in
@@ -52,7 +52,10 @@ export function text(el: Element | null | undefined): string {
   return norm(typeof t === "string" && t.length > 0 ? t : el.textContent);
 }
 
-/** jsdom has no layout; treat everything as visible there. */
+/**
+ * jsdom has no layout: there an element counts as visible unless it or an ancestor is `hidden`, `aria-hidden`
+ * or has an inline `display: none` (how a saved page keeps its hidden sections and dialogs).
+ */
 export function isVisible(el: Element): boolean {
   const h = el as HTMLElement;
   if (
@@ -61,7 +64,9 @@ export function isVisible(el: Element): boolean {
   ) {
     return h.checkVisibility({ checkVisibilityCSS: true } as CheckVisibilityOptions);
   }
-  return !h.closest("[hidden],[aria-hidden='true']");
+  if (h.closest("[hidden],[aria-hidden='true']")) return false;
+  for (let e: HTMLElement | null = h; e; e = e.parentElement) if (e.style?.display === "none") return false;
+  return true;
 }
 
 /** React stores props on the DOM node under a randomised key. Only visible from the MAIN world. */
@@ -185,6 +190,16 @@ export function matchOption(wanted: string, options: string[]): number {
     if (i >= 0) return i;
   }
   return -1;
+}
+
+/** "YYYY", "YYYY-MM", "YYYY-MM-DD", "MM/YYYY" or "MM/DD/YYYY" → its parts. */
+export function parseDate(value: string): { year: string; month?: string; day?: string } | null {
+  const v = value.trim();
+  const iso = /^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(v);
+  if (iso) return { year: iso[1] as string, ...(iso[2] ? { month: iso[2] } : {}), ...(iso[3] ? { day: iso[3] } : {}) };
+  const us = /^(\d{1,2})\/(?:(\d{1,2})\/)?(\d{4})$/.exec(v);
+  if (us) return { year: us[3] as string, month: us[1] as string, ...(us[2] ? { day: us[2] } : {}) };
+  return null;
 }
 
 /**

@@ -3,7 +3,7 @@ import { z } from "zod";
 export const PostingStatus = z.enum(["captured", "drafting", "attached", "filled", "submitted", "archived"]);
 export type PostingStatus = z.infer<typeof PostingStatus>;
 
-export const SiteId = z.enum(["workday", "generic"]);
+export const SiteId = z.enum(["workday", "oracle", "generic"]);
 export type SiteId = z.infer<typeof SiteId>;
 
 /** What the extension sends when the user presses "Set posting". */

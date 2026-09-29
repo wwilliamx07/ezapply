@@ -1,5 +1,5 @@
 /**
- * The waits the Workday adapter uses, in milliseconds. The companion reads the user's overrides from
+ * The waits the form adapters (Workday, Oracle) use, in milliseconds. The companion reads the user's overrides from
  * `autofill-timing.yaml` in the workspace and sends the resolved values with every form call; without them the
  * adapter uses these defaults. A "quiet" wait ends once the page has stopped changing for that long; its "max"
  * ends it regardless. Other waits end as soon as what they wait for happens, so they only cost their full

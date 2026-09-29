@@ -9,7 +9,8 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
 1. **Canonical URL** (`canonicalizeUrl`): lowercase host, trailing slashes dropped, only query parameters
    that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`), and on
    Workday the leading locale segment (`/en-US/`) dropped: Workday links to the same job with and without
-   it. A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
+   it. On Oracle (`oracleJobPath`) the language segment is dropped and so is everything after the job id, so
+   a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
    matched by their `canonicalUrl` and by their `url` canonicalized again, so postings saved before a
    canonicalization change still match.
 2. **Extraction** (`extractPosting`, below) from the visible HTML.
@@ -34,11 +35,15 @@ reaches `posting.md`.
   [extension](extension.md#set-posting).
 - Metadata, in order of trust: JSON-LD `JobPosting` (title, hiring organization, identifier, location) →
   Workday page structure (role, location, requisition, tenant) → the page title split on separators
-  on ` | `, ` - `, ` – ` (non-Workday) → company from the URL: on Workday the tenant (`workdayTenant`: the
-  subdomain on myworkdayjobs.com, the path segment after `recruiting` on myworkdaysite.com); on LinkedIn and
+  on ` | `, ` - `, ` – ` (non-Workday; Oracle titles read "<role> - <Company> Careers") → company from the
+  URL: on Workday the tenant (`workdayTenant`: the subdomain on myworkdayjobs.com, the path segment after
+  `recruiting` on myworkdaysite.com); on an Oracle Cloud host (`*.oraclecloud.com`) nothing, since the host
+  names Oracle's pod, not the employer; on LinkedIn and
   Indeed nothing (their job paths, `/jobs/view/<id>` and `/viewjob`, don't name the company), except Indeed
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
+- **Tenant:** a Workday posting's tenant, or an Oracle career site's (`oracleTenant`: host and site number,
+  `jobs.umbrella.example/cx_1`), from the content's URL.
 - Body: on Workday, the job description container; elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
@@ -65,7 +70,8 @@ compiler output, `.previews/` rendered pages, and `form-log.jsonl`.
 ## Status
 `captured`, `drafting`, `attached`, `filled`, `submitted`, `archived`. Skills set `drafting`; the form
 tools move it forward automatically (`attached` on upload, `filled` at review, `submitted` on the
-confirmation page), never backward, and only for the posting whose Workday tenant the application tab is on
+confirmation page), never backward, and only for the posting whose tenant (Workday tenant or Oracle career site) the application
+tab is on
 ([mcp-tools](../mcp-tools.md#forms)). `archived` is set by hand.
 
 ## No database

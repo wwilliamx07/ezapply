@@ -1,4 +1,4 @@
-import { DEFAULT_TIMING, resolveTiming, type Timing } from "@ezapply/protocol";
+import { DEFAULT_TIMING, resolveTiming, type Timing } from "@ezapply/protocol/timing";
 
 /**
  * The waits in use, in ms. The companion sends them with every call (from the workspace's

@@ -94,6 +94,27 @@ describe("helpers", () => {
     expect(canonicalizeUrl("https://example.com/en-US/jobs/1")).toBe("https://example.com/en-US/jobs/1");
   });
 
+  it("canonicalizeUrl makes an Oracle job one posting, whatever its language or application page", () => {
+    const job = "https://jobs.umbrella.example/sites/CX_1/job/10001";
+    expect(canonicalizeUrl("https://jobs.umbrella.example/en/sites/CX_1/job/10001")).toBe(job);
+    expect(canonicalizeUrl("https://jobs.umbrella.example/fr/sites/CX_1/job/10001/apply/section/2")).toBe(job);
+  });
+
+  it("reads an Oracle career site's tenant, and takes no company from an Oracle Cloud host", () => {
+    const r = extractPosting({
+      visibleHtml: "<h1>Firmware Engineering Co-op</h1><p>Build firmware.</p>",
+      url: "https://fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/10001",
+      pageTitle: "Firmware Engineering Co-op - Umbrella Careers",
+      jsonLd: [],
+    });
+    expect(r).toMatchObject({
+      site: "oracle",
+      tenant: "fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com/cx_1",
+      company: "Umbrella",
+      role: "Firmware Engineering Co-op",
+    });
+  });
+
   it("reads the tenant from the path on myworkdaysite.com and records an embedded frame", () => {
     const html = `<div data-automation-id="jobPostingHeader">Analyst</div>
       <div data-automation-id="jobPostingDescription"><p>${"Analyze things. ".repeat(40)}</p></div>`;

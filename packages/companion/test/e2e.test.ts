@@ -17,7 +17,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
+import { createOracleApi } from "../../extension/src/adapters/oracle/api.js";
 import { createWorkdayApi } from "../../extension/src/adapters/workday/api.js";
+import { buildOracleApplication } from "../../extension/test/oracle-fixture.js";
 import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
 import type { AppConfig } from "../src/config/app.js";
 import { MemoryStore } from "../src/github/secrets.js";
@@ -72,14 +74,18 @@ interface FakeTab {
 }
 
 /**
- * The browser side of the form tools: each tab runs the real Workday adapter on the shared jsdom fixture
- * (extension/test/workday-fixture.ts), and the handlers call it the way the extension's forms.ts does. One
- * model of a Workday step serves both the adapter's tests and these.
+ * The browser side of the form tools: each tab runs the real adapter for its site on the shared jsdom fixture
+ * (extension/test/workday-fixture.ts, oracle-fixture.ts), and the handlers call it the way the extension's
+ * forms.ts does. One model of each site serves both the adapter's tests and these.
  */
-function workdayTabs(tabs: FakeTab[]) {
+function applicationTabs(tabs: FakeTab[]) {
   const pages = tabs.map((t) => {
     const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: t.url });
     installDomShims(dom.window as unknown as Window);
+    if (detectSite(t.url) === "oracle") {
+      buildOracleApplication(dom.window.document);
+      return { ...t, api: createOracleApi(dom.window.document, () => t.url) };
+    }
     buildWorkdayStep(dom.window.document);
     return { ...t, api: createWorkdayApi(dom.window.document, () => t.url) };
   });
@@ -130,7 +136,7 @@ function fakeExtension(
   });
   sockets.push(ws);
   const send = (m: BridgeMessage) => ws.send(JSON.stringify(m));
-  const browser = workdayTabs(opts.tabs ?? [{ tabId: 7, url: APPLY_URL }]);
+  const browser = applicationTabs(opts.tabs ?? [{ tabId: 7, url: APPLY_URL }]);
   const peer = new RpcPeer({
     send,
     remote: CompanionApi,
@@ -818,6 +824,54 @@ describe("form tools over MCP", () => {
     // After activating Acme, the same tab is credited to it.
     await callJson(client, "posting_activate", { id: acme.postingId });
     expect((await callJson(client, "get_form", { tabId: 7 })).data).toMatchObject({ posting: acme.postingId });
+    await client.close();
+  });
+
+  it("fills an Oracle application on the posting's career site, and credits it to that posting", async () => {
+    const oracleApply = "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1";
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: APPLY_URL, active: true },
+        { tabId: 9, url: oracleApply, active: false },
+      ],
+    });
+    await ext.outcome;
+    const posting = await capture(ext, "https://jobs.acme.com/en/sites/CX_1/job/42", "Firmware Engineer");
+    const client = await mcpClient();
+    expect((await callJson(client, "posting_active")).data).toMatchObject({
+      id: posting.postingId,
+      site: "oracle",
+      tenant: "jobs.acme.com/cx_1",
+    });
+    // A capture on the application pages is the same job.
+    expect((await capture(ext, oracleApply, "Firmware Engineer")).postingId).toBe(posting.postingId);
+
+    // The Oracle tab is chosen for the Oracle posting, though the Workday tab is in front.
+    const form = await callJson(client, "get_form");
+    expect(form.data).toMatchObject({ adapter: "oracle", tabId: 9, posting: posting.postingId, nextLabel: "Submit" });
+    const fill = await callJson(client, "fill_fields", {
+      fills: [
+        { fieldId: "address.country", value: "Canada", source: "profile" },
+        { fieldId: "contact-information.lastName", value: "Doe", source: "profile" },
+      ],
+    });
+    expect(fill.data.results).toEqual([
+      { fieldId: "address.country", ok: true },
+      { fieldId: "contact-information.lastName", ok: true },
+    ]);
+    const log = await readFile(join(dir, "ws", "postings", posting.postingId, "form-log.jsonl"), "utf8");
+    expect(log).toMatch(/"fieldId":"address.country"/);
+    expect((await callJson(client, "go_next")).data).toMatchObject({
+      advanced: false,
+      refusedReason: expect.stringMatching(/Submit/),
+    });
+
+    // The Workday tab isn't this posting's: acting on it says so.
+    const other = await callJson(client, "get_form", { tabId: 7 });
+    expect(other.data.postingMismatch).toMatchObject({
+      formTenant: "acme",
+      activePosting: { tenant: "jobs.acme.com/cx_1" },
+    });
     await client.close();
   });
 

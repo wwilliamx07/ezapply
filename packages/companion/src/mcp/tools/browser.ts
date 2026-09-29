@@ -16,7 +16,7 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
       title: "Browser status",
       description:
         "Check whether the browser extension is connected, which browser it runs in (`extension.browser`: where ezapply " +
-        "opens pages and PDFs for the user), and list open tabs (with which ones are Workday). " +
+        "opens pages and PDFs for the user), and list open tabs (with `site`: workday, oracle or generic). " +
         "Call this first when a browser action fails, and relay the returned hint to the user.",
       annotations: { readOnlyHint: true },
     },
@@ -72,7 +72,8 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
           page: "about:debugging#/runtime/this-firefox",
           steps:
             "Click Load Temporary Add-on and choose this file. Firefox removes it when it closes; load it again and " +
-            "call extension_pair next time. If its options page says it has no access to Workday sites, click Grant site access.",
+            "call extension_pair next time. If its options page says it has no access to Workday sites, click Grant site access. " +
+            "Oracle career sites are granted one at a time: clicking the ezapply button (Set posting) on one asks for it.",
           manifest: firefox,
         },
         ...(built

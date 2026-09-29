@@ -9,12 +9,16 @@ so a change here is a change to the contract between them.
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` (`workday`, `oracle` or `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (a Workday tenant or an Oracle career site) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
+| `timing.ts` | `DEFAULT_TIMING` (every adapter wait, in ms), `TIMING_DOCS`, `resolveTiming(overrides, scale)`; no imports (imported as `@ezapply/protocol/timing` by the adapters) ([waits](workday-adapter.md#waits-autofill-timingyaml)) |
+| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
 | `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
 
-The package exports `.` (everything) and `./workday`. `detectSite` counts only candidate-facing Workday
-hosts as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
+The package exports `.` (everything), and `./workday`, `./oracle` and `./timing` for the in-page adapters:
+those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
+waits, making each adapter 850 KB instead of 60 KB). `detectSite` counts only candidate-facing Workday hosts
+as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
 
 ## Bridge handshake
 
@@ -82,16 +86,19 @@ keys are ignored and an older extension strips the field, so it came without a v
 
 ## Form schema
 
-What the adapter reports of an application page (`FormSchema`; Claude gets a leaner copy, see
-[mcp-tools](../mcp-tools.md#forms)): `adapter`, `tabId`, `url`, `tenant?`, `pageKind`,
+What a site adapter reports of an application page (`FormSchema`; Claude gets a leaner copy, see
+[mcp-tools](../mcp-tools.md#forms)): `adapter` (`workday` or `oracle`), `tabId`, `url`, `tenant?`, `pageKind`,
 `step? { index?, total?, title }`, `sections[] { id, title, fields[], removable? }`,
-`addButtons[] { id, label, section? }` (`section`: the heading the button sits under), `actions[]` (page
+`addButtons[] { id, label, section? }` (`section`: the heading the button sits under; on Oracle also the
+`save.<block>` button of an open inline form), `actions[]` (page
 actions available), `errors[]`, `messages?` (notices such as "resume.pdf successfully uploaded", which live
 Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
 
-- `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown`.
+- `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown` (Oracle has no
+  `review`: its last page is a `step` whose `nextLabel` is Submit).
 - `PageAction`: `apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`.
-- `Field`: `id` (stable within the page: section + automation id, `#n` for repeats), `automationId?`,
+- `Field`: `id` (stable within the page: section + a key (Workday's automation id, Oracle's control id
+  without its render counter), `#n` for repeats), `automationId?`,
   `label`, `helpText?`, `required`, `kind`, `options?`, `optionsLazy?`, `dateParts?`, `multiple?`,
   `currentValue` (string, string[], boolean or null), `error?`, `hint? { profileKey }`.
 - `FieldKind`: `text`, `textarea`, `number`, `password`, `date`, `dropdown`, `typeahead`, `radio`,
@@ -126,8 +133,9 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
   `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
-  `PROTOCOL_VERSION` stayed 2.
+  `PROTOCOL_VERSION` stayed 2 through these.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
-  then refuse each other with a hint naming the side to rebuild.
+  then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
+  companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

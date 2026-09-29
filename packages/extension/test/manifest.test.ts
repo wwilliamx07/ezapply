@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WORKDAY_HOST_PERMISSIONS } from "@ezapply/protocol";
+import { ORACLE_OPTIONAL_HOST_PERMISSIONS, WORKDAY_HOST_PERMISSIONS } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 
 // npm test builds first, so both outputs exist.
@@ -27,6 +27,12 @@ describe("host permissions", () => {
   it("cover exactly the Workday application hosts that site detection knows", () => {
     for (const dir of ["dist", "dist-firefox"]) {
       expect(manifest(dir).host_permissions).toEqual([...WORKDAY_HOST_PERMISSIONS]);
+    }
+  });
+
+  it("let Oracle career sites, which can be on any host, be granted one origin at a time", () => {
+    for (const dir of ["dist", "dist-firefox"]) {
+      expect(manifest(dir).optional_host_permissions).toEqual([...ORACLE_OPTIONAL_HOST_PERMISSIONS]);
     }
   });
 });

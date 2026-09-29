@@ -11,7 +11,7 @@ ezapply-home/
   EZAPPLY.md               agent file (managed by ezapply; rewritten by init)
   CLAUDE.md                the user's own notes; imports @EZAPPLY.md
   ezapply.config.json      settings: resume page limit and size, TeX engine, PDF size limit, decisions provider
-  autofill-timing.yaml     how long the Workday adapter waits (the user's to tune)
+  autofill-timing.yaml     how long the form adapters wait (the user's to tune)
   state.json               the active posting id
   .mcp.json                Claude Code → `node <cli>/main.js mcp`
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/
@@ -100,7 +100,7 @@ when a request matches it or the user types `/ezapply-<name>`.
 | `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check, then review (in `after-approval`) |
 | `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body, `format.md` structure if present, one-page build loop, then review (in `after-approval`) |
 | `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks; the bundle is reviewed as its own document in `after-approval` |
-| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`; form text treated as untrusted; step-by-step Workday filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat, hand-off at review |
+| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`; form text treated as untrusted; step-by-step Workday and Oracle filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat, hand-off at review (on Oracle, when Submit is next); Oracle's single-page flow, inline item forms saved with `save.*`, dependent address lists; every add button's section matched to the profile (work, education, languages, certifications, links) |
 | `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants), validation |
 
 ## Claude Code settings

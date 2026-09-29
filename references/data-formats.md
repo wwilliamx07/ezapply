@@ -66,7 +66,7 @@ comment wins ([documents](components/documents.md#tex-engines-texenginests)). `l
 when latexmk runs, which a comment never selects.
 
 ### `autofill-timing.yaml` (`companion/src/forms/timing.ts`)
-The Workday adapter's waits, for the user to tune. Written by `ezapply init` if missing and never
+The form adapters' waits (Workday and Oracle use the same named waits), for the user to tune. Written by `ezapply init` if missing and never
 overwritten; read for every form call, so a saved edit applies to the next one.
 ```yaml
 scale: 1                  # multiplies the defaults of the waits left unset (not pollMs; 0.1–10)
@@ -111,14 +111,14 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
-from), `pageTitle`, `site` (`workday` | `generic`, of the content), `tenant?` (the Workday tenant, read from
-the URL), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
+from), `pageTitle`, `site` (`workday` | `oracle` | `generic`, of the content), `tenant?` (the Workday tenant or the
+Oracle career site as `host/site`, read from the URL), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
 `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
 ### `form-log.jsonl`
-One JSON object per line, each with `ts`. Written only for form activity on a tab of this posting's Workday
-tenant (or when either has no tenant):
+One JSON object per line, each with `ts`. Written only for form activity on a tab of this posting's tenant
+(Workday tenant or Oracle career site; or when either has no tenant):
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
   `computed`, `user`, `judgment`
 - `{ event: "upload", fieldId, file, ok, error? }`

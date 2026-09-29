@@ -67,7 +67,7 @@ export function timingFileTemplate(): string {
     `# ${`${k}: ${DEFAULT_TIMING[k]}`.padEnd(width)}# ${TIMING_DOCS[k]}`.trimEnd(),
   );
   return [
-    "# ezapply autofill timing: how long the Workday adapter waits, in milliseconds.",
+    "# ezapply autofill timing: how long the form adapters (Workday, Oracle) wait, in milliseconds.",
     "#",
     "# Read on every form call: save, and the next call uses it (no restart). Uncomment a line to change it.",
     "# Most waits end as soon as what they wait for happens and cost their full length only when it doesn't.",

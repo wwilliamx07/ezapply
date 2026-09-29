@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { isOracleUrl, oracleTenant } from "./oracle.js";
 import { SiteId } from "./postings.js";
-import { isWorkdayUrl } from "./workday.js";
+import { isWorkdayUrl, workdayTenant } from "./workday.js";
 
 /**
  * Browsers the companion can open pages and files in. The extension reports which one it runs in, so what
@@ -44,5 +45,19 @@ export type BrowserStatus = z.infer<typeof BrowserStatus>;
 
 /** Site detection shared by the extension and the companion. */
 export function detectSite(url: string): SiteId {
-  return isWorkdayUrl(url) ? "workday" : "generic";
+  if (isWorkdayUrl(url)) return "workday";
+  if (isOracleUrl(url)) return "oracle";
+  return "generic";
+}
+
+/** The sites whose application forms ezapply reads and fills, each with its own adapter. */
+export const FORM_SITES: readonly SiteId[] = ["workday", "oracle"];
+
+export function isFormSite(site: SiteId): boolean {
+  return FORM_SITES.includes(site);
+}
+
+/** The tenant an application or posting URL belongs to: a Workday tenant or an Oracle career site. */
+export function siteTenant(url: string): string | undefined {
+  return workdayTenant(url) ?? oracleTenant(url);
 }

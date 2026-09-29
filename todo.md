@@ -217,13 +217,19 @@ Ranked by how much they help one person apply faster without lowering quality or
    is credited to, tab choice follows the active posting, and a mismatch warns and logs nothing. Left: match
    by requisition too (two postings at one company share a tenant), and stop filling on a mismatch instead
    of warning.
-2. **More application sites: Greenhouse, Lever, Ashby.**
+2. **More application sites: Greenhouse, Lever, Ashby.** (Oracle Recruiting Cloud is built:
+   `references/components/oracle-adapter.md`; "Add a job site" in `references/development.md` lists the steps.)
    - Their forms are plain HTML and much simpler than Workday's, and they're very common for software
      jobs.
    - Same adapter API (`getForm`/`fill`/`upload`/`remove`/`next`), with site detection in
      `protocol/src/browser.ts`.
    - These sites submit from a single page, so the submit guard matters more there.
-3. **Checking Workday behind sign-in, with consent.**
+   - **Oracle follow-ups** (`references/components/oracle-adapter.md`): re-run a live application to confirm
+     the fixes from the first one (2026-09-29) and add languages and certifications; find out why the Cover
+     Letter field was missing live (save the page); move the posting to `filled` when an Oracle form is complete (it has no review page); support
+     the multi-select dropdown (preferred locations) and JET comboboxes, now left to the user; button texts
+     in other languages.
+3. **Checking Workday and Oracle behind sign-in, with consent.**
    - A `form_snapshot` tool saves the current step's structure: field kinds, automation ids, the markup
      around widgets, with values stripped.
    - After the user agrees, it goes into `test/fixtures/live/`.

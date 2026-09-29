@@ -20,8 +20,9 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [components/profile-and-templates.md](components/profile-and-templates.md) | Profile, answer bank, preferences, resume and cover letter templates |
 | [components/github-and-repos.md](components/github-and-repos.md) | GitHub App, login, tokens, the read-only repo cache |
 | [components/knowledge-base.md](components/knowledge-base.md) | Project knowledge base, claims, indexing |
-| [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, capture, options, builds |
-| [components/workday-adapter.md](components/workday-adapter.md) | Reading and filling Workday forms, the submit guard |
+| [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, capture, site access, options, builds |
+| [components/workday-adapter.md](components/workday-adapter.md) | Reading and filling Workday forms, the submit guard, the waits (`autofill-timing.yaml`) |
+| [components/oracle-adapter.md](components/oracle-adapter.md) | Reading and filling Oracle Recruiting Cloud forms, per-site access, what was verified |
 | [components/cli.md](components/cli.md) | `packages/cli`: the `ezapply` command, init, the MCP relay, `chat` (hosting the companion, restarting Claude) |
 | [components/workspace.md](components/workspace.md) | The user's workspace: layout, agent file, skills, Claude Code settings |
 | [mcp-tools.md](mcp-tools.md) | Every MCP tool: inputs, behaviour, errors |

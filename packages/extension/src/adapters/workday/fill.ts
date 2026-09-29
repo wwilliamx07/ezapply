@@ -7,6 +7,7 @@ import {
   key,
   matchOption,
   norm,
+  parseDate,
   press,
   setNativeValue,
   settle,
@@ -15,7 +16,8 @@ import {
   typeChar,
   waitFor,
   win,
-} from "./dom.js";
+} from "../common/dom.js";
+import { T } from "../common/timing.js";
 import {
   attachedFiles,
   datePartInput,
@@ -28,7 +30,6 @@ import {
   optionLabel,
 } from "./extract.js";
 import { SEL, within } from "./selectors.js";
-import { T } from "./timing.js";
 
 type Result = Omit<FillResult, "fieldId">;
 
@@ -435,16 +436,6 @@ async function fillCheckboxGroup(c: HTMLElement, wanted: string[]): Promise<Resu
 }
 
 // ---- date ---------------------------------------------------------------------------------------
-
-/** "YYYY", "YYYY-MM", "YYYY-MM-DD", "MM/YYYY" or "MM/DD/YYYY" → its parts. */
-export function parseDate(value: string): { year: string; month?: string; day?: string } | null {
-  const v = value.trim();
-  const iso = /^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(v);
-  if (iso) return { year: iso[1] as string, ...(iso[2] ? { month: iso[2] } : {}), ...(iso[3] ? { day: iso[3] } : {}) };
-  const us = /^(\d{1,2})\/(?:(\d{1,2})\/)?(\d{4})$/.exec(v);
-  if (us) return { year: us[3] as string, month: us[1] as string, ...(us[2] ? { day: us[2] } : {}) };
-  return null;
-}
 
 /**
  * Enter one date part the way a person does: click it, type the digits, leave it. Live Workday's parts take

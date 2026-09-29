@@ -1,4 +1,4 @@
-import { detectSite, type SiteId, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
+import { detectSite, oracleTenant, type SiteId, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
@@ -61,6 +61,8 @@ export function extractPosting(input: {
   const company = ld.company ?? fromTitle.company ?? companyFromUrl(input.url);
   const location = ld.location ?? workday.location;
   const reqId = ld.reqId ?? workday.reqId;
+  // Oracle career sites: host and site number, so the application tab can be matched to this posting.
+  const tenant = workday.tenant ?? (site === "oracle" ? oracleTenant(contentUrl) : undefined);
 
   const header = [
     `# ${role ?? input.pageTitle}`,
@@ -78,7 +80,7 @@ export function extractPosting(input: {
   return {
     markdown: `${header}${toMarkdown(bodyHtml)}\n`,
     site,
-    ...(workday.tenant ? { tenant: workday.tenant } : {}),
+    ...(tenant ? { tenant } : {}),
     ...(company ? { company } : {}),
     ...(role ? { role } : {}),
     ...(reqId ? { reqId } : {}),
@@ -217,6 +219,8 @@ function cleanCompany(s: string): string | undefined {
 
 export function companyFromUrl(url: string): string | undefined {
   const u = new URL(url);
+  // Oracle Cloud hosts (fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com) don't name the employer; the title does.
+  if (/(^|\.)oraclecloud\.com$/i.test(u.hostname)) return undefined;
   if (ATS_HOSTS.test(u.hostname)) {
     // Workday: acme.wd5.myworkdayjobs.com, wd5.myworkdaysite.com/recruiting/acme/...
     if (/myworkday/i.test(u.hostname)) return workdayTenant(url);

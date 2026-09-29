@@ -29,25 +29,26 @@ decides and submits.
    in the conversation instead of in a troubleshooting guide.
 8. **As few manual steps as possible.** The terminal part of setup is one command. The only thing the
    user must do by hand is what a browser or website insists on: loading the extension, signing in to
-   Workday, pressing Submit.
+   Workday or an Oracle career site (and letting the extension onto that site), pressing Submit.
 9. **Honest about uncertainty.** Claude asks rather than guesses on sensitive answers (EEO, salary,
    anything marked `sensitive` or unanswered), and flags answers that came from its own judgment.
 10. **Built to grow, not built big.** Single-user today, but with seams for more: site adapters beyond
-    Workday, a pluggable decision model, versioned file formats and protocol, and no personal
+    Workday and Oracle, a pluggable decision model, versioned file formats and protocol, and no personal
     assumptions in code.
 
 ## Goals
 - One click captures a posting; from then on it's the context for every request.
 - Documents are made and revised by chatting, with each revision compiled, checked and snapshotted.
 - A one-page resume and a cover letter tailored with evidence-backed facts from the user's own projects.
-- Autofill for Workday applications, including each company's own screening questions and widgets.
+- Autofill for Workday and Oracle Recruiting Cloud applications, including each company's own screening
+  questions and widgets.
 - Single-PDF bundles when a posting requires one.
 - Guided onboarding: tools, extension, GitHub and repos, knowledge base, profile, templates, answers.
 - A decision model (e.g. Jev) can be added later without changing tools or skills.
 
 ## Non-goals (v1)
 - Submitting, or applying in bulk.
-- Autofill on sites other than Workday. Capture works on any site.
-- Creating Workday accounts or solving CAPTCHAs. The user signs in and tells Claude when done.
+- Autofill on sites other than Workday and Oracle Recruiting Cloud. Capture works on any site.
+- Creating Workday accounts, completing Oracle's email step, or solving CAPTCHAs. The user signs in and tells Claude when done.
 - Review screens in the browser. Review happens in chat and the user's PDF viewer.
 - Hidden text, keyword stuffing, or any other trick aimed at applicant-tracking systems.

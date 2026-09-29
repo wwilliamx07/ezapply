@@ -1,0 +1,1348 @@
+<!-- Snapshot of an Oracle Recruiting Cloud application (single-page flow, before filling), employer details and personal data replaced, for adapter tests. Scripts, styles, SVGs and Knockout bindings removed. -->
+<body class="app-loading font-family-primary app-loaded body--scrolled-down" data-route="apply-flow" data-zoomrange="ZOOM-LTE-100">
+        <div class="preload" aria-hidden="true">
+            <div class="preload__icons"></div>
+            <div class="preload__primary-font"></div>
+            <div class="preload__secondary-font"></div>
+        </div>
+        <div class="app-loading-spinner"></div>
+        <div class="app"><skip-navigation-link><a class="skip-navigation-link" href="https://jobs.umbrella.example/en/sites/CX_1#main" aria-label="Skip to main content.">Skip to main content.</a>
+<ai-assistant-skip-navigation-link>
+</ai-assistant-skip-navigation-link>
+</skip-navigation-link>
+<notifications><div role="alert" aria-live="assertive" aria-relevant="additions" class="notifications font-family-primary" tabindex="-1">
+</div>
+</notifications>
+<oda-summary><minimal-dialog><oj-dialog initial-visibility="hide" resize-behavior="none" drag-affordance="none" cancel-behavior="none" modality="modeless" aria-modal="true" on-oj-focus="{{setFocusToBody}}" class="app-dialog font-family-primary oj-dialog oj-component oj-component-initnode oj-complete" id="ui-id-12" tabindex="-1" role="dialog" style="display: none;">
+<div class="oj-dialog-container" data-oj-context=""><div class="oj-dialog-header oj-dialog-header-decoration"><div class="oj-dialog-header app-dialog__hide-header" slot="header"></div></div><div class="oj-dialog-content oj-dialog-default-content"><div class="oj-dialog-body-wrapper"><div class="app-dialog__wrapper app-dialog__wrapper--align-center oj-dialog-body" slot="body">
+        <div class="oj-dialog-body app-dialog__main background-color-dialog" tabindex="-1">
+        <div class="app-dialog__bar text-color-secondary">
+            <button class="app-dialog__close focused-tooltip" title="Cancel" aria-label="Cancel"></button>
+        </div>
+        <div class="app-dialog__header">
+            <h1 class="heading">Work Summary</h1>
+        </div>
+        <div class="app-dialog__content"><p>Placeholder text.</p></div>
+        <div class="app-dialog__footer">
+            <div class="app-dialog__buttons-bar font-family-secondary text-color-primary">
+                <button class="button app-dialog__footer-button">
+                    <span class="button__label">Discard</span>
+                </button>
+                <button class="button app-dialog__footer-button">
+                    <span class="button__label">Add Summary</span>
+                </button>
+            </div>
+        </div>
+        </div>
+    </div><div class="app-dialog__background oj-dialog-body"></div></div></div></div></oj-dialog>
+</minimal-dialog>
+</oda-summary>
+<div class="app__viewport">
+    <div class="apply-flow background-color-apply-flow standard-apply-flow">
+        <header class="app-header apply-flow-header">
+    <div class="apply-flow-header__content">
+        <div class="app-header__current-page text-color-secondary">
+            <sitemap-link><a class="sitemap-link" href="https://jobs.umbrella.example/sitemaps/sitemapIndex">sitemap</a>
+</sitemap-link>
+            <button role="link" class="app-header-icon-button app-header__close" aria-label="Back to Job Details" title="Back to Job Details">
+                <span class="app-header-icon-button__icon app-header__close-icon"></span>
+            </button>
+            <span class="app-header__spacer app-header__close-spacer"></span>
+            <div class="app-header__current-page-title" tabindex="0" aria-describedby="job-details-apply-flow-dropdown">
+                <div class="app-header__current-page-title-container">
+                    <div>Firmware Engineering Co-op</div>
+                    <div class="page-title-ellipse">...</div>
+                </div>
+                <div class="context-menu apply-flow-header__job-context-menu background-color-dropdown" id="job-details-apply-flow-dropdown">
+                    <ul class="context-menu__list">
+                        <li class="context-menu__item posting-locations">
+                            <span class="apply-flow-header__location-label">Location</span>:&nbsp;
+                            <span class="text-color-primary">
+<span>Canada</span>
+<span>(Onsite)</span>
+                            </span>
+                        </li>
+                        <li class="context-menu__item">
+                            Job Identification:
+                            <span class="text-color-primary">10001</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Job Category:
+                            <span class="text-color-primary">Corporate Services</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Posting Date:
+                            <span class="text-color-primary">01/02/2026, 02:24 PM</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Degree Level:
+                            <span class="text-color-primary">Incomplete</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Job Schedule:
+                            <span class="text-color-primary">Full time</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Job Subfamily:
+                            <span class="text-color-primary">Trainee</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Regular or Temporary:
+                            <span class="text-color-primary">Temporary</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Job Type:
+                            <span class="text-color-primary">Fixed Term Student Trainee/Apprentice (3 months+)</span>
+                        </li>
+                        <li class="context-menu__item" style="display: none;">
+                            Placeholder text.
+                            <span class="text-color-primary">No</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Role Type:
+                            <span class="text-color-primary">Individual contributor</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Salary Range:
+                            <span class="text-color-primary">$50,000 - 90,000 CAD  per year</span>
+                        </li>
+                        <li class="context-menu__item">
+                            Experience level:
+                            <span class="text-color-primary">Student or Intern or Trainee</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <h1 class="ui-helper-hidden-accessible">Firmware Engineering Co-op application, step 1 of 4</h1>
+    <apply-flow-navigation-train>
+<div class="apply-flow-navigation-train text-color-secondary font-family-secondary" role="navigation" tabindex="0" aria-label="Application Flow Navigation">
+    <div class="apply-flow-navigation-train__details">
+        <div class="apply-flow-navigation-train__line">
+            <div class="current-stop trainstop icon-trainstop current-stop--progress"></div>
+        </div>
+        <ul class="apply-flow-navigation-train__blocks">
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Import your profile" data-blockid="300001817768648" tabindex="0">Import your profile</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Resume and URLs" data-blockid="300001817768653" tabindex="0">Resume and URLs</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Extra Information" data-blockid="300001817768650" tabindex="0">Extra Information</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Contact Information" data-blockid="300001817768649" tabindex="0">Contact Information</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Address" data-blockid="300001817768652" tabindex="0">Address</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Application Questions" data-blockid="300001817768659" tabindex="0">Application Questions</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Work Preferences" data-blockid="300001817768660" tabindex="0">Work Preferences</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Work and Education History" data-blockid="300001817768664" tabindex="0">Work and Education History</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Languages" data-blockid="300001817768668" tabindex="0">Languages</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Licenses and Certificates" data-blockid="300001817768666" tabindex="0">Licenses and Certificates</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Disability Information" data-blockid="300001817768673" tabindex="0">Disability Information</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Diversity Information" data-blockid="300001817768672" tabindex="0">Diversity Information</a>
+            </li>
+            <li class="apply-flow-navigation-train__block">
+                <a href="javascript:void(0)" class="apply-flow-navigation-train__block-link" title="Additonal Documents" data-blockid="300001817768674" tabindex="0">Additonal Documents</a>
+            </li>
+        </ul>
+    </div>
+</div>
+</apply-flow-navigation-train>
+    <apply-flow-fixer>
+</apply-flow-fixer>
+    <div class="apply-flow-header__background"></div>
+</header>
+        <main id="main" aria-labelledby="apply-flow-main-heading" tabindex="-1">
+            <h1 id="apply-flow-main-heading" class="oj-helper-hidden-accessible">Job application form</h1>
+            <section class="apply-flow__content-container">
+                <form class="apply-flow__content apply-flow__content-form" novalidate="" method="post">
+                    <div class="apply-flow-page apply-flow-page--one-page">
+                        <apply-flow-section id="presection-1"><div class="apply-flow-section" tabindex="-1" data-section-number="1">
+    <ul class="apply-flow-page-list">
+        <li>
+            <apply-flow-block class="300001817768648" id="block-300001817768648" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768648"><div class="apply-flow-block apply-flow-block--profile-import">
+    <div class="apply-flow-block__form-list" role="region" aria-label="Import your profile  ">
+        <div class="apply-flow-profile-import" tabindex="-1">
+    <div class="apply-flow-block__header">
+        <h2 class="apply-flow-block__title" aria-label="Import your profile">Import your profile</h2>
+    </div>
+    <div class="apply-flow-profile-import__awli-content">
+        <div title="Apply with LinkedIn frame" aria-label="Apply with LinkedIn frame"><span class="IN-widget"></span></div>
+    </div>
+    <div aria-live="polite" role="status">
+    </div>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+    </ul>
+</div>
+</apply-flow-section>
+                        <apply-flow-section id="section-1" data-scroll-spy="apply-flow-sections" data-scroll-spy-id="1" aria-hidden="false"><div class="apply-flow-section" tabindex="-1" data-section-number="1">
+    <h2 class="apply-flow-section__trainstop-name">Personal Info</h2>
+    <ul class="apply-flow-page-list">
+        <li>
+            <apply-flow-block class="300001817768653" id="block-300001817768653" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768653"><div class="apply-flow-block apply-flow-block--file-upload">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Resume and URLs</span>
+</h3>
+</apply-flow-block-title>
+        <p class="apply-flow-block__instructions">Please add your resume. Supported file formats for resume are: .txt, .rtf, .doc, .docx, .pdf, .odt, .html, .htm. File size is limited to 5 MB. You can also optionally add URLS of your social profile. e.g., Indeed, LinkedIn etc.
+Please be aware that documents uploaded in .docx format may not fully retain their original formatting when converted to PDF. This could impact the overall presentation of your resume or application</p>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Resume and URLs  Please add your resume. Supported file formats for resume are: .txt, .rtf, .doc, .docx, .pdf, .odt, .html, .htm. File size is limited to 5 MB. You can also optionally add URLS of your social profile. e.g., Indeed, LinkedIn etc.
+Please be aware that documents uploaded in .docx format may not fully retain their original formatting when converted to PDF. This could impact the overall presentation of your resume or application">
+        <div class="file-upload-wrapper">
+    <div class="file-upload-wrapper__section">
+        <resume-upload-button><div>
+    <div class="attachment-upload-button attachment-upload-button--waiting" role="application">
+        <div class="attachment-upload-button__container font-family-secondary">
+            <div class="attachment-upload-button__drag-and-drop">
+                <span class="attachment-upload-button__drag-and-drop-label attachment-upload-button__drag-and-drop-label--required">
+                    <span>Drop Resume Here</span>
+                    <span class="attachment-upload-button__drag-and-drop-label--required-star" aria-hidden="true"></span>
+                </span>
+            </div>
+            <div class="attachment-upload-button__upload-button">
+                <span class="attachment-upload-button__or">Or</span>
+                <div class="file-form-element">
+    <input type="file" class="file-form-element__input upload-button" multiple="" id="attachment-upload-4" name="attachment-upload" accept=".txt, .rtf, .doc, .docx, .pdf, .odt, .htm, .html" aria-required="true">
+    <label class="file-form-element__label attachment-upload-button__label theme-color-1" for="attachment-upload-4">
+        <span>Upload Resume</span>
+    </label>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+<referral-resume-block>
+</referral-resume-block>
+</resume-upload-button>
+        <attachment-preuploaded>
+</attachment-preuploaded>
+    </div>
+    <div class="file-upload-wrapper__section">
+        <cover-letter-upload-button><div>
+    <div class="attachment-upload-button attachment-upload-button--waiting" role="application">
+        <div class="attachment-upload-button__container font-family-secondary">
+            <div class="attachment-upload-button__drag-and-drop">
+                <span class="attachment-upload-button__drag-and-drop-label">
+                    <span>Drop Cover Letter Here</span>
+                </span>
+            </div>
+            <div class="attachment-upload-button__upload-button">
+                <span class="attachment-upload-button__or">Or</span>
+                <div class="file-form-element">
+    <input type="file" class="file-form-element__input upload-button" multiple="" id="attachment-upload-5" name="attachment-upload" accept=".txt, .rtf, .doc, .docx, .pdf, .odt, .htm, .html">
+    <label class="file-form-element__label attachment-upload-button__label theme-color-1" for="attachment-upload-5">
+        <span>Upload Cover Letter</span>
+    </label>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+</cover-letter-upload-button>
+        <attachment-preuploaded>
+</attachment-preuploaded>
+    </div>
+</div>
+<candidate-links><div class="candidate-links">
+    <form-builder>
+<div class="candidate-links__link">
+    <div class="input-row input-row--text">
+        <form-element-label>
+<label class="input-row__label" for="siteLink-1-7" id="siteLink-1-7-label" aria-labelledby="labelText-siteLink-1-7 instructionsText-siteLink-1-7" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-siteLink-1-7">Link 1</span>
+</label>
+</form-element-label>
+        <div class="input-row__control-container">
+            <input class="input-row__control" id="siteLink-1-7" name="siteLink-1" type="url" aria-label="Resume and URLs Link 1">
+            <div class="input-row__control-decorator"></div>
+        </div>
+    </div>
+</div>
+</form-builder>
+    <button type="button" class="candidate-links__add-link theme-color-1">
+        <span>Add Another Link</span>
+    </button>
+</div>
+</candidate-links>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768650" id="block-300001817768650" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768650"><div class="apply-flow-block apply-flow-block--extra-information">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Extra Information</span>
+</h3>
+</apply-flow-block-title>
+        <p class="apply-flow-block__instructions">I, hereby give my consent to Umbrella to the storage of my personal information and sensitive personal information for a period of 2 years for the purpose of being considered for future recruitment opportunities. I am aware that subject to the prevailing privacy laws, I have the right to withdraw my consent at any time. The consent I give Umbrella will last for two years and can be renewed at my request.</p>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Extra Information  I, hereby give my consent to Umbrella to the storage of my personal information and sensitive personal information for a period of 2 years for the purpose of being considered for future recruitment opportunities. I am aware that subject to the prevailing privacy laws, I have the right to withdraw my consent at any time. The consent I give Umbrella will last for two years and can be renewed at my request.">
+<form-builder>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="areYouOkayToKeepYourCandidateD-38-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="areYouOkayToKeepYourCandidateD-38-label" aria-labelledby="labelText-areYouOkayToKeepYourCandidateD-38 instructionsText-areYouOkayToKeepYourCandidateD-38" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-areYouOkayToKeepYourCandidateD-38">Are you okay to keep your candidate data for 2 years?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="N" id="areYouOkayToKeepYourCandidateD-38-N" name="areYouOkayToKeepYourCandidateD-38" required="true" aria-labelledby="label-areYouOkayToKeepYourCandidateD-38-N">
+        <label class="apply-flow-input-radio" for="areYouOkayToKeepYourCandidateD-38-N">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-areYouOkayToKeepYourCandidateD-38-N">No</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="Y" id="areYouOkayToKeepYourCandidateD-38-Y" name="areYouOkayToKeepYourCandidateD-38" required="true" aria-labelledby="label-areYouOkayToKeepYourCandidateD-38-Y">
+        <label class="apply-flow-input-radio" for="areYouOkayToKeepYourCandidateD-38-Y">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-areYouOkayToKeepYourCandidateD-38-Y">Yes</span>
+        </label>
+    </div>
+</div>
+</form-builder>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768649" id="block-300001817768649" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768649"><div class="apply-flow-block apply-flow-block--personal-information-basic">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Contact Information</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Contact Information  ">
+<name-form><form-builder>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="lastName-39" aria-labelledby="labelText-lastName-39 instructionsText-lastName-39" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-lastName-39">Last Name</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="lastName-39" name="lastName" autocomplete="family-name" aria-required="true" aria-describedby="lastName-39-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="firstName-40" aria-labelledby="labelText-firstName-40 instructionsText-firstName-40" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-firstName-40">First Name</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="firstName-40" name="firstName" autocomplete="given-name" aria-required="true" aria-describedby="firstName-40-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label" for="title-41" aria-labelledby="labelText-title-41 instructionsText-title-41" aria-hidden="false" style="display: none;">
+    <span class="input-row__linebreak" id="labelText-title-41">Title</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="title">
+        <div><ul role="list" aria-label="Title" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Miss</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Mr.</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Mrs.</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Ms.</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Unknown</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label" for="middleNames-42" aria-labelledby="labelText-middleNames-42 instructionsText-middleNames-42" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-middleNames-42">Middle Name</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="middleNames-42" name="middleNames" autocomplete="additional-name" aria-describedby="middleNames-42-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row communication-channel__email quick-apply-flow-communication-channel__email">
+    <div class="input-row input-row--text input-row--filled">
+        <form-element-label>
+<label class="input-row__label input-row__label--disabled" for="email-43" aria-labelledby="labelText-email-43 instructionsText-email-43" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-email-43">Email Address</span>
+</label>
+</form-element-label>
+        <div class="input-row__control-container">
+            <div class="input-row__item communication-channel__email-row">
+                <input class="input-row__control communication-channel__email-control" id="email-43" name="email" type="email" readonly="readonly" autocomplete="email">
+                <button type="button" class="communication-channel__value-edit communication-channel__value-email-edit theme-color-1 focused-tooltip" title="Edit email address" aria-label="Edit email address">
+                    <em class="icon-af-edit-sm"></em>
+                </button>
+                <div class="input-row__control-decorator communication-channel__email-decorator"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="input-row input-row--with-placeholder input-row--has-picker input-row--filled">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="country-codes-dropdownphoneNumber" id="phoneNumberGroupLabel" aria-labelledby="labelText-phoneNumber-44 instructionsText-phoneNumber-44" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-phoneNumber-44">Phone Number</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index">
+        <div class="input-row-composite__inputs phone-row" role="group" aria-labelledby="phoneNumberGroupLabel">
+            <div class="input-row-composite__input phone-row__prefix">
+                <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><span id="inputFieldLabel-country-codes-dropdownphoneNumber" class="input-field__label">Country code</span><input autocomplete="none" name="phoneNumber" id="country-codes-dropdownphoneNumber" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-expanded="false" aria-labelledby="labelText-undefined inputFieldLabel-country-codes-dropdownphoneNumber" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button id="country-codes-dropdownphoneNumber-reset-button" type="button" aria-label="Remove value for the Country code field." title="Remove value for the Country code field." class="icon-clear focused-tooltip-left "></button><button type="button" id="country-codes-dropdownphoneNumber-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Country code." title="Open the drop-down list for Country code." aria-expanded="false" aria-controls="country-codes-dropdownphoneNumber-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+            </div>
+            <div class="input-row-composite__input phone-row__number">
+                <input type="tel" class="input-row__control phone-row__input" maxlength="30" aria-label="Phone Number" aria-required="true" aria-invalid="false">
+                <div class="input-row__control-decorator"></div>
+            </div>
+        </div>
+    </div>
+</div>
+</form-builder>
+</name-form>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768652" id="block-300001817768652" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768652"><div class="apply-flow-block apply-flow-block--personal-information-address-v2">
+    <div class="apply-flow-block__form-list" role="region" aria-label="Address  ">
+<fieldset class="address-form__group">
+    <legend aria-labelledby="address-block-additional-instruction" class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Address</span>
+</h3>
+</apply-flow-block-title>
+    </legend>
+    <span class="oj-helper-hidden-accessible" id="address-block-additional-instruction">Address
+        This block contains dependent drop-down lists. Note that if you change a value for one of the fields, a value for another one in the block may automatically change. To change values in some drop-downs lists, you may need to edit the value in their parent drop-down list.</span>
+    <div class="address-block-v2-container">
+        <address-form-v2><form-builder>
+<div class="input-row input-row--has-picker geo-hierarchy-form-element input-row--filled">
+    <label class="input-row__label cx-select__label input-row__label--required" for="country-30">
+        <span class="input-row__label-text">
+            Country
+            <span class="cx-select__label--required" aria-hidden="true">*</span>
+        </span>
+    </label>
+    <div class="input-row__control-container reset-z-index">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><span id="inputFieldLabel-country-30" class="input-field__label"></span><input autocomplete="none" name="country" id="country-30" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="country-30-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button id="country-30-reset-button" type="button" aria-label="Remove value for the Country field." title="Remove value for the Country field." class="icon-clear focused-tooltip "></button><button type="button" id="country-30-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Country." title="Open the drop-down list for Country." aria-expanded="false" aria-controls="country-30-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+        <inline-spinner><span class="inline-spinner inline-spinner--right">
+    <span class="inline-spinner__icon-wrapper">
+        <span class="inline-spinner__icon"></span>
+    </span>
+</span>
+</inline-spinner>
+    </div>
+</div>
+</form-builder>
+<form-builder class="address-form">
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="addressLine1-31" aria-labelledby="labelText-addressLine1-31 instructionsText-addressLine1-31" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-addressLine1-31">Street and House Number</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="addressLine1-31" name="addressLine1" autocomplete="address-line1" aria-required="true" aria-describedby="addressLine1-31-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label" for="addressLine2-32" aria-labelledby="labelText-addressLine2-32 instructionsText-addressLine2-32" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-addressLine2-32">2nd address line</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="addressLine2-32" name="addressLine2" autocomplete="address-line2" aria-describedby="addressLine2-32-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker geo-hierarchy-form-element">
+    <label class="input-row__label cx-select__label input-row__label--required" for="city-33">
+        <span class="input-row__label-text">
+            City
+            <span class="cx-select__label--required" aria-hidden="true">*</span>
+        </span>
+    </label>
+    <div class="input-row__control-container reset-z-index">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="city" id="city-33" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="city-33-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="city-33-toggle-button" tabindex="-1" aria-label="Open the drop-down list for City." title="Open the drop-down list for City." aria-expanded="false" aria-controls="city-33-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker geo-hierarchy-form-element">
+    <label class="input-row__label cx-select__label input-row__label--required" for="region2-34">
+        <span class="input-row__label-text">
+            Province
+            <span class="cx-select__label--required" aria-hidden="true">*</span>
+        </span>
+    </label>
+    <div class="input-row__control-container reset-z-index">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="region2" id="region2-34" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="region2-34-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="region2-34-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Province." title="Open the drop-down list for Province." aria-expanded="false" aria-controls="region2-34-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label" for="addlAddressAttribute1-35" aria-labelledby="labelText-addlAddressAttribute1-35 instructionsText-addlAddressAttribute1-35" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-addlAddressAttribute1-35">State/Province Code</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="addlAddressAttribute1-35" name="addlAddressAttribute1" aria-describedby="addlAddressAttribute1-35-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker geo-hierarchy-form-element">
+    <label class="input-row__label cx-select__label input-row__label--required" for="postalCode-36">
+        <span class="input-row__label-text">
+            Postal Code
+            <span class="cx-select__label--required" aria-hidden="true">*</span>
+        </span>
+    </label>
+    <div class="input-row__control-container reset-z-index">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="postalCode" id="postalCode-36" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="postalCode-36-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="postalCode-36-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Postal Code." title="Open the drop-down list for Postal Code." aria-expanded="false" aria-controls="postalCode-36-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--text">
+    <form-element-label>
+<label class="input-row__label" for="addlAddressAttribute4-37" aria-labelledby="labelText-addlAddressAttribute4-37 instructionsText-addlAddressAttribute4-37" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-addlAddressAttribute4-37">Care Of</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input class="input-row__control" id="addlAddressAttribute4-37" name="addlAddressAttribute4" aria-describedby="addlAddressAttribute4-37-error" aria-invalid="false">
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+</form-builder>
+</address-form-v2>
+    </div>
+</fieldset>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+    </ul>
+</div>
+</apply-flow-section>
+                        <apply-flow-section id="section-2" data-scroll-spy="apply-flow-sections" data-scroll-spy-id="2" aria-hidden="false"><div class="apply-flow-section" tabindex="-1" data-section-number="2">
+    <h2 class="apply-flow-section__trainstop-name">Job Application Questions</h2>
+    <ul class="apply-flow-page-list">
+        <li>
+            <apply-flow-block class="300001817768659" id="block-300001817768659" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768659"><div class="apply-flow-block apply-flow-block--disqualification-questions">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Application Questions</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Application Questions  ">
+<form-builder>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300002080504910-15" aria-labelledby="labelText-300002080504910-15 instructionsText-300002080504910-15" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300002080504910-15">Do you require any accommodations or support during the recruitment process?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="300002080504910">
+        <div><ul role="list" aria-label="Do you require any accommodations or support during the recruitment process?" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Yes</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> No</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300002040221012-16" aria-labelledby="labelText-300002040221012-16 instructionsText-300002040221012-16" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300002040221012-16">Will you have graduated prior to the start of the co-op/internship?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="300002040221012">
+        <div><ul role="list" aria-label="Will you have graduated prior to the start of the co-op/internship?" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Yes</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> No</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300002038062998-17" aria-labelledby="labelText-300002038062998-17 instructionsText-300002038062998-17" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300002038062998-17">If you're currently enrolled in a college or university, kindly indicate your current academic year.</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="300002038062998">
+        <div><ul role="list" aria-label="If you're currently enrolled in a college or university, kindly indicate your current academic year." class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> First Year  </span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Second Year</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Third Year</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Fourth Year</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Fifth Year</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300001488637217-18" aria-labelledby="labelText-300001488637217-18 instructionsText-300001488637217-18" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300001488637217-18">Where did you first hear about this position?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="300001488637217">
+        <div><ul role="list" aria-label="Where did you first hear about this position?" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> New Jobs in Your Area Newsletter</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Technical Career Path/MyGrowth Portal</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Manager recommendation</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Colleague recommendation</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Recruiter recommendation</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Opportunity Marketplace</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Local Talent Pool/Pipeline</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Internal Job Fair Event</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000008730006-19-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000008730006-19-label" aria-labelledby="labelText-300000008730006-19 instructionsText-300000008730006-19" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000008730006-19">Have you previously worked for Umbrella as a student (co-op, university relations, intern and/or future tech)? If so, when?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000878073473" id="300000008730006-19-300000878073473" name="300000008730006-19" required="true" aria-labelledby="label-300000008730006-19-300000878073473">
+        <label class="apply-flow-input-radio" for="300000008730006-19-300000878073473">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008730006-19-300000878073473">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000878073474" id="300000008730006-19-300000878073474" name="300000008730006-19" required="true" aria-labelledby="label-300000008730006-19-300000878073474">
+        <label class="apply-flow-input-radio" for="300000008730006-19-300000878073474">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008730006-19-300000878073474">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--textarea">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300000008694884-20" aria-labelledby="labelText-300000008694884-20 instructionsText-300000008694884-20" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000008694884-20">Please indicate the total number co-op/ student internships or work terms you have completed</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <textarea class="input-row__control input-row__control--autoheight" rows="1" id="300000008694884-20" name="300000008694884" required="true" aria-describedby="300000008694884-20-error"></textarea><textarea class="input-row__control input-row__control--helper" rows="1" aria-hidden="true" tabindex="-1"></textarea>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000008730002-21-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000008730002-21-label" aria-labelledby="labelText-300000008730002-21 instructionsText-300000008730002-21" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000008730002-21">Are you currently enrolled in a co-op program?&nbsp; If so, will you be able to provide a confirmation of your enrollment from a recognized post-secondary University or College?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000878073464" id="300000008730002-21-300000878073464" name="300000008730002-21" required="true" aria-labelledby="label-300000008730002-21-300000878073464">
+        <label class="apply-flow-input-radio" for="300000008730002-21-300000878073464">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008730002-21-300000878073464">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000878073465" id="300000008730002-21-300000878073465" name="300000008730002-21" required="true" aria-labelledby="label-300000008730002-21-300000878073465">
+        <label class="apply-flow-input-radio" for="300000008730002-21-300000878073465">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008730002-21-300000878073465">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000384030745-22-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000384030745-22-label" aria-labelledby="labelText-300000384030745-22 instructionsText-300000384030745-22" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000384030745-22">Can you provide an official or unofficial educational transcript for your college or university?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062921" id="300000384030745-22-300002038062921" name="300000384030745-22" required="true" aria-labelledby="label-300000384030745-22-300002038062921">
+        <label class="apply-flow-input-radio" for="300000384030745-22-300002038062921">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000384030745-22-300002038062921">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062922" id="300000384030745-22-300002038062922" name="300000384030745-22" required="true" aria-labelledby="label-300000384030745-22-300002038062922">
+        <label class="apply-flow-input-radio" for="300000384030745-22-300002038062922">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000384030745-22-300002038062922">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000383851644-23-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000383851644-23-label" aria-labelledby="labelText-300000383851644-23 instructionsText-300000383851644-23" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000383851644-23">Are you legally authorized to work in Canada?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062960" id="300000383851644-23-300002038062960" name="300000383851644-23" required="true" aria-labelledby="label-300000383851644-23-300002038062960">
+        <label class="apply-flow-input-radio" for="300000383851644-23-300002038062960">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000383851644-23-300002038062960">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062961" id="300000383851644-23-300002038062961" name="300000383851644-23" required="true" aria-labelledby="label-300000383851644-23-300002038062961">
+        <label class="apply-flow-input-radio" for="300000383851644-23-300002038062961">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000383851644-23-300002038062961">No</span>
+        </label>
+    </div>
+</div>
+<div class="datepicker-row quick-apply-flow-datepicker-row input-row input-row--with-placeholder input-row--has-picker" aria-label="What is your expected year of graduation?">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300000392474837-24" aria-labelledby="labelText-300000392474837-24 instructionsText-300000392474837-24" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000392474837-24">What is your expected year of graduation?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container tooltip-trigger reset-z-index">
+        <div class="input-row-composite__inputs">
+            <div class="input-row-composite__input datepicker-row__input datepicker-row__input--month datepicker-row__listbox--[object Object]">
+                <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><span id="inputFieldLabel-month-300000392474837-24" class="input-field__label">Month</span><input autocomplete="none" name="300000392474837" id="month-300000392474837-24" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="month-300000392474837-24-listbox" aria-expanded="false" aria-labelledby="labelText-300000392474837-24 inputFieldLabel-month-300000392474837-24" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="month-300000392474837-24-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Month." title="Open the drop-down list for Month." aria-expanded="false" aria-controls="month-300000392474837-24-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+                <div class="input-row__control-decorator"></div>
+            </div>
+            <div class="input-row-composite__input datepicker-row__input datepicker-row__input--day datepicker-row__listbox--[object Object]">
+                <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><span id="inputFieldLabel-day-300000392474837-24" class="input-field__label">Day</span><input autocomplete="none" name="300000392474837" id="day-300000392474837-24" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="day-300000392474837-24-listbox" aria-expanded="false" aria-labelledby="labelText-300000392474837-24 inputFieldLabel-day-300000392474837-24" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="day-300000392474837-24-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Day." title="Open the drop-down list for Day." aria-expanded="false" aria-controls="day-300000392474837-24-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+                <div class="input-row__control-decorator"></div>
+            </div>
+            <div class="input-row-composite__input datepicker-row__input datepicker-row__input--year datepicker-row__listbox--[object Object]">
+                <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><span id="inputFieldLabel-year-300000392474837-24" class="input-field__label">Year</span><input autocomplete="none" name="300000392474837" id="year-300000392474837-24" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="year-300000392474837-24-listbox" aria-expanded="false" aria-labelledby="labelText-300000392474837-24 inputFieldLabel-year-300000392474837-24" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="year-300000392474837-24-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Year." title="Open the drop-down list for Year." aria-expanded="false" aria-controls="year-300000392474837-24-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+                <div class="input-row__control-decorator"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="input-row input-row--textarea">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="300000008694980-25" aria-labelledby="labelText-300000008694980-25 instructionsText-300000008694980-25" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000008694980-25">If currently enrolled in a college or university, please indicate your major.</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <textarea class="input-row__control input-row__control--autoheight" rows="1" id="300000008694980-25" name="300000008694980" required="true" aria-describedby="300000008694980-25-error"></textarea><textarea class="input-row__control input-row__control--helper" rows="1" aria-hidden="true" tabindex="-1"></textarea>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000384117137-26-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000384117137-26-label" aria-labelledby="labelText-300000384117137-26 instructionsText-300000384117137-26" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000384117137-26">Are you currently enrolled in an accredited Canadian College or University?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062965" id="300000384117137-26-300002038062965" name="300000384117137-26" required="true" aria-labelledby="label-300000384117137-26-300002038062965">
+        <label class="apply-flow-input-radio" for="300000384117137-26-300002038062965">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000384117137-26-300002038062965">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300002038062966" id="300000384117137-26-300002038062966" name="300000384117137-26" required="true" aria-labelledby="label-300000384117137-26-300002038062966">
+        <label class="apply-flow-input-radio" for="300000384117137-26-300002038062966">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000384117137-26-300002038062966">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000009787910-27-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000009787910-27-label" aria-labelledby="labelText-300000009787910-27 instructionsText-300000009787910-27" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000009787910-27">Do you have any active non-compete, non-solicit, confidentiality, and/or non-disclosure agreements with your current or previous employer?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000294997148" id="300000009787910-27-300000294997148" name="300000009787910-27" required="true" aria-labelledby="label-300000009787910-27-300000294997148">
+        <label class="apply-flow-input-radio" for="300000009787910-27-300000294997148">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000009787910-27-300000294997148">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000294997149" id="300000009787910-27-300000294997149" name="300000009787910-27" required="true" aria-labelledby="label-300000009787910-27-300000294997149">
+        <label class="apply-flow-input-radio" for="300000009787910-27-300000294997149">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000009787910-27-300000294997149">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000009787917-28-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000009787917-28-label" aria-labelledby="labelText-300000009787917-28 instructionsText-300000009787917-28" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000009787917-28">I was previously employed directly by Umbrella or a subsidiary of Umbrella, not as a subcontractor.</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000009787918" id="300000009787917-28-300000009787918" name="300000009787917-28" required="true" aria-labelledby="label-300000009787917-28-300000009787918">
+        <label class="apply-flow-input-radio" for="300000009787917-28-300000009787918">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000009787917-28-300000009787918">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000009787919" id="300000009787917-28-300000009787919" name="300000009787917-28" required="true" aria-labelledby="label-300000009787917-28-300000009787919">
+        <label class="apply-flow-input-radio" for="300000009787917-28-300000009787919">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000009787917-28-300000009787919">No</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="300000008694943-29-label">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" id="300000008694943-29-label" aria-labelledby="labelText-300000008694943-29 instructionsText-300000008694943-29" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-300000008694943-29">Do you currently work for the government?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000008694945" id="300000008694943-29-300000008694945" name="300000008694943-29" required="true" aria-labelledby="label-300000008694943-29-300000008694945">
+        <label class="apply-flow-input-radio" for="300000008694943-29-300000008694945">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008694943-29-300000008694945">Yes</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="300000008694944" id="300000008694943-29-300000008694944" name="300000008694943-29" required="true" aria-labelledby="label-300000008694943-29-300000008694944">
+        <label class="apply-flow-input-radio" for="300000008694943-29-300000008694944">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-300000008694943-29-300000008694944">No</span>
+        </label>
+    </div>
+</div>
+</form-builder>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768660" id="block-300001817768660" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768660"><div class="apply-flow-block apply-flow-block--work-preferences">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Work Preferences</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Work Preferences  ">
+<form-builder>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label" for="partAssignFlag-45" aria-labelledby="labelText-partAssignFlag-45 instructionsText-partAssignFlag-45" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-partAssignFlag-45">Consider Part Time Work</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="partAssignFlag">
+        <div><ul role="list" aria-label="Consider Part Time Work" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> No</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Yes</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label" for="flexibleWorkFlag-46" aria-labelledby="labelText-flexibleWorkFlag-46 instructionsText-flexibleWorkFlag-46" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-flexibleWorkFlag-46">Work a Flexible Schedule</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="flexibleWorkFlag">
+        <div><ul role="list" aria-label="Work a Flexible Schedule" class="cx-select-pills-container"><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> No</span></button></li><li role="listitem"><button type="button" aria-disabled="false" aria-pressed="false" class="cx-select-pill-section
+                                        "><span class="cx-select-pill-name"> Yes</span></button></li></ul></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+</form-builder>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+    </ul>
+</div>
+</apply-flow-section>
+                        <apply-flow-section id="section-3" data-scroll-spy="apply-flow-sections" data-scroll-spy-id="3" aria-hidden="false"><div class="apply-flow-section" tabindex="-1" data-section-number="3">
+    <h2 class="apply-flow-section__trainstop-name">Experience and Skills</h2>
+    <ul class="apply-flow-page-list">
+        <li>
+            <apply-flow-block class="300001817768664" id="block-300001817768664" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768664"><div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Work and Education History</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History  ">
+<div class="timeline-container">
+    <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+        <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+            <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add">
+                <span class="apply-flow-profile-item-button__label">Add Experience</span>
+            </button>
+            <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add">
+                <span class="apply-flow-profile-item-button__label">Add Education</span>
+            </button>
+        </div>
+    </div>
+    <beautiful-timeline><div class="beautiful-timeline">
+    <div class="beautiful-timeline__column beautiful-timeline__column--left"></div>
+    <div class="beautiful-timeline__years">
+        <div class="beautiful-timeline__year">
+            <span class="beautiful-timeline__year-title">2027</span>
+        </div>
+        <div class="beautiful-timeline__year">
+            <span class="beautiful-timeline__year-title">2026</span>
+        </div>
+        <div class="beautiful-timeline__year">
+            <span class="beautiful-timeline__year-title">2025</span>
+        </div>
+        <div class="beautiful-timeline__year">
+            <span class="beautiful-timeline__year-title">2024</span>
+        </div>
+        <div class="beautiful-timeline__year">
+            <span class="beautiful-timeline__year-title">2023</span>
+        </div>
+    </div>
+    <div class="beautiful-timeline__column beautiful-timeline__column--right"></div>
+</div>
+</beautiful-timeline>
+    <timeline-form-inline>
+</timeline-form-inline>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768668" id="block-300001817768668" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768668"><div class="apply-flow-block apply-flow-block--unique-tile-profile-items">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Languages</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Languages  ">
+<div class="profile-item-container standard-apply-flow-profile-item-109-300000006940665">
+    <div class="standard-apply-flow-profile-item">
+        <div class="profile-add-item">
+            <button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1790650840380" data-qa="add109">
+                <span class="button__label">Add Language</span>
+            </button>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768666" id="block-300001817768666" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768666"><div class="apply-flow-block apply-flow-block--tile-profile-items">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Licenses and Certificates</span>
+</h3>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Licenses and Certificates  ">
+<div class="profile-item-container standard-apply-flow-profile-item-103-300000006940667">
+    <div class="standard-apply-flow-profile-item">
+        <div class="profile-add-item">
+            <button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1790650840383" data-qa="add103">
+                <span class="button__label">Add License</span>
+            </button>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+    </ul>
+</div>
+</apply-flow-section>
+                        <apply-flow-section id="section-4" data-scroll-spy="apply-flow-sections" data-scroll-spy-id="4" aria-hidden="false"><div class="apply-flow-section" tabindex="-1" data-section-number="4">
+    <h2 class="apply-flow-section__trainstop-name">More About You</h2>
+    <ul class="apply-flow-page-list">
+        <li>
+            <apply-flow-block class="300001817768673" id="block-300001817768673" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768673"><div class="apply-flow-block apply-flow-block--disability">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Disability Information</span>
+</h3>
+</apply-flow-block-title>
+        <p class="apply-flow-block__instructions">This is option information. Please provide as per your convenience. Umbrella is an equal opportunity employer that is committed to inclusion and diversity. At Umbrella, employment decisions are made regardless of sex, gender identity or expression, sexual orientation, race, ethnic origin, color, creed, religion, national origin, citizenship, age, marital status, physical or mental disability, genetic information or ancestry, protected Veteran or military status, or other characteristics protected by law. It is important to us that we understand how we are doing in our effort to ensure an inclusive and diverse workplace. To assist Umbrella in this effort, we invite you to consider voluntarily disclosing your disability using the question posed below. This information is used solely and exclusively for statistical purposes, will be processed anonymously, and will not be used in any way for recruitment or selection decisions.</p>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Disability Information  This is option information. Please provide as per your convenience. Umbrella is an equal opportunity employer that is committed to inclusion and diversity. At Umbrella, employment decisions are made regardless of sex, gender identity or expression, sexual orientation, race, ethnic origin, color, creed, religion, national origin, citizenship, age, marital status, physical or mental disability, genetic information or ancestry, protected Veteran or military status, or other characteristics protected by law. It is important to us that we understand how we are doing in our effort to ensure an inclusive and diverse workplace. To assist Umbrella in this effort, we invite you to consider voluntarily disclosing your disability using the question posed below. This information is used solely and exclusively for statistical purposes, will be processed anonymously, and will not be used in any way for recruitment or selection decisions.">
+        <div>
+    <form-builder>
+<div class="input-row input-row--radiogroup" role="radiogroup" aria-labelledby="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-label">
+    <form-element-label>
+<label class="input-row__label" id="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-label" aria-labelledby="labelText-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8 instructionsText-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8">Do you have a disability?</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container">
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="ORA_PER_YES_US" id="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_YES_US" name="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8" showlov="true" aria-labelledby="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_YES_US">
+        <label class="apply-flow-input-radio" for="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_YES_US">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_YES_US">Yes, I have a disability (or previously had a disability)</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="ORA_PER_NO_US" id="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_US" name="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8" showlov="true" aria-labelledby="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_US">
+        <label class="apply-flow-input-radio" for="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_US">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_US">No, I don't have a disability</span>
+        </label>
+        <input type="radio" class="input-row__hidden-control apply-flow-input-radio-control" value="ORA_PER_NO_ANSWER_US" id="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_ANSWER_US" name="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8" showlov="true" aria-labelledby="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_ANSWER_US">
+        <label class="apply-flow-input-radio" for="CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_ANSWER_US">
+            <span class="apply-flow-input-radio__button apply-flow-input-radio__button--unchecked" aria-hidden="true"></span>
+            <span aria-hidden="true" class="apply-flow-input-radio__label" id="label-CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD-8-ORA_PER_NO_ANSWER_US">I do not wish to answer</span>
+        </label>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9" aria-labelledby="labelText-CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9 instructionsText-CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9">Category</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD" id="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Category." title="Open the drop-down list for Category." aria-expanded="false" aria-controls="CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD-9-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+</form-builder>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768672" id="block-300001817768672" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768672"><div class="apply-flow-block apply-flow-block--diversity">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Diversity Information</span>
+</h3>
+</apply-flow-block-title>
+        <p class="apply-flow-block__instructions">It is important to us that we understand how we are doing in our effort to ensure an inclusive and diverse workplace. To assist Umbrella in this effort, we invite you to consider voluntarily disclosing your gender using the question posed below. This information is used solely and exclusively for statistical purposes, will be processed anonymously, and will not be used in any way for recruitment or selection decisions. It is being collected in accordance with our data privacy agreement and will be hidden from stakeholders involved in the selection process, including the Talent Acquisition resource as well as all interviewers and the hiring manager. Whether you chose to voluntarily provide this information, or not, it will have no impact on your application for a role with Umbrella. You are not obliged to disclose this information.</p>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Diversity Information  It is important to us that we understand how we are doing in our effort to ensure an inclusive and diverse workplace. To assist Umbrella in this effort, we invite you to consider voluntarily disclosing your gender using the question posed below. This information is used solely and exclusively for statistical purposes, will be processed anonymously, and will not be used in any way for recruitment or selection decisions. It is being collected in accordance with our data privacy agreement and will be hidden from stakeholders involved in the selection process, including the Talent Acquisition resource as well as all interviewers and the hiring manager. Whether you chose to voluntarily provide this information, or not, it will have no impact on your application for a role with Umbrella. You are not obliged to disclose this information.">
+        <div>
+    <div class="regulatory-disability"></div>
+    <form-builder>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="CA-STANDARD-ORA_ETHNICITY-STANDARD-10" aria-labelledby="labelText-CA-STANDARD-ORA_ETHNICITY-STANDARD-10 instructionsText-CA-STANDARD-ORA_ETHNICITY-STANDARD-10" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-STANDARD-ORA_ETHNICITY-STANDARD-10">Ethnicity</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-STANDARD-ORA_ETHNICITY-STANDARD">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-STANDARD-ORA_ETHNICITY-STANDARD" id="CA-STANDARD-ORA_ETHNICITY-STANDARD-10" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-STANDARD-ORA_ETHNICITY-STANDARD-10-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-STANDARD-ORA_ETHNICITY-STANDARD-10-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Ethnicity." title="Open the drop-down list for Ethnicity." aria-expanded="false" aria-controls="CA-STANDARD-ORA_ETHNICITY-STANDARD-10-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="CA-STANDARD-ORA_GENDER-STANDARD-11" aria-labelledby="labelText-CA-STANDARD-ORA_GENDER-STANDARD-11 instructionsText-CA-STANDARD-ORA_GENDER-STANDARD-11" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-STANDARD-ORA_GENDER-STANDARD-11">Gender</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-STANDARD-ORA_GENDER-STANDARD">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-STANDARD-ORA_GENDER-STANDARD" id="CA-STANDARD-ORA_GENDER-STANDARD-11" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-STANDARD-ORA_GENDER-STANDARD-11-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-STANDARD-ORA_GENDER-STANDARD-11-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Gender." title="Open the drop-down list for Gender." aria-expanded="false" aria-controls="CA-STANDARD-ORA_GENDER-STANDARD-11-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="CA-DFF-areYouIndigenous-ATTRIBUTE4-12" aria-labelledby="labelText-CA-DFF-areYouIndigenous-ATTRIBUTE4-12 instructionsText-CA-DFF-areYouIndigenous-ATTRIBUTE4-12" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-DFF-areYouIndigenous-ATTRIBUTE4-12">Are you Indigenous?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-DFF-areYouIndigenous-ATTRIBUTE4">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-DFF-areYouIndigenous-ATTRIBUTE4" id="CA-DFF-areYouIndigenous-ATTRIBUTE4-12" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-DFF-areYouIndigenous-ATTRIBUTE4-12-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-DFF-areYouIndigenous-ATTRIBUTE4-12-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Are you Indigenous?." title="Open the drop-down list for Are you Indigenous?." aria-expanded="false" aria-controls="CA-DFF-areYouIndigenous-ATTRIBUTE4-12-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label input-row__label--required" for="CA-DFF-a2lgbtqia-ATTRIBUTE6-13" aria-labelledby="labelText-CA-DFF-a2lgbtqia-ATTRIBUTE6-13 instructionsText-CA-DFF-a2lgbtqia-ATTRIBUTE6-13" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-DFF-a2lgbtqia-ATTRIBUTE6-13">Do you identify as 2SLGBTQIA+?</span>
+    <span class="input-row__label--required-star" aria-hidden="true"></span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-DFF-a2lgbtqia-ATTRIBUTE6">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-DFF-a2lgbtqia-ATTRIBUTE6" id="CA-DFF-a2lgbtqia-ATTRIBUTE6-13" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-DFF-a2lgbtqia-ATTRIBUTE6-13-listbox" aria-expanded="false" aria-invalid="false" aria-required="true" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-DFF-a2lgbtqia-ATTRIBUTE6-13-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Do you identify as 2SLGBTQIA+?." title="Open the drop-down list for Do you identify as 2SLGBTQIA+?." aria-expanded="false" aria-controls="CA-DFF-a2lgbtqia-ATTRIBUTE6-13-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+<div class="input-row input-row--has-picker">
+    <form-element-label>
+<label class="input-row__label" for="CA-DFF-taxCode-ATTRIBUTE5-14" aria-labelledby="labelText-CA-DFF-taxCode-ATTRIBUTE5-14 instructionsText-CA-DFF-taxCode-ATTRIBUTE5-14" aria-hidden="false">
+    <span class="input-row__linebreak" id="labelText-CA-DFF-taxCode-ATTRIBUTE5-14">Tax code</span>
+</label>
+</form-element-label>
+    <div class="input-row__control-container reset-z-index" data-qa="CA-DFF-taxCode-ATTRIBUTE5">
+        <div><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left"><input autocomplete="none" name="CA-DFF-taxCode-ATTRIBUTE5" id="CA-DFF-taxCode-ATTRIBUTE5-14" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="CA-DFF-taxCode-ATTRIBUTE5-14-listbox" aria-expanded="false" aria-invalid="false" class="cx-select-input
+                            "></div><div class="input-field-container__right"><button type="button" id="CA-DFF-taxCode-ATTRIBUTE5-14-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Tax code." title="Open the drop-down list for Tax code." aria-expanded="false" aria-controls="CA-DFF-taxCode-ATTRIBUTE5-14-listbox" class="icon-dropdown-arrow "></button></div></div></div></div>
+        <div class="input-row__control-decorator"></div>
+    </div>
+</div>
+</form-builder>
+    <div class="regulatory-disability-footer"></div>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block class="300001817768674" id="block-300001817768674" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="300001817768674"><div class="apply-flow-block apply-flow-block--misc-attachments">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+<h3 class="apply-flow-block__title">
+    <span>Additonal Documents</span>
+</h3>
+</apply-flow-block-title>
+        <p class="apply-flow-block__instructions">Add any additional documents. E.g.: Cover Letter, Certificate, Reference letter. You can upload maximum 10 documents and there are no restrictions on types of files attached. The size limit for each file attached is 50 MB.</p>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="Additonal Documents  Add any additional documents. E.g.: Cover Letter, Certificate, Reference letter. You can upload maximum 10 documents and there are no restrictions on types of files attached. The size limit for each file attached is 50 MB.">
+        <attachment-upload-button><div>
+    <div class="attachment-upload-button attachment-upload-button--waiting" role="application">
+        <div class="attachment-upload-button__container font-family-secondary">
+            <div class="attachment-upload-button__drag-and-drop">
+                <span class="attachment-upload-button__drag-and-drop-label">
+                    <span>Drop attachment here</span>
+                </span>
+            </div>
+            <div class="attachment-upload-button__upload-button">
+                <span class="attachment-upload-button__or">Or</span>
+                <div class="file-form-element">
+    <input type="file" class="file-form-element__input upload-button" multiple="" id="attachment-upload-6" name="attachment-upload" accept=".txt, .rtf, .doc, .docx, .pdf, .odt, .htm, .html, .jpeg, .png, .zip, .HEIC, .pptx, .msg, .jpg, .eml">
+    <label class="file-form-element__label attachment-upload-button__label theme-color-1" for="attachment-upload-6">
+        <span>Upload Attachment</span>
+    </label>
+</div>
+            </div>
+        </div>
+    </div>
+</div>
+</attachment-upload-button>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+        <li>
+            <apply-flow-block id="block-ORA_AGREEMENTS" data-scroll-spy="apply-flow-blocks" data-scroll-spy-id="ORA_AGREEMENTS"><div class="apply-flow-block apply-flow-block--agreements">
+    <div class="apply-flow-block__header">
+        <apply-flow-block-title>
+</apply-flow-block-title>
+    </div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="  ">
+<div class="apply-flow-block__component">
+    <job-alerts-opt-in class="apply-flow-agreements__row">
+<div class="input-row">
+    <input type="checkbox" class="input-row__hidden-control" id="job-alerts-checkbox">
+    <label class="apply-flow-input-checkbox apply-flow-input-checkbox--focus-enabled" for="job-alerts-checkbox">
+        <span class="apply-flow-input-checkbox__button"></span>
+        <span class="apply-flow-input-checkbox__label">I agree to receive updates about new job opportunities.</span>
+    </label>
+</div>
+</job-alerts-opt-in>
+    <opt-in class="apply-flow-agreements__row">
+<div class="input-row" aria-labelledby="agreements-checkbox-label">
+    <label class="apply-flow-input-checkbox" id="opt-in-checkbox-label">
+        <input type="checkbox" class="input-row__hidden-control" aria-labelledby="opt-in-checkbox-label">
+        <span class="apply-flow-input-checkbox__button apply-flow-input-checkbox--focus-enabled"></span>
+        <span class="apply-flow-input-checkbox__label apply-flow-input-checkbox--focus-enabled">
+            <span class="agreements-label-text">
+                <i18n><span>I agree to receive <a data-i18n-token="open_dialog_link" id="opt-in-link" href="https://jobs.umbrella.example/en/sites/CX_1#" class="agreements-label-text-link"> marketing communications </a></span>
+</i18n>
+            </span>
+        </span>
+    </label>
+</div>
+<agreement-dialog><minimal-dialog><oj-dialog initial-visibility="hide" resize-behavior="none" drag-affordance="none" cancel-behavior="none" modality="modeless" aria-modal="true" on-oj-focus="{{setFocusToBody}}" class="app-dialog font-family-primary standard-apply-flow-agreement__dialog oj-dialog oj-component oj-component-initnode oj-complete" aria-label="Marketing Communications" id="ui-id-16" tabindex="-1" role="dialog" style="display: none;">
+<div class="oj-dialog-container" data-oj-context=""><div class="oj-dialog-header oj-dialog-header-decoration"><div class="oj-dialog-header app-dialog__hide-header" slot="header"></div></div><div class="oj-dialog-content oj-dialog-default-content"><div class="oj-dialog-body-wrapper"><div class="app-dialog__wrapper app-dialog__wrapper--align-center oj-dialog-body" slot="body">
+        <div class="oj-dialog-body app-dialog__main background-color-dialog standard-apply-flow-agreement__dialog__main standard-apply-flow-agreement__dialog__main-center" tabindex="-1">
+            <div class="app-dialog__bar text-color-secondary">
+                <button class="app-dialog__close focused-tooltip" title="Close" aria-label="Close"></button>
+            </div>
+        <div class="app-dialog__header">
+            <h1 class="heading">Marketing Communications</h1>
+        </div>
+        <div aria-live="polite">
+            <div class="app-dialog__content basic-formatter"><p>Placeholder text.</p></div>
+        </div>
+        <div class="app-dialog__footer">
+            <div class="app-dialog__buttons-bar font-family-secondary text-color-primary">
+                <button class="button app-dialog__footer-button">
+                    <span class="button__label">Agree</span>
+                </button>
+            </div>
+        </div>
+        </div>
+    </div><div class="app-dialog__background oj-dialog-body"></div></div></div></div></oj-dialog>
+</minimal-dialog>
+</agreement-dialog>
+</opt-in>
+</div>
+    </div>
+</div>
+</apply-flow-block>
+        </li>
+    </ul>
+</div>
+</apply-flow-section>
+                        <apply-flow-pagination><div class="apply-flow-pagination">
+    <div class="apply-flow-pagination__buttons">
+        <button type="button" class="button apply-flow-pagination__button apply-flow-pagination__submit-button theme-color-1">
+            <span class="button__label">Submit</span>
+        </button>
+    </div>
+</div>
+</apply-flow-pagination>
+                    </div>
+                </form>
+                <div class="apply-flow__content">
+<apply-flow-submission-checklist><minimal-dialog role="alert"><oj-dialog initial-visibility="hide" resize-behavior="none" drag-affordance="none" cancel-behavior="none" modality="modeless" aria-modal="true" on-oj-focus="{{setFocusToBody}}" class="app-dialog font-family-primary apply-flow-checklist-dialog oj-dialog oj-component oj-component-initnode oj-complete" aria-label="Loading screen" id="ui-id-14" tabindex="-1" role="dialog" style="display: none;">
+<div class="oj-dialog-container" data-oj-context=""><div class="oj-dialog-header oj-dialog-header-decoration"><div class="oj-dialog-header app-dialog__hide-header" slot="header"></div></div><div class="oj-dialog-content oj-dialog-default-content"><div class="oj-dialog-body-wrapper"><div class="app-dialog__wrapper app-dialog__wrapper--align-center oj-dialog-body" slot="body">
+        <div class="oj-dialog-body app-dialog__main background-color-dialog apply-flow-checklist-dialog__main apply-flow-checklist-dialog__main-center" tabindex="-1">
+        <div aria-live="polite">
+            <h1 class="standard-apply-flow-dialog__header" role="alert">
+                <span>You're all set!</span>
+            </h1>
+            <div class="apply-flow-checklist-dialog__content">
+                <div class="checklist" role="alert">
+                    <ul class="checklist__steps"></ul>
+                    <div class="checklist__progress theme-color-1">
+                        <oj-progress-bar class="progress-bar oj-progress-bar oj-complete" value="{{progress}}" aria-label="Loading screen" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="oj-progress-bar-track"><div class="oj-progress-bar-value"></div></div></oj-progress-bar>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div><div class="app-dialog__background oj-dialog-body"></div></div></div></div></oj-dialog>
+</minimal-dialog>
+</apply-flow-submission-checklist>
+<awli-confirm>
+</awli-confirm>
+                </div>
+            </section>
+        </main>
+        <apply-flow-accessibility-messages><div aria-live="polite" aria-relevant="additions removals" class="oj-helper-hidden-accessible"></div>
+<div role="alert" class="oj-helper-hidden-accessible"></div>
+</apply-flow-accessibility-messages>
+        <cx-notifications></cx-notifications>
+        <session-expire><minimal-dialog><oj-dialog initial-visibility="hide" resize-behavior="none" drag-affordance="none" cancel-behavior="none" modality="modeless" aria-modal="true" on-oj-focus="{{setFocusToBody}}" class="app-dialog font-family-primary session-expire-dialog oj-dialog oj-component oj-component-initnode oj-complete" id="ui-id-13" tabindex="-1" role="dialog" style="display: none;">
+<div class="oj-dialog-container" data-oj-context=""><div class="oj-dialog-header oj-dialog-header-decoration"><div class="oj-dialog-header app-dialog__hide-header" slot="header"></div></div><div class="oj-dialog-content oj-dialog-default-content"><div class="oj-dialog-body-wrapper"><div class="app-dialog__wrapper app-dialog__wrapper--align-center oj-dialog-body" slot="body">
+        <div class="oj-dialog-body app-dialog__main background-color-dialog session-expire-dialog__main session-expire-dialog__main-center" tabindex="-1">
+        <div class="standard-apply-session-expire-container">
+            <div class="app-dialog__header">
+                <h1 class="heading">Are You Still With Us?</h1>
+            </div>
+            <div class="app-dialog__content"><p>Placeholder text.</p></div>
+            <div class="app-dialog__footer">
+                <div class="app-dialog__buttons-bar font-family-secondary text-color-primary">
+                    <button class="button app-dialog__footer-button end-session-button">
+                        <span class="button__label">End Session</span>
+                    </button>
+                    <button class="button app-dialog__footer-button theme-color-1">
+                        <span class="button__label">Continue Working</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div><div class="app-dialog__background oj-dialog-body"></div></div></div></div></oj-dialog>
+</minimal-dialog>
+</session-expire>
+        <indeed-import-handler><profile-selection-overlay><minimal-dialog><oj-dialog initial-visibility="hide" resize-behavior="none" drag-affordance="none" cancel-behavior="none" modality="modeless" aria-modal="true" on-oj-focus="{{setFocusToBody}}" class="app-dialog font-family-primary standard-apply-flow-profile-selection-overlay profile-selection-overlay oj-dialog oj-component oj-component-initnode oj-complete" id="ui-id-15" tabindex="-1" role="dialog" style="display: none;">
+<div class="oj-dialog-container" data-oj-context=""><div class="oj-dialog-header oj-dialog-header-decoration"><div class="oj-dialog-header app-dialog__hide-header" slot="header"></div></div><div class="oj-dialog-content oj-dialog-default-content"><div class="oj-dialog-body-wrapper"><div class="app-dialog__wrapper app-dialog__wrapper--align-center oj-dialog-body" slot="body">
+        <div class="oj-dialog-body app-dialog__main background-color-dialog standard-apply-flow-profile-selection-overlay profile-selection-overlay__main profile-selection-overlay__main-center" tabindex="-1">
+            <div class="app-dialog__bar text-color-secondary">
+                <button class="app-dialog__close focused-tooltip" title="Close" aria-label="Close"></button>
+            </div>
+        <div class="app-dialog__header">
+            <h1 class="heading">Welcome Back</h1>
+        </div>
+        <div class="app-dialog__content"><p>Placeholder text.</p></div>
+        <div class="app-dialog__footer">
+            <div class="app-dialog__buttons-bar font-family-secondary text-color-primary">
+                <button class="button app-dialog__footer-button">
+                    <span class="button__label">Use My Profile</span>
+                </button>
+                <button class="button app-dialog__footer-button theme-color-1 import-indeed-button" import-indeed-button-label="">
+                    <span class="button__label">Import Profile from Indeed</span>
+                </button>
+            </div>
+        </div>
+        </div>
+    </div><div class="app-dialog__background oj-dialog-body"></div></div></div></div></oj-dialog>
+</minimal-dialog>
+</profile-selection-overlay>
+</indeed-import-handler>
+    </div>
+    <ai-assistant-container>
+</ai-assistant-container>
+</div>
+</div>
+<div id="00000000-0000-4000-8000-000000000001" class="IN-staging" style="display: none;"></div>
+</body>

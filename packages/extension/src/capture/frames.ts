@@ -5,7 +5,7 @@ import type { PageCapture } from "./capture.js";
  * company's page chrome and no job description.
  */
 export const EMBEDDED_BOARD_HOST =
-  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|icims\.com|myworkdayjobs\.com|myworkdaysite\.com|smartrecruiters\.com|jobvite\.com|bamboohr\.com|workable\.com|recruitee\.com|teamtailor\.com|personio\.(de|com))$/i;
+  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|icims\.com|myworkdayjobs\.com|myworkdaysite\.com|oraclecloud\.com|smartrecruiters\.com|jobvite\.com|bamboohr\.com|workable\.com|recruitee\.com|teamtailor\.com|personio\.(de|com))$/i;
 
 export interface FrameCapture {
   frameId: number;

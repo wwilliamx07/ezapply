@@ -1,7 +1,8 @@
 # Browser extension (`packages/extension`)
 
 A Manifest V3 extension for Chrome and Firefox 128+. It has one button, **Set posting**, and otherwise
-quietly carries out the form reads, fills and uploads the companion asks for. It has no popup and no
+quietly carries out the form reads, fills and uploads the companion asks for, on Workday and Oracle
+Recruiting Cloud application pages. It has no popup and no
 review UI: that happens in Claude Code and the PDF viewer.
 
 ## Source layout
@@ -11,14 +12,16 @@ review UI: that happens in Claude Code and the PDF viewer.
 | `src/ext.ts` | `ext`: Firefox's promise-based `browser`, else Chrome's `chrome` (typed as Chrome's API); `isFirefox` |
 | `src/background/index.ts` | Entry: wiring, Set posting, lifecycle listeners and the reconnect alarm, `browser.status` handler |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
-| `src/background/forms.ts` | Handlers for the form methods: choose the tab, check site access, inject and call the adapter |
+| `src/background/forms.ts` | Handlers for the form methods: choose the tab, pick the site's adapter, check site access, inject and call it |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
 | `src/background/badge.ts` | Toolbar badge and tooltip |
 | `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. Firefox from `runtime.getBrowserInfo()`; Chromium browsers from `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
-| `src/options/options.ts`, `static/options.html` | Options page: status, site access, manual pairing |
+| `src/options/options.ts`, `static/options.html` | Options page: status, Workday site access, access to open Oracle sites, manual pairing |
 | `src/adapters/workday/` | The Workday adapter → [workday-adapter.md](workday-adapter.md) |
+| `src/adapters/oracle/` | The Oracle Recruiting Cloud adapter → [oracle-adapter.md](oracle-adapter.md) |
+| `src/adapters/common/` | What both share: DOM helpers, the waits, the submit guard |
 | `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time |
 | `build.mjs` | esbuild bundles and both output folders |
 
@@ -28,13 +31,16 @@ review UI: that happens in Claude Code and the PDF viewer.
   without a click), exactly `WORKDAY_HOST_PERMISSIONS` from the protocol (a test checks both builds). Not
   `*.workday.com`: that matched Workday's marketing site and employees' own tenants (`*.myworkday.com`),
   which aren't application sites. Capture needs none: the button click grants `activeTab`.
+- Optional host permissions: `https://*/*` (`ORACLE_OPTIONAL_HOST_PERMISSIONS`, tested). Oracle career sites
+  can be on any host, so each is granted one origin at a time, when the user asks
+  ([site access](oracle-adapter.md#site-access)); nothing is granted by the install.
 - `commands._execute_action`: Alt+Shift+P runs Set posting.
 - Options page embedded (`open_in_tab: false`).
 
 ## Builds (`npm run build -w @ezapply/extension`)
-esbuild bundles `background.js` (ESM), `options.js` and `workday-main.js` (IIFE, small and without zod) for
-`chrome120` and `firefox128`, with linked source maps. `workday-main.js` gets its `ADAPTER_VERSION` stamped
-in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
+esbuild bundles `background.js` (ESM), `options.js`, and the adapters `workday-main.js` and `oracle-main.js`
+(IIFE, about 60 KB each and without zod: they import only the protocol's import-free subpaths) for
+`chrome120` and `firefox128`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
 (so the source map stays exact). Any change to the adapter therefore replaces older copies in open tabs,
 with no version number to remember to bump.
 
@@ -81,13 +87,14 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   `disconnected { reason }`, `error { message, hint? }`, stored for the badge and options page.
 
 ## Set posting
-Click (or Alt+Shift+P) on an `http(s)` page → inject `capturePage` into every frame the extension may read
+Click (or Alt+Shift+P) on an `http(s)` page → on an Oracle page, ask for access to its origin, synchronously
+in the click handler (Firefox allows `permissions.request` only there; [why](oracle-adapter.md#site-access)) → inject `capturePage` into every frame the extension may read
 → pick the frame that holds the posting → send `posting.capture` (60 s timeout) → save the "Company: Role"
 label and flash ✓. Not connected: store the capture as pending (only the latest is kept; badge `…`) and
 send it on the next connection. Pages that can't be captured, or failures, flash `!` with the reason in the
 tooltip. Details of what's captured: [postings.md](postings.md).
 
-**Embedded job boards.** Career pages often show a Greenhouse, Lever, iCIMS or Workday board in an iframe,
+**Embedded job boards.** Career pages often show a Greenhouse, Lever, iCIMS, Workday or Oracle board in an iframe,
 and a capture of the top frame alone holds only the company's page around it.
 - `executeScript` runs with `allFrames: true` (falling back to the top frame if that fails). The click's
   `activeTab` grant covers the tab's own origin; frames from other sites are skipped without an error.
@@ -99,16 +106,18 @@ and a capture of the top frame alone holds only the company's page around it.
   new tab next to the page, and the badge says to click Set posting there.
 
 ## Serving form requests (`forms.ts`)
-1. **Tab:** the explicit `tabId`; else the focused window's active tab if it's Workday; else the most
-   recently used Workday tab. None → `not_found` ("ask the user to open the application"). The companion
+1. **Tab:** the explicit `tabId`; else the focused window's active tab if it's an application site (Workday
+   or Oracle); else the most recently used one. None → `not_found` ("ask the user to open the application"). The companion
    normally chooses the tab itself (preferring the active posting's tenant) and always passes it; the
    fallback serves callers that don't.
-2. The tab must be a Workday URL (`detectSite`).
-3. **Site access:** Firefox lets users withhold or revoke host permissions, so the handler checks
-   `permissions.contains` for the tab's origin first and fails with a hint to click **Grant site access**
-   in the options page.
-4. Inject `workday-main.js` into the page's MAIN world (idempotent), then call
-   `window.__ezapplyWorkday[method](...args)` through a second `executeScript`. Results and thrown errors
+2. The tab must be an application site (`detectSite` → `workday` or `oracle`), which picks the adapter:
+   `workday-main.js` (`window.__ezapplyWorkday`) or `oracle-main.js` (`window.__ezapplyOracle`).
+3. **Site access:** the handler checks `permissions.contains` for the tab's origin first. Workday: Firefox lets
+   users withhold or revoke host permissions; the hint is **Grant site access** in the options page. Oracle:
+   the origin must have been granted; the hint is Set posting on that tab, or **Grant access** in the options
+   page.
+4. Inject the adapter into the page's MAIN world (idempotent), then call its `window.__ezapply…[method](...args)`
+   through a second `executeScript`. Results and thrown errors
    come back as `{ __ok }` / `{ __error }`.
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
    switch to it).
@@ -122,7 +131,7 @@ from it.
   (`…`), red = error; briefly ✓ or `!` after a capture. The tooltip shows the status, any pending capture,
   and the active posting.
 - Options page: connection status (live), a **Grant site access** row when Workday host permissions are
-  missing, the extension id the companion pins (Chrome's id or Firefox's install UUID, from the page's own
+  missing, a **Grant access** row for each open Oracle career site whose origin isn't granted, the extension id the companion pins (Chrome's id or Firefox's install UUID, from the page's own
   origin), and manual port and code fields (only needed for a non-default port).
 
 ## Constraints worth knowing

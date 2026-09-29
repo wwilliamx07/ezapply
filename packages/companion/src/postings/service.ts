@@ -6,6 +6,7 @@ import {
   detectSite,
   ErrorCode,
   EzError,
+  oracleJobPath,
   PostingMeta,
   type PostingMetaPatch,
   WORKDAY_LOCALE_SEGMENT,
@@ -241,15 +242,22 @@ function isPostingId(id: string): boolean {
 }
 
 /**
- * The URL that identifies a posting: lowercase host, no trailing slash, only job-id query parameters, and
- * on Workday no leading locale segment (`/en-US/`), which the same job's links have or lack.
+ * The URL that identifies a posting: lowercase host, no trailing slash, only job-id query parameters; on
+ * Workday no leading locale segment (`/en-US/`), which the same job's links have or lack; on Oracle no language
+ * segment and nothing after the job id, so the application pages (`…/job/123/apply/section/1`) are the job's.
  */
 export function canonicalizeUrl(raw: string): string {
   const u = new URL(raw);
   const keep = new URLSearchParams();
   for (const [k, v] of u.searchParams) if (JOB_ID_PARAMS.has(k.toLowerCase())) keep.set(k, v);
   const query = keep.toString();
-  const pathname = detectSite(raw) === "workday" ? u.pathname.replace(WORKDAY_LOCALE_SEGMENT, "") : u.pathname;
+  const site = detectSite(raw);
+  const pathname =
+    site === "workday"
+      ? u.pathname.replace(WORKDAY_LOCALE_SEGMENT, "")
+      : site === "oracle"
+        ? oracleJobPath(u.pathname)
+        : u.pathname;
   const path = pathname.replace(/\/+$/, "") || "/";
   return `${u.protocol}//${u.hostname.toLowerCase()}${u.port ? `:${u.port}` : ""}${path}${query ? `?${query}` : ""}`;
 }

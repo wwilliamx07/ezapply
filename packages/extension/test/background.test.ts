@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 /** Just enough of the WebExtensions API for the background module to load outside a browser. */
 const event = () => ({ addListener: vi.fn() });
+/** The toolbar button's click listener, kept outside the mock (mock calls are cleared between tests). */
+let clickListener: ((tab: unknown) => void) | undefined;
 const chromeStub = {
   runtime: {
     getManifest: () => ({ version: "1.0.0" }),
@@ -11,7 +13,11 @@ const chromeStub = {
     openOptionsPage: vi.fn(async () => {}),
   },
   action: {
-    onClicked: event(),
+    onClicked: {
+      addListener: (l: (tab: unknown) => void) => {
+        clickListener = l;
+      },
+    },
     setBadgeText: vi.fn(async () => {}),
     setBadgeBackgroundColor: vi.fn(async () => {}),
     setTitle: vi.fn(async () => {}),
@@ -29,7 +35,7 @@ const chromeStub = {
   tabs: { query: vi.fn(async () => []) },
   windows: { getLastFocused: vi.fn(async () => ({ id: 1 })) },
   scripting: { executeScript: vi.fn() },
-  permissions: { contains: vi.fn(async () => true) },
+  permissions: { contains: vi.fn(async () => true), request: vi.fn(async (_p: unknown) => true) },
 };
 (globalThis as unknown as { chrome: unknown }).chrome = chromeStub;
 // Nothing may connect anywhere: a socket that never opens.
@@ -54,5 +60,24 @@ describe("background lifecycle", () => {
     chromeStub.alarms.get.mockResolvedValueOnce({ name: RECONNECT_ALARM, periodInMinutes: 0.5 });
     await ensureReconnectAlarm();
     expect(chromeStub.alarms.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("Set posting", () => {
+  const click = async (url: string) => {
+    await import("../src/background/index.js");
+    chromeStub.permissions.request.mockClear();
+    clickListener?.({ id: 3, url, index: 0, windowId: 1 });
+  };
+
+  it("asks for an Oracle career site's origin in the click itself, while it counts as the user's gesture", async () => {
+    await click("https://jobs.umbrella.example/en/sites/CX_1/job/10001");
+    // Called synchronously: Firefox refuses permissions.request once the handler has awaited anything.
+    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["https://jobs.umbrella.example/*"] });
+  });
+
+  it("asks nothing on other pages", async () => {
+    await click("https://boards.greenhouse.io/acme/jobs/1");
+    expect(chromeStub.permissions.request).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@
     "format": "biome format --write .",
     "ezapply": "node packages/cli/dist/main.js",
     "recon:workday": "node scripts/workday-recon.mjs",
+    "recon:oracle": "node scripts/oracle-recon.mjs",
     "usage:report": "node scripts/usage-report.mjs"
   },
   "devDependencies": {

@@ -8,9 +8,17 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./oracle": {
+      "types": "./dist/oracle.d.ts",
+      "default": "./dist/oracle.js"
+    },
     "./workday": {
       "types": "./dist/workday.d.ts",
       "default": "./dist/workday.js"
+    },
+    "./timing": {
+      "types": "./dist/timing.d.ts",
+      "default": "./dist/timing.js"
     }
   },
   "dependencies": {

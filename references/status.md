@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-09-27.
+As of 2026-09-28.
 
 ## Done
 | Area | State |
@@ -14,6 +14,7 @@ As of 2026-09-27.
 | Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
 | Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
+| Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
@@ -39,6 +40,14 @@ As of 2026-09-27.
   (`bottom-navigation-previous-button`), which come from
   knowledge of Workday's markup, not a live page. On the first real application: `screenshot` plus a saved
   snapshot of a step with a removable pill, file and row, turned into a live fixture.
+- **Parts of filling an Oracle application.** The first live application (2026-09-29, Umbrella, single page,
+  in Chrome, with site access granted at Set posting) was filled to Submit: text, pills, radios, dates, lists,
+  uploads, and education and work entries through the inline form and Save worked. Its failures (list
+  read-backs, a re-rendered city input, the postal-code search, a reformatted phone number, stale errors,
+  "Saved" as an error, languages and a certification never added) are fixed and reproduced in the fixture,
+  not yet re-run live. Still unseen live: language and license tiles, deletes, the multi-page flow (Next,
+  Previous), the confirmation page, the permission prompt in Firefox, the options page's Grant access, and
+  why the Cover Letter field was missing ([details](components/oracle-adapter.md#what-was-verified-and-how)).
 - **Capturing from embedded job boards** in a real browser: whether `allFrames` quietly skips frames the
   click's `activeTab` grant doesn't cover (as expected) in both Chrome and Firefox, and the board opening in
   its own tab when it can't be read. Tested with the frame-choice logic only.

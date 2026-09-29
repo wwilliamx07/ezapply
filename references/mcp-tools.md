@@ -22,9 +22,9 @@ ever happens, rename with the old names kept as aliases for a while.
 | Tool | Input | Does |
 |---|---|---|
 | `workspace_check` | — | The onboarding checklist `{ ready, nextStep?, items[] }` ([details](components/companion.md#readiness-checklist-workspace_check)) |
-| `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code |
+| `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code. Firefox's steps mention Grant site access, and that Oracle career sites are granted one at a time by Set posting |
 | `extension_pair_wait` | `timeoutSeconds` (5–900, default 180) | Waits for the extension to connect; `{ connected, extension? , hint? }` |
-| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site; when not, a hint |
+| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site (`workday`, `oracle` or `generic`); when not, a hint |
 
 ## Postings
 
@@ -84,8 +84,10 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; stamps a hash on evidence that has none, records the indexed commit. Returns the meta plus `stamped` |
 
 ## Forms
-Workday only. Each call is an RPC to the extension ([workday-adapter.md](components/workday-adapter.md)); the
-logic around it lives in `FormsService` (`companion/src/forms/service.ts`).
+Workday and Oracle Recruiting Cloud. Each call is an RPC to the extension, which runs the tab's site adapter
+([workday-adapter.md](components/workday-adapter.md), [oracle-adapter.md](components/oracle-adapter.md)); the
+logic around it lives in `FormsService` (`companion/src/forms/service.ts`). Both adapters answer every method
+the same way; where Oracle differs, the tool descriptions say so.
 
 - **One call per tab at a time:** Claude Code sends tool calls in parallel, and two acting on one page
   interfere (two dropdown reads each open a listbox and both can read whichever is on screen; a fill can land
@@ -93,12 +95,13 @@ logic around it lives in `FormsService` (`companion/src/forms/service.ts`).
   same tab and runs in order (`onTab`, a `KeyedQueue` per tab id); calls on other tabs aren't held up, and a
   failed call doesn't stop the next.
 
-- **Which tab:** `tabId` if given; otherwise a Workday tab on the active posting's tenant (the one the user
-  is looking at, else the most recently used), otherwise any Workday tab the same way. The companion picks
+- **Which tab:** `tabId` if given; otherwise an application tab (Workday or Oracle) on the active posting's
+  tenant (the one the user is looking at, else the most recently used), otherwise any application tab the
+  same way. The tenant is `siteTenant`: the Workday tenant, or the Oracle career site (`host/site`). The companion picks
   it from `browser.status` and always passes it explicitly.
 - **Which posting:** fills, removals, uploads, steps and the confirmation page are appended to the active
   posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab is on that
-  posting's Workday tenant (or one of them has no tenant to compare, e.g. a posting captured on a job
+  posting's tenant (or one of them has no tenant to compare, e.g. a posting captured on a job
   board). Otherwise the action still happens, nothing is logged or moved, and the result carries
   `postingMismatch { activePosting { id, company?, role?, tenant }, formTenant, hint }`. Without this, two open
   applications or an old confirmation page on screen would credit the wrong posting, up to marking it
@@ -108,15 +111,15 @@ logic around it lives in `FormsService` (`companion/src/forms/service.ts`).
 |---|---|---|
 | `get_form` | `onlyEmpty?`, `section?`, `tabId?` | The page's `FormSchema`, lean: `required` only when true, `multiple` only when true, `options` only when non-empty, no `automationId` or `optionsLazy` (dropdowns and typeaheads always list options on demand). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose id or title contains it. Add buttons carry their `section` (ids like `add.work-experience`); notices such as upload confirmations are in `messages`, not `errors`. Adds `posting` (the id it's credited to) or `postingMismatch`, and `timingIssues` when `autofill-timing.yaml` has mistakes ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). Seeing `review` sets status `filled`; `confirmation` sets `submitted` |
 | `list_options` | `fieldIds?` (or `fieldId?`), `tabId?` | Options of dropdowns or a typeahead's top level (`hasChildren` = nested menu). `fieldIds` → `{ <fieldId>: options \| { error } }`, one call for a whole step (the adapter opens them one after another); `fieldId` alone → that field's options. The description says a miss in `fill_fields` returns the options anyway, so listing first is only for questions whose wording decides the answer |
-| `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead and return matches, each label once, once the results for this query are in |
-| `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. `{ results[], postingMismatch? }`; the companion waits `fillTimeoutSeconds` (`autofill-timing.yaml`, default 120) for it. A clean success whose read-back equals the value exactly is just `{ fieldId, ok: true }` (`leanFillResult`); anything else keeps ok, read-back (e.g. the full text of a matched option), error, available options, and a typeahead's `unmatched` (entries with the options their search showed) and `inexact` (an option Workday selected itself). Dates also take `MM/YYYY` and `MM/DD/YYYY`; option text is matched as in [filling](components/workday-adapter.md#filling). A field that still shows an error after filling keeps `ok: true` with "Filled, but the page reports: …" in `error`. The description asks for the whole step in one call |
+| `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead (on Oracle, a dropdown: its lists search as you type) and return matches, each label once, once the results for this query are in |
+| `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. `{ results[], postingMismatch? }`; the companion waits `fillTimeoutSeconds` (`autofill-timing.yaml`, default 120) for it. A clean success whose read-back equals the value exactly is just `{ fieldId, ok: true }` (`leanFillResult`); anything else keeps ok, read-back (e.g. the full text of a matched option), error, available options, and a typeahead's `unmatched` (entries with the options their search showed) and `inexact` (an option the page selected itself). On Oracle the fields are filled in page order, whatever order they're given in, since its address lists load from the one above. Dates also take `MM/YYYY` and `MM/DD/YYYY`; option text is matched as in [filling](components/workday-adapter.md#filling). A field that still shows an error after filling keeps `ok: true` with "Filled, but the page reports: …" in `error`. The description asks for the whole step in one call |
 | `upload_file` | `fieldId`, `path` (under `postings/` or `library/`, ≤25 MB), `tabId?` | Attach a file; success needs a newly shown file (a same-named file left from a previous application doesn't count) and sets status `attached`. In the `after-approval` attach mode a file from `postings/` must be approved in its current version, or it's refused with a hint to review it; `library/` files never need approval |
-| `remove_items` | `fieldId`, `values?` (labels or file names; omit = all), `reason?`, `tabId?` | Remove selected entries from a multi-select (e.g. Skills) or attached files from a file field, typically what Workday carried over from the last application. `{ ok, removed, remaining, notFound?, error? }`; logged as `remove` |
-| `add_repeatable` | `addButtonId`, `tabId?` | Press an add button (another work, education or website row), named by its section (`add.websites`) |
-| `remove_repeatable` | `sectionId` (a section `get_form` marks `removable`), `reason?`, `tabId?` | Delete that repeatable row, e.g. a work-history entry carried over from the last application. `{ sectionId, ok, removed?, error? }`; logged as `remove-row`. Later rows' field ids change: `get_form` again |
-| `go_next` | `tabId?` | Next / Save and Continue. `{ advanced, pageKind, step?, errors, messages?, refusedReason? }`: `advanced` when the step index, title or page kind changed. Refuses on review and on any submit control; logged as `next` with the step title and index |
+| `remove_items` | `fieldId`, `values?` (labels or file names; omit = all), `reason?`, `tabId?` | Remove selected entries from a multi-select (e.g. Skills; on Oracle a multi-choice `checkbox-group`) or attached files from a file field, typically what Workday carried over from the last application or Oracle from the candidate's profile. `{ ok, removed, remaining, notFound?, error? }`; logged as `remove` |
+| `add_repeatable` | `addButtonId`, `tabId?` | Press an add button (another work, education or website row), named by its section (`add.websites`). On Oracle an add button opens an inline form, and its `save.<block>` button (also in `addButtons`) adds the item once filled: `ok: false` with the page's errors when it wants more |
+| `remove_repeatable` | `sectionId` (a section `get_form` marks `removable`), `reason?`, `tabId?` | Delete that repeatable row, e.g. a work-history entry carried over from the last application (on Oracle, a saved item: a language or license tile, a timeline entry). `{ sectionId, ok, removed?, error? }`; logged as `remove-row`. Later rows' field ids change: `get_form` again |
+| `go_next` | `tabId?` | Next / Save and Continue. `{ advanced, pageKind, step?, errors, messages?, refusedReason? }`: `advanced` when the step index, title or page kind changed. Refuses on review, on any submit control (an Oracle single-page application has only Submit) and on Oracle's email step; logged as `next` with the step title and index |
 | `go_back` | `tabId?` | Back to the previous step (`get_form` shows `backLabel` when there's a Back button), e.g. to fix an answer from the review page. `{ moved, pageKind, step?, errors, refusedReason? }`; refuses on the first step and after submitting; logged as `back`. Entries not saved with `go_next` may be lost |
-| `page_action` | `action` (`apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`), `tabId?` | Start-page buttons |
+| `page_action` | `action` (`apply`, `apply_manually`, `autofill_with_resume`, `use_last_application`), `tabId?` | Start-page buttons. On Oracle only `apply` (Apply Now) and `use_last_application` (Use My Profile) exist |
 | `screenshot` | `tabId?` | The visible part of the tab as an image (tab must be visible) |
 
 An extension built before `form.remove`, `form.removeRepeatable` or `form.back` existed answers "Unknown

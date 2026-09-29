@@ -12,6 +12,7 @@ ezapply/
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
   scripts/workday-recon.mjs live Workday check (Playwright, headless)
+  scripts/oracle-recon.mjs  live Oracle check up to the email step (Playwright, headless)
   scripts/usage-report.mjs  token usage of a Claude Code session in the workspace
   packages/
     protocol/               shared schemas            → components/protocol.md
@@ -28,7 +29,7 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
   If type errors look stale after a `tsconfig` change, delete `packages/*/tsconfig.tsbuildinfo`.
 - **esbuild** bundles the extension (`packages/extension/build.mjs`).
 - **Biome** lints and formats (2-space indent, 120 columns, double quotes, organized imports). It skips
-  `dist`, `dist-firefox`, the live Workday HTML snapshots (third-party markup), `project.txt`.
+  `dist`, `dist-firefox`, the live HTML snapshots in `test/fixtures/live/` (third-party markup), `project.txt`.
 - **Line endings:** `.gitattributes` pins LF everywhere (Biome rejects CRLF). On Windows, after a fresh
   clone with the old settings, renormalize with `git rm --cached -r . && git reset --hard` (on a clean tree).
 - **Vitest** runs every `packages/*/test/**/*.test.ts` (20 s default timeout).
@@ -45,6 +46,7 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | `npm run ezapply -- <cmd>` | run the CLI |
 | `npm run usage:report [-- <transcript.jsonl>]` | token usage of a workspace session (default: the most recent, found from `config.json`'s workspace under `~/.claude/projects/`): turns, tokens re-sent and written, average and peak context, then per user prompt (turns, tokens, context at start → end), per tool (calls, result size, images), and per subagent (from its `.meta.json` description). Every turn re-sends the conversation, so cost ≈ turns × context; use it before and after a change meant to cut usage. Synthetic zero-usage entries and harness notifications aren't counted |
 | `npm run recon:workday -- <careers-url> [outDir]` | headless walk of a public Workday tenant up to sign-in, printing what the adapter sees and saving each page's HTML (needs `npm run build` and Playwright's Chromium) |
+| `npm run recon:oracle -- <job-url> [outDir]` | the same for a public Oracle job: the job page, then Apply to the email step, where it stops (never types anything). `RECON_CHANNEL=msedge` (or `chrome`) uses an installed browser when Playwright's Chromium isn't downloaded |
 
 ## Tests
 
@@ -52,8 +54,9 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 |---|---|
 | `protocol/test/rpc.test.ts` | RPC round trips, validation, errors, timeouts |
 | `protocol/test/workday.test.ts` | Which hosts count as Workday (not the marketing site or employee tenants), tenants from myworkdayjobs hosts and myworkdaysite paths |
-| `companion/test/e2e.test.ts` | A real companion on a free port: HTTP guards, `/health` with `mode: "chat"`, no control routes (404), bridge handshake, pinning, Firefox origins, the browser reported in `hello` (in `browser_status`, "connected in Edge" in `workspace_check`, kept after a disconnect), the pairing window opened by `extension_pair`, `extension_pair`/`replace`, `posting_active` waiting for a queued capture after a start and giving up after the grace period with the reconnecting hint, the `ChatHost` change events from a capture and `posting_activate`, pairing written into `config.json` without undoing edits made meanwhile, `github_login` with a stub opener (opened, naming the browser, and not; `app: "existing"` returning the callback URL), capture → MCP, invalid posting ids, the review page (token, PDFs served, answers, waiting, a replaced or answered review) and the approval gate on `upload_file` (refused before approval, allowed after, refused again for a rebuilt file, never for `library/`), `attach_mode_set` keeping the rest of the config, and the form tools driving the **real Workday adapter on the shared jsdom fixture** behind a fake extension: `list_options` for several fields (one unknown), lean fill results (a clean success bare, a matched option's full text kept), fill, clear an old attachment, upload, add and remove a row, next and refusal, back from review and forward again, the log and status; lean `get_form` with its filters; tab choice by the active posting's tenant and `postingMismatch` with nothing logged |
-| `companion/test/extract.test.ts` | Posting extraction and metadata; company from ATS, LinkedIn and Indeed URLs; Workday locale dropped from canonical URLs; myworkdaysite tenants and embedded frames |
+| `protocol/test/oracle.test.ts` | Which pages count as Oracle (Oracle Cloud hosts and employers' domains, by path; not other "sites" pages or http), tenants as host and site number, `siteTenant` for both sites, a job's path without language or application pages |
+| `companion/test/e2e.test.ts` | A real companion on a free port: HTTP guards, `/health` with `mode: "chat"`, no control routes (404), bridge handshake, pinning, Firefox origins, the browser reported in `hello` (in `browser_status`, "connected in Edge" in `workspace_check`, kept after a disconnect), the pairing window opened by `extension_pair`, `extension_pair`/`replace`, `posting_active` waiting for a queued capture after a start and giving up after the grace period with the reconnecting hint, the `ChatHost` change events from a capture and `posting_activate`, pairing written into `config.json` without undoing edits made meanwhile, `github_login` with a stub opener (opened, naming the browser, and not; `app: "existing"` returning the callback URL), capture → MCP, invalid posting ids, the review page (token, PDFs served, answers, waiting, a replaced or answered review) and the approval gate on `upload_file` (refused before approval, allowed after, refused again for a rebuilt file, never for `library/`), `attach_mode_set` keeping the rest of the config, and the form tools driving the **real Workday adapter on the shared jsdom fixture** behind a fake extension: `list_options` for several fields (one unknown), lean fill results (a clean success bare, a matched option's full text kept), fill, clear an old attachment, upload, add and remove a row, next and refusal, back from review and forward again, the log and status; lean `get_form` with its filters; tab choice by the active posting's tenant and `postingMismatch` with nothing logged; the **real Oracle adapter on its fixture**: an Oracle posting (site, tenant; a capture on its application pages is the same posting) choosing its Oracle tab over a Workday tab in front, a fill credited and logged, `go_next` refusing Submit, and the Workday tab then reported as another tenant |
+| `companion/test/extract.test.ts` | Posting extraction and metadata; company from ATS, LinkedIn and Indeed URLs; Workday locale dropped from canonical URLs; an Oracle job's language and application pages dropped; myworkdaysite tenants and embedded frames; an Oracle posting's tenant, and its company from the title rather than an Oracle Cloud host |
 | `companion/test/documents.test.ts` | Page-range parsing; PDF merge (ranges, bookmarks, metadata, normalizing, and a resized page keeping its link with its rectangle moved), render with preview, text, images → PDF, compression, encrypted or broken input, `open_file` through the opener, path guards; `% !TEX program` parsing (both spellings, 20-line window, unknown values), pdfTeX-only detection, engine resolution order and no-fallback errors (engines mocked); TeX compile, page limit with the `overflow` text, snapshots, errors with lines, no shell escape, the default cover template building under auto, and a pdfTeX-only resume building with pdflatex over `tex.engine: xelatex` (real-TeX parts skipped without an engine or without pdflatex, unless `EZAPPLY_REQUIRE_TEX=1`) |
 | `companion/test/texlog.test.ts` | TeX log parsing |
 | `companion/test/profile.test.ts` | Answer seed, profile and answers validation |
@@ -71,8 +74,10 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | `cli/test/cli.test.ts` | The built CLI: a bad `--port` and a damaged `config.json` give one line and what to do, no stack; `start`, `stop`, `restart`, `daemon`, `pair` are unknown commands; `status` says ezapply isn't running outside a chat |
 | `extension/test/workday.test.ts` | Adapter extraction (add buttons named by section, upload notices kept out of errors), every filler, two dropdowns in a row each reading its own options (the previous listbox lingering, no `aria-controls`; fails on the old logic), dropdowns that behave as live ones (`liveDropdowns`: the next one opening after a miss and after `list_options`, no list reopened after a choice), dates typed into a split widget that takes digits only in keydown and an honest failure when it ignores them (`dateWidget`), a skills list filled entry by entry against a delayed search with nested option hooks (bare names, acronyms, `unmatched` with suggestions), `search_options` waiting for its own results, `matchOption` (parentheticals, repeated labels, no guess between two "Yes" options), `next()` advancing when every step is titled "Application", a date entered again while the field shows an error and once otherwise, removing pills (charm and keyboard) and attachments (with a confirmation dialog), removable rows and removing one (with a confirmation dialog, later rows renumbered), going back from review with entries kept (and refusing on the first step), uploads not fooled by a same-named leftover file, next/refusals, submit guard, the waits the companion sends taking effect (a shorter no-results wait returns sooner) and `null` restoring the defaults, against the behavioural fixture (jsdom) |
 | `extension/test/workday-live.test.ts` | Page detection on live snapshots (posting, start-choice, sign-in) |
-| `extension/test/manifest.test.ts` | The built Firefox manifest: CSP without `upgrade-insecure-requests` and loopback-only `connect-src`, event-page background, gecko id; both builds' host permissions equal the protocol's Workday hosts |
-| `extension/test/background.test.ts` | The background loaded with a stubbed WebExtensions API: the reconnect alarm exists without any install event, and an existing one is left alone |
+| `extension/test/oracle.test.ts` | The Oracle adapter against its behavioural fixture (`oracle-fixture.ts`, jsdom): extraction (the phone's two fields, pills as radio or checkbox-group, date parts, add buttons, a timeline entry as a removable section, Welcome Back as start-choice), text, pills (a pressed one not pressed again), radios, textarea and checkbox fills, the read-only email refused, lists filled in page order so a city list loads for the country chosen first (its input re-rendered on opening, its option labelled "Kanata, Ontario" but shown as "Kanata", a "required" error lingering after the choice: all ok), a postal code found by searching the part before the comma, a phone number the page reformats, a miss returning the options and leaving the old choice (Escape never sent to a closed list), listing and searching, a date through three lists, uploads (a profile's resume removed first), several additional documents and removing one, unselecting pills, an inline Language form with Save (refused while incomplete; "Saved" a notice, not an error) and deleting its tile, a timeline delete through its hover button, another link row, `next` refusing a single page's Submit, the multi-page flow (validation error, Next, Previous, Submit refused), the submit guard, Use My Profile |
+| `extension/test/oracle-live.test.ts` | Snapshots: a live job page (posting, Apply, tenant), the live email step (auth; email and terms, never the honeypot), and a saved single-page application (every field's kind, id, hints, options; Submit the only button; no false errors) |
+| `extension/test/manifest.test.ts` | The built Firefox manifest: CSP without `upgrade-insecure-requests` and loopback-only `connect-src`, event-page background, gecko id; both builds' host permissions equal the protocol's Workday hosts, and their optional host permissions the protocol's Oracle ones |
+| `extension/test/background.test.ts` | The background loaded with a stubbed WebExtensions API: the reconnect alarm exists without any install event, and an existing one is left alone; Set posting on an Oracle page asks for its origin synchronously in the click, and on other pages asks nothing |
 | `extension/test/browser-id.test.ts` | `detectBrowser`: Edge and Brave named before the Chrome/Chromium brands they also list, plain Chromium, none, and Firefox through `getBrowserInfo` |
 | `extension/test/frames.test.ts` | Choosing the frame that holds a posting; spotting an embedded job board that couldn't be read |
 
@@ -102,13 +107,15 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 - **Write atomically** (`writeFileAtomic` for text or bytes, `writeJsonAtomic`, in `companion/src/util/fs.ts`).
 - **Shared helpers live in `companion/src/util/`** (`fs.ts`, `keyed-queue.ts`, `wait.ts`, `open.ts`, `proc.ts`,
   `install-hints.ts`) and are exported for the CLI; don't redefine `exists` or a polling loop locally. The
-  adapter's own `waitFor` in `dom.ts` is different on purpose: it runs in the page and polls a synchronous
+  adapters' own `waitFor` in `adapters/common/dom.ts` is different on purpose: it runs in the page and polls a synchronous
   DOM condition.
 - **External programs** through `run()` (no shell, timeouts, tree kill) and `which()`; programs that should
   outlive the call (a viewer, a browser) through the `Opener`.
-- **Workday strings** only in `adapters/workday/selectors.ts`, plus `protocol/src/workday.ts` for what the
-  companion needs too (hosts, tenant parsing, the posting-page hooks). Both sides import those from there
-  instead of repeating them.
+- **Site strings** only in each adapter's `selectors.ts` (`adapters/workday/`, `adapters/oracle/`), plus
+  `protocol/src/workday.ts` and `oracle.ts` for what the companion and background need too (hosts or paths,
+  tenant parsing, the posting-page hooks). Both sides import those from there instead of repeating them.
+- **Adapter bundles stay free of zod:** in-page code imports the protocol only through its import-free
+  subpaths (`@ezapply/protocol/workday`, `/oracle`, `/timing`) or as types.
 - **No personal assumptions in code**: everything user-specific lives in the profile and config.
 
 ## How to…
@@ -132,6 +139,8 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   `EZAPPLY.md` is in every session's context: keep it near 100 lines, add only rules that apply to every
   task, and put procedures in skills. Rules that must hold even without it (Explore/Plan subagents) also go
   in the MCP server instructions (`mcp/server.ts`).
-- **Add a job site:** a new adapter folder beside `workday/` exposing the same API, site detection in
-  `protocol/src/browser.ts`, routing in `extension/src/background/forms.ts`, host permissions in the
-  manifest.
+- **Add a job site:** a new adapter folder beside `workday/` and `oracle/` exposing the same API (reuse
+  `adapters/common/`), its site id in `SiteId` (a `PROTOCOL_VERSION` bump: older peers reject the new value)
+  and `FORM_SITES`, detection and tenant in `protocol/src/`, the bundle in `build.mjs`, routing in
+  `extension/src/background/forms.ts` (`ADAPTERS`), host permissions (fixed hosts in the manifest, or a
+  per-origin grant as for Oracle), a live snapshot and a behavioural fixture, and a component page here.
