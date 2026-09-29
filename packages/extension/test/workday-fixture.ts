@@ -40,7 +40,15 @@ export interface StepOptions {
   dateWidget?: "keys" | "stuck";
   /** Every step in the progress bar is titled "Application", as on some live tenants. */
   sameStepTitles?: boolean;
+  /**
+   * Dropdowns as seen live: the button has no aria-expanded, Escape doesn't close an open listbox, and a press
+   * anywhere outside it (its own button included) only closes it: the press itself is swallowed.
+   */
+  liveDropdowns?: boolean;
 }
+
+/** The live-dropdown listeners each document was given by its last build. */
+const liveListeners = new WeakMap<Document, AbortController>();
 
 /** Search delay of the Skills prompt, which shows "No Items." until its results arrive. */
 export const SKILLS_SEARCH_MS = 400;
@@ -142,6 +150,35 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
   // Dropdowns: clicking the button renders a listbox portal at the end of <body>. A closed listbox stays on
   // screen for LISTBOX_LINGER_MS while it animates away, as on live Workday. Country's button names its
   // listbox with aria-controls; Degree Level's doesn't (live buttons don't).
+  const live = opts.liveDropdowns === true;
+  let current: { ul: HTMLElement; close: () => void } | null = null;
+  // The page-wide listeners of an earlier build on this document go, or its open list would swallow presses.
+  liveListeners.get(doc)?.abort();
+  if (live) {
+    const listeners = new AbortController();
+    liveListeners.set(doc, listeners);
+    const { signal } = listeners;
+    let swallow = false;
+    doc.addEventListener(
+      "mousedown",
+      (e) => {
+        if (current && !current.ul.contains(e.target as Node)) {
+          current.close();
+          swallow = true;
+        }
+      },
+      { capture: true, signal },
+    );
+    doc.addEventListener(
+      "click",
+      (e) => {
+        if (!swallow) return;
+        swallow = false;
+        e.stopImmediatePropagation();
+      },
+      { capture: true, signal },
+    );
+  }
   const dropdown = (automationId: string, options: string[], listId?: string) => {
     const button = doc.querySelector<HTMLButtonElement>(
       `[data-automation-id="${automationId}"] button[aria-haspopup="listbox"]`,
@@ -150,7 +187,8 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     const close = () => {
       const ul = open;
       open = null;
-      button.setAttribute("aria-expanded", "false");
+      if (current?.ul === ul) current = null;
+      if (!live) button.setAttribute("aria-expanded", "false");
       setTimeout(() => ul?.remove(), LISTBOX_LINGER_MS);
     };
     button.addEventListener("click", () => {
@@ -169,14 +207,15 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
         ul.append(li);
       }
       ul.addEventListener("keydown", (e) => {
-        if ((e as KeyboardEvent).key === "Escape" && open === ul) close();
+        if (!live && (e as KeyboardEvent).key === "Escape" && open === ul) close();
       });
       doc.body.append(ul);
       open = ul;
-      button.setAttribute("aria-expanded", "true");
+      current = { ul, close };
+      if (!live) button.setAttribute("aria-expanded", "true");
     });
     button.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).key === "Escape" && open) close();
+      if (!live && (e as KeyboardEvent).key === "Escape" && open) close();
     });
   };
   dropdown("formField-countryDropdown", ["Canada", "United States of America", "United Kingdom"], "lb-country");

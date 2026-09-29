@@ -115,21 +115,28 @@ Now:
 - After the press, accept `aria-controls`' target when it exists, or else a listbox that wasn't visible
   before the press, or one that was but whose options changed (a reused portal).
 - When no listbox appears after the press, React's `onClick` is tried.
-- Closing waits (up to 1 s) until the listbox is hidden or removed.
+- **Closing.** After a choice the list closes by itself; the adapter waits (up to 1 s,
+  `dropdownClosedMs`) until it's hidden or removed, pressing Escape and then the button only while the button
+  says `aria-expanded="true"`. When nothing was chosen (`list_options`, or a value that matched nothing) the
+  list has to be closed: Escape on the button, and if the button has no `aria-expanded` and the list is still
+  there after `dropdownEscapeCloseMs` (300 ms), a press on the dropdown's own button, as a person would. A
+  button without `aria-expanded` is never pressed after a choice: a list still animating away would open
+  again.
 
-The fixture models the live behaviour (the portal lingers 150 ms, and Degree Level's button has no
-`aria-controls`); its test fails on the old logic.
+**Why the press.** "Could not open the dropdown" followed a miss in the second live run, and in the fifth it
+failed 9 fields (each waiting out 1 s + 0.5 s + 2 s + 2 s): the first dropdown after `list_options` had read
+that step's dropdowns, five after a value that matched nothing (in one call), the first dropdown of two later
+calls, and one mid-call after a successful dropdown. Live buttons have no `aria-expanded` and Escape doesn't
+close a live listbox, so the close did nothing when nothing was chosen, the list stayed open, and the next
+dropdown's press only closed it. The press covers the first two patterns; the other three failures aren't
+explained, and the fix is unverified on a live tenant. (An earlier, broader fix that also clicked the page
+body and pressed again when opening was reverted: unverified, and fills had become much slower.)
 
-**Known problem, not fixed:** in the second live run, after a value matched nothing, the *next* dropdown
-failed with "Could not open the dropdown" (the listbox seemed to stay open, and the press on the next button
-only closed it); the call after that worked. A fix (dismissing a listbox that stays open, pressing again)
-was tried and reverted: it wasn't shown to work live, and dropdown fills had become much slower. The fifth
-live run hit it 9 times: the first dropdown after `list_options` had read that step's dropdowns, five after
-a value that matched nothing (in one call), the first dropdown of two later calls, and one mid-call after a
-successful dropdown. Each failure waits out the open (1 s + 0.5 s + 2 s + 2 s by default). Likely cause, unconfirmed:
-closing a listbox without choosing (after reading options, or after a miss) presses Escape and then presses
-the button only if it says `aria-expanded="true"`, which live buttons don't (the fixture's live-dropdown
-model was built from that), so the list stays open.
+The fixture models the live behaviour: the portal lingers 150 ms, and Degree Level's button has no
+`aria-controls`. With `liveDropdowns`, buttons have no `aria-expanded`, Escape closes nothing, and a press
+outside an open list (its own button included) only closes it. Its tests (the next dropdown after a miss,
+after `list_options`, and no reopening after a choice) fail on the old logic, the first two with "Could not
+open the dropdown".
 
 ### Typeahead searches and lists
 - **Waiting for results.** Typing a query waits until the options on screen differ from those before it

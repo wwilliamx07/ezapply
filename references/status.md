@@ -85,7 +85,9 @@ As of 2026-09-27.
   ([waits](components/workday-adapter.md#waits-autofill-timingyaml)), not yet tried live. Next: per-field
   timings in fill results.
 - **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
-  extra calls ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
+  extra calls. A listbox closed without a choice is now closed with a press on its own button when Escape
+  doesn't do it, which covers 6 of the 9; not yet tried live
+  ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
 
 ## Deferred
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:

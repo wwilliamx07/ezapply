@@ -454,3 +454,55 @@ describe("timing", () => {
     expect(T).toEqual({ ...DEFAULT_TIMING, dropdownOpenMs: 700 });
   });
 });
+
+describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't close them)", () => {
+  const id = (automationId: string) =>
+    api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === automationId)?.id as string;
+  beforeEach(() => {
+    fixture = buildWorkdayStep(document, { liveDropdowns: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+  });
+  const openLists = () => [...document.querySelectorAll('[role="listbox"]')].filter((l) => l.isConnected);
+
+  it("opens the next dropdown after one that matched nothing", async () => {
+    const res = await api.fill([
+      { fieldId: id("formField-degreeLevel"), value: "Diploma" },
+      { fieldId: id("formField-countryDropdown"), value: "Canada" },
+    ]);
+    expect(res.map((r) => [r.ok, r.readBack ?? r.availableOptions])).toEqual([
+      [false, ["Undergraduate", "Masters", "Ph.D"]],
+      [true, "Canada"],
+    ]);
+  });
+
+  it("opens a dropdown after list_options read another, and leaves no list open", async () => {
+    expect((await api.listOptions(id("formField-degreeLevel"))).map((o) => o.label)).toEqual([
+      "Undergraduate",
+      "Masters",
+      "Ph.D",
+    ]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(openLists()).toEqual([]);
+    const [r] = await api.fill([{ fieldId: id("formField-countryDropdown"), value: "Canada" }]);
+    expect(r).toMatchObject({ ok: true, readBack: "Canada" });
+  });
+
+  it("doesn't reopen a list that is closing after a choice", async () => {
+    const res = await api.fill([
+      { fieldId: id("formField-degreeLevel"), value: "Masters" },
+      { fieldId: id("formField-countryDropdown"), value: "Canada" },
+    ]);
+    expect(res.map((r) => r.ok)).toEqual([true, true]);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(openLists()).toEqual([]);
+    expect(
+      api
+        .getForm()
+        .sections.flatMap((s) => s.fields)
+        .find((f) => f.automationId === "formField-degreeLevel")?.currentValue,
+    ).toBe("Masters");
+  });
+});

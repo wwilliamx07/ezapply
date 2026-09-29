@@ -140,21 +140,37 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
   return opened;
 }
 
-/** Close the listbox and wait until it has gone, so the next dropdown can't mistake it for its own. */
-async function closeListbox({ button, list }: OpenListbox): Promise<void> {
-  if (button.getAttribute("aria-expanded") === "true") {
+/**
+ * Close the listbox and wait until it has gone, so the next dropdown can't mistake it for its own.
+ *
+ * `chose`: an option was just picked, which closes the list by itself. When nothing was (after reading the
+ * options, or a value that matched nothing) the list has to be closed here. Live buttons have no
+ * `aria-expanded` and Escape doesn't close a live listbox, so this used to do nothing, the list stayed open,
+ * and the next dropdown's press only closed it: "Could not open the dropdown" (9 fields in the fifth live
+ * run). So when Escape hasn't closed it within `dropdownEscapeCloseMs`, the dropdown's own button is pressed,
+ * as a person would. After a choice the button isn't pressed without `aria-expanded` saying the list is
+ * open: a list still animating away would open again.
+ */
+async function closeListbox({ button, list }: OpenListbox, chose: boolean): Promise<void> {
+  const gone = () => !list.isConnected || !isVisible(list);
+  const expanded = button.getAttribute("aria-expanded");
+  if (expanded === "true" || (expanded === null && !chose && !gone())) {
     key(button, "Escape");
     await sleep(T.dropdownCloseKeyMs);
-    if (button.getAttribute("aria-expanded") === "true") press(button);
+    const stillOpen =
+      expanded === null
+        ? !(await waitFor(gone, T.dropdownEscapeCloseMs))
+        : button.getAttribute("aria-expanded") === "true";
+    if (stillOpen) press(button);
   }
-  await waitFor(() => !list.isConnected || !isVisible(list), T.dropdownClosedMs);
+  await waitFor(gone, T.dropdownClosedMs);
 }
 
 export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
   const opened = await openListbox(c);
   if (!opened) return [];
   const labels = opened.options.map((o) => ({ label: text(o) })).filter((o) => o.label);
-  await closeListbox(opened);
+  await closeListbox(opened, false);
   return labels;
 }
 
@@ -164,7 +180,7 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
   const labels = opened.options.map(text);
   const idx = matchOption(value, labels);
   if (idx < 0) {
-    await closeListbox(opened);
+    await closeListbox(opened, false);
     return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
   }
   const option = opened.options[idx] as HTMLElement;
@@ -175,7 +191,7 @@ async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
     callReact(option, "onClick", {});
     await waitFor(() => norm(text(opened.button)) === norm(wanted), T.dropdownSelectRetryMs);
   }
-  await closeListbox(opened);
+  await closeListbox(opened, true);
   const readBack = text(opened.button);
   return norm(readBack) === norm(wanted) ? { ok: true, readBack } : fail("Selection did not stick.", { readBack });
 }
