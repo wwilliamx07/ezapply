@@ -167,8 +167,22 @@ async function closeListbox({ button, list }: OpenListbox, chose: boolean): Prom
   await waitFor(gone, T.dropdownClosedMs);
 }
 
-export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
+/**
+ * Open the listbox, and when it doesn't open, wait for the page to go quiet and try once more. In two live runs
+ * a dropdown whose list had been read without a choice (`list_options`, or a value that matched nothing) failed
+ * its next open with "Could not open the dropdown": 12 of 12 such dropdowns, and no other dropdown. The same
+ * fill in the agent's next call worked every time, at a turn each. Why the first open fails isn't known; the
+ * second attempt here is what the agent's retry did.
+ */
+async function openListboxRetrying(c: HTMLElement): Promise<OpenListbox | null> {
   const opened = await openListbox(c);
+  if (opened) return opened;
+  await settle(c.ownerDocument, T.afterFieldQuietMs, T.afterFieldMaxMs);
+  return openListbox(c);
+}
+
+export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
+  const opened = await openListboxRetrying(c);
   if (!opened) return [];
   const labels = opened.options.map((o) => ({ label: text(o) })).filter((o) => o.label);
   await closeListbox(opened, false);
@@ -176,7 +190,7 @@ export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
 }
 
 async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
-  const opened = await openListbox(c);
+  const opened = await openListboxRetrying(c);
   if (!opened) return fail("Could not open the dropdown.");
   const labels = opened.options.map(text);
   const idx = matchOption(value, labels);

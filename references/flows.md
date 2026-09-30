@@ -132,12 +132,15 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
    field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
    doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in
-   one call; `upload_file` for documents; `go_next`. To change an earlier step, `go_back` to it,
+   one call; `upload_file` for documents (every approved one: on Workday's single Resume/CV field, which
+   takes several files, the resume and the cover letter both; `notAttached` in the upload result lists what's
+   left); `go_next`. To change an earlier step, `go_back` to it,
    fix, and `go_next` forward again. Values carried over from the last
    application are cleared first: attached files this application didn't upload (per `form-log.jsonl`) and
    multi-select entries such as skills that don't belong go through `remove_items`, extra work-history,
    education or website rows through `remove_repeatable`, then the current documents and values are added.
-4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next): summarize what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
+4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next). If `go_next`
+   or `get_form` reports `notAttached` there, Claude goes back and attaches those documents first. Then it summarizes what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
    judgment, and what couldn't be filled. The user reviews and presses Submit.
 5. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on
    a successful upload, `filled` at the review page, `submitted` when the confirmation page is seen. Oracle has

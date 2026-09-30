@@ -982,6 +982,54 @@ describe("form tools over MCP", () => {
     await client.close();
   });
 
+  it("says which approved documents aren't attached, after an upload and on the review page", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume");
+    await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover");
+    const client = await mcpClient();
+    const review = (
+      await callJson(client, "review_open", {
+        files: [`postings/${cap.postingId}/resume.pdf`, `postings/${cap.postingId}/cover.pdf`],
+      })
+    ).data;
+    const token = new URL(review.url).searchParams.get("t") ?? "";
+    await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}`, {
+      method: "POST",
+      body: new URLSearchParams({ t: token, c0: "", c1: "" }),
+    });
+    await callJson(client, "remove_items", { fieldId: "application-questions.coverLetter" });
+    await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+    });
+
+    const up = await callJson(client, "upload_file", {
+      fieldId: "application-questions.resume",
+      path: `postings/${cap.postingId}/resume.pdf`,
+    });
+    expect(up.data).toMatchObject({
+      ok: true,
+      notAttached: { files: ["cover.pdf"], hint: expect.stringMatching(/multiple: true/) },
+    });
+    const next = await callJson(client, "go_next");
+    expect(next.data).toMatchObject({ pageKind: "review", notAttached: { files: ["cover.pdf"] } });
+    expect((await callJson(client, "get_form")).data.notAttached).toMatchObject({ files: ["cover.pdf"] });
+
+    await callJson(client, "go_back");
+    const cover = await callJson(client, "upload_file", {
+      fieldId: "application-questions.coverLetter",
+      path: `postings/${cap.postingId}/cover.pdf`,
+    });
+    expect(cover.data).toMatchObject({ ok: true });
+    expect(cover.data.notAttached).toBeUndefined();
+    const again = await callJson(client, "go_next");
+    expect(again.data).toMatchObject({ pageKind: "review" });
+    expect(again.data.notAttached).toBeUndefined();
+    await client.close();
+  });
+
   it("switches the attach mode without touching the rest of the config", async () => {
     await mkdir(join(dir, "ws"), { recursive: true });
     await writeFile(

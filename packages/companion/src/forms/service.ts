@@ -1,5 +1,5 @@
 import { appendFile, readFile, stat } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, extname, join, relative, sep } from "node:path";
 import {
   ErrorCode,
   EzError,
@@ -90,8 +90,10 @@ export class FormsService {
         await this.logEvent(t, { event: "confirmation-seen", url: form.url });
       }
       if (form.pageKind === "review") await this.setStatus(t, "filled");
+      const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
       return {
         ...leanForm(form, opts),
+        ...(missing ? { notAttached: missing } : {}),
         ...(t.posting ? { posting: t.posting.id } : {}),
         ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
         ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
@@ -190,8 +192,10 @@ export class FormsService {
         ok: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
-      if (result.ok) await this.setStatus(t, "attached");
-      return withMismatch(result, t);
+      if (!result.ok) return withMismatch(result, t);
+      await this.setStatus(t, "attached");
+      const missing = await this.notAttached(t, "upload");
+      return withMismatch(missing ? { ...result, notAttached: missing } : result, t);
     });
   }
 
@@ -251,8 +255,10 @@ export class FormsService {
         step: r.step?.title,
         ...(r.step?.index ? { stepIndex: r.step.index } : {}),
       });
-      if (r.pageKind === "review") await this.setStatus(t, "filled");
-      return withMismatch(r, t);
+      if (r.pageKind !== "review") return withMismatch(r, t);
+      await this.setStatus(t, "filled");
+      const missing = await this.notAttached(t, "review");
+      return withMismatch(missing ? { ...r, notAttached: missing } : r, t);
     });
   }
 
@@ -355,6 +361,50 @@ export class FormsService {
     if (!t.posting) return;
     const line = JSON.stringify({ ts: new Date().toISOString(), ...event });
     await appendFile(join(this.postings.folder(t.posting.id), "form-log.jsonl"), `${line}\n`, "utf8");
+  }
+
+  /**
+   * The documents the user approved for this posting (in their current version) that no successful upload on
+   * this application has attached, with what to do about them; undefined when there are none. Said after an
+   * upload and on reaching the review page.
+   *
+   * Why: Workday usually has one file field, "Resume/CV", that takes several files. In two live runs the agent
+   * uploaded the approved resume there, never the approved cover letter, and handed over at the review page;
+   * both times the user had to point it out. `multiple: true` on the field wasn't enough of a cue.
+   *
+   * Only approvals count (the after-approval attach mode), since they say which documents the user means to
+   * send. A posting that wants one bundled PDF is left to the skill: its parts are approved but not uploaded.
+   */
+  private async notAttached(
+    t: Target,
+    when: "upload" | "review",
+  ): Promise<{ files: string[]; hint: string } | undefined> {
+    if (!t.posting || t.posting.bundleRequired) return undefined;
+    const { approved } = await this.reviews.summary(t.posting.id);
+    const wanted = approved.filter((a) => a.current).map((a) => a.file);
+    if (wanted.length === 0) return undefined;
+    const folder = this.postings.folder(t.posting.id);
+    const log = await readFile(join(folder, "form-log.jsonl"), "utf8").catch(() => "");
+    const uploaded = new Set<string>();
+    for (const line of log.split(/\r?\n/)) {
+      let e: { event?: string; ok?: boolean; file?: string };
+      try {
+        e = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (e.event === "upload" && e.ok && e.file) uploaded.add(relative(folder, e.file).split(sep).join("/"));
+    }
+    const files = wanted.filter((f) => !uploaded.has(f));
+    if (files.length === 0) return undefined;
+    const hint =
+      when === "upload"
+        ? "Approved for this posting and not attached yet. A file field with multiple: true (Workday's Resume/CV) " +
+          "takes several files: upload them to it too, unless the form has a field of their own."
+        : "Approved for this posting and never attached to this application. Before the hand-off, go_back to the " +
+          "step with the file field and upload them (a field with multiple: true takes several files), or tell " +
+          "the user why they aren't attached.";
+    return { files, hint };
   }
 
   /** Move the posting's status forward, never back. */

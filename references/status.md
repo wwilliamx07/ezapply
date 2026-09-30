@@ -36,10 +36,10 @@ As of 2026-09-28.
   matching, education dates with a day, the student seed questions, documents written before the form) were
   reverted: they were unverified, and fills had become several times slower (see Known issues). Not
   exercised yet: the remove controls for skill pills and attached
-  files (`DELETE_charm`, `delete-file`), repeatable rows (`panel-set-delete-button`) and the Back button
-  (`bottom-navigation-previous-button`), which come from
+  files (`DELETE_charm`, `delete-file`), and repeatable rows (`panel-set-delete-button`), which come from
   knowledge of Workday's markup, not a live page. On the first real application: `screenshot` plus a saved
-  snapshot of a step with a removable pill, file and row, turned into a live fixture.
+  snapshot of a step with a removable pill, file and row, turned into a live fixture. The Back button worked
+  live in the two Oscorp runs (2026-09-29).
 - **Parts of filling an Oracle application.** The first live application (2026-09-29, Umbrella, single page,
   in Chrome, with site access granted at Set posting) was filled to Submit: text, pills, radios, dates, lists,
   uploads, and education and work entries through the inline form and Save worked. Its failures (list
@@ -95,8 +95,25 @@ As of 2026-09-28.
   timings in fill results.
 - **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
   extra calls. A listbox closed without a choice is now closed with a press on its own button when Escape
-  doesn't do it, which covers 6 of the 9; not yet tried live
+  doesn't do it, which covers 6 of the 9. The two Oscorp runs (2026-09-29, with that press) still failed 12
+  fields, each a dropdown whose own list had been read without a choice (`list_options` or a miss), and the
+  agent's next call filled every one. The adapter now tries such an open a second time itself; why the first
+  fails isn't known, and the retry isn't tried live yet
   ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
+- **Reading a step before it rendered.** In the Oscorp runs `get_form` straight after `go_next` read an empty
+  step four times. `go_next` and `go_back` now wait for the new step's fields (`stepFieldsMs`), and `go_back`
+  sees a move when every step is titled "Application" (it waited out 12 s and said `moved: false` on all five
+  Backs). Not yet tried live.
+- **The cover letter left out.** Both Oscorp runs uploaded only the resume into Workday's single Resume/CV
+  field (`multiple: true`), and the user had to ask for the cover letter. `upload_file`, `go_next` and
+  `get_form` now report approved documents not attached (`notAttached`), and the apply skill says both go
+  into that field. Not yet tried live.
+- **Guessed parameter names.** The Oscorp runs lost 11 turns to schema errors on deferred tools. The skills
+  and `EZAPPLY.md` now show each call's parameters
+  ([call shapes](components/workspace.md#call-shapes)). Not yet tried in a real session.
+- **Language rows emptied.** In the first Oscorp run the French and German language rows, filled with
+  `ok: true` before Save and Continue, were empty when the agent came back to the step. Not explained; the
+  skill already re-checks steps when coming forward.
 
 ## Deferred
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:

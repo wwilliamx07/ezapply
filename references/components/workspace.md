@@ -31,7 +31,8 @@ Every file's format: [data-formats.md](../data-formats.md).
 ## The agent file (`EZAPPLY.md`)
 The workspace rules, about 115 lines and kept short on purpose: Claude Code loads it into every session,
 so every line costs context. Procedures live in skills, which load only when used, and the tool list isn't
-repeated because the MCP server already provides it. Sections:
+repeated because the MCP server already provides it. Its intro says how tool calls are written here and in
+the skills ([call shapes](#call-shapes)). Sections:
 - **Setup and errors:** run `ezapply-onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
   before installing, run it, retry); the `doctor`, `status` and `init` commands with this install's
   absolute path; the tools work only while `ezapply chat` is open.
@@ -96,6 +97,24 @@ hid Claude Code's `/resume`), and a personal skill in `~/.claude/skills/` overri
 same name. The prefix avoids both. Only each skill's `description` is always in context; the body loads
 when a request matches it or the user types `/ezapply-<name>`.
 
+### Call shapes
+The skills and `EZAPPLY.md` write a tool call with its parameters: `fill_fields { fills: [{ fieldId, value,
+source, answerId? }] }`, `add_repeatable { addButtonId }`, `review_wait { reviewId }` (`?` marks an optional
+one, a quoted value is one to pass as is). Every file that mentions a tool with required parameters shows
+its shape at least once, usually where it first says to call it.
+
+*Why:* Claude Code defers MCP tools, so the agent sees the ezapply tools' names but not their parameters until
+it loads them, and it tends to guess instead. In the two Oscorp runs (2026-09-29) it guessed wrong 11 times, a
+turn each: `fill_fields` with `fields`, `add_repeatable` with `buttonId` (5), `upload_file` and
+`tex_compile` with `file`, `review_open` with `paths`, `review_wait` without `reviewId`. The alternative,
+telling the skills to load the tools' schemas first, was rejected: an extra call and every form tool's schema
+in context on each application, and it depends on how Claude Code defers tools. Shapes are added only where
+the skills already call a tool, so they don't change which calls the agent makes.
+
+`cli/test/skill-calls.test.ts` keeps the shapes true: each one is checked against the registered schema
+(names, required and optional, nested lists, enum values), and a file that mentions a tool with required
+parameters without showing its shape fails. Renaming a parameter therefore means updating the skills.
+
 | Skill | When | What it does |
 |---|---|---|
 | `ezapply-onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub (asking first whether to connect an existing ezapply app or create a new one), repos, knowledge base, resume + profile, cover template, answer bank, preferences (first the attach mode), library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
@@ -104,7 +123,7 @@ when a request matches it or the user types `/ezapply-<name>`.
 | `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check, then review (in `after-approval`) |
 | `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body, `format.md` structure if present, one-page build loop, then review (in `after-approval`) |
 | `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks; the bundle is reviewed as its own document in `after-approval` |
-| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`; form text treated as untrusted; step-by-step Workday and Oracle filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat, hand-off at review (on Oracle, when Submit is next); Oracle's single-page flow, inline item forms saved with `save.*`, dependent address lists; every add button's section matched to the profile (work, education, languages, certifications, links) |
+| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`, every one of them (resume and cover letter both into Workday's single Resume/CV field), and goes back for any `notAttached` at review; form text treated as untrusted; step-by-step Workday and Oracle filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat, hand-off at review (on Oracle, when Submit is next); Oracle's single-page flow, inline item forms saved with `save.*`, dependent address lists; every add button's section matched to the profile (work, education, languages, certifications, links) |
 | `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants), validation |
 
 ## Claude Code settings

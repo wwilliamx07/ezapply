@@ -1,7 +1,7 @@
 ---
 name: ezapply-cover-letter
-description: Write or revise a cover letter for the active job posting using the user's cover letter template, profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one.
----
+description: Write or revise a cover letter for the active job posting using the user's cover letter template,
+profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one. ---
 
 # Cover letter
 
@@ -11,16 +11,17 @@ description: Write or revise a cover letter for the active job posting using the
   word or page limits, who to address, reference numbers, questions the letter must answer, whether a
   letter is wanted at all.
 - `profile/preferences.md` for tone, emphasis and things never to mention. `profile/profile.yaml`.
-- `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a quick
-  version: the top requirements and the matching claims, from the claims (`claims_list`, if not
-  already called in this session).
+- `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a
+  quick version: the top requirements and the matching claims, from the claims (`claims_list`, if not already
+  called in this session).
 - Template: `templates/cover/` main file (`template.json` names it). If there is none, ask the user to run
   `ezapply init`, which installs the default.
 - `templates/cover/format.md` if it exists: the structure taken from the user's example letter.
 
 ## Write `postings/<id>/cover.tex`
 Copy the template main file (and any `contentFiles` from `template.json`, at the same relative paths), fill
-its placeholders (company, role, date, addressee if the posting names one), and write the body (between the `% BODY START` / `% BODY END` markers when the template has them):
+its placeholders (company, role, date, addressee if the posting names one), and write the body (between the
+`% BODY START` / `% BODY END` markers when the template has them):
 1. **Opening (2–3 sentences):** the specific role and a concrete, true reason this company or team
    interests the user, drawn from the posting. No clichés ("I am writing to express…", "passionate").
 2. **Two evidence paragraphs:** each ties one or two requirements to a specific project or role, citing
@@ -37,28 +38,29 @@ Constraints:
 - Escape LaTeX specials in anything taken from the posting.
 
 ## Build and check
-`tex_compile` (must be one page) → `pdf_render` → read it once as the hiring manager would. Cut filler and
-repeated claims.
+`tex_compile { path }` (must be one page) → `pdf_render { path, page? }` → read it once as the hiring manager
+would. Cut filler and repeated claims.
 
 ## Build from an example
 When the user gives a sample letter whose format they like:
-1. `template_import_example` with its absolute path. Word files: ask for a PDF export first.
-2. Look at it: `pdf_render` and `pdf_text` for a PDF, or read the image or text file directly.
+1. `template_import_example { sourcePath }` with its absolute path. Word files: ask for a PDF export first.
+2. Look at it: `pdf_render` and `pdf_text { path, pages? }` for a PDF, or read the image or text file
+   directly.
 3. Rework `templates/cover/cover.tex` to reproduce its **format**: page size and margins, font family
    and size (the closest available), header layout and contact line, date and addressee block, subject
    line, salutation, paragraph spacing or indents, and the sign-off. Keep the `\newcommand` fields and
    the `% BODY START` / `% BODY END` markers. Fill the identity fields from the profile.
 4. Write `templates/cover/format.md`: a short list of the structure to follow in every letter
    (paragraph count and roles, salutation form, sign-off, typical length). Describe it; don't quote it.
-5. `template_set_main kind: "cover"`, `tex_compile`, then `pdf_render` it next to the example. Adjust
-   until the layouts match, then ask the user to approve.
+5. `template_set_main { kind: "cover", main }`, `tex_compile`, then `pdf_render` it next to the example.
+   Adjust until the layouts match, then ask the user to approve.
 
 Never reuse the example's sentences, claims or voice in the user's letters. Only its format carries over.
 Tone comes from `profile/preferences.md`.
 
 ## Report and iterate
 Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode (EZAPPLY.md):
-in `after-approval`, `review_open` it (with the resume if that's ready and not yet approved) and
-`review_wait`. Handle tweaks ("more concise", "mention X"), from chat or the review page, by editing,
-recompiling, reporting in one line, and reviewing again in `after-approval`. Every build is saved in `.history/`, so earlier
-versions can be restored on request.
+in `after-approval`, `review_open { files }` it (with the resume if that's ready and not yet approved) and
+`review_wait { reviewId }`. Handle tweaks ("more concise", "mention X"), from chat or the review page, by
+editing, recompiling, reporting in one line, and reviewing again in `after-approval`. Every build is saved in
+`.history/`, so earlier versions can be restored on request.

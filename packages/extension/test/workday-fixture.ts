@@ -45,6 +45,16 @@ export interface StepOptions {
    * anywhere outside it (its own button included) only closes it: the press itself is swallowed.
    */
   liveDropdowns?: boolean;
+  /**
+   * A dropdown whose list was closed without a choice ignores the next press on its button, which is what two
+   * live runs showed: the first open after list_options or a miss failed, the next attempt worked.
+   */
+  dismissedIgnoresNextPress?: boolean;
+  /**
+   * Next goes from the first step to an "Application Questions" step whose progress bar changes at once and
+   * whose field renders this many ms later, as live steps did; its Next goes on to Review.
+   */
+  questionsStepRenderMs?: number;
 }
 
 /** The live-dropdown listeners each document was given by its last build. */
@@ -184,15 +194,21 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
       `[data-automation-id="${automationId}"] button[aria-haspopup="listbox"]`,
     ) as HTMLButtonElement;
     let open: HTMLElement | null = null;
-    const close = () => {
+    let dismissed = false;
+    const close = (chose = false) => {
       const ul = open;
       open = null;
+      dismissed = !chose;
       if (current?.ul === ul) current = null;
       if (!live) button.setAttribute("aria-expanded", "false");
       setTimeout(() => ul?.remove(), LISTBOX_LINGER_MS);
     };
     button.addEventListener("click", () => {
       if (open) return close();
+      if (opts.dismissedIgnoresNextPress && dismissed) {
+        dismissed = false;
+        return;
+      }
       const ul = doc.createElement("ul");
       if (listId) ul.id = listId;
       ul.setAttribute("role", "listbox");
@@ -202,7 +218,7 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
         li.innerHTML = `<div>${c}</div>`;
         li.addEventListener("click", () => {
           button.textContent = c;
-          close();
+          close(true);
         });
         ul.append(li);
       }
@@ -439,7 +455,10 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     bar.innerHTML = `<li data-automation-id="progressBarActiveStep"><label>current step 1 of 3</label>Application</li><li>Application</li><li>Application</li>`;
   }
   const firstStepBar = bar.innerHTML;
+  let onQuestions = false;
   back.addEventListener("click", () => {
+    doc.querySelector('[data-automation-id="formField-coopTerms"]')?.remove();
+    onQuestions = false;
     bar.innerHTML = firstStepBar;
     for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = false;
     next.textContent = "Save and Continue";
@@ -458,10 +477,21 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
       doc.querySelector('[data-automation-id="formField-legalName--firstName"]')?.append(err);
       return;
     }
-    bar.innerHTML = `<li>${title("My Information")}</li><li>${title("Application Questions")}</li><li data-automation-id="progressBarActiveStep">${title("Review")}</li>`;
     for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = true;
-    next.textContent = "Submit";
     back.hidden = false;
+    if (opts.questionsStepRenderMs !== undefined && !onQuestions) {
+      onQuestions = true;
+      bar.innerHTML = `<li>${title("My Information")}</li><li data-automation-id="progressBarActiveStep">${title("Application Questions")}</li><li>${title("Review")}</li>`;
+      setTimeout(() => {
+        const q = doc.createElement("div");
+        q.setAttribute("data-automation-id", "formField-coopTerms");
+        q.innerHTML = '<label>Co-op terms completed</label><input type="text">';
+        doc.querySelector('[data-automation-id="pageFooter"]')?.before(q);
+      }, opts.questionsStepRenderMs);
+      return;
+    }
+    bar.innerHTML = `<li>${title("My Information")}</li><li>${title("Application Questions")}</li><li data-automation-id="progressBarActiveStep">${title("Review")}</li>`;
+    next.textContent = "Submit";
   });
 
   return { submitClicks: () => submitClicks };

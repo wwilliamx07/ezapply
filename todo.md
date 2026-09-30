@@ -1,264 +1,135 @@
-# ezapply: review and todo
+# ezapply: todo
 
-Review of the whole repo (all packages, skills, `EZAPPLY.md`, `references/`, tests, CI) as of 2026-09-26.
-Items are ordered by importance within each part: correctness first, then design and consistency, then
-proposals. Each item says where the problem is, what goes wrong, and a suggested fix.
-
-**Checked** means confirmed by reading the code path end to end or by running it. **Likely** means the
-code reads that way but it hasn't been reproduced.
+What's left, as of 2026-09-29. Finished work is described in `references/` (what still needs a live run is
+in `references/status.md`) and in git history. Most important first within each part.
 
 ---
 
-## Parts 1 and 2: done (2026-09-27)
+## Read first: changing the Workday adapter
 
-All of Part 1 except item 13 and all of Part 2 are built, tested and described in `references/`
-(`references/status.md` lists what is still unverified in a real browser or on a signed-in Workday page).
+Commit e390fef (Part 8, 2026-09-28) changed about ten things in the adapter at once, and live Workday
+autofill broke: fills got several times slower, a step's `fill_fields` ran past the companion's 120 s
+timeout twice, and 9 dropdowns ran past 110 s. c6aac3e reverted everything the live runs hadn't shown
+working. **Which change caused it was never found.** Anything that looks like one of the reverted changes
+might be it.
 
-| Item | What was done |
-|---|---|
-| 1. Relay retried and timed out | Re-sends only on `ECONNREFUSED`; `node:http` without an agent, so no response timeout. Relay tests for a broken connection and a slow response |
-| 2. Token refresh raced | Single-flight refresh that re-reads the stored token, and adopts one refreshed meanwhile. Mock GitHub with single-use refresh tokens |
-| 3. `github_login` never opened the browser | `Opener.url` (loopback only, detached); `tell` depends on `openedBrowser`. Tested with a stub opener |
-| 4. Reconnect alarm lost on browser restart | Created at every background start when missing. Lifecycle test with a stubbed API |
-| 5. Form actions credited to the wrong posting | `FormsService`: tab chosen by the active posting's tenant; mismatch → action done, nothing logged or moved, `postingMismatch` with a hint |
-| 6. Multi-file resumes | `contentFiles` (from `\input`/`\include`/`\subfile`) in `template_import`, `template_set_main` and `template.json`; skills copy them |
-| 7. Carried-over rows | `remove_repeatable` (adapter `removeRepeatable`, `removable` sections), logged as `remove-row` |
-| 8. Postings in iframes | Capture from all readable frames and pick the posting's; an unreadable embedded board opens in its own tab |
-| 9. Bundling stripped links | Pages resized in place (content and annotations transformed), not redrawn as XObjects |
-| 10. Log grew forever | Rotation at 5 MB, three files, checked at start and every 10 minutes |
-| 11. 40 s stall after a start | Waits only for an extension seen in the last 6 hours (`daemon-state.json`); otherwise `extensionReconnecting` |
-| 12. Token on git's command line | `GIT_CONFIG_*` environment variables |
-| 14. Unchecked ids and paths | Posting ids must be plain folder names; template `main` must stay in `templates/<kind>/` |
-| 15. Wrong capture metadata | LinkedIn/Indeed company, myworkdaysite tenants (shared `workdayTenant`), Workday locale dropped from canonical URLs |
-| 16. Windows hints everywhere | `installCommand`/`installHint` per OS, with a Ghostscript case |
-| 17. Daemon undid `daemon.json` edits | `updateDaemonConfig`: only pairing fields, on the file as it is then |
-| 18. TeX distro cached as unknown | Only definite answers cached |
-| 19. Concurrent builds and syncs | `KeyedQueue` per `.tex` file and per repo |
-| 20. Stack traces on bad input | Safe token parsing; `EzError` for a bad `--port` or damaged `daemon.json`, printed as one line |
-| 21. GitHub App port | `localBaseUrl` recorded; `portMismatch` in `github_status`, `github_login` refuses with the fix |
-| 22. Workday site detection too broad | Only `*.myworkdayjobs.com` and `*.myworkdaysite.com`, in detection and host permissions |
-| 23. Stale claim evidence | Evidence `hash` stamped by `knowledge_mark_indexed`; `claims_check` flags changed lines |
-| Part 2 | Compact results, lean `get_form` with filters, shorter descriptions; `FormsService`; `TemplateService`; shared helpers in `companion/src/util/`; Workday hooks shared through `protocol/src/workday.ts`; `doctor.ts`; tool-naming rule in `references/mcp-tools.md`; CI `tex` and `firefox` jobs; one Workday fixture driven by both test suites; `ADAPTER_VERSION` stamped from a bundle hash; references and README updated |
+Reverted in c6aac3e, cause not isolated:
+- adapter: dismissing a listbox left open (Escape, then a click on the page body) and pressing again to open;
+  `ok: false` while a field shows an error; errors already shown ending `go_next`'s wait after 2.5 s;
+  `go_back` changes (step index as well as title); `decline` resolving to the form's wording
+- companion, skills: education dates with a day; answer-bank seed version 2 (six student questions);
+  resume/cover letter written before the form (the review page then opened in front of the form tab; a hidden
+  tab's timers run about once a second); skill guidance on year of study, options not seen, template numbers,
+  `python`/`sed` and duplicate text
 
-### Still open
+**The working tree (uncommitted, 2026-09-29) brings some of those back.** Tests, typecheck and lint pass,
+but nothing has run on a live page:
+- `openListboxRetrying` (`extension/src/adapters/workday/fill.ts`): when a dropdown doesn't open, wait for
+  quiet and open it again. Close to the reverted "press again". A dropdown that can't open now costs its
+  open waits twice, which is the kind of time Part 9 measured.
+- `back()` (`workday/api.ts`) sees a move by step index or title. Nearly the same code as the reverted
+  `go_back` change.
+- New: `stepFields` after `next()`/`back()` polls `extract()` every 150 ms for up to `stepFieldsMs` (3 s)
+  until the new step shows a field.
+- Low risk, outside the adapter: `notAttached` from `upload_file`/`go_next`/`get_form`
+  (`companion/src/forms/service.ts`) and the apply skill's text about attaching the cover letter.
 
-**13. The Workday remove controls haven't been seen on a live page.** `DELETE_charm`, `delete-file` and now
-`panel-set-delete-button` come from knowledge of Workday's markup. On the first real application,
-`screenshot` plus a saved snapshot of a step with a removable pill, file and row; turn it into a live
-fixture (see proposal 3).
+Also in `git stash` ("tab.show: bring the application tab to the front"): built and tested, never run live.
+
+**How to land these.** Commit the low-risk part on its own. Then add the adapter changes one per live run,
+each run with per-field timings (Part A, item 1), so a slowdown points at one change. If a run is slower,
+`autofill-timing.yaml` can shorten a wait without a rebuild. Don't bundle adapter changes again.
 
 ---
 
-## Part 4: Context and usage: done (2026-09-27)
+## A. Workday: speed and reliability (live runs needed)
 
-### What the first real session cost
-Measured from the first real workspace session (onboarding, then one Soylent Workday application) with
-`npm run usage:report`. Every turn re-sends the whole conversation, so **cost ≈ turns × context size**.
+1. **Per-field timings in fill results**, with the slow paths taken (dropdown re-open, `onClick` fallback,
+   date re-entry), logged by the companion to `form-log.jsonl`. Nothing measures this now, which is why Part 8's
+   slowdown couldn't be traced. Build it before any other adapter change.
+2. **Land the uncommitted adapter changes and the `tab.show` stash**, one at a time (see above).
+3. **"Could not open the dropdown".** The Oscorp runs (with the committed close-by-own-button fix, 42d9eb4)
+   still failed 12 dropdowns, each one whose list had been read without a choice (`list_options` or a miss);
+   the agent's next call filled every one. The uncommitted retry targets this. Why the first open fails is
+   unknown: a live snapshot would say.
+4. **A time budget per fill, and a way to stop one in the page** (on cancel or timeout), with partial results
+   logged. A timed-out fill keeps running in the page now, isn't logged, and the tab's queue lets the next call
+   in.
+5. **Wait for a dropdown's options to stop changing** before reading them. "How did you hear" returned only
+   "Select One" once (options loading late).
+6. **`screenshot` permission.** Failed with "Either the '<all_urls>' or 'activeTab' permission is required" in
+   Chrome (Monarch, and Oscorp run 1); worked in Oscorp run 2.
+7. **Unexplained, from the Oscorp runs** (each needs a snapshot of the step):
+   - Language rows filled `ok: true`, still filled before Save and Continue, empty when the agent came back.
+   - Back from the review page went to step 1 once and to step 5 the other time.
+   - `upload_file` said "Unknown field" right after the review page had been open; the same id worked after a
+     `get_form`.
+   - Dates: the adapter enters a date again when the field still shows an error (`fill.ts`, "second entry").
+     Why the first entry isn't taken is unknown.
+8. **Remove controls never seen live.** `DELETE_charm` (skill pills), `delete-file` (attached files) and
+   `panel-set-delete-button` (rows) come from knowledge of Workday's markup. Oscorp: `remove_repeatable
+   languages-3` said "No removable row". Save a live step with a removable pill, file and row and turn it into a
+   fixture (C, item 3 builds the tool for that).
 
-| | |
-|---|---|
-| Main session | 159 model turns: **19.4M** tokens re-sent from the cache, 208k newly written, 44k output |
-| Fill phase | 92 turns, **14.4M** tokens, average context **156k** per turn |
-| Carried into the fill | **~115k** of onboarding was still in context at "fill in the active posting". A fresh session starts at ~45k, a subagent at ~33k |
-| Wasted turns | ~18 turns at ~160k lost to the stale-dropdown bug; after the first failures the agent filled **one field per call**, about 40 calls on the Application Questions step |
-| Documents mid-fill | The resume and cover letter were built at the upload step: 12 turns, 1.77M tokens |
-| Repo indexing (one-off) | **10.5M** more in 9 subagents; one (canvasbuddy) reached 204k over 37 turns, 5.2M on its own |
+## B. Agent guidance (skills and `EZAPPLY.md`; no adapter change)
 
-### What was done
-All built, tested and described in `references/`. What still needs a real run is in `references/status.md`.
+Guidance that changes which tools the agent calls, or how often, changes how often the adapter opens
+dropdowns (Part 9 suspected `list_options` then `fill_fields` on every dropdown). Change that kind with the
+same care, one live run at a time.
 
-| Item | What was done |
-|---|---|
-| A0. Measuring | `scripts/usage-report.mjs` (`npm run usage:report`): turns, context, per prompt, per tool, per subagent |
-| A1. Stale dropdown options | `openListbox` waits for other listboxes to go and accepts only one that appeared (or changed) after the press; `closeListbox` waits until its listbox has gone. The fixture lingers a closed listbox and drops `aria-controls`; the test fails on the old logic |
-| A2. Dates needing a second entry | Entered again when the field still shows an error. The cause is still unknown: needs a live snapshot |
-| A3. Batching | `ezapply-apply`: one `fill_fields` per step, one retry call for all failures, no listing first unless the option wording decides the answer |
-| A4. `list_options` for several fields | `fieldIds` → `{ fieldId: options | { error } }` in one call |
-| A5. Lean fill results | A clean success that reads back exactly the value is `{ fieldId, ok: true }` |
-| B. Clearing | `ezapply chat` (the workspace launcher `./ezapply`) runs Claude Code and restarts it with a fresh session when another posting is captured, once the session has used a tool and none is running. The relay tags MCP requests with the session id, the daemon counts its tool calls (`GET /control/chat`), `context.restartOnCapture` turns it off. No hooks, no handoff: work is on disk, and every claim is read in one Grep (`EZAPPLY.md`) |
+Done, not yet seen in a real session: the skills and `EZAPPLY.md` show each call's parameters
+(`references/components/workspace.md`, "Call shapes"; 11 schema errors in the Oscorp runs). It changes no
+calls, only their spelling. Check the next session's transcript for schema errors.
 
-### Later
+1. **No Python on Windows.** Three runs tried `python` for a LaTeX edit and failed. Say in `EZAPPLY.md`: no
+   Python; edit `.tex` with Edit. (It was in e390fef and reverted only for being unverified.)
+2. **Answer bank after a resolved miss.** `how_heard` "School job board" missed on both Oscorp runs (the form
+   wanted "College/University") and nothing was saved, so it will miss again. Offer a per-company answer once
+   the agent has resolved a miss. Part of C, item 7.
+3. **Redo the reverted companion and skill changes** (listed above) only one at a time, if still wanted.
 
-**C1. Forked skills.** A skill with `context: fork` runs in a separate subagent that starts at ~33k,
-without the conversation, and only its final report comes back. `background: false` keeps the full tool
-set, `AskUserQuestion` included.
-- **Candidates:** the first drafts of the resume and cover letter (1.77M tokens in the session, ~0.7M
-  forked), and `ezapply-index-repo`.
-- **Experiment:** `ezapply-apply`, with step questions through `AskUserQuestion`. The cost is that the
-  user can't chat during the fill.
-- Tweaks and the review loop stay inline.
-
-**C2. Indexing cost.** Look at why the canvasbuddy indexing subagent grew to 204k over 37 turns (5.2M
-tokens) when the others stayed under 80k: a large component read whole, or re-reads.
-
----
-
-## Part 9: Slow fills after Part 8; Part 8 partly reverted (2026-09-28): open
-
-The next two live runs (same Monarch posting) were several times slower. One dropdown took 10.5 s (2.9 s
-before). Step 2 (38 to 43 fields: 18 or 19 dropdowns, a 15-entry skills list, 6 dates) outran the
-companion's 120 s `form.fill` timeout both times, and 9 dropdowns on step 3 ran past 110 s. The Part 8
-change was reverted except the fixes those runs showed working (marked **kept** in Part 8's table).
-
-Suspected sources of the time, not yet measured:
-- Fixed waits in the adapter: settling after every field (up to 1.5 s), a dropdown selection checked by
-  exact button text (two 1.5 s waits when long labels don't match), the typeahead's waits for its own
-  results (kept: they worked).
-- The Workday tab hidden behind the review page: browsers run a hidden tab's timers about once a second.
-  In the second run, 4 dates took 28 s right after the review page opened, against 16 fields in 6.7 s before.
-- A throttled laptop (at 8% battery, loading jsdom took 32 s instead of 1.3 s).
-- Large batches: a timed-out fill keeps running in the page, isn't logged, and the tab's queue lets the next
-  call in.
-- Dropdown options that load late: step 1's "How did you hear" returned only "Select One".
-- Opening every dropdown twice (`list_options` then `fill_fields`) on a step whose wording didn't need it.
-- Screenshots fail in Chrome ("Either the '<all_urls>' or 'activeTab' permission is required").
-
-The fifth run (after the revert) reached the review page in 330 s: form tools 210 s, `fill_fields` 135 s.
-Dropdowns took about 2.5–3 s each when they worked. "Could not open the dropdown" failed 9 fields (about 5.5 s
-of waiting each) and cost 4 extra calls, about 80 s of the 135 s. See `references/components/workday-adapter.md`
-("Finding a dropdown's listbox") for the pattern.
-
-- [x] Every adapter wait tunable in the workspace's `autofill-timing.yaml` (read per call, `scale`, fill timeout).
-
-Next:
-- [x] "Could not open the dropdown": when a listbox is still open after Escape (reading options, or a miss),
-  press its own button to close it, as a person would. Live
-  buttons have no `aria-expanded`, so the old close did nothing. Fixture tests fail on the old code; not yet
-  run live. 3 of the 9 failures don't fit this cause.
-- [ ] Per-field timings in fill results (and the slow paths taken), logged by the companion, then one live run.
-- [ ] Bring the application tab to the front before each form call (`tab.show`, `tabHidden`): built and
-  tested, kept in a git stash ("tab.show: bring the application tab to the front") until a live run can
-  confirm it.
-- [ ] A time budget per fill and a way to stop one in the page (on cancel or timeout), with partial results
-  logged.
-- [ ] Wait for a dropdown's options to stop changing before reading them.
-- [ ] Fix the screenshot permission.
-
----
-
-## Part 8: The second live run (Monarch, 2026-09-28): partly reverted
-
-It reached the review page. About 25 of ~70 tool calls went on retries, probes and recovery, and the user
-stepped in four times beyond the designed approvals (typing five dates, choosing to write a resume
-mid-form, asking for the cover letter, an unanswered question). Sources: the session transcript, the agent's
-own report in the workspace's `reports/`, and `form-log.jsonl`. All built, tested (each adapter test fails on
-the old code) and described in `references/`. After the slow runs in Part 9, only the fixes those runs
-showed working were kept.
-
-| Finding | What was done |
-|---|---|
-| Multi-part dates never taken; `ok: true` anyway | **Kept:** digits typed as key events; parts read from the widget's display, `aria-valuenow` or value; `MM/YYYY` accepted; an untaken date fails with the value for the user. Reverted: `ok: false` while a field shows an error |
-| "Could not open the dropdown" after a miss | Reverted (unverified, suspected in the slowdown): dismissing a listbox left open, pressing again. Still open |
-| Skills list stopped at the first miss; options listed twice | **Kept:** entries matched one by one (`unmatched` with suggestions, `inexact`); innermost option hook only; `matchOption` counts labels once and matches bare names and acronyms in parentheses |
-| `search_options` one query behind | **Kept:** waits for options that differ from those before the query, or a settled "No Items." |
-| `go_next` always `advanced: false`, 12 s waits | **Kept:** step index, title or page kind. Reverted: errors already shown ending the wait after 2.5 s |
-| Upload notices as errors | **Kept:** `messages`, not `errors`, in `get_form`, `go_next` and field errors. Reverted: `go_back` changes |
-| Add buttons all "Add" | **Kept:** named by the section heading (`add.work-experience`, `section`) |
-| `resume-cv.` field id | **Kept:** the label when the automation id is bare |
-| EEO decline wording guessed | Reverted (never exercised): `decline` resolving to the form's decline option |
-| Documents written mid-form | Reverted: the review page then opened in front of the form tab, a suspect in the slowdown |
-| Year of study guessed; option text stated unseen | Reverted (unverified) |
-| Student questions not in the bank | Reverted (unverified). Existing banks keep the six questions already added; the `seedVersion` key is ignored |
-| Graduation day not storable; no education start | Reverted (unverified) |
-| Five compiles to fit one page | **Kept:** `tex_compile` `overflow { lines, text }` (a live resume fitted in one more compile) |
-| Template number the claims don't back | Reverted (unverified) |
-| `python`, `sed` escaping, duplicate text | Reverted (unverified) |
-
-The report also suggested mapping "Yes" to any option starting with "Yes": not done, since the
-work-eligibility question had two ("citizen or permanent resident", "temporary work permit") and the choice
-is the user's.
-
----
-
-## Part 5: No daemon: done (2026-09-28)
-
-ezapply runs only through `ezapply chat`, so the background daemon went. The companion runs inside the
-`ezapply chat` process, with `claude` as its child; there is no daemon mode at all. Built, tested and described
-in `references/` (`architecture.md` has the why; `status.md` what's unverified with a real Claude Code).
-
-```
-ezapply chat   one Node process: companion (HTTP + MCP + extension bridge) on 127.0.0.1:<port>
-  └─ claude    child, inherits the terminal
-       └─ ezapply mcp   stdio relay Claude Code starts; forwards to the companion over HTTP
-```
-
-| Item | What was done |
-|---|---|
-| Hosting | `hostChat` starts the companion, then Claude; closes it when Claude exits; no Claude if the companion can't start |
-| Restarts by events | `PostingsService.onActiveChange` and `ChatSessions.onCallEnd` through `ChatHost`; `/control/chat`, `fetchChatState` and the poll gone |
-| Relay | Never starts anything; `NOT_RUNNING` for every request outside a chat; nothing re-sent |
-| Commands | `start`, `stop`, `restart`, `daemon`, `pair` gone (pairing is `extension_pair [replace]`); `status` and `doctor` report whether a chat runs; `/control/*` and `daemonctl.ts` gone |
-| Background-only code | `idle.ts`, `idleTimeoutMinutes`, `CloseCode.Idle` and the extension's idle state, `daemon-state.json` and the 6-hour rule gone; `extensionReconnecting` now means "not connected since the start" |
-| Naming | `~/.ezapply/config.json` (`AppConfig`, `config/app.ts`), moved from `daemon.json` on load; "daemon" gone from messages and tool results (`portMismatch.localUrl`) |
-| Terminal | Logger file-only; jsdom silent `VirtualConsole`; `quietProcess` sends `console.*` and stderr to the log |
-| Crashes | `guardProcess`: uncaught exceptions and rejections logged, the chat carries on |
-| One instance | `/health` `mode: "chat"`; a second chat refused; an earlier build's daemon asked to shut down; another program on the port named |
-| Tests | Chat host with a stub `claude` and the real companion, second instance, legacy daemon, port squatter, quiet child process, relay `NOT_RUNNING`, config move, change events; smoke-tested with the real CLI and a stand-in `claude` |
-
----
-
-## Parts 6 and 7: done (2026-09-28)
-
-| Item | What was done |
-|---|---|
-| 6. Open in the user's browser | The extension reports its browser in `hello` (`detectBrowser`: `getBrowserInfo` in Firefox, `userAgentData` brands in Chromium browsers). The companion keeps it (`bridge.browser()`, in `browser_status` and `workspace_check`) and starts that browser's program itself (`findBrowser`: App Paths or install folders on Windows, `.app` bundles on macOS, PATH elsewhere) with the page, or a PDF/image as a `file://` URL. Other files, and everything when no browser is known or found, use the OS opener. Tools report `openedIn`. Not through the extension, which can't open local files without the user granting file access |
-| 7. Auto memory off | `ezapply init` sets `autoMemoryEnabled: false` in the workspace's `.claude/settings.json` unless the user set it |
-
-Still to see for real (`references/status.md`): each browser opening a new tab from its program, Opera's
-Windows path, Chrome with several profiles, and the context saved without auto memory (`npm run usage:report`).
-
----
-
-## Part 3: Proposals (features and improvements that fit the app)
+## C. Proposals
 
 Ranked by how much they help one person apply faster without lowering quality or honesty.
 
-1. **Tie each application to its posting.** Item 5 did the tenant part: `get_form` reports the posting a tab
-   is credited to, tab choice follows the active posting, and a mismatch warns and logs nothing. Left: match
-   by requisition too (two postings at one company share a tenant), and stop filling on a mismatch instead
-   of warning.
-2. **More application sites: Greenhouse, Lever, Ashby.** (Oracle Recruiting Cloud is built:
-   `references/components/oracle-adapter.md`; "Add a job site" in `references/development.md` lists the steps.)
-   - Their forms are plain HTML and much simpler than Workday's, and they're very common for software
-     jobs.
-   - Same adapter API (`getForm`/`fill`/`upload`/`remove`/`next`), with site detection in
-     `protocol/src/browser.ts`.
-   - These sites submit from a single page, so the submit guard matters more there.
-   - **Oracle follow-ups** (`references/components/oracle-adapter.md`): re-run a live application to confirm
-     the fixes from the first one (2026-09-29) and add languages and certifications; find out why the Cover
-     Letter field was missing live (save the page); move the posting to `filled` when an Oracle form is complete (it has no review page); support
-     the multi-select dropdown (preferred locations) and JET comboboxes, now left to the user; button texts
-     in other languages.
-3. **Checking Workday and Oracle behind sign-in, with consent.**
-   - A `form_snapshot` tool saves the current step's structure: field kinds, automation ids, the markup
-     around widgets, with values stripped.
-   - After the user agrees, it goes into `test/fixtures/live/`.
-   - This turns the unverified steps (fillers, removal, review detection) into regression tests.
-4. **Keyword coverage check without keyword stuffing.** A `coverage_check` tool compares the posting's
-   key terms (from `notes.md`) with `pdf_text` of the resume. It lists terms that are **backed by
-   evidence but missing**, and ignores terms with no evidence. It fits "no fabrication" and makes the
-   ATS check measurable.
-5. **Application tracker.**
-   - An `ezapply-status` skill (or `postings_list` extensions) answers "what's in flight?": status,
-     deadline, date submitted, and postings drafted but not applied to.
-   - `meta.json` already has `deadline` and `status`.
-   - Optional reminders through Claude Code scheduled tasks.
-6. **Start from the closest earlier resume.** When a new posting resembles an earlier one (same role
-   family), offer to start from that tailored `resume.tex` instead of the template. This reuses reviewed
-   wording and saves a loop.
+1. **Tie each application to its posting.** The tenant part is done. Left: match by requisition too (two
+   postings at one company share a tenant), and stop filling on a mismatch instead of warning.
+2. **More application sites: Greenhouse, Lever, Ashby.** Plain HTML forms, common for software jobs, same
+   adapter API, site detection in `protocol/src/browser.ts`; "Add a job site" in `references/development.md`.
+   They submit from a single page, so the submit guard matters more.
+   **Oracle follow-ups** (`references/components/oracle-adapter.md`): re-run a live application to confirm the
+   fixes from the first one and add languages and certifications; find out why the Cover Letter field was
+   missing live (save the page); move the posting to `filled` when an Oracle form is complete (it has no
+   review page); the multi-select dropdown (preferred locations) and JET comboboxes, now left to the user;
+   button texts in other languages.
+3. **`form_snapshot` tool.** Saves the current step's structure (field kinds, automation ids, the markup around
+   widgets, values stripped); with the user's consent it goes into `test/fixtures/live/`. Most of A, items 3,
+   7 and 8 wait on this.
+4. **Keyword coverage check without stuffing.** `coverage_check` compares the posting's key terms (from
+   `notes.md`) with `pdf_text` of the resume and lists terms backed by evidence but missing; terms without
+   evidence are ignored.
+5. **Application tracker.** An `ezapply-status` skill (or `postings_list` extensions) for "what's in flight?":
+   status, deadline, date submitted, postings drafted but not applied to. `meta.json` has `deadline` and
+   `status`. Optional reminders through Claude Code scheduled tasks.
+6. **Start from the closest earlier resume** when a new posting resembles an earlier one (same role family).
 7. **Learn the answer bank from `form-log.jsonl`.** At hand-off, propose new `variants` and answers from
-   questions answered in chat during this application, in one batch the user confirms. The skill already
-   says "offer to save"; making it systematic gets the bank full sooner.
-8. **Duplicate-application warning at capture.** When a capture's company matches earlier postings,
-   `posting_active` says so ("applied to Acme on 2026-08-02 for Backend Engineer"). That helps with
-   "Have you applied here before?" and avoids duplicates.
-9. **Capture from PDFs.** (Iframes were item 8.) A posting that is a PDF (`tab.url` ends in `.pdf`)
-   gets captured through `pdf_text` on the fetched bytes, or by asking the user to save it into
-   `library/`.
-10. **Workspace history.** Offer `git init` in the workspace (with `repo-cache/` ignored), so profile,
-    answers and templates have undo beyond `.history/` snapshots. A later `ezapply backup` could zip the
-    user's data.
-11. **Page size per posting.** `resume.pageSize` is global. Postings outside North America usually expect
-    A4: detect it from the posting's location and ask once.
-12. **Decision provider (deferred, per `status.md`).** Only after about 150 real screening questions are
-    in `form-log.jsonl`, as planned.
+   questions answered in chat, in one batch the user confirms.
+8. **Duplicate-application warning at capture.** `posting_active` says "applied to Acme on 2026-08-02 for
+   Backend Engineer" when the company matches earlier postings.
+9. **Capture from PDFs.** A posting that is a PDF gets captured through `pdf_text`, or by asking the user to
+   save it into `library/`.
+10. **Workspace history.** Offer `git init` in the workspace (`repo-cache/` ignored); later an `ezapply backup`.
+11. **Page size per posting.** `resume.pageSize` is global; postings outside North America usually expect A4.
+    Detect from the location and ask once.
+12. **Decision provider** (deferred): only after about 150 real screening questions are in `form-log.jsonl`.
+
+## D. Context cost
+
+The first real session (2026-09-27) re-sent 19.4M tokens over 159 turns; see `npm run usage:report`.
+
+1. **Forked skills.** A skill with `context: fork` runs in a subagent that starts at ~33k without the
+   conversation (`background: false` keeps `AskUserQuestion`). Candidates: first drafts of the resume and cover
+   letter (1.77M tokens in that session, ~0.7M forked) and `ezapply-index-repo`. Experiment: `ezapply-apply`
+   with step questions through `AskUserQuestion`, at the cost of the user not chatting during the fill.
+2. **Indexing cost.** Find why the canvasbuddy indexing subagent grew to 204k over 37 turns (5.2M tokens)
+   when the others stayed under 80k: a large component read whole, or re-reads.

@@ -1,7 +1,8 @@
 ---
 name: ezapply-onboard
-description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base, resume import and profile, cover letter template, screening-question answers, preferences). Use when the user says onboard, set up, or get started, or when workspace_check reports missing steps.
----
+description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base,
+resume import and profile, cover letter template, screening-question answers, preferences). Use when the user
+says onboard, set up, or get started, or when workspace_check reports missing steps. ---
 
 # Onboarding
 
@@ -42,14 +43,15 @@ For each selected repo not yet indexed, run the **ezapply-index-repo** skill. Wi
 them in parallel with subagents (one repo each) and summarize when all finish.
 
 ## 4. Resume template and profile
-1. Ask for the folder that holds their LaTeX resume (absolute path). Call `template_import` with
-   `kind: "resume"`. If it reports ambiguity, ask which file is the main one. If the result has
-   `texProgram.added`, tell the user its `note`: the template is now marked to build with pdflatex.
-2. `tex_compile` the imported main file. Fix only environment problems (missing packages are installed
-   automatically; font paths may need adjusting). Never change the content. Confirm it is one page and
-   `pdf_render` it. If it only builds under another engine than the one used (e.g. `Undefined control
-   sequence \pdfglyphtounicode` under XeLaTeX), add `% !TEX program = <engine>` as its first line rather
-   than editing the template.
+1. Ask for the folder that holds their LaTeX resume (absolute path). Call
+   `template_import { sourceDir, kind: "resume", main?, replace? }`. If it reports ambiguity, ask which file
+   is the main one. If the result has `texProgram.added`, tell the user its `note`: the template is now marked
+   to build with pdflatex.
+2. `tex_compile { path }` the imported main file. Fix only environment problems (missing packages are
+   installed automatically; font paths may need adjusting). Never change the content. Confirm it is one page
+   and `pdf_render { path, page? }` it. If it only builds under another engine than the one used (e.g.
+   `Undefined control sequence \pdfglyphtounicode` under XeLaTeX), add `% !TEX program = <engine>` as its
+   first line rather than editing the template.
 3. Read the resume source and write `profile/profile.yaml`: identity, contact, links, work history
    (YYYY-MM dates, `end: null` for current), education, skills, languages, certifications. Run
    `profile_check` until it is valid.
@@ -63,8 +65,8 @@ them in parallel with subagents (one repo each) and summarize when all finish.
 `templates/cover/` starts with ezapply's default: a plain one-page letter. Ask which they want:
 1. **The default.** Fill its identity fields (`\myname`, `\mycontact`) from the profile. Offer to restyle
    it to match the resume's fonts and header so the two look like a set.
-2. **Their own LaTeX template.** `template_import kind: "cover"` with the folder path. It replaces the
-   default without asking.
+2. **Their own LaTeX template.** `template_import { sourceDir, kind: "cover" }` with the folder path. It
+   replaces the default without asking.
 3. **An example letter to copy the format from** (PDF, screenshot, or text; Word files exported to PDF).
    Follow **Build from an example** in the **ezapply-cover-letter** skill.
 
@@ -80,7 +82,7 @@ answers into `answer` in `profile/answers.yaml` (leave `suggested` as is). Leave
 unless they insist. Run `answers_check` after each group.
 
 ## 7. Preferences
-First ask how documents should reach applications, and save it with `attach_mode_set`:
+First ask how documents should reach applications, and save it with `attach_mode_set { mode }`:
 - **after-approval** (default): each resume, cover letter or bundle opens in the browser for them to approve
   or ask changes, and is attached only once approved.
 - **immediately**: attached as soon as it's built, without a review step.

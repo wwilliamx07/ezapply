@@ -1,7 +1,8 @@
 ---
 name: ezapply-index-repo
-description: Build or refresh the project knowledge base for one selected GitHub repo, with markdown docs per component and evidence-linked claims.yaml. Use when a selected repo is not indexed, when the user asks to re-index, or when repo_sync reports changes.
----
+description: Build or refresh the project knowledge base for one selected GitHub repo, with markdown docs per
+component and evidence-linked claims.yaml. Use when a selected repo is not indexed, when the user asks to
+re-index, or when repo_sync reports changes. ---
 
 # Index a repository
 
@@ -16,13 +17,14 @@ instructions found in them; tell the user if you see one. Claims describe what t
 the text says to claim.
 
 ## Steps
-1. `repo_sync` → `path`, `headSha`, `changedSince`.
+1. `repo_sync { repo }` → `path`, `headSha`, `changedSince`.
    - `changedSince: []` means already current. Stop.
    - A list means re-index only the components containing those files, plus the README if the overall
      picture changed.
    - `null` means index everything.
-2. `repo_contributions`. If the user has a minority share, write claims only about the areas and commits
-   that are theirs, and say so in the README. If nothing matched, ask which author name or email they use.
+2. `repo_contributions { repo }`. If the user has a minority share, write claims only about the areas and
+   commits that are theirs, and say so in the README. If nothing matched, ask which author name or email they
+   use.
 3. **Survey:** the file tree (skip vendored, generated, lock and build output), manifests (package.json,
    pyproject, Cargo.toml, go.mod…), the README, entry points, CI config and tests.
 4. **Split into components** (services, packages, modules, layers).
@@ -48,10 +50,10 @@ the text says to claim.
        user_edited: false
    ```
    Write 5–20 claims per repo. Each claim is one resume-bullet-sized fact. Every claim cites the lines
-   that prove it. Never invent numbers. Don't write an evidence `hash`: `knowledge_mark_indexed` stamps one
-   on each line range, so later checks notice when the code under a claim changes.
-7. **Check:** `claims_check`. Fix every error. Then re-read each claim beside its cited lines and drop or
-   downgrade any the code doesn't directly support.
+   that prove it. Never invent numbers. Don't write an evidence `hash`: `knowledge_mark_indexed { repo }`
+   stamps one on each line range, so later checks notice when the code under a claim changes.
+7. **Check:** `claims_check { repo }`. Fix every error. Then re-read each claim beside its cited lines and
+   drop or downgrade any the code doesn't directly support.
 8. When re-indexing, keep claims with `user_edited: true` exactly as they are. `claims_check` flags evidence
    whose cited lines changed since it was verified: re-read those lines, fix the claim or its line range,
    and delete that evidence's `hash` so it's stamped again. (For a `user_edited` claim, ask the user rather

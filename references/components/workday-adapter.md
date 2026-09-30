@@ -121,6 +121,8 @@ Now:
 - After the press, accept `aria-controls`' target when it exists, or else a listbox that wasn't visible
   before the press, or one that was but whose options changed (a reused portal).
 - When no listbox appears after the press, React's `onClick` is tried.
+- When that fails too, the adapter waits for the page to go quiet (`afterFieldQuietMs`/`afterFieldMaxMs`)
+  and opens the dropdown once more from the start, for `list_options` and `fill_fields` alike.
 - **Closing.** After a choice the list closes by itself; the adapter waits (up to 1 s,
   `dropdownClosedMs`) until it's hidden or removed, pressing Escape and then the button only while the button
   says `aria-expanded="true"`. When nothing was chosen (`list_options`, or a value that matched nothing) the
@@ -138,11 +140,20 @@ dropdown's press only closed it. The press covers the first two patterns; the ot
 explained, and the fix is unverified on a live tenant. (An earlier, broader fix that also clicked the page
 body and pressed again when opening was reverted: unverified, and fills had become much slower.)
 
+**Why the second attempt.** The two Oscorp runs (2026-09-29, with the press above) failed 12 dropdowns with
+"Could not open the dropdown". Every one was a dropdown whose own list had been read without a choice
+earlier (by `list_options`, or by a value that matched nothing), and every such dropdown failed its next
+open; no other dropdown failed. The agent's next call filled all 12 at the first try, at a turn each. Why the
+first open fails isn't known (the page wasn't captured), so the adapter does what worked: it tries again
+itself. A dropdown that can't be opened at all now costs its open waits twice.
+
 The fixture models the live behaviour: the portal lingers 150 ms, and Degree Level's button has no
 `aria-controls`. With `liveDropdowns`, buttons have no `aria-expanded`, Escape closes nothing, and a press
 outside an open list (its own button included) only closes it. Its tests (the next dropdown after a miss,
 after `list_options`, and no reopening after a choice) fail on the old logic, the first two with "Could not
-open the dropdown".
+open the dropdown". `dismissedIgnoresNextPress` adds the Oscorp symptom: a dropdown whose list was closed
+without a choice ignores the next press on its button. Filling it after `list_options` or after a miss fails
+without the second attempt.
 
 ### Typeahead searches and lists
 - **Waiting for results.** Typing a query waits until the options on screen differ from those before it
@@ -187,14 +198,28 @@ on every move of the second live run, and waited the full 12 s on two of them; t
 move. Notices go to `messages`, not `errors`. Returns
 `{ advanced, pageKind, step?, errors, messages?, refusedReason? }`.
 
+**Waiting for the new step's fields** (`stepFields`, after `next()` and `back()` see a move): up to
+`stepFieldsMs` (3 s) for the step to show at least one field, checked every 150 ms, then the usual quiet
+wait. Workday moves the progress bar before it renders the step: in the Oscorp runs a `get_form` straight after
+`go_next` read an empty step (no sections) four times, and one or two seconds later the questions were there.
+A re-check with `onlyEmpty` in that moment looks like a step with nothing left to fill, which the agent took
+as "my answers were kept" three times. The wait ends as soon as a field shows, so it costs its full length
+only on a step without fields. The review page has none, so it isn't waited for. The fixture's
+`questionsStepRenderMs` puts a step between the first and review whose field renders later; `get_form` after
+`next()` fails to see it without the wait.
+
 **Going back** (`back()`): presses the footer's Back button (`backButton`: `bottom-navigation-previous-button`,
 `pageFooterBackButton`, `wd-CommandButton_back`, else a visible button reading Back or Previous) and waits for
 the step title to change. It's allowed from any step with a Back button, including review (to correct an
 answer before the user submits), refused on the first step and on the confirmation page, and never presses
-a submit control. Returns `{ moved, pageKind, step?, errors, refusedReason? }`. What Workday keeps of
-unsaved entries on the step being left isn't verified; the skill re-checks steps when coming forward. The
-Back hooks are best knowledge of Workday's markup, unverified on a live tenant (Back appears from step 2,
-behind sign-in); the fixture's review page has one that returns to the step with its entries.
+a submit control. A move is seen as in `next()` (index, title or page kind), then it waits for the step's
+fields. It used to wait for the title alone: on the Oscorp tenant, whose steps are all "Application", each of
+five Backs waited out the 12 s and said `moved: false` although the step had changed. Returns
+`{ moved, pageKind, step?, errors, refusedReason? }`. What Workday keeps of
+unsaved entries on the step being left isn't verified; the skill re-checks steps when coming forward. Back
+worked on a live tenant in the Oscorp runs (five presses, from the review page and between steps; which hook
+matched wasn't recorded). From the review page it went to step 5 once and to step 1 once, unexplained. The
+fixture's review page has a Back that returns to the step with its entries.
 
 **Removing a row** (`removeRepeatable(sectionId)`): "Use My Last Application" pre-fills work experience,
 education and website rows, and when Workday holds more rows than the profile, adding alone can't fix it.
@@ -210,7 +235,7 @@ with their row (`file-upload-item` / `file-upload-successful`), or the rows them
 name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
 
 ## Waits (`autofill-timing.yaml`)
-Every wait the adapter makes (about 45: after each field, opening and closing a dropdown, a typeahead's
+Every wait the adapter makes (about 46: after each field, opening and closing a dropdown, a typeahead's
 search, typing a date, uploads, rows, steps) is a named value in `T` (`timing.ts`), with its default and a
 line on what it's for in `DEFAULT_TIMING` / `TIMING_DOCS` (`protocol/src/timing.ts`). The companion reads
 the user's `autofill-timing.yaml` for every form call ([format](../data-formats.md#autofill-timingyaml)),

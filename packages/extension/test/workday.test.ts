@@ -410,6 +410,28 @@ describe("navigation and the submit guard", () => {
     expect(fixture.submitClicks()).toBe(0);
   });
 
+  it("waits for the next step's fields, which render after its progress bar moves", async () => {
+    fixture = buildWorkdayStep(document, { questionsStepRenderMs: 800 });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const fn = api.getForm().sections[0]?.fields[0]?.id as string;
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    const r = await api.next();
+    expect(r).toMatchObject({ advanced: true, pageKind: "step", step: { index: 2 } });
+    expect(api.getForm().sections.flatMap((s) => s.fields.map((f) => f.label))).toEqual(["Co-op terms completed"]);
+  });
+
+  it("sees a move back when every step has the same title, without waiting out the timeout", async () => {
+    fixture = buildWorkdayStep(document, { sameStepTitles: true });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const fn = api.getForm().sections[0]?.fields[0]?.id as string;
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    await api.next();
+    const started = Date.now();
+    const r = await api.back();
+    expect(r).toMatchObject({ moved: true, pageKind: "step", step: { index: 1, title: "Application" } });
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
   it("blocks synthetic clicks on Submit even from other scripts", async () => {
     const fn = api.getForm().sections[0]?.fields[0]?.id as string;
     await api.fill([{ fieldId: fn, value: "Jane" }]);
@@ -488,6 +510,29 @@ describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't c
     expect(openLists()).toEqual([]);
     const [r] = await api.fill([{ fieldId: id("formField-countryDropdown"), value: "Canada" }]);
     expect(r).toMatchObject({ ok: true, readBack: "Canada" });
+  });
+
+  describe("when a dismissed dropdown ignores the next press on it", () => {
+    beforeEach(async () => {
+      fixture = buildWorkdayStep(document, { liveDropdowns: true, dismissedIgnoresNextPress: true });
+      api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+      const { DEFAULT_TIMING } = await import("@ezapply/protocol");
+      api.setTiming({ ...DEFAULT_TIMING, dropdownOpenMs: 300, dropdownOpenRetryMs: 300 });
+    });
+    afterEach(() => api.setTiming(null));
+
+    it("fills a dropdown whose options list_options just read", async () => {
+      expect(await api.listOptions(id("formField-degreeLevel"))).toHaveLength(3);
+      const [r] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Masters" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "Masters" });
+    });
+
+    it("fills a dropdown again after a value that matched nothing", async () => {
+      const [miss] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Diploma" }]);
+      expect(miss?.availableOptions).toEqual(["Undergraduate", "Masters", "Ph.D"]);
+      const [r] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Masters" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "Masters" });
+    });
   });
 
   it("doesn't reopen a list that is closing after a choice", async () => {

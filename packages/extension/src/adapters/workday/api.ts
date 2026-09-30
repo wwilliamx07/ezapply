@@ -66,6 +66,23 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
 
   const blocked = installSubmitGuard(doc);
 
+  /** Live step titles are often all "Application", so a move is seen in the index as well as the title. */
+  const stepKey = () => {
+    const s = stepInfo(doc);
+    return `${s?.index ?? ""}|${s?.title ?? ""}`;
+  };
+
+  /**
+   * After a move, wait for the new step to show its fields. Workday moves the progress bar before the step
+   * renders: in two live runs a get_form straight after go_next read an empty step four times (its questions
+   * were there a second or two later), and a re-check with `onlyEmpty` then looked like a step with nothing
+   * left to fill. The review page has no fields, so it isn't waited for.
+   */
+  const stepFields = async () => {
+    if (detectPage(doc, 0) === "review") return;
+    await waitFor(() => extract(doc, getUrl()).fields.size > 0, T.stepFieldsMs, 150);
+  };
+
   return {
     version: ADAPTER_VERSION,
 
@@ -179,7 +196,7 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
      * Press Next and report whether the step changed: its index, title or page kind. Live step titles are often
      * all "Application", so comparing titles alone said `advanced: false` on every move and waited out the
      * full timeout. The wait ends on a new step or on validation errors; notices such as "successfully
-     * uploaded" don't count as errors.
+     * uploaded" don't count as errors. On a new step it then waits for the step's fields (`stepFields`).
      */
     async next(): Promise<NextResult> {
       const before = refresh();
@@ -204,13 +221,10 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       if (isSubmitControl(button)) {
         return summary(false, { refusedReason: `The forward button is "${text(button)}". The user must press it.` });
       }
-      const stepKey = () => {
-        const s = stepInfo(doc);
-        return `${s?.index ?? ""}|${s?.title ?? ""}`;
-      };
       const keyBefore = stepKey();
       press(button);
       await waitFor(() => stepKey() !== keyBefore || pageErrors(doc).length > 0, T.stepMs, 150);
+      if (stepKey() !== keyBefore) await stepFields();
       await settle(doc, T.stepQuietMs, T.stepMaxMs);
       const after = summary(false);
       return { ...after, advanced: stepKey() !== keyBefore || after.pageKind !== kind };
@@ -218,7 +232,9 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
 
     /**
      * Press Back to the previous step, e.g. to correct an answer from the review page. Allowed anywhere there
-     * is a Back button except after submitting; it never touches a submit control.
+     * is a Back button except after submitting; it never touches a submit control. A move is seen as in
+     * `next`: waiting for the title alone waited out the full 12 s on every Back of two live runs whose steps
+     * were all titled "Application", and reported `moved: false` although the step had changed.
      */
     async back(): Promise<BackResult> {
       const before = refresh();
@@ -238,11 +254,13 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
       const button = backButton(doc);
       if (!button) return summary(false, { refusedReason: "No Back button on this page (it's the first step)." });
       if (isSubmitControl(button)) return summary(false, { refusedReason: "Refusing to press a submit control." });
-      const stepBefore = before.schema.step?.title ?? "";
+      const keyBefore = stepKey();
       press(button);
-      const changed = await waitFor(() => (stepInfo(doc)?.title ?? "") !== stepBefore, T.stepMs, 150);
+      await waitFor(() => stepKey() !== keyBefore, T.stepMs, 150);
+      if (stepKey() !== keyBefore) await stepFields();
       await settle(doc, T.stepQuietMs, T.stepMaxMs);
-      return summary(Boolean(changed));
+      const after = summary(false);
+      return { ...after, moved: stepKey() !== keyBefore || after.pageKind !== before.schema.pageKind };
     },
 
     async pageAction(action: PageAction): Promise<{ ok: boolean; pageKind: PageKind; error?: string }> {

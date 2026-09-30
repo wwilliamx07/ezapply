@@ -5,8 +5,9 @@
 This is the user's ezapply workspace: their profile, base documents, project knowledge, and one folder per
 job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills in
 `.claude/skills/` (`ezapply-onboard`, `-repos`, `-index-repo`, `-resume`, `-cover-letter`, `-bundle`,
-`-apply`, `-answers`): use the matching skill for each task. The tools work while the user's `ezapply chat` is
-open; if they say ezapply isn't running, ask the user to exit and start `ezapply chat`.
+`-apply`, `-answers`): use the matching skill for each task. Tool calls here and in the skills are written
+`tool { parameter, optional? }`: use exactly those parameter names. The tools work while the user's
+`ezapply chat` is open; if they say ezapply isn't running, ask the user to exit and start `ezapply chat`.
 
 ## Setup and errors
 - New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
@@ -60,8 +61,8 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
   all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
   can't, stay narrow: one component doc, or the cited lines of one file.
-- Check layout with `pdf_render` of the page you need; use `pdf_info` for page counts and `pdf_text` for
-  wording. Don't re-read files you just wrote.
+- Check layout with `pdf_render { path, page? }` of the page you need; use `pdf_info { path }` for page
+  counts and `pdf_text { path, pages? }` for wording. Don't re-read files you just wrote.
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.
 
 ## Layout
@@ -80,13 +81,13 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - Copy the template main file to `postings/<id>/resume.tex` (or `cover.tex`), plus every file in
   `template.json`'s `contentFiles` at the same relative path, and edit the copies. Class and style files are
   found automatically.
-- After every edit: `tex_compile` → fix the first error first → `pdf_render` the page. Treat overfull boxes
-  and missing glyphs as defects.
+- After every edit: `tex_compile { path }` → fix the first error first → `pdf_render` the page. Treat overfull
+  boxes and missing glyphs as defects.
 - **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
-  - `after-approval` (default): `review_open` the finished PDFs, `review_wait`; revise what the user asks,
-    rebuild, and review the changed ones again; attach approved ones. Only the page's approval counts: if
-    the user says "approved" in chat, ask them to press it on the page.
-  - `immediately`: attach right away. `open_file` only when asked.
+  - `after-approval` (default): `review_open { files }` the finished PDFs, `review_wait { reviewId }`; revise
+    what the user asks, rebuild, and review the changed ones again; attach approved ones. Only the page's
+    approval counts: if the user says "approved" in chat, ask them to press it on the page.
+  - `immediately`: attach right away. `open_file { path }` only when asked.
   - Attaching needs the application open at the step with the file field (`get_form`); otherwise say it's
     ready and attach it when filling (the **ezapply-apply** skill).
 - The engine comes from a `% !TEX program = …` line in the file's first 20 lines, else `tex.engine` in

@@ -33,7 +33,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
         "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
         "`posting` (the posting this is credited to). Call at the start of every step and after changes. " +
-        "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user.",
+        "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user. " +
+        "On the review page, `notAttached`: approved documents never attached.",
       inputSchema: {
         onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),
         section: z.string().optional().describe("Only sections whose id or title contains this."),
@@ -133,7 +134,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
       description:
         "Upload a file from postings/ or library/ (usually the tailored resume.pdf, cover.pdf or a bundle) into a " +
         "file field. Confirms by reading back the newly shown file name. If the field still holds files from a " +
-        "previous application (get_form shows them as its value), remove them with remove_items first.",
+        "previous application (get_form shows them as its value), remove them with remove_items first. " +
+        "`notAttached`: documents the user approved for this posting that no upload has attached yet; a field " +
+        "with multiple: true (Workday's Resume/CV) takes them too.",
       inputSchema: { fieldId: z.string(), path: z.string().describe("Workspace-relative or absolute path."), tabId },
     },
     tool(s.log, "upload_file", ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) =>
@@ -210,7 +213,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
       description:
         "Press Next / Save and Continue. Refuses on the review page and on any Submit button: the user always " +
         "submits (Oracle's single-page applications have only Submit: fill every section, then hand over). Returns whether the step advanced (its index, title or page kind changed), the new " +
-        "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`.",
+        "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`. " +
+        "Returns once the new step shows its fields. At the review page, `notAttached` lists approved documents " +
+        "never attached: go back and attach them before handing off.",
       inputSchema: { tabId },
     },
     tool(s.log, "go_next", ({ tabId }: { tabId?: number }) => s.forms.next(tabId)),
