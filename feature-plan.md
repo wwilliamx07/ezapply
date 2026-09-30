@@ -1,0 +1,6 @@
+- Application tracker
+- Cover letter/resume diffs
+- Login manager
+- Stronger application form identification
+- More modular adapters
+- Companion runs the checklist, not the model

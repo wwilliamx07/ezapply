@@ -37,7 +37,7 @@ As of 2026-09-28.
   reverted: they were unverified, and fills had become several times slower (see Known issues). Not
   exercised yet: the remove controls for skill pills and attached
   files (`DELETE_charm`, `delete-file`), and repeatable rows (`panel-set-delete-button`), which come from
-  knowledge of Workday's markup, not a live page. On the first real application: `screenshot` plus a saved
+  knowledge of Workday's markup, not a live page. On the first real application: a saved
   snapshot of a step with a removable pill, file and row, turned into a live fixture. The Back button worked
   live in the two Oscorp runs (2026-09-29).
 - **Parts of filling an Oracle application.** The first live application (2026-09-29, Umbrella, single page,

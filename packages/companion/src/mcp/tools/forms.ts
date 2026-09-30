@@ -253,7 +253,10 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Screenshot tab",
       description:
-        "Capture the visible part of the application tab, to understand a widget or error the schema does not explain.",
+        "Last resort only. Capture the visible part of the application tab as an image, when get_form (with its " +
+        "errors and messages) and browser_status leave a page or widget unexplained and you are about to hand the " +
+        "problem to the user. Never to read or check fields: get_form does that. The image is re-sent with every " +
+        "later turn, and only the tab on screen can be captured.",
       inputSchema: { tabId },
       annotations: { readOnlyHint: true },
     },

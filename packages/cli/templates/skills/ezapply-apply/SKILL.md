@@ -36,7 +36,9 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
      (Use My Profile) or import from Indeed themselves.
    - `review`: go to **Hand-off**.
    - `confirmation`: the application was submitted. Say so. The status is recorded automatically.
-   - `unknown`: `screenshot` and describe what you see to the user.
+   - `unknown`: `get_form` once more (the page may still be loading) and check the tab's URL and title in
+     `browser_status`. If that doesn't explain it, ask the user what the page shows. `screenshot` is the
+     last resort, only when neither of you can tell (see **Screenshots**).
 
 ## Each step
 1. `get_form`, then decide a value for every field that is empty or wrong:
@@ -107,8 +109,8 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
    unclear.
 3. `go_next`. When it advanced, its result already gives the new step: go straight to `get_form`. If it
    didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
-   again. If a widget behaves oddly, `screenshot` it and explain it to the user rather than guessing
-   repeatedly.
+   again. If a widget still won't take a value after one retry, stop guessing: tell the user which field
+   and what the tools returned, and ask them to set it in the browser.
 4. To change something on an earlier step (the user spotted it on the review page, or an answer turns out
    wrong), `go_back` until that step (`get_form` shows `backLabel` while there is one), fix it, and `go_next`
    forward again, re-checking each step with `get_form`.
@@ -142,6 +144,13 @@ it, and come forward again before handing off. Stop. In one message, give:
 
 Then ask the user to review everything in their browser and press **Submit** themselves. Afterwards, if they
 tell you they submitted, run `get_form` once so the confirmation page is recorded.
+
+## Screenshots
+`screenshot` is an escape hatch, not a tool for filling. Use it only when `get_form`, its `errors` and
+`messages`, and `browser_status` can't explain what the page is doing, and the user can't either. Never use it
+to read fields, check values or confirm a step: `get_form` does that. The image is re-sent with every later
+turn, and it works only while the tab is on screen. Take at most one per problem, then tell the user what
+you saw.
 
 ## Resuming
 `postings/<id>/form-log.jsonl` records every fill, removal, upload and step. After an interruption, `get_form`

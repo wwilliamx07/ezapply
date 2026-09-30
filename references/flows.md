@@ -123,7 +123,9 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
 2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
-   `confirmation` → done. An Oracle application is often one page with only Submit: every section is filled,
+   `confirmation` → done; `unknown` → `get_form` again and `browser_status`, then the user is asked what the
+   page shows, and only if neither explains it a `screenshot` (the last-resort escape hatch; a widget that
+   still fails after one retry goes to the user without one). An Oracle application is often one page with only Submit: every section is filled,
    then hand-off. Oracle's work, education, language and license items are added through an inline form and
    its `save.<block>` button.
 3. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
