@@ -58,6 +58,21 @@ interface Target {
   fillTimeoutMs: number;
   /** Problems in autofill-timing.yaml (those settings fell back to their defaults). */
   timingIssues: string[];
+  /** What `tab.show` did just before this call; absent when the extension predates it or it failed. */
+  shown?: Shown;
+}
+
+/** The tab brought to the front (`activated`), or left hidden: see `FormsService.show`. */
+interface Shown {
+  activated: boolean;
+  hidden: boolean;
+  /** A review page was waiting for the user, so the tab wasn't switched to. */
+  reviewPending: boolean;
+}
+
+/** Said in a result when the application page is still hidden after `tab.show`. */
+export interface TabHidden {
+  hint: string;
 }
 
 /**
@@ -73,6 +88,7 @@ interface Target {
 export class FormsService {
   /** One queue per tab id: the page can only do one thing at a time. */
   private readonly pages = new KeyedQueue();
+  private warnedNoTabShow = false;
 
   constructor(
     private readonly ws: Workspace,
@@ -96,6 +112,7 @@ export class FormsService {
         ...(missing ? { notAttached: missing } : {}),
         ...(t.posting ? { posting: t.posting.id } : {}),
         ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+        ...tabHiddenOf(t),
         ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
       };
     });
@@ -154,6 +171,7 @@ export class FormsService {
       return {
         results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)),
         ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+        ...tabHiddenOf(t),
       };
     });
   }
@@ -192,10 +210,10 @@ export class FormsService {
         ok: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
-      if (!result.ok) return withMismatch(result, t);
+      if (!result.ok) return annotate(result, t);
       await this.setStatus(t, "attached");
       const missing = await this.notAttached(t, "upload");
-      return withMismatch(missing ? { ...result, notAttached: missing } : result, t);
+      return annotate(missing ? { ...result, notAttached: missing } : result, t);
     });
   }
 
@@ -213,7 +231,7 @@ export class FormsService {
         ok: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
-      return withMismatch(result, t);
+      return annotate(result, t);
     });
   }
 
@@ -230,7 +248,7 @@ export class FormsService {
         ok: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
-      return withMismatch(result, t);
+      return annotate(result, t);
     });
   }
 
@@ -241,7 +259,7 @@ export class FormsService {
         { addButtonId, tabId: t.tab.tabId, timing: t.timing },
         20_000,
       );
-      return withMismatch(result, t);
+      return annotate(result, t);
     });
   }
 
@@ -255,10 +273,10 @@ export class FormsService {
         step: r.step?.title,
         ...(r.step?.index ? { stepIndex: r.step.index } : {}),
       });
-      if (r.pageKind !== "review") return withMismatch(r, t);
+      if (r.pageKind !== "review") return annotate(r, t);
       await this.setStatus(t, "filled");
       const missing = await this.notAttached(t, "review");
-      return withMismatch(missing ? { ...r, notAttached: missing } : r, t);
+      return annotate(missing ? { ...r, notAttached: missing } : r, t);
     });
   }
 
@@ -268,14 +286,14 @@ export class FormsService {
         .call("form.back", { tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.back", "go back"));
       await this.logEvent(t, { event: "back", moved: r.moved, pageKind: r.pageKind, step: r.step?.title });
-      return withMismatch(r, t);
+      return annotate(r, t);
     });
   }
 
   async pageAction(action: PageAction, tabId?: number) {
     return this.onTab(tabId, async (t) => {
       const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
-      return withMismatch(r, t);
+      return annotate(r, t);
     });
   }
 
@@ -298,8 +316,39 @@ export class FormsService {
     return this.pages.run(String(t.tab.tabId), async () => {
       const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws);
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
-      return fn({ ...t, timing, fillTimeoutMs, timingIssues: issues });
+      // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
+      const shown = await this.show(t.tab.tabId);
+      return fn({ ...t, timing, fillTimeoutMs, timingIssues: issues, ...(shown ? { shown } : {}) });
     });
+  }
+
+  /**
+   * Bring the application tab to the front of its window. Browsers throttle a hidden tab's timers to about once
+   * a second, and every adapter wait (and much of Workday's own rendering) is a timer: in the Monarch run, 16
+   * fields took 6.7 s, then the review page opened in front of the form and 4 dates took 28 s. A slow fill runs
+   * past its timeout and keeps going in the page unlogged, which looks like a broken adapter.
+   *
+   * Not while a review page waits for the user: switching would take it away from them mid-approval. Never
+   * fails the call: an extension built before `tab.show` answers "Unknown method" (logged once), and any other
+   * problem leaves the tab as it was.
+   */
+  private async show(tabId: number): Promise<Shown | undefined> {
+    const reviewPending = this.reviews.pending();
+    try {
+      const r = await this.bridge.call("tab.show", { tabId, activate: !reviewPending }, 5_000);
+      if (r.activated) this.log.info({ tabId }, "application tab brought to the front");
+      if (r.hidden) this.log.warn({ tabId, reviewPending }, "application tab is hidden; the browser throttles it");
+      return { activated: r.activated, hidden: r.hidden, reviewPending };
+    } catch (err) {
+      const e = EzError.from(err);
+      if (!e.message.includes("Unknown method tab.show")) {
+        this.log.warn({ err: e.message }, "tab.show failed; the call goes ahead");
+      } else if (!this.warnedNoTabShow) {
+        this.warnedNoTabShow = true;
+        this.log.warn("the extension predates tab.show: application tabs aren't brought to the front");
+      }
+      return undefined;
+    }
   }
 
   /**
@@ -356,10 +405,17 @@ export class FormsService {
     return { tab, posting: active };
   }
 
-  /** Append to the posting's form-log.jsonl: the audit trail for "what did we submit". */
+  /**
+   * Append to the posting's form-log.jsonl: the audit trail for "what did we submit". `tabActivated` and
+   * `tabHidden` (only when true) let a slow step be matched to a hidden tab afterwards.
+   */
   private async logEvent(t: Target, event: Record<string, unknown>): Promise<void> {
     if (!t.posting) return;
-    const line = JSON.stringify({ ts: new Date().toISOString(), ...event });
+    const tab = {
+      ...(t.shown?.activated ? { tabActivated: true } : {}),
+      ...(t.shown?.hidden ? { tabHidden: true } : {}),
+    };
+    const line = JSON.stringify({ ts: new Date().toISOString(), ...event, ...tab });
     await appendFile(join(this.postings.folder(t.posting.id), "form-log.jsonl"), `${line}\n`, "utf8");
   }
 
@@ -442,8 +498,24 @@ export function leanFillResult(r: FillResult, value: FillValue | undefined): Fil
   return same ? { fieldId: r.fieldId, ok: true } : r;
 }
 
-function withMismatch<T extends object>(result: T, t: Target): T & { postingMismatch?: PostingMismatch } {
-  return t.mismatch ? { ...result, postingMismatch: t.mismatch } : result;
+/** A result with what the agent must know about the tab: another posting's tenant, or a page left hidden. */
+function annotate<T extends object>(
+  result: T,
+  t: Target,
+): T & { postingMismatch?: PostingMismatch; tabHidden?: TabHidden } {
+  return { ...result, ...(t.mismatch ? { postingMismatch: t.mismatch } : {}), ...tabHiddenOf(t) };
+}
+
+function tabHiddenOf(t: Target): { tabHidden?: TabHidden } {
+  if (!t.shown?.hidden) return {};
+  const hint =
+    "The application tab is in the background, where the browser slows it down (its timers run about once a " +
+    "second), so filling is slow and can time out. Tell the user once and keep filling: ask them to keep the tab " +
+    "visible (window not minimized, the review page closed or moved to another window)." +
+    (t.shown.reviewPending
+      ? " A review page is waiting for them, so ezapply doesn't switch tabs until they answer."
+      : "");
+  return { tabHidden: { hint } };
 }
 
 /** An extension built before a method existed answers "Unknown method": say what to do about it. */

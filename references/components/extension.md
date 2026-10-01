@@ -121,6 +121,17 @@ and a capture of the top frame alone holds only the company's page around it.
    come back as `{ __ok }` / `{ __error }`.
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
    switch to it).
+6. `tab.show` (sent by the companion before every form call): with `activate` and the tab not active,
+   `tabs.update(tabId, { active: true })`. Then it reads `document.visibilityState` with one `executeScript`
+   in the isolated world (the site's host permission is already required). The page learns of a switch
+   asynchronously, so after one it's read up to 10 times, 50 ms apart, from the background, whose timers
+   aren't throttled. Without access to the page it falls back to the tab's active state.
+   - **No window focus.** `windows.update({ focused: true })` would pull the browser in front of the terminal
+     the user is typing in, and take keyboard focus, on every form call. Switching the tab inside its window
+     is enough for the usual cases (the review page or another page opened over the form).
+   - **Hidden stays hidden.** A minimized window, or on Windows one fully covered by others (Chrome tracks
+     occlusion), keeps its pages hidden even when the tab is active. That's reported as `hidden: true`, not
+     forced.
 
 `browser.status` lists every tab with a URL: id, window, URL, title, active, `focused` (active in the window
 the user last focused), `lastAccessed` when the browser reports it, and site. The companion picks form tabs

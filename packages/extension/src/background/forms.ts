@@ -156,4 +156,33 @@ export const formHandlers: FormHandlers = {
     const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     return { tabId: tab.id, pngBase64: dataUrl.replace(/^data:image\/png;base64,/, "") };
   },
+  "tab.show": async ({ tabId, activate }) => {
+    const tab = await resolveTab(tabId);
+    if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
+    // Switching the tab within its window is enough. windows.update({ focused: true }) would also pull the
+    // browser in front of the terminal the user is typing in, and take keyboard focus, on every form call.
+    const activated = activate && !tab.active;
+    if (activated) await ext.tabs.update(tab.id, { active: true });
+    return { tabId: tab.id, activated, hidden: await pageHidden(tab.id, activated, tab.active ?? false) };
+  },
 };
+
+/**
+ * Whether the page reports itself hidden. A minimized window, or on Windows one fully covered by others (Chrome
+ * tracks occlusion), keeps its tabs hidden even when active: that's reported, not forced. The page learns of a
+ * switch asynchronously, so after one it's asked a few times. Polled from here, not from the page: the
+ * background's timers aren't throttled. Without access to the page (it's never an application tab then), the
+ * tab's active state stands in.
+ */
+async function pageHidden(tabId: number, activated: boolean, wasActive: boolean): Promise<boolean> {
+  const tries = activated ? 10 : 1;
+  for (let i = 0; i < tries; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 50));
+    const [res] = await ext.scripting
+      .executeScript({ target: { tabId }, func: () => document.visibilityState === "hidden" })
+      .catch(() => [undefined]);
+    if (typeof res?.result !== "boolean") return !(activated || wasActive);
+    if (!res.result) return false;
+  }
+  return true;
+}

@@ -119,7 +119,10 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
 ([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md)):
 1. `posting_active`; read the profile and answer bank. The form tools act on the application tab (Workday or
    Oracle) of this posting's tenant and credit everything to it; a tab of another company's tenant comes back with `postingMismatch`
-   and nothing is logged, and Claude stops to sort it out with the user.
+   and nothing is logged, and Claude stops to sort it out with the user. Before each form call the companion
+   brings that tab to the front of its window (not while a review page waits for the user); if it's still
+   hidden (a minimized window), results carry `tabHidden` and Claude tells the user once to keep it visible,
+   since the browser slows hidden tabs.
 2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
@@ -130,7 +133,8 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    its `save.<block>` button.
 3. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
-   in one message per step; the skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a
+   in one message per step, and a resolved miss or a new answer offered for saving to the answer bank; the
+   skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
    field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
    doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in

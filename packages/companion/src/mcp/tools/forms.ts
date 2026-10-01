@@ -19,7 +19,8 @@ const tabId = z
 
 /**
  * Application form tools (Workday and Oracle Recruiting Cloud). Logging, status moves, tab choice and the posting check live in FormsService; a result
- * carries `postingMismatch` when the tab is on another tenant than the active posting (nothing was logged).
+ * carries `postingMismatch` when the tab is on another tenant than the active posting (nothing was logged), and
+ * `tabHidden` when the application tab is still hidden after being brought to the front (the browser throttles it).
  */
 export function registerFormTools(server: McpServer, s: Services): void {
   server.registerTool(
@@ -34,6 +35,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
         "`posting` (the posting this is credited to). Call at the start of every step and after changes. " +
         "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user. " +
+        "`tabHidden` (here and on other form tools): the application tab is hidden and runs slowly; pass its hint " +
+        "to the user once. " +
         "On the review page, `notAttached`: approved documents never attached.",
       inputSchema: {
         onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),

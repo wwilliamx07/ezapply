@@ -81,6 +81,9 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - Copy the template main file to `postings/<id>/resume.tex` (or `cover.tex`), plus every file in
   `template.json`'s `contentFiles` at the same relative path, and edit the copies. Class and style files are
   found automatically.
+- **Edit `.tex` files with the Edit tool**, never with a script (`python`, `sed`, PowerShell `-replace`). Files
+  can have Windows line endings, and LaTeX is full of backslashes: scripted edits miss their text
+  or corrupt it (`"\t"` in `"\textbf"` becomes a tab). To drop a block, Edit it out whole.
 - After every edit: `tex_compile { path }` → fix the first error first → `pdf_render` the page. Treat overfull
   boxes and missing glyphs as defects.
 - **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
@@ -110,8 +113,9 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
    the user can't back up.
 3. **The resume is exactly one page.** Tighten wording or drop the weakest bullet; never shrink fonts or
    margins below the template's.
-4. **Ask, don't guess** on EEO, disability, veteran and salary questions, and on any answer-bank entry
-   marked `sensitive` or with a `null` answer.
+4. **Ask, don't guess** on EEO, disability, veteran and salary questions the user hasn't answered in
+   `profile/`, and on any answer-bank entry marked `sensitive` or with a `null` answer. Read
+   `profile/answers.yaml` before asking anything it may hold.
 5. **Never submit an application.** Stop at the review page (on a single-page Oracle application, once every
    section is filled); the user presses Submit.
 6. **Repos are read-only.**

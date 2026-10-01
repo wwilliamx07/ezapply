@@ -42,9 +42,17 @@ function slowBridge() {
 const workspaceAt = (dir = join(tmpdir(), "ezapply-no-such-workspace")) =>
   ({ path: (...p: string[]) => join(dir, ...p) }) as unknown as Workspace;
 
+/** FormsService over `bridge`, with the tab always in front (`tab.show` is answered here, not by the bridge). */
 function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
   const postings = { activeId: async () => null } as unknown as PostingsService;
-  return new FormsService(ws, postings, bridge, {} as never, createLogger({ toFile: false, level: "silent" }));
+  const shown = {
+    call: (method: string, params: { tabId: number }, timeoutMs?: number) =>
+      method === "tab.show"
+        ? Promise.resolve({ tabId: params.tabId, activated: false, hidden: false })
+        : (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(method, params, timeoutMs),
+  } as unknown as ExtensionBridge;
+  const reviews = { pending: () => false } as never;
+  return new FormsService(ws, postings, shown, reviews, createLogger({ toFile: false, level: "silent" }));
 }
 
 describe("form calls on one tab", () => {

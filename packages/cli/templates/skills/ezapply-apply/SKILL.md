@@ -14,11 +14,15 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
 `adapter`. Oracle differs in a few ways: see **Oracle applications** below.
 
 ## Before starting
-1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind.
+1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind,
+   even when the documents come first: no question is asked of the user before the answer bank is read.
    The form tools pick the application tab on this posting's tenant (Workday tenant or Oracle career site)
    and credit fills, uploads and the status to it. A result with `postingMismatch` means the tab belongs to
    another company: nothing was logged. Stop, tell the user, and follow its hint (activate the right posting,
    or switch tabs) before filling more.
+   Each form call brings the application tab to the front of its window (not while a review page waits for
+   the user). A result with `tabHidden` means the tab is still hidden and the browser slows it down: pass
+   its hint to the user once and keep filling.
 2. For "attach them" requests, confirm which files: normally `postings/<id>/resume.pdf` and `cover.pdf`,
    or the bundle if `bundleRequired`, as `## Application requirements` in `notes.md` asks (documents,
    single PDF, naming, format). Make sure they're compiled and current. In the `after-approval` attach mode
@@ -68,7 +72,17 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
      - salary
      - anything where you are unsure
 
-     Offer to save new answers to `answers.yaml` (as new entries or `variants`).
+   - **Save what got resolved.** When a stored answer matched none of the field's options and the user (or
+     your judgment, which the user then confirms) picked one, or the user answered a question the bank
+     didn't have, offer to save it, in the same message as the hand-off or the question. Saved answers are
+     for the next form, so the user isn't asked again:
+     - Edit the entry that already covers the question: put the form's wording in its `variants` and the
+       option chosen under `byCompany` for this company (`{ default, byCompany }`) when it's the form's own
+       wording (a how-did-you-hear list), or as the `answer` when it holds everywhere. A new entry only for
+       a question no entry covers. Never a second entry for the same question.
+     - An answer the user tells you to save is meant to be used: set `sensitive: false` unless they say to
+       keep asking.
+     - Edit `answers.yaml` with the Edit tool (not a shell append), then `answers_check`.
    - **Dropdowns and typeaheads:** fill with your best reading of the option text: a value that matches
      nothing returns the field's `availableOptions`, so don't list first. When the exact wording decides
      the answer (reversed polarity, categories, ranges such as GPA bands), list those fields first, all of

@@ -129,6 +129,10 @@ One JSON object per line, each with `ts`. Written only for form activity on a ta
 - `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 
+Any event can also carry `tabActivated: true` (the companion switched to the application tab before the call)
+and `tabHidden: true` (the page was still hidden, so the browser throttled it), so a slow step can be matched to
+a hidden tab afterwards. They're left out when false.
+
 ## Profile (`companion/src/profile/schema.ts`)
 
 ### `profile/profile.yaml`

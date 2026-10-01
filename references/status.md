@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-09-28.
+As of 2026-09-30.
 
 ## Done
 | Area | State |
@@ -17,7 +17,7 @@ As of 2026-09-28.
 | Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
-| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check |
+| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions on 2026-09-30) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time; `npm run usage:report` to measure |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
@@ -48,6 +48,14 @@ As of 2026-09-28.
   not yet re-run live. Still unseen live: language and license tiles, deletes, the multi-page flow (Next,
   Previous), the confirmation page, the permission prompt in Firefox, the options page's Grant access, and
   why the Cover Letter field was missing ([details](components/oracle-adapter.md#what-was-verified-and-how)).
+- **Bringing the application tab to the front** (`tab.show`, 2026-09-30): tested against a fake `ext.tabs`
+  and through the companion with a fake extension. Not yet seen live: Chrome switching tabs from the
+  background, the page reporting visible within the 500 ms the extension polls, a minimized window reported
+  hidden, and a step after a review page taking about as long as the steps before it. Check it in one run with
+  no other change, opening a review page in the middle of the application.
+- **Guidance from the 2026-09-30 sessions** (`.tex` edited with the Edit tool only, the answer bank read
+  before asking, resolved answers saved into the existing entry with `sensitive: false`): not yet seen in a
+  session.
 - **Capturing from embedded job boards** in a real browser: whether `allFrames` quietly skips frames the
   click's `activeTab` grant doesn't cover (as expected) in both Chrome and Firefox, and the board opening in
   its own tab when it can't be read. Tested with the frame-choice logic only.
@@ -98,19 +106,28 @@ As of 2026-09-28.
   doesn't do it, which covers 6 of the 9. The two Oscorp runs (2026-09-29, with that press) still failed 12
   fields, each a dropdown whose own list had been read without a choice (`list_options` or a miss), and the
   agent's next call filled every one. The adapter now tries such an open a second time itself; why the first
-  fails isn't known, and the retry isn't tried live yet
-  ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
+  fails isn't known ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)). The first live
+  run with the retry (Tyrell, 2026-09-30, four steps) had no dropdown fail to open, and listed none before
+  filling; nothing records whether the retry ran.
 - **Reading a step before it rendered.** In the Oscorp runs `get_form` straight after `go_next` read an empty
   step four times. `go_next` and `go_back` now wait for the new step's fields (`stepFieldsMs`), and `go_back`
   sees a move when every step is titled "Application" (it waited out 12 s and said `moved: false` on all five
-  Backs). Not yet tried live.
+  Backs). In the Tyrell run both `go_next`s returned in 1–3 s and the `get_form` right after read the new step
+  each time. `go_back` not yet tried live.
+- **Fill speed in the Tyrell run** (Workday, 2026-09-30, the first live run of the changes in b5ba545): 9
+  fields in 3 s; a step of two work rows, an education row, two websites and a nine-entry skills list (about
+  20 fields) in 22 s; 4 questions in 3 s. No call timed out.
 - **The cover letter left out.** Both Oscorp runs uploaded only the resume into Workday's single Resume/CV
   field (`multiple: true`), and the user had to ask for the cover letter. `upload_file`, `go_next` and
   `get_form` now report approved documents not attached (`notAttached`), and the apply skill says both go
-  into that field. Not yet tried live.
-- **Guessed parameter names.** The Oscorp runs lost 11 turns to schema errors on deferred tools. The skills
-  and `EZAPPLY.md` now show each call's parameters
-  ([call shapes](components/workspace.md#call-shapes)). Not yet tried in a real session.
+  into that field. Seen working live on 2026-09-30: on Tyrell's Workday form the agent uploaded the cover
+  letter into Resume/CV after the hint. Two flaws seen on Oracle (Umbrella, twice): the agent sent both uploads
+  in parallel, so the resume's result listed the cover letter, whose upload was queued right behind it; and
+  the hint names Workday's Resume/CV on an Oracle form.
+- **A Workday field of study that searches nothing.** On Tyrell's form, `search_options` on the multi-select
+  "Field of Study" returned only its two top-level entries ("Partial List (First 500 Entries)", "All") for
+  "Physics" and for "Comp", and "Physics" failed with "No option matches" in the step's
+  fill but was taken when filled alone a few seconds later. Not explained.
 - **Language rows emptied.** In the first Oscorp run the French and German language rows, filled with
   `ok: true` before Save and Continue, were empty when the agent came back to the step. Not explained; the
   skill already re-checks steps when coming forward.

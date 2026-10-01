@@ -71,26 +71,37 @@ interface FakeTab {
   tabId: number;
   url: string;
   active?: boolean;
+  /** In a minimized window: the page stays hidden even as the active tab. */
+  minimized?: boolean;
 }
 
 /**
  * The browser side of the form tools: each tab runs the real adapter for its site on the shared jsdom fixture
  * (extension/test/workday-fixture.ts, oracle-fixture.ts), and the handlers call it the way the extension's
- * forms.ts does. One model of each site serves both the adapter's tests and these.
+ * forms.ts does. One model of each site serves both the adapter's tests and these. `calls` records every
+ * request in order. `tabShow: false` plays an extension built before `tab.show`.
  */
-function applicationTabs(tabs: FakeTab[]) {
-  const pages = tabs.map((t) => {
+function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
+  const pages = tabs.map((t, i) => {
     const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: t.url });
     installDomShims(dom.window as unknown as Window);
+    const state = { ...t, active: t.active ?? i === 0 };
     if (detectSite(t.url) === "oracle") {
       buildOracleApplication(dom.window.document);
-      return { ...t, api: createOracleApi(dom.window.document, () => t.url) };
+      return { ...state, api: createOracleApi(dom.window.document, () => t.url) };
     }
     buildWorkdayStep(dom.window.document);
-    return { ...t, api: createWorkdayApi(dom.window.document, () => t.url) };
+    return { ...state, api: createWorkdayApi(dom.window.document, () => t.url) };
   });
   const page = (tabId?: number) => pages.find((p) => p.tabId === tabId) ?? (pages[0] as (typeof pages)[number]);
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
   const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status"> = {
+    "tab.show": async ({ tabId, activate }) => {
+      const p = page(tabId);
+      const activated = activate && !p.active;
+      if (activated) for (const other of pages) other.active = other === p;
+      return { tabId: p.tabId, activated, hidden: Boolean(p.minimized) || !p.active };
+    },
     "form.get": async ({ tabId }) => ({ ...page(tabId).api.getForm(), tabId: page(tabId).tabId }),
     "form.listOptions": async ({ tabId, fieldId }) => page(tabId).api.listOptions(fieldId),
     "form.searchOptions": async ({ tabId, fieldId, query }) => page(tabId).api.searchOptions(fieldId, query),
@@ -104,19 +115,30 @@ function applicationTabs(tabs: FakeTab[]) {
     "form.pageAction": async ({ tabId, action }) => page(tabId).api.pageAction(action),
     "tab.screenshot": async ({ tabId }) => ({ tabId: page(tabId).tabId, pngBase64: "iVBORw0KGgo=" }),
   };
+  const recorded = Object.fromEntries(
+    Object.entries(handlers)
+      .filter(([method]) => opts.tabShow !== false || method !== "tab.show")
+      .map(([method, h]) => [
+        method,
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params });
+          return (h as (p: Record<string, unknown>) => Promise<unknown>)(params);
+        },
+      ]),
+  ) as unknown as typeof handlers;
   const status = async () => ({
     extensionVersion: "9.9.9",
-    tabs: tabs.map((t, i) => ({
-      tabId: t.tabId,
+    tabs: pages.map((p) => ({
+      tabId: p.tabId,
       windowId: 1,
-      url: t.url,
+      url: p.url,
       title: "Apply",
-      active: t.active ?? i === 0,
-      focused: t.active ?? i === 0,
-      site: detectSite(t.url),
+      active: p.active,
+      focused: p.active,
+      site: detectSite(p.url),
     })),
   });
-  return { handlers, status };
+  return { handlers: recorded, status, calls };
 }
 
 /** A stand-in for the browser extension speaking the real bridge protocol. */
@@ -129,6 +151,7 @@ function fakeExtension(
     pendingCapture?: boolean;
     browser?: { name: string; version?: string };
     tabs?: FakeTab[];
+    tabShow?: boolean;
   } = {},
 ) {
   const ws = new WebSocket(`ws://127.0.0.1:${handle.port}/bridge`, {
@@ -136,7 +159,7 @@ function fakeExtension(
   });
   sockets.push(ws);
   const send = (m: BridgeMessage) => ws.send(JSON.stringify(m));
-  const browser = applicationTabs(opts.tabs ?? [{ tabId: 7, url: APPLY_URL }]);
+  const browser = applicationTabs(opts.tabs ?? [{ tabId: 7, url: APPLY_URL }], { tabShow: opts.tabShow });
   const peer = new RpcPeer({
     send,
     remote: CompanionApi,
@@ -166,7 +189,7 @@ function fakeExtension(
       ws.on("error", (err) => resolve({ welcomed: false, error: err.message }));
     },
   );
-  return { ws, peer, outcome };
+  return { ws, peer, outcome, calls: browser.calls };
 }
 
 async function mcpClient(): Promise<Client> {
@@ -1027,6 +1050,81 @@ describe("form tools over MCP", () => {
     const again = await callJson(client, "go_next");
     expect(again.data).toMatchObject({ pageKind: "review" });
     expect(again.data.notAttached).toBeUndefined();
+    await client.close();
+  });
+
+  it("brings the application tab to the front before each form call, but not during a review", async () => {
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: APPLY_URL, active: false },
+        { tabId: 8, url: "https://www.example.com/posting", active: true },
+      ],
+    });
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    const client = await mcpClient();
+    const firstName = { fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" };
+
+    // The tab is shown inside the tab's queue, right before the adapter call.
+    const fill = await callJson(client, "fill_fields", { fills: [firstName] });
+    expect(fill.data.tabHidden).toBeUndefined();
+    expect(ext.calls.map((c) => c.method)).toEqual(["tab.show", "form.fill"]);
+    expect(ext.calls[0]?.params).toMatchObject({ tabId: 7, activate: true });
+    // Already in front: nothing to switch, and nothing extra in the log.
+    await callJson(client, "fill_fields", { fills: [firstName] });
+    const log = (await readFile(join(folder, "form-log.jsonl"), "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => JSON.parse(l));
+    expect(log[0]).toMatchObject({ event: "fill", tabActivated: true });
+    expect(log[1]).not.toHaveProperty("tabActivated");
+    expect(log[1]).not.toHaveProperty("tabHidden");
+
+    // While a review page waits for the user, the tab isn't switched to.
+    await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume");
+    await callJson(client, "review_open", { files: [`postings/${cap.postingId}/resume.pdf`] });
+    ext.calls.length = 0;
+    await callJson(client, "get_form");
+    expect(ext.calls.map((c) => c.method)).toEqual(["tab.show", "form.get"]);
+    expect(ext.calls[0]?.params).toMatchObject({ activate: false });
+    await client.close();
+  });
+
+  it("says when the application tab stays hidden, in the result and the log", async () => {
+    const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL, active: true, minimized: true }] });
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await mcpClient();
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+    });
+    expect(fill.data.results).toEqual([{ fieldId: "my-information.legalName--firstName", ok: true }]);
+    expect(fill.data.tabHidden).toEqual({ hint: expect.stringMatching(/minimized/) });
+    expect((await callJson(client, "get_form")).data.tabHidden).toBeDefined();
+    expect((await callJson(client, "add_repeatable", { addButtonId: "add.work-experience" })).data).toMatchObject({
+      ok: true,
+      tabHidden: expect.anything(),
+    });
+    const log = await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8");
+    expect(JSON.parse(log.trim())).toMatchObject({ event: "fill", ok: true, tabHidden: true });
+    await client.close();
+  });
+
+  it("still fills with an extension built before tab.show", async () => {
+    const ext = fakeExtension({ tabShow: false });
+    await ext.outcome;
+    await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await mcpClient();
+    for (let i = 0; i < 2; i++) {
+      const fill = await callJson(client, "fill_fields", {
+        fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+      });
+      expect(fill.isError).toBe(false);
+      expect(fill.data.results).toEqual([{ fieldId: "my-information.legalName--firstName", ok: true }]);
+      expect(fill.data.tabHidden).toBeUndefined();
+    }
+    expect(ext.calls.map((c) => c.method)).toEqual(["form.fill", "form.fill"]);
     await client.close();
   });
 

@@ -22,105 +22,59 @@ Reverted in c6aac3e, cause not isolated:
   tab's timers run about once a second); skill guidance on year of study, options not seen, template numbers,
   `python`/`sed` and duplicate text
 
-**b5ba545 (2026-09-29) brought some of those back, in one commit.** Tests, typecheck and lint pass, but none
-of it has run on a live page:
+**b5ba545 (2026-09-29) brought some of those back, in one commit.** One live run so far (Tyrell, Workday,
+2026-09-30, four steps, no slowdown: about 20 fields in 22 s, no timeout):
 - `openListboxRetrying` (`extension/src/adapters/workday/fill.ts`): when a dropdown doesn't open, wait for
   quiet and open it again. Close to the reverted "press again". A dropdown that can't open now costs its
-  open waits twice, which is the kind of time Part 9 measured.
+  open waits twice, which is the kind of time Part 9 measured. In the Tyrell run no dropdown failed to open;
+  whether the retry ran is unknown.
 - `back()` (`workday/api.ts`) sees a move by step index or title. Nearly the same code as the reverted
-  `go_back` change.
+  `go_back` change. Not yet used live.
 - New: `stepFields` after `next()`/`back()` polls `extract()` every 150 ms for up to `stepFieldsMs` (3 s)
-  until the new step shows a field.
+  until the new step shows a field. Worked on both of Tyrell's `go_next`s.
 - Low risk, outside the adapter: `notAttached` from `upload_file`/`go_next`/`get_form`
-  (`companion/src/forms/service.ts`) and the apply skill's text about attaching the cover letter.
+  (`companion/src/forms/service.ts`) and the apply skill's text about attaching the cover letter. Worked live.
 
-**If the next live run is slower** than the Oscorp runs, these are the first suspects. `autofill-timing.yaml`
-can shorten a wait without a rebuild. From here on, land adapter changes one per live run, so a slowdown
-points at one change. Don't bundle adapter changes again. Once debug mode (C, item 3) exists, run these live
-checks with it on, so a slowdown shows which waits grew instead of only that the run was slower.
+**If a live run is slower** than the Oscorp and Tyrell runs, the first two are the first suspects.
+`autofill-timing.yaml` can shorten a wait without a rebuild. From here on, land adapter changes one per live
+run, so a slowdown points at one change. Don't bundle adapter changes again. Once debug mode (C, item 3)
+exists, run these live checks with it on, so a slowdown shows which waits grew instead of only that the run
+was slower.
 
 ---
 
-## A. Workday: keep the application tab in front (`tab.show`)
+## A. Live checks waiting on a run
 
-1. **Bring the application tab to the front before each form call, and say when it can't be.**
+Built and tested on 2026-09-30, not yet seen live. Check them one at a time (see "Read first").
 
-   **Why it matters.** Browsers slow down tabs that aren't on screen. Chrome, Edge and Firefox run a hidden
-   tab's timers at most about once a second. Chrome also runs chained timers only once a minute after a tab has
-   been hidden for five minutes. `requestAnimationFrame` stops entirely. Every wait in the adapter is a timer:
-   `sleep` and the quiet wait in `extension/src/adapters/common/dom.ts`, and the 150 ms `stepFields` poll.
-   Workday's own widgets also render on timers and animation frames. So in a hidden tab, each wait of a few
-   hundred milliseconds becomes a second or more, and a step with dozens of them runs many times slower. It
-   was measured once, in the Monarch run (2026-09-28): 16 fields took 6.7 s, then `review_open` opened the
-   review page in front of the Workday tab and 4 dates took 28 s. That is about 0.4 s per field against 7 s.
-   A slow fill doesn't just waste time. It runs past the companion's fill timeout, keeps running in the page
-   unlogged, and lets the tab's queue start the next call while it's still going. From outside that looks
-   like the adapter breaking, and it made Part 8's slowdown harder to trace, since a hidden tab and a bad
-   change look the same. The tab gets hidden in ordinary use:
-   - `review_open` opens the review page as a new tab in front of the form (`after-approval`, the default
-     attach mode).
-   - The user reads the posting, a PDF or anything else in another tab while Claude fills.
-   - The browser window is minimized.
+1. **`tab.show`: the application tab brought to the front before each form call** (`references/mcp-tools.md`,
+   "The tab in front"). One run with only this change, opening a review page in the middle of the
+   application: the step after it should take about as long as the steps before it, and `form-log.jsonl`
+   should show `tabActivated` on its first call. Also: minimize the window once and check that `tabHidden`
+   reaches the user once, and that the review page isn't taken away while it waits for approval.
+2. **Guidance from the 2026-09-30 sessions** (`EZAPPLY.md`, `ezapply-apply`, `ezapply-answers`; no adapter
+   change). In the next session's transcript, check:
+   - no `python`, `sed` or `-replace` on `.tex` files (all five sessions used `python`; four scripts missed
+     their text and one turned `\textbf` into a tab);
+   - `profile/answers.yaml` read before any question to the user, also when the documents come first;
+   - a resolved miss (Tyrell's how-did-you-hear list) offered for saving under `byCompany` of the existing
+     entry, with `sensitive: false` when the user says to save, and no second entry for the same question.
 
-   `screenshot` also only works on the tab that's on screen.
+## B. Found in the 2026-09-30 runs
 
-   **The stash is gone.** A version was built and tested on 2026-09-28 and kept in a git stash ("tab.show:
-   bring the application tab to the front"). `git stash list` is empty and no unreachable commit holds it, so
-   this is a rebuild.
-
-   **Implementation.**
-   - *Protocol* (`protocol/src/forms.ts`): `"tab.show": { params: TabParam.extend({ activate: z.boolean() }),
-     result: { tabId, activated, hidden } }`. `activated` means the extension switched to the tab. `hidden`
-     means the page still reports `document.visibilityState === "hidden"` afterwards.
-   - *Extension* (`extension/src/background/forms.ts`):
-     - Resolve the tab with `resolveTab`. If `activate` is set and `!tab.active`, call
-       `ext.tabs.update(tab.id, { active: true })`.
-     - Read `document.visibilityState` with one `executeScript`. The isolated world is enough, and the site's
-       host permission is already required.
-     - Don't call `windows.update({ focused: true })`. It would pull the browser in front of the terminal the
-       user is typing in and take keyboard focus on every call.
-     - A minimized window stays hidden, and so does a window fully covered by others (Chrome on Windows tracks
-       occlusion and marks those pages hidden). Report `hidden: true` instead of forcing it.
-   - *Companion* (`companion/src/forms/service.ts`, `onTab`):
-     - Call `tab.show` inside the tab's queue, right before the adapter call, so nothing can hide the tab in
-       between.
-     - Pass `activate: false` while `reviews.pending()` (a review page is waiting for the user). Switching
-       would take the review away from them in the middle of approving. `FormsService` needs the review
-       service for that.
-     - When `hidden` comes back, add `tabHidden: { hint }` to the tool result. Hint: the application tab is in
-       the background, where the browser slows it down; ask the user to keep it visible (window not minimized,
-       review page closed or moved to another window).
-     - Log `activated` and `hidden` with the call in `form-log.jsonl`, so a slow step can be matched to a
-       hidden tab afterwards.
-     - An extension built before `tab.show` answers "Unknown method". Treat that as a no-op, not a failed
-       fill: log it once and carry on.
-   - *Skill* (`ezapply-apply`): on `tabHidden`, pass the hint to the user once and keep filling.
-   - *Tests*:
-     - `extension/test/background.test.ts` (fake `ext.tabs`): an inactive tab is activated; an active one is
-       left alone; `activate: false` doesn't switch; `windows.update` is never called.
-     - `companion/test/e2e.test.ts` (fake extension): `tab.show` reaches the tab before `form.fill`; no
-       activation while a review is pending; `tabHidden` shows up in the result and the log; an extension
-       without `tab.show` still fills.
-   - *Live check*: one run with only this change (see "Read first"), opening a review page in the middle of
-     the application. The step after it should take about as long as the steps before it.
-   - *References*: `components/protocol.md` (method table), `components/extension.md` (handler and why no
-     window focus), `mcp-tools.md` and `components/companion.md` (`tabHidden`), `status.md`.
-
-## B. Agent guidance (skills and `EZAPPLY.md`; no adapter change)
-
-Guidance that changes which tools the agent calls, or how often, changes how often the adapter opens
-dropdowns (Part 9 suspected `list_options` then `fill_fields` on every dropdown). Change that kind with the
-same care, one live run at a time.
-
-Done, not yet seen in a real session: the skills and `EZAPPLY.md` show each call's parameters
-(`references/components/workspace.md`, "Call shapes"; 11 schema errors in the Oscorp runs). It changes no
-calls, only their spelling. Check the next session's transcript for schema errors.
-
-1. **No Python on Windows.** Three runs tried `python` for a LaTeX edit and failed. Say in `EZAPPLY.md`: no
-   Python; edit `.tex` with Edit. (It was in e390fef and reverted only for being unverified.)
-2. **Answer bank after a resolved miss.** `how_heard` "School job board" missed on both Oscorp runs (the form
-   wanted "College/University") and nothing was saved, so it will miss again. Offer a per-company answer once
-   the agent has resolved a miss.
+1. **`notAttached` on parallel uploads.** On Oracle (Umbrella, twice) the agent sent the resume and cover
+   letter uploads in one turn. The tab's queue runs the resume's first, and its result listed the cover
+   letter as not attached while that upload waited behind it. Leave out files whose upload is already queued
+   on the tab. The hint also names Workday's Resume/CV on an Oracle form: word it per adapter.
+2. **Workday "Field of Study" search.** On Tyrell's form, `search_options` on the multi-select returned only
+   "Partial List (First 500 Entries)" and "All" for "Physics" and for "Comp", and "Physics"
+   failed "No option matches" in the step's fill but was taken alone seconds later. An adapter change: one
+   live run for it alone, ideally with debug mode (C, item 3).
+3. **Clean up the user's answer bank.** `profile/answers.yaml` in the workspace has `umbrella_how_heard` beside
+   `how_heard`, from before the guidance above. Run `ezapply-answers` with the user to merge them (the user's
+   data, so not done from this repo).
+4. **`review_open` with a bare file name.** Tyrell's agent passed `resume.pdf` and got `path_not_allowed`,
+   costing a turn. Resolve a bare name against the active posting's folder, or say so in the hint.
 
 ## C. Proposals
 
@@ -198,7 +152,7 @@ Ranked by how much they help one person apply faster without lowering quality or
      This covers per-field timings: the trace shows which fields and which waits took the time.
    - **Page state around the call.** URL, step title and index, `document.visibilityState`,
      `document.hasFocus()`, whether the tab was active, and its window's state. This is how a slow call gets
-     matched to a hidden tab (Part A).
+     matched to a hidden tab (`tab.show` only says whether the page was hidden at the start of a call).
    - **DOM changes during the call.** A `MutationObserver` on the form, summarised rather than raw: nodes added
      and removed (tag, automation id, role), and changes to `aria-expanded`, `aria-selected`, `aria-invalid`,
      `value`, `disabled` and `hidden`. This shows a listbox opening and closing, or Workday re-rendering a

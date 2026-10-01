@@ -83,6 +83,7 @@ keys are ignored and an older extension strips the field, so it came without a v
 | `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
+| `tab.show` | `{ tabId?, activate }` → `{ tabId, activated, hidden }`: switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`. Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump; an older extension answers "Unknown method" |
 
 ## Form schema
 

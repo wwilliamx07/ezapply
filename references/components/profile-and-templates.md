@@ -30,7 +30,20 @@ Stored answers to screening questions.
   (always ask even when answered), `variants` (other wordings seen), `notes`.
 - `answers_check` validates it (unique ids) and lists unanswered entries. The checklist counts the bank as
   done when only sensitive questions are unanswered.
-- Answers learned while filling forms are offered for saving; new wordings go into `variants`.
+- **Saving while filling** (`ezapply-apply`, "Save what got resolved"): when a stored answer matched none of
+  a field's options and the user (or the agent's judgment, then confirmed) picked one, or the user answered a
+  question the bank lacked, the agent offers to save it. It edits the entry that already covers the question:
+  the form's wording goes into `variants`, and the chosen option under `byCompany` when it's that form's own
+  wording (a how-did-you-hear list), else into `answer`. A new entry only for a question nothing covers. An
+  answer the user tells it to save gets `sensitive: false` unless they want to keep being asked. Edits go
+  through the Edit tool, then `answers_check`.
+
+  *Why:* `how_heard` ("School job board") matched nothing on both Oscorp forms (2026-09-29: "College/University")
+  and on Tyrell's (2026-09-30: a list of schools), and each time nothing was saved, so it missed again. On
+  2026-09-30 the user told the agent to save three Umbrella answers; it appended new entries with a shell
+  `cat >>`, marked `sensitive: true` (which means "always ask"), and added `umbrella_how_heard` beside the
+  existing `how_heard`. The next Umbrella application asked the same questions again, and the user had to point
+  out they'd already saved them.
 
 ## Preferences (`profile/preferences.md`)
 Free text: tone for cover letters, what to emphasize, what never to mention, target roles and locations,

@@ -204,4 +204,15 @@ export const FormMethods = {
     params: TabParam,
     result: z.object({ tabId: z.number().int(), pngBase64: z.string() }),
   },
+  /**
+   * Bring the application tab to the front of its window before a form call (browsers throttle hidden tabs'
+   * timers to about once a second, and every adapter wait is a timer). `activate: false` only reports.
+   * `activated`: the extension switched to the tab. `hidden`: the page still reports
+   * `document.visibilityState === "hidden"` (a minimized or fully covered window), which the extension doesn't
+   * try to force.
+   */
+  "tab.show": {
+    params: TabParam.extend({ activate: z.boolean() }),
+    result: z.object({ tabId: z.number().int(), activated: z.boolean(), hidden: z.boolean() }),
+  },
 };

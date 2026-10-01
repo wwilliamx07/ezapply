@@ -108,6 +108,25 @@ the same way; where Oracle differs, the tool descriptions say so.
   `postingMismatch { activePosting { id, company?, role?, tenant }, formTenant, hint }`. Without this, two open
   applications or an old confirmation page on screen would credit the wrong posting, up to marking it
   `submitted`.
+- **The tab in front:** inside the tab's queue, right before each call reaches the adapter, the companion
+  sends `tab.show` so the application tab is the active tab of its window (the window itself isn't focused,
+  see [extension](components/extension.md#serving-form-requests-formsts)). Why: browsers run a hidden tab's
+  timers at most about once a second (Chrome also only once a minute for chained timers after five hidden
+  minutes) and stop `requestAnimationFrame`. Every adapter wait is a timer, and Workday's widgets render on
+  timers and animation frames, so a hidden tab fills many times slower: in the Monarch run (2026-09-28) 16
+  fields took 6.7 s, then `review_open` opened the review page in front of the form and 4 dates took 28 s. A
+  slow fill runs past the companion's timeout and keeps going in the page unlogged, which looks like a broken
+  adapter. The tab gets hidden in ordinary use: the review page opens as a new tab in front of the form, the
+  user reads something else, the window is minimized.
+  - While a review page waits for the user (`ReviewService.pending()`), it's sent with `activate: false`:
+    switching would take the review away from them mid-approval.
+  - When the page is still hidden afterwards (minimized or covered window, or a pending review), results
+    that are objects carry `tabHidden: { hint }` (`get_form`, `fill_fields`, `upload_file`, `remove_items`,
+    `add_repeatable`, `remove_repeatable`, `go_next`, `go_back`, `page_action`; not the option lists), and
+    the logged event gets `tabHidden: true`. A switch adds `tabActivated: true` to the logged event. The
+    `ezapply-apply` skill passes the hint to the user once and keeps filling.
+  - An extension built before `tab.show` answers "Unknown method": the call goes ahead as before, and the
+    companion logs that once. Any other `tab.show` failure is logged and ignored too.
 
 | Tool | Input | Does |
 |---|---|---|
