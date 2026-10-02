@@ -23,11 +23,16 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 | 10 | Login manager | Medium | L | — |
 
 Suggested order:
-1. Autofill phase 1. It changes no adapter code.
-2. Debug mode's companion part, so autofill's first live run is recorded.
-3. Items 2 and 3, each a fix for a failure seen live.
-4. The rest of debug mode.
-5. Autofill phases 2 and 3, each adapter change in its own live run.
+1. ~~Autofill phase 1~~ (built 2026-10-01).
+2. ~~Debug mode's companion part~~ (built 2026-10-01).
+3. ~~Items 2 and 3~~ (built 2026-10-01).
+4. **Next: a live run** with debug mode on (`ezapply debug on`). It checks autofill, posting matching and the
+   checklist together; none of them changed the adapter, so a slowdown still points at the adapter's own
+   suspects. Read it with `ezapply debug report`.
+5. The rest of debug mode (the adapter trace, then markup), one adapter change per live run.
+6. Autofill phases 2 and 3, each adapter change in its own live run. The companion-only parts (Workday rows,
+   computed answers, language rows) can land before them, but after step 4, so any wrong fill from the first
+   run is traced to one feature.
 
 Items 5, 7 and 9 come after debug mode.
 
