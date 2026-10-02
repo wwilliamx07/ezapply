@@ -140,8 +140,9 @@ Oracle career site as `host/site`, read from the URL), `company?`, `role?`, `req
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
 ### `form-log.jsonl`
-One JSON object per line, each with `ts`. Written only for form activity on a tab of this posting's tenant
-(Workday tenant or Oracle career site; or when either has no tenant):
+One JSON object per line, each with `ts`. Written only for form activity on this posting's application tab:
+its tenant (Workday tenant or Oracle career site) and, when both URLs name one, its job (requisition); or when
+either has no tenant:
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
   `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`)
   mark a fill by `autofill_step`; one that took a loose match is `ok: false` with `error: "inexact: …"`

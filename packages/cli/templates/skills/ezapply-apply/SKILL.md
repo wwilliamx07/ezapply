@@ -16,10 +16,11 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
 ## Before starting
 1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind,
    even when the documents come first: no question is asked of the user before the answer bank is read.
-   The form tools pick the application tab on this posting's tenant (Workday tenant or Oracle career site)
-   and credit fills, uploads and the status to it. A result with `postingMismatch` means the tab belongs to
-   another company: nothing was logged. Stop, tell the user, and follow its hint (activate the right posting,
-   or switch tabs) before filling more.
+   The form tools pick the application tab for this posting (its Workday tenant or Oracle career site, and
+   its requisition) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
+   `posting_mismatch` error from a tool that changes the page, means the tab is another posting's (another
+   company, or another job at the same one): nothing ran. Stop, tell the user, and follow its hint (activate
+   the right posting, or switch tabs).
    Each form call brings the application tab to the front of its window (not while a review page waits for
    the user). A result with `tabHidden` means the tab is still hidden and the browser slows it down: pass
    its hint to the user once and keep filling.

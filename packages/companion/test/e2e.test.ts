@@ -999,23 +999,66 @@ describe("form tools over MCP", () => {
     const form = await callJson(client, "get_form");
     expect(form.data).toMatchObject({ tabId: 8, posting: globex.postingId });
 
-    // Acting on the Acme tab explicitly: done, but not credited to Globex.
-    const fill = await callJson(client, "fill_fields", {
-      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
-      tabId: 7,
-    });
-    expect(fill.data.results[0]).toMatchObject({ ok: true });
-    expect(fill.data.postingMismatch).toMatchObject({
+    // Reading the Acme tab says whose it is; changing it is refused.
+    expect((await callJson(client, "get_form", { tabId: 7 })).data.postingMismatch).toMatchObject({
       activePosting: { id: globex.postingId, tenant: "globex" },
       formTenant: "acme",
       hint: expect.stringMatching(/posting_activate/),
     });
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+      tabId: 7,
+    });
+    expect(fill.data.error).toMatchObject({
+      code: "posting_mismatch",
+      hint: expect.stringMatching(/posting_activate/),
+    });
+    expect(ext.calls.some((c) => c.method === "form.fill")).toBe(false);
     await expect(readFile(join(dir, "ws", "postings", globex.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
     await expect(readFile(join(dir, "ws", "postings", acme.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
 
     // After activating Acme, the same tab is credited to it.
     await callJson(client, "posting_activate", { id: acme.postingId });
     expect((await callJson(client, "get_form", { tabId: 7 })).data).toMatchObject({ posting: acme.postingId });
+    await client.close();
+  });
+
+  it("tells two postings at one company apart by requisition", async () => {
+    const applyA = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Backend-Engineer_R100/apply";
+    const applyB = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Data-Engineer_R200/apply";
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: applyA, active: true },
+        { tabId: 8, url: applyB, active: false },
+      ],
+    });
+    await ext.outcome;
+    await capture(
+      ext,
+      "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Backend-Engineer_R100",
+      "Backend",
+    );
+    const data = await capture(
+      ext,
+      "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Data-Engineer_R200",
+      "Data",
+    );
+    const client = await mcpClient();
+    // Data Engineer is active: its own application tab is chosen, though Backend's is in front.
+    expect((await callJson(client, "get_form")).data).toMatchObject({ tabId: 8, posting: data.postingId });
+    // Backend's tab, same tenant, other requisition: read with a mismatch, changes refused.
+    expect((await callJson(client, "get_form", { tabId: 7 })).data.postingMismatch).toMatchObject({
+      activePosting: { id: data.postingId, job: "r200" },
+      formTenant: "acme",
+      formJob: "r100",
+      hint: expect.stringMatching(/job r100/),
+    });
+    const next = await callJson(client, "go_next", { tabId: 7 });
+    expect(next.data.error.code).toBe("posting_mismatch");
+    expect((await callJson(client, "autofill_step", { tabId: 7 })).data).toMatchObject({
+      filled: [],
+      note: expect.stringMatching(/another posting/),
+    });
     await client.close();
   });
 

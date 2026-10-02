@@ -97,16 +97,24 @@ the same way; where Oracle differs, the tool descriptions say so.
   failed call doesn't stop the next.
 
 - **Which tab:** `tabId` if given; otherwise an application tab (Workday or Oracle) on the active posting's
-  tenant (the one the user is looking at, else the most recently used), otherwise any application tab the
-  same way. The tenant is `siteTenant`: the Workday tenant, or the Oracle career site (`host/site`). The companion picks
+  tenant whose job is the posting's (see below), then any on its tenant (the one the user is looking at, else
+  the most recently used), otherwise any application tab the same way. The tenant is `siteTenant`: the Workday tenant, or the Oracle career site (`host/site`). The companion picks
   it from `browser.status` and always passes it explicitly.
 - **Which posting:** fills, removals, uploads, steps and the confirmation page are appended to the active
-  posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab is on that
-  posting's tenant (or one of them has no tenant to compare, e.g. a posting captured on a job
-  board). Otherwise the action still happens, nothing is logged or moved, and the result carries
-  `postingMismatch { activePosting { id, company?, role?, tenant }, formTenant, hint }`. Without this, two open
-  applications or an old confirmation page on screen would credit the wrong posting, up to marking it
-  `submitted`.
+  posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab is that
+  posting's. That means the tab is on its tenant, and for the same job when both URLs name one: `siteJob`
+  reads Workday's requisition from the job's path segment (`…/Engineer_JR1000001-1/apply` → `jr1000001-1`)
+  and Oracle's job id (`…/job/42/apply/…`). The posting's job comes from its URL, else its `reqId`, and
+  `sameJob` takes Workday's `-1` posting suffix as the same job. If either side has no tenant (a posting
+  captured on a job board) or no job to compare, the tenant decides. Otherwise reads (`get_form`,
+  `list_options`, `search_options`, `screenshot`) run and carry
+  `postingMismatch { activePosting { id, company?, role?, tenant, job? }, formTenant, formJob?, hint }`. Every
+  call that changes the page (`fill_fields`, `upload_file`, `remove_items`, `add_repeatable`,
+  `remove_repeatable`, `go_next`, `go_back`, `page_action`) is refused with `posting_mismatch` and the same
+  hint, and `autofill_step` fills nothing. *Why:* without the check, two open applications or an old
+  confirmation page on screen would credit the wrong posting, up to marking it `submitted`. Before
+  2026-10-01 a mismatch only skipped the logging, and the fill itself still ran, so with two applications at
+  one company open the agent could fill the wrong one and nothing would record it.
 - **The tab in front:** inside the tab's queue, right before each call reaches the adapter, the companion
   sends `tab.show` so the application tab is the active tab of its window (the window itself isn't focused,
   see [extension](components/extension.md#serving-form-requests-formsts)). Why: browsers run a hidden tab's

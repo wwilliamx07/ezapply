@@ -23,6 +23,9 @@ As of 2026-09-30.
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
+- **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Not yet seen: whether
+  Workday's application URL keeps the job path (`…/Title_R123/apply/…`) through sign-in and every step. If it
+  drops it, the check falls back to the tenant, as before.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
   Workday fixture and with a timed-out call. Not yet used on a live run; turn it on for autofill's first one.
 - **Deterministic autofill** (`autofill_step`, 2026-10-01; [autofill](components/autofill.md)): tested on

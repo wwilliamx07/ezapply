@@ -15,6 +15,8 @@ export const ErrorCode = {
   NoActivePosting: "no_active_posting",
   CaptureFailed: "capture_failed",
   PathNotAllowed: "path_not_allowed",
+  /** The application tab belongs to another posting than the active one: nothing that changes the page runs. */
+  PostingMismatch: "posting_mismatch",
   Internal: "internal",
 } as const;
 

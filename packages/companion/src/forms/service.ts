@@ -12,6 +12,8 @@ import {
   type PageAction,
   type PostingMeta,
   type PostingStatus,
+  sameJob,
+  siteJob,
   siteTenant,
   type TabInfo,
   type Timing,
@@ -44,8 +46,10 @@ export type FillSource = "profile" | "answer-bank" | "computed" | "user" | "judg
 
 /** The active posting's tenant differs from the application tab's: nothing was logged or moved. */
 export interface PostingMismatch {
-  activePosting: { id: string; company?: string; role?: string; tenant: string };
+  activePosting: { id: string; company?: string; role?: string; tenant: string; job?: string };
   formTenant: string;
+  /** The job the tab is for, when its URL names one (a Workday requisition, an Oracle job id). */
+  formJob?: string;
   hint: string;
 }
 
@@ -264,6 +268,7 @@ export class FormsService {
     tabId?: number,
   ): Promise<{ results: FillResult[]; postingMismatch?: PostingMismatch }> {
     return this.onTab({ tool: "fill_fields", params: { fills } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const results = await t.bridge.call(
         "form.fill",
         { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId, timing: t.timing },
@@ -311,6 +316,7 @@ export class FormsService {
       base64: (await readFile(abs)).toString("base64"),
     };
     return this.onTab({ tool: "upload_file", params: { fieldId, path } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const result = await t.bridge.call(
         "form.upload",
         { fieldId, file, tabId: t.tab.tabId, timing: t.timing },
@@ -332,6 +338,7 @@ export class FormsService {
 
   async remove(fieldId: string, values: string[] | undefined, reason: string | undefined, tabId?: number) {
     return this.onTab({ tool: "remove_items", params: { fieldId, values, reason } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const result = await this.bridge
         .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.remove", "remove items"));
@@ -350,6 +357,7 @@ export class FormsService {
 
   async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
     return this.onTab({ tool: "remove_repeatable", params: { sectionId, reason } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const result = await this.bridge
         .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId, timing: t.timing }, 30_000)
         .catch(olderExtension("form.removeRepeatable", "remove rows"));
@@ -367,6 +375,7 @@ export class FormsService {
 
   async addRepeatable(addButtonId: string, tabId?: number) {
     return this.onTab({ tool: "add_repeatable", params: { addButtonId } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const result = await t.bridge.call(
         "form.addRepeatable",
         { addButtonId, tabId: t.tab.tabId, timing: t.timing },
@@ -378,6 +387,7 @@ export class FormsService {
 
   async next(tabId?: number) {
     return this.onTab({ tool: "go_next", params: {} }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const r = await t.bridge.call("form.next", { tabId: t.tab.tabId, timing: t.timing }, 60_000);
       await this.logEvent(t, {
         event: "next",
@@ -395,6 +405,7 @@ export class FormsService {
 
   async back(tabId?: number) {
     return this.onTab({ tool: "go_back", params: {} }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const r = await this.bridge
         .call("form.back", { tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.back", "go back"));
@@ -405,6 +416,7 @@ export class FormsService {
 
   async pageAction(action: PageAction, tabId?: number) {
     return this.onTab({ tool: "page_action", params: { action } }, tabId, async (t) => {
+      refuseOtherPosting(t);
       const r = await t.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
       return annotate(r, t);
     });
@@ -519,6 +531,11 @@ export class FormsService {
     const activeId = await this.postings.activeId();
     const active = activeId ? await this.postings.get(activeId).catch(() => null) : null;
     const postingTenant = active ? postingTenantOf(active) : undefined;
+    const postingJob = active ? postingJobOf(active) : undefined;
+    const ownJob = (t: TabInfo) => {
+      const job = siteJob(t.url);
+      return !postingJob || !job || sameJob(job, postingJob);
+    };
 
     let tab: TabInfo | undefined;
     if (tabId !== undefined) {
@@ -527,8 +544,10 @@ export class FormsService {
         throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
       }
     } else {
+      // This posting's tenant and job, then its tenant, then any application tab.
       const forms = tabs.filter((t) => isFormSite(t.site));
-      tab = pickTab(postingTenant ? forms.filter((t) => siteTenant(t.url) === postingTenant) : []) ?? pickTab(forms);
+      const tenant = postingTenant ? forms.filter((t) => siteTenant(t.url) === postingTenant) : [];
+      tab = pickTab(tenant.filter(ownJob)) ?? pickTab(tenant) ?? pickTab(forms);
       if (!tab) {
         throw new EzError(
           ErrorCode.NotFound,
@@ -538,30 +557,36 @@ export class FormsService {
       }
     }
 
+    const base = { tab, ...(extensionVersion ? { extensionVersion } : {}) };
     const formTenant = siteTenant(tab.url);
-    if (active && postingTenant && formTenant && postingTenant !== formTenant) {
-      const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
-      return {
-        tab,
-        posting: null,
-        ...(extensionVersion ? { extensionVersion } : {}),
-        mismatch: {
-          activePosting: {
-            id: active.id,
-            ...(active.company ? { company: active.company } : {}),
-            ...(active.role ? { role: active.role } : {}),
-            tenant: postingTenant,
-          },
-          formTenant,
-          hint:
-            `This tab is on "${formTenant}", but the active posting (${label}) is on ` +
-            `"${postingTenant}", so nothing was logged and no status changed. If the user is applying to ` +
-            "another job, activate its posting (postings_list with a company filter, then posting_activate) " +
-            "or have them capture it with Set posting; otherwise switch to the right tab.",
+    if (!active || !postingTenant || !formTenant) return { ...base, posting: active };
+    const formJob = siteJob(tab.url);
+    const otherTenant = postingTenant !== formTenant;
+    if (!otherTenant && ownJob(tab)) return { ...base, posting: active };
+
+    const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
+    const why = otherTenant
+      ? `This tab is on "${formTenant}", but the active posting (${label}) is on "${postingTenant}"`
+      : `This tab is the application for job ${formJob}, but the active posting (${label}) is job ${postingJob}`;
+    return {
+      ...base,
+      posting: null,
+      mismatch: {
+        activePosting: {
+          id: active.id,
+          ...(active.company ? { company: active.company } : {}),
+          ...(active.role ? { role: active.role } : {}),
+          tenant: postingTenant,
+          ...(postingJob ? { job: postingJob } : {}),
         },
-      };
-    }
-    return { tab, posting: active, ...(extensionVersion ? { extensionVersion } : {}) };
+        formTenant,
+        ...(formJob ? { formJob } : {}),
+        hint:
+          `${why}, so nothing that changes the page runs and nothing is logged. If the user is applying to ` +
+          "that job, activate its posting (postings_list with a company filter, then posting_activate) or have " +
+          "them capture it with Set posting; otherwise switch to the right tab.",
+      },
+    };
   }
 
   /**
@@ -631,6 +656,27 @@ export class FormsService {
       this.log.info({ id: t.posting.id, status }, "posting status moved by form activity");
     }
   }
+}
+
+/** The job a posting is for: from its URL (Workday requisition, Oracle job id), else its recorded requisition. */
+function postingJobOf(meta: PostingMeta): string | undefined {
+  return siteJob(meta.url) ?? meta.reqId?.toLowerCase();
+}
+
+/**
+ * Refuse a call that would change the page when the tab belongs to another posting. Reading (get_form, options,
+ * screenshot) still works, so the agent can see where it is.
+ *
+ * Why: before this, a fill on another posting's tab ran and only its logging was skipped. With two applications
+ * at one company open, the agent could fill the wrong one, and nothing would record it.
+ */
+function refuseOtherPosting(t: Target): void {
+  if (!t.mismatch) return;
+  throw new EzError(
+    ErrorCode.PostingMismatch,
+    "This tab belongs to another posting than the active one.",
+    t.mismatch.hint,
+  );
 }
 
 /** The tenant a posting belongs to: read from its URL when it's a Workday or Oracle page, else as stored. */

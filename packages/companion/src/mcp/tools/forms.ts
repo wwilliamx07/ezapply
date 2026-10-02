@@ -19,7 +19,8 @@ const tabId = z
 
 /**
  * Application form tools (Workday and Oracle Recruiting Cloud). Logging, status moves, tab choice and the posting check live in FormsService; a result
- * carries `postingMismatch` when the tab is on another tenant than the active posting (nothing was logged), and
+ * carries `postingMismatch` when the tab is another posting's (other tenant or requisition; calls that change the
+ * page are refused with `posting_mismatch`), and
  * `tabHidden` when the application tab is still hidden after being brought to the front (the browser throttles it).
  */
 export function registerFormTools(server: McpServer, s: Services): void {

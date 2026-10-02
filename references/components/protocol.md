@@ -9,7 +9,7 @@ so a change here is a change to the contract between them.
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` (`workday`, `oracle` or `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (a Workday tenant or an Oracle career site) |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` (`workday`, `oracle` or `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (a Workday tenant or an Oracle career site), `siteJob(url)` (the job a Workday or Oracle URL is for: the Workday requisition, the Oracle job id) and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
 | `timing.ts` | `DEFAULT_TIMING` (every adapter wait, in ms), `TIMING_DOCS`, `resolveTiming(overrides, scale)`; no imports (imported as `@ezapply/protocol/timing` by the adapters) ([waits](workday-adapter.md#waits-autofill-timingyaml)) |
 | `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
@@ -123,7 +123,7 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
 
 `EzError { code, message, hint? }`, serialized as `ErrorPayload`. Codes: `bad_request`, `unauthorized`,
 `protocol_mismatch`, `not_paired`, `extension_disconnected`, `timeout`, `not_found`, `no_active_posting`,
-`capture_failed`, `path_not_allowed`, `internal`. `EzError.from(anything)` wraps unknown errors as
+`capture_failed`, `path_not_allowed`, `posting_mismatch` (the tab is another posting's: nothing that changes the page runs), `internal`. `EzError.from(anything)` wraps unknown errors as
 `internal`.
 
 ## Changing the protocol

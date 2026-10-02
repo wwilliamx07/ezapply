@@ -31,3 +31,24 @@ describe("Oracle career sites", () => {
     );
   });
 });
+
+describe("siteJob", () => {
+  it("reads the Workday requisition and the Oracle job id, on postings and applications alike", async () => {
+    const { siteJob, sameJob } = await import("../src/index.js");
+    expect(
+      siteJob(
+        "https://initech.wd5.myworkdayjobs.com/en-US/InitechCareers/job/Springfield/Senior-Architect_JR1000001-1/apply/applyManually",
+      ),
+    ).toBe("jr1000001-1");
+    expect(siteJob("https://initech.wd5.myworkdayjobs.com/en-US/Site/details/Senior-Architect_JR1000001-1/apply")).toBe(
+      "jr1000001-1",
+    );
+    expect(siteJob("https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Engineer_R123")).toBe("r123");
+    expect(siteJob("https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply")).toBeUndefined();
+    expect(siteJob("https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1")).toBe("42");
+    expect(siteJob("https://jobs.acme.com/en/sites/CX_1/jobs?keyword=x")).toBeUndefined();
+    expect(siteJob("https://example.com/careers/123")).toBeUndefined();
+    expect(sameJob("JR1000001", "jr1000001-1")).toBe(true);
+    expect(sameJob("r123", "r1234")).toBe(false);
+  });
+});

@@ -204,6 +204,10 @@ run can be compared with and without it.
 
 ## 2. Tie each application to its posting (High, M)
 
+**Status:** built on 2026-10-01: requisition matching from the URLs, and refusing calls that change the page
+(`references/mcp-tools.md`, "Which posting"). Left: the live check on the sign-in redirect, and the job-title
+fallback and the evidence in results, both left out until a live run shows they're needed.
+
 Also covers "stronger application form identification".
 
 **Now.** The form tools pick a tab on the posting's tenant (`siteTenant`), and a tab on another tenant gets

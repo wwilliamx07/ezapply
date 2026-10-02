@@ -118,8 +118,9 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
 ([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md)):
 1. `posting_active`; read the profile and answer bank. The form tools act on the application tab (Workday or
-   Oracle) of this posting's tenant and credit everything to it; a tab of another company's tenant comes back with `postingMismatch`
-   and nothing is logged, and Claude stops to sort it out with the user. Before each form call the companion
+   Oracle) of this posting's tenant and credit everything to it; a tab of another posting (another company's tenant, or another requisition at the same one) is
+   read with `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude
+   stops to sort it out with the user. Before each form call the companion
    brings that tab to the front of its window (not while a review page waits for the user); if it's still
    hidden (a minimized window), results carry `tabHidden` and Claude tells the user once to keep it visible,
    since the browser slows hidden tabs.
