@@ -22,6 +22,7 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [components/knowledge-base.md](components/knowledge-base.md) | Project knowledge base, claims, indexing |
 | [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, capture, site access, options, builds |
 | [components/workday-adapter.md](components/workday-adapter.md) | Reading and filling Workday forms, the submit guard, the waits (`autofill-timing.yaml`) |
+| [components/autofill.md](components/autofill.md) | Deterministic autofill: what the companion fills by itself on a step, the rules, strict matching |
 | [components/oracle-adapter.md](components/oracle-adapter.md) | Reading and filling Oracle Recruiting Cloud forms, per-site access, what was verified |
 | [components/cli.md](components/cli.md) | `packages/cli`: the `ezapply` command, init, the MCP relay, `chat` (hosting the companion, restarting Claude) |
 | [components/workspace.md](components/workspace.md) | The user's workspace: layout, agent file, skills, Claude Code settings |

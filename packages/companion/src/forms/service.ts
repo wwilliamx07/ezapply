@@ -20,8 +20,10 @@ import type { ExtensionBridge } from "../bridge/server.js";
 import type { ReviewService } from "../documents/review.js";
 import type { Logger } from "../logger.js";
 import type { PostingsService } from "../postings/service.js";
+import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { checkReadBack, type LeftReason, type PlannedFill, planStep } from "./autofill.js";
 import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -95,26 +97,120 @@ export class FormsService {
     private readonly postings: PostingsService,
     private readonly bridge: ExtensionBridge,
     private readonly reviews: ReviewService,
+    private readonly profile: ProfileService,
     private readonly log: Logger,
   ) {}
 
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string } = {}) {
-    return this.onTab(opts.tabId, async (t) => {
-      const form = await this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
-      if (form.pageKind === "confirmation") {
-        await this.setStatus(t, "submitted");
-        await this.logEvent(t, { event: "confirmation-seen", url: form.url });
-      }
-      if (form.pageKind === "review") await this.setStatus(t, "filled");
-      const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
-      return {
-        ...leanForm(form, opts),
-        ...(missing ? { notAttached: missing } : {}),
-        ...(t.posting ? { posting: t.posting.id } : {}),
-        ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
-        ...tabHiddenOf(t),
-        ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
+    return this.onTab(opts.tabId, async (t) =>
+      this.view(t, await this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts),
+    );
+  }
+
+  /**
+   * get_form's result for a page read: the lean schema with what the agent must know about the call. Seeing the
+   * review page sets status `filled` (and reports approved documents never attached); a confirmation page sets
+   * `submitted`.
+   */
+  private async view(t: Target, form: FormSchema, opts: { onlyEmpty?: boolean; section?: string }) {
+    if (form.pageKind === "confirmation") {
+      await this.setStatus(t, "submitted");
+      await this.logEvent(t, { event: "confirmation-seen", url: form.url });
+    }
+    if (form.pageKind === "review") await this.setStatus(t, "filled");
+    const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
+    return {
+      ...leanForm(form, opts),
+      ...(missing ? { notAttached: missing } : {}),
+      ...(t.posting ? { posting: t.posting.id } : {}),
+      ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+      ...tabHiddenOf(t),
+      ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
+    };
+  }
+
+  /**
+   * Fill what the profile and the answer bank decide on this step without the model (see `forms/autofill.ts`),
+   * then return what was filled and only the fields left to decide. Two passes: fields that appear because of a
+   * fill (a province list after the country) are planned on a second read. Never fills a tab that belongs to
+   * another posting. With `forms.autofill: "off"` it fills nothing and returns the whole step as left.
+   */
+  async autofillStep(tabId?: number) {
+    return this.onTab(tabId, async (t) => {
+      const read = () => this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+      let form = await read();
+      // get_form's view of the page (it replaces get_form at the start of a step), narrowed to the fields left.
+      const result = async (
+        filled: AutofilledField[],
+        failed: AutofillFailure[],
+        kept: number,
+        left: Map<string, LeftReason> | null,
+        note?: string,
+      ) => {
+        const view = await this.view(t, form, {});
+        const sections = leftSections(view.sections, failed, left);
+        return { ...view, sections, filled, failed, kept, ...(note ? { note } : {}) };
       };
+      const nothing = (note: string) => result([], [], 0, null, note);
+      if (form.pageKind !== "step") return nothing(`Nothing to autofill on a ${form.pageKind} page.`);
+      if (t.mismatch) return nothing("Not filled: this tab belongs to another posting.");
+      if ((await this.ws.readConfig()).forms.autofill === "off") {
+        return nothing("Autofill is off (forms.autofill in ezapply.config.json).");
+      }
+      const profile = await this.profile.profile();
+      if (!profile.exists || !profile.valid) {
+        return nothing("Not filled: profile/profile.yaml is missing or invalid (profile_check).");
+      }
+      const answers = await this.profile.answers();
+      const input = {
+        profile: profile.value,
+        answers: answers.exists && answers.valid ? answers.value.entries : [],
+        ...(t.posting?.company ? { company: t.posting.company } : {}),
+      };
+
+      const filled: AutofilledField[] = [];
+      const failed: AutofillFailure[] = [];
+      let kept = 0;
+      const handled = new Set<string>();
+      let left = new Map<string, LeftReason>();
+      // The second pass plans fields that appeared after the first fill; a third is never needed for one step.
+      for (let pass = 0; pass < 2; pass++) {
+        const plan = planStep({ form, ...input, skip: handled });
+        kept += plan.kept.length;
+        for (const k of plan.kept) handled.add(k.fieldId);
+        left = new Map([...left, ...plan.left]);
+        if (plan.fills.length === 0) break;
+        const results = await this.bridge.call(
+          "form.fill",
+          {
+            fills: plan.fills.map(({ fieldId, value }) => ({ fieldId, value })),
+            tabId: t.tab.tabId,
+            timing: t.timing,
+          },
+          t.fillTimeoutMs,
+        );
+        for (const f of plan.fills) {
+          handled.add(f.fieldId);
+          left.delete(f.fieldId);
+          const r = results.find((x) => x.fieldId === f.fieldId) ?? { fieldId: f.fieldId, ok: false };
+          const check = checkReadBack(f, r);
+          await this.logEvent(t, {
+            event: "fill",
+            fieldId: f.fieldId,
+            value: f.value,
+            source: f.source,
+            ...(f.answerId ? { answerId: f.answerId } : {}),
+            auto: true,
+            rule: f.rule,
+            ok: check.ok,
+            ...(r.error ? { error: r.error } : !check.ok && r.ok ? { error: `inexact: ${check.selected ?? "?"}` } : {}),
+          });
+          if (check.ok) filled.push(filledEntry(f));
+          else failed.push(failure(f, r, check.selected));
+        }
+        form = await read();
+      }
+      return result(filled, failed, kept, left);
     });
   }
 
@@ -496,6 +592,69 @@ export function leanFillResult(r: FillResult, value: FillValue | undefined): Fil
     ? Array.isArray(back) && back.length === value.length && value.every((v, i) => back[i] === v)
     : back === value || (typeof value !== "boolean" && back === String(value));
   return same ? { fieldId: r.fieldId, ok: true } : r;
+}
+
+interface AutofilledField {
+  fieldId: string;
+  label: string;
+  value: FillValue;
+  rule: string;
+  /** What the field held before (left from a previous application). */
+  was?: Field["currentValue"];
+}
+
+interface AutofillFailure {
+  fieldId: string;
+  label: string;
+  value: FillValue;
+  rule: string;
+  error?: string;
+  availableOptions?: string[];
+  /** The page took a near match instead (it holds this now): set the right option. */
+  inexact?: string;
+}
+
+function filledEntry(f: PlannedFill): AutofilledField {
+  return {
+    fieldId: f.fieldId,
+    label: f.label,
+    value: f.value,
+    rule: f.rule,
+    ...(f.was !== undefined ? { was: f.was } : {}),
+  };
+}
+
+function failure(f: PlannedFill, r: FillResult, selected: string | undefined): AutofillFailure {
+  return {
+    fieldId: f.fieldId,
+    label: f.label,
+    value: f.value,
+    rule: f.rule,
+    ...(r.error ? { error: r.error } : {}),
+    ...(r.availableOptions ? { availableOptions: r.availableOptions } : {}),
+    ...(r.ok && selected !== undefined ? { inexact: selected } : {}),
+  };
+}
+
+/**
+ * autofill_step's sections: only the fields left to decide, each with why, and not the ones that failed (those
+ * are in `failed`). `left: null` means nothing was planned, so every field is left. Rows marked removable stay
+ * even when empty, so remove_repeatable can still find them.
+ */
+function leftSections(
+  sections: ReturnType<typeof leanForm>["sections"],
+  failed: AutofillFailure[],
+  left: Map<string, LeftReason> | null,
+) {
+  const failedIds = new Set(failed.map((f) => f.fieldId));
+  return sections
+    .map((s) => ({
+      ...s,
+      fields: s.fields
+        .filter((f) => !failedIds.has(f.id) && (left === null || left.has(f.id)))
+        .map((f) => (left?.get(f.id) ? { ...f, reason: left.get(f.id) } : f)),
+    }))
+    .filter((s) => s.fields.length > 0 || s.removable);
 }
 
 /** A result with what the agent must know about the tab: another posting's tenant, or a page left hidden. */

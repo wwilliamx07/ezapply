@@ -45,7 +45,19 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
      last resort, only when neither of you can tell (see **Screenshots**).
 
 ## Each step
-1. `get_form`, then decide a value for every field that is empty or wrong:
+1. `autofill_step`. It fills, without you, what `profile.yaml` and `answers.yaml` settle (profile fields the
+   page marks, outside work and education rows; questions worded exactly as an answer-bank entry with a plain
+   answer), and returns:
+   - `filled`: glance at it. A value wrong for this form goes, corrected, into your `fill_fields`. `was` is a
+     value it replaced, left from a previous application: list those in the hand-off.
+   - `failed`: fix each from its `error` or `availableOptions`. `inexact` means the page holds a near match
+     now, so set the right option.
+   - the step's sections with only the fields left, each with its `reason`. `reversed-wording`: an
+     answer-bank variant phrased the other way round ("I do NOT…"), so flip its yes and no. `eeo-decline`: pick
+     the form's decline option. `row`: work and education rows (below). A `note` says when it filled
+     nothing (another page kind, another posting's tab, autofill off): then treat the result as `get_form`'s.
+
+   Then decide a value for every field left that is empty or wrong:
    - **Profile facts** (a `hint` is given, or the label clearly matches): use `profile.yaml`, formatted for
      the widget. Work history and education rows map to `work[i]` / `education[i]` in order. Use
      `add_repeatable { addButtonId }` until the row counts match, then `get_form` again. Rows carried over
@@ -121,7 +133,7 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
    `availableOptions` or `error`. Never fill one field per call unless only one is left: every call
    re-sends the whole conversation. Re-check with `get_form` (`onlyEmpty: true`) only if something is
    unclear.
-3. `go_next`. When it advanced, its result already gives the new step: go straight to `get_form`. If it
+3. `go_next`. When it advanced, its result already gives the new step: go straight to `autofill_step`. If it
    didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
    again. If a widget still won't take a value after one retry, stop guessing: tell the user which field
    and what the tools returned, and ask them to set it in the browser.

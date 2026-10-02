@@ -100,7 +100,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     ...(opts.reconnectGraceMs !== undefined ? { reconnectGraceMs: opts.reconnectGraceMs } : {}),
   });
 
-  const forms = new FormsService(workspace, postings, bridge, reviews, log.child({ svc: "forms" }));
+  const forms = new FormsService(workspace, postings, bridge, reviews, profile, log.child({ svc: "forms" }));
 
   const services: Services = {
     version: COMPANION_VERSION,

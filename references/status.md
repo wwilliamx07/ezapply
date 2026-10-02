@@ -23,6 +23,10 @@ As of 2026-09-30.
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
+- **Deterministic autofill** (`autofill_step`, 2026-10-01; [autofill](components/autofill.md)): tested on
+  the planner and over MCP on the Workday fixture. Not yet seen live. The first live run should compare turns
+  per step, tokens (`npm run usage:report`), fill time and wrong values with the Tyrell and Hooli runs, and check
+  the strict read-back on real dropdowns (the phone country code, the phone type).
 - **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
   reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;

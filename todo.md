@@ -35,6 +35,11 @@ Items 5, 7 and 9 come after debug mode.
 
 ## 1. Deterministic autofill (High, L in three phases)
 
+**Status:** phase 1 built on 2026-10-01 (`references/components/autofill.md`), and waiting for its live
+run. Building it added one rule not planned here: a saved variant phrased the other way round ("I do NOT
+require…" under "Do you require…?") is never filled (`reversed-wording`), because only the model flips yes
+and no. What's below is the plan; phases 2 and 3 are still to do.
+
 **Why.** In the four applications of 2026-09-30 and 2026-10-01 (Tyrell, Hooli, two Umbrella), the agent made 128
 fills:
 
@@ -152,8 +157,7 @@ now.
 lists answers from the user and from judgment as now. The checklist (item 3) adds the automatic fills by
 section.
 
-**Config.** `forms.autofill` in `ezapply.config.json`, `"on"` or `"off"`. It defaults to on once phase 1 has
-had a clean live run. When it's off, `autofill_step` fills nothing and returns the whole step in `left`, so a
+**Config.** `forms.autofill` in `ezapply.config.json`, `"on"` (the default) or `"off"`. When it's off, `autofill_step` fills nothing and returns the whole step in `left`, so a
 run can be compared with and without it.
 
 **Phases.**

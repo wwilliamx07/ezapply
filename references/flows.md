@@ -131,7 +131,9 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    still fails after one retry goes to the user without one). An Oracle application is often one page with only Submit: every section is filled,
    then hand-off. Oracle's work, education, language and license items are added through an inline form and
    its `save.<block>` button.
-3. Each step: decide every field (profile facts via hints; screening questions matched to the answer bank
+3. Each step: `autofill_step` fills what the profile and answer bank settle (hinted profile fields outside
+   rows, questions worded exactly as an answer-bank entry; [autofill](components/autofill.md)) and returns the
+   rest; Claude glances at what was filled, fixes what failed, and decides every field left (profile facts via hints; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    in one message per step, and a resolved miss or a new answer offered for saving to the answer bank; the
    skills that fit the role, not necessarily all), `add_repeatable` until rows match, `fill_fields` once for the whole step with a

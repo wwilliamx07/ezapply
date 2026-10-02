@@ -56,6 +56,7 @@ dropped.
   },
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
+  "forms": { "autofill": "on" },   // or "off": autofill_step fills nothing (components/autofill.md)
   "decisions": { "provider": "none" },
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
@@ -119,8 +120,9 @@ Oracle career site as `host/site`, read from the URL), `company?`, `role?`, `req
 ### `form-log.jsonl`
 One JSON object per line, each with `ts`. Written only for form activity on a tab of this posting's tenant
 (Workday tenant or Oracle career site; or when either has no tenant):
-- `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
-  `computed`, `user`, `judgment`
+- `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
+  `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`)
+  mark a fill by `autofill_step`; one that took a loose match is `ok: false` with `error: "inexact: …"`
 - `{ event: "upload", fieldId, file, ok, error? }`
 - `{ event: "remove", fieldId, removed, remaining, reason?, ok, error? }`
 - `{ event: "remove-row", sectionId, removed?, reason?, ok, error? }` (`removed`: the row's title)

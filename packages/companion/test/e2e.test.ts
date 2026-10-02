@@ -7,6 +7,7 @@ import {
   CompanionApi,
   detectSite,
   ExtensionApi,
+  type Field,
   type Handlers,
   PROTOCOL_VERSION,
   parseBridgeMessage,
@@ -699,6 +700,82 @@ describe("form tools over MCP", () => {
       tabId: 7,
     });
   }
+
+  it("autofills what the profile and answer bank decide, and returns only the rest", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    await writeFile(
+      join(dir, "ws", "profile", "profile.yaml"),
+      [
+        "schemaVersion: 1",
+        "identity: { firstName: Jane, lastName: Doe }",
+        "contact:",
+        "  email: jane@example.com",
+        "  address: { city: Toronto, country: Canada }",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(dir, "ws", "profile", "answers.yaml"),
+      [
+        "schemaVersion: 1",
+        "entries:",
+        "  - { id: how_heard, canonical: How did you hear about us?, answer: { default: Job Board > LinkedIn } }",
+        "  - { id: previously_employed, canonical: Have you worked here before?, answer: 'No' }",
+      ].join("\n"),
+    );
+    const client = await mcpClient();
+    const r = (await callJson(client, "autofill_step")).data;
+    expect(r.filled).toEqual([
+      expect.objectContaining({ fieldId: "my-information.legalName--firstName", value: "Jane" }),
+      expect.objectContaining({ fieldId: "my-information.countryDropdown", value: "Canada" }),
+      expect.objectContaining({
+        fieldId: "my-information.source",
+        value: "Job Board > LinkedIn",
+        rule: "answer:how_heard",
+      }),
+      expect.objectContaining({ fieldId: "application-questions.previousWorker", value: "No" }),
+    ]);
+    expect(r.failed).toEqual([]);
+    // Only what's left to decide comes back, each with why.
+    const left = Object.fromEntries(
+      r.sections.flatMap((s: { fields: { id: string; reason?: string }[] }) => s.fields.map((f) => [f.id, f.reason])),
+    );
+    expect(left).toEqual({
+      "my-information.skills": "multi-select",
+      "application-questions.degreeLevel": "no-rule",
+      "application-questions.agreement": "no-rule",
+      "application-questions.startDate": "section-mismatch",
+      "application-questions.resume": "file",
+      "application-questions.coverLetter": "file",
+      "work-experience-1.jobTitle": "row",
+    });
+    expect(r).toMatchObject({ pageKind: "step", nextLabel: "Save and Continue", posting: cap.postingId });
+    // The page really holds the values, and the log says they were automatic.
+    const after = (await callJson(client, "get_form")).data;
+    const value = (id: string) =>
+      after.sections.flatMap((s: { fields: Field[] }) => s.fields).find((f: Field) => f.id === id)?.currentValue;
+    expect(value("my-information.legalName--firstName")).toBe("Jane");
+    expect(value("application-questions.previousWorker")).toBe("No");
+    const log = (await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(log[0]).toMatchObject({ event: "fill", source: "profile", auto: true, rule: "hint:identity.firstName" });
+    expect(log.filter((e) => e.auto)).toHaveLength(4);
+
+    // A second call finds them already right.
+    expect((await callJson(client, "autofill_step")).data).toMatchObject({ filled: [], kept: 4 });
+    // Turned off, it fills nothing and returns the whole step.
+    await writeFile(
+      join(dir, "ws", "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, forms: { autofill: "off" } }),
+    );
+    const off = (await callJson(client, "autofill_step")).data;
+    expect(off).toMatchObject({ filled: [], note: expect.stringMatching(/off/) });
+    expect(off.sections.flatMap((s: { fields: unknown[] }) => s.fields)).toHaveLength(11);
+    await client.close();
+  });
 
   it("fills, clears, uploads, removes rows, advances, logs every action and tracks posting status", async () => {
     const ext = fakeExtension();

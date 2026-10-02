@@ -38,6 +38,15 @@ export const WorkspaceConfig = z.object({
       attach: z.enum(["after-approval", "immediately"]).default("after-approval"),
     })
     .default({ attach: "after-approval" }),
+  forms: z
+    .object({
+      /**
+       * on: autofill_step fills, without the model, what the profile and the answer bank decide (forms/autofill.ts).
+       * off: it fills nothing and returns the whole step, so a run can be compared with and without it.
+       */
+      autofill: z.enum(["on", "off"]).default("on"),
+    })
+    .default({ autofill: "on" }),
   decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
   context: z
     .object({
