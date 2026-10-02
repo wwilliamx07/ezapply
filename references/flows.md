@@ -148,7 +148,9 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    application are cleared first: attached files this application didn't upload (per `form-log.jsonl`) and
    multi-select entries such as skills that don't belong go through `remove_items`, extra work-history,
    education or website rows through `remove_repeatable`, then the current documents and values are added.
-4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next). If `go_next`
+4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next). The page's
+   `handoff` (the companion's summary from the log: warnings still open per step, answers from the user or
+   judgment, automatic fills, replaced and removed values) is what Claude's message is built from. If `go_next`
    or `get_form` reports `notAttached` there, Claude goes back and attaches those documents first. Then it summarizes what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
    judgment, and what couldn't be filled. The user reviews and presses Submit.
 5. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on

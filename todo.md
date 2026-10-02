@@ -233,6 +233,11 @@ Also covers "stronger application form identification".
 
 ## 3. The companion runs the hand-off checklist (High, M)
 
+**Status:** built on 2026-10-01 (`references/mcp-tools.md`, "The hand-off checklist"). The warnings are given
+during the step too, on `get_form` and `autofill_step`, so most are fixed before `go_next` instead of after a
+`go_back`. Required fields still empty aren't checked: Workday reports those itself on `go_next`. Left: a live
+run.
+
 **Why.** The hand-off list in `ezapply-apply` (documents attached, every add-button section filled, files left
 from a previous application removed, answers from the user or from judgment flagged) is kept by the model from
 memory over many steps. Live runs missed parts of it: the cover letter twice (now caught by `notAttached`),

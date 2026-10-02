@@ -23,6 +23,8 @@ As of 2026-09-30.
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
+- **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
+  Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Not yet seen: whether
   Workday's application URL keeps the job path (`…/Title_R123/apply/…`) through sign-in and every step. If it
   drops it, the check falls back to the tenant, as before.

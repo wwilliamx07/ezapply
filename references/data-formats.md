@@ -145,7 +145,9 @@ its tenant (Workday tenant or Oracle career site) and, when both URLs name one, 
 either has no tenant:
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
   `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`)
-  mark a fill by `autofill_step`; one that took a loose match is `ok: false` with `error: "inexact: …"`
+  mark a fill by `autofill_step`, with `was` when it overwrote a value; one that took a loose match is `ok: false` with `error: "inexact: …"`
+- `{ event: "step-check", step?, stepIndex?, warnings[] }`: written by `go_next` before it moves, with what
+  still looked off on the step (`checklist`); the review page's `handoff.steps` reads the last per step
 - `{ event: "upload", fieldId, file, ok, error? }`
 - `{ event: "remove", fieldId, removed, remaining, reason?, ok, error? }`
 - `{ event: "remove-row", sectionId, removed?, reason?, ok, error? }` (`removed`: the row's title)

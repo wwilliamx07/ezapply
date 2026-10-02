@@ -907,7 +907,16 @@ describe("form tools over MCP", () => {
     expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, pageKind: "review" });
     expect((await callJson(client, "go_next")).data.refusedReason).toBeDefined();
     // Back from the review page to fix something, and forward again.
-    expect((await callJson(client, "get_form")).data.backLabel).toBe("Back");
+    const review = (await callJson(client, "get_form")).data;
+    expect(review.backLabel).toBe("Back");
+    // The hand-off summary comes from the log: what was removed, and why.
+    expect(review.handoff).toMatchObject({
+      steps: [],
+      removed: [
+        { what: expect.stringMatching(/coverLetter.*cover.pdf/), reason: "left from a previous application" },
+        { what: "work-experience-2 (Work Experience 2)", reason: "not in profile" },
+      ],
+    });
     expect((await callJson(client, "go_back")).data).toMatchObject({
       moved: true,
       pageKind: "step",
@@ -927,11 +936,14 @@ describe("form tools over MCP", () => {
       "remove",
       "upload",
       "remove-row",
+      "step-check",
       "next",
       "next",
       "back",
+      "step-check",
       "next",
     ]);
+    expect(log[5]).toMatchObject({ event: "step-check", step: "My Information", warnings: [] });
     expect(log[0]).toMatchObject({
       fieldId: "my-information.legalName--firstName",
       value: "Jane",

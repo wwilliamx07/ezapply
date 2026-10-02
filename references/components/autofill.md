@@ -87,7 +87,8 @@ sets the right one.
 
 ## Logging
 Each automatic fill is a normal `fill` event in `form-log.jsonl`, with `source` (`profile` or `answer-bank`),
-`answerId`, `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`). A fill that took a loose match
+`answerId`, `auto: true`, `rule` (`hint:contact.email`, `answer:how_heard`) and `was` (a value it
+overwrote). The review page's `handoff` lists them by section, with what they replaced. A fill that took a loose match
 is logged `ok: false` with `error: "inexact: <selected>"`.
 
 ## Turning it off

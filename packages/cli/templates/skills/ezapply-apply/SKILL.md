@@ -57,6 +57,9 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
      answer-bank variant phrased the other way round ("I do NOT…"), so flip its yes and no. `eeo-decline`: pick
      the form's decline option. `row`: work and education rows (below). A `note` says when it filled
      nothing (another page kind, another posting's tab, autofill off): then treat the result as `get_form`'s.
+   - `checklist` (here and on `get_form`): what looks off on this step: a list section whose rows don't
+     match the profile, a file this application didn't upload. Fix it on this step, or say why not in the
+     hand-off (the user left out an old job on purpose).
 
    Then decide a value for every field left that is empty or wrong:
    - **Profile facts** (a `hint` is given, or the label clearly matches): use `profile.yaml`, formatted for
@@ -134,7 +137,9 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
    `availableOptions` or `error`. Never fill one field per call unless only one is left: every call
    re-sends the whole conversation. Re-check with `get_form` (`onlyEmpty: true`) only if something is
    unclear.
-3. `go_next`. When it advanced, its result already gives the new step: go straight to `autofill_step`. If it
+3. `go_next`. Its `checklist` is what still looked off on the step you just left: `go_back` and fix it, or
+   note why for the hand-off. When it advanced, its result already gives the new step: go straight to
+   `autofill_step`. If it
    didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
    again. If a widget still won't take a value after one retry, stop guessing: tell the user which field
    and what the tools returned, and ask them to set it in the browser.
@@ -163,10 +168,14 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
 ## Hand-off (review page)
 On Oracle, this is when every section is filled and Submit is the only way on. If `go_next` or `get_form`
 shows `notAttached`, an approved document never went in: `go_back` to the step with the file field, upload
-it, and come forward again before handing off. Stop. In one message, give:
+it, and come forward again before handing off. Stop. The page's `handoff` (on `get_form` or
+`autofill_step`) is the summary of this application from its log: build the message from it, not from memory.
+In one message, give:
 - the steps completed and the files attached
-- what you removed that a previous application had left (old attachments, skills, work-history rows)
-- every answer that came from the user or from your judgment, flagged for a second look
+- `handoff.steps`: what still looked off when each step was left, and what you did about it
+- `handoff.removed` and `handoff.replaced`: what a previous application had left, and what replaced it
+- `handoff.answersToFlag`: every answer from the user or your judgment, flagged for a second look
+- `handoff.automatic`, briefly by section: what was filled without you
 - anything you could not fill
 
 Then ask the user to review everything in their browser and press **Submit** themselves. Afterwards, if they

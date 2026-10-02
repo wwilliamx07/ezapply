@@ -53,7 +53,8 @@ function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
         : (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(method, params, timeoutMs),
   } as unknown as ExtensionBridge;
   const reviews = { pending: () => false } as never;
-  return new FormsService(ws, postings, shown, reviews, {} as never, createLogger({ toFile: false, level: "silent" }));
+  const profile = { profile: async () => ({ exists: false }) } as never;
+  return new FormsService(ws, postings, shown, reviews, profile, createLogger({ toFile: false, level: "silent" }));
 }
 
 describe("form calls on one tab", () => {

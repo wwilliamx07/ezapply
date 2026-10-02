@@ -26,6 +26,7 @@ import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { checkReadBack, type LeftReason, type PlannedFill, planStep } from "./autofill.js";
+import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
 import { type CallRecord, DebugRecorder, stripBulk } from "./debug.js";
 import { loadTiming } from "./timing.js";
 
@@ -136,9 +137,11 @@ export class FormsService {
     }
     if (form.pageKind === "review") await this.setStatus(t, "filled");
     const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
+    const checks = await this.checks(t, form);
     return {
       ...leanForm(form, opts),
       ...(missing ? { notAttached: missing } : {}),
+      ...checks,
       ...(t.posting ? { posting: t.posting.id } : {}),
       ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
       ...tabHiddenOf(t),
@@ -223,6 +226,7 @@ export class FormsService {
             ...(f.answerId ? { answerId: f.answerId } : {}),
             auto: true,
             rule: f.rule,
+            ...(f.was !== undefined ? { was: f.was } : {}),
             ok: check.ok,
             ...(r.error ? { error: r.error } : !check.ok && r.ok ? { error: `inexact: ${check.selected ?? "?"}` } : {}),
           });
@@ -388,6 +392,20 @@ export class FormsService {
   async next(tabId?: number) {
     return this.onTab({ tool: "go_next", params: {} }, tabId, async (t) => {
       refuseOtherPosting(t);
+      // The step as it's left, for the hand-off: what still looked off then (one read, only when it's logged).
+      let leaving: string[] = [];
+      if (t.posting) {
+        const before = await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+        if (before.pageKind === "step") {
+          leaving = (await this.checks(t, before)).checklist ?? [];
+          await this.logEvent(t, {
+            event: "step-check",
+            step: before.step?.title,
+            ...(before.step?.index ? { stepIndex: before.step.index } : {}),
+            warnings: leaving,
+          });
+        }
+      }
       const r = await t.bridge.call("form.next", { tabId: t.tab.tabId, timing: t.timing }, 60_000);
       await this.logEvent(t, {
         event: "next",
@@ -396,10 +414,11 @@ export class FormsService {
         step: r.step?.title,
         ...(r.step?.index ? { stepIndex: r.step.index } : {}),
       });
-      if (r.pageKind !== "review") return annotate(r, t);
+      const left = leaving.length ? { checklist: leaving } : {};
+      if (r.pageKind !== "review") return annotate({ ...r, ...left }, t);
       await this.setStatus(t, "filled");
       const missing = await this.notAttached(t, "review");
-      return annotate(missing ? { ...r, notAttached: missing } : r, t);
+      return annotate({ ...r, ...left, ...(missing ? { notAttached: missing } : {}) }, t);
     });
   }
 
@@ -601,6 +620,48 @@ export class FormsService {
     };
     const line = JSON.stringify({ ts: new Date().toISOString(), ...event, ...tab });
     await appendFile(join(this.postings.folder(t.posting.id), "form-log.jsonl"), `${line}\n`, "utf8");
+  }
+
+  /**
+   * The checklist for a page (see `forms/checklist.ts`): on a step, `checklist` warnings (rows that don't match
+   * the profile, files this application didn't upload); on the review page, or an Oracle page whose only way on
+   * is Submit, also `handoff`, the summary of this application from its log. Only for a posting this tab is
+   * credited to, and never failing the call.
+   */
+  private async checks(t: Target, form: FormSchema): Promise<{ checklist?: string[]; handoff?: Handoff }> {
+    if (!t.posting) return {};
+    try {
+      const events = await this.logEvents(t);
+      const uploaded = new Set(
+        events.filter((e) => e.event === "upload" && e.ok && e.file).map((e) => basename(e.file as string)),
+      );
+      const profile = await this.profile.profile();
+      const warnings = stepWarnings(form, profile.exists && profile.valid ? profile.value : null, uploaded);
+      const end = form.pageKind === "review" || (form.adapter === "oracle" && /submit/i.test(form.nextLabel ?? ""));
+      return {
+        ...(form.pageKind === "step" && warnings.length ? { checklist: warnings } : {}),
+        ...(end ? { handoff: handoff(events) } : {}),
+      };
+    } catch (err) {
+      this.log.warn({ err: (err as Error).message }, "checklist skipped");
+      return {};
+    }
+  }
+
+  /** This posting's form-log.jsonl, parsed (lines that aren't JSON skipped). */
+  private async logEvents(t: Target): Promise<LogEvent[]> {
+    if (!t.posting) return [];
+    const text = await readFile(join(this.postings.folder(t.posting.id), "form-log.jsonl"), "utf8").catch(() => "");
+    const out: LogEvent[] = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        out.push(JSON.parse(line) as LogEvent);
+      } catch {
+        // a line cut off mid-write
+      }
+    }
+    return out;
   }
 
   /**
