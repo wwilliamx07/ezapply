@@ -185,7 +185,8 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 `pageAction*`, `afterField*`.
 
 ## What was verified, and how
-- **Live, headless** (`npm run recon:oracle`, 2026-09-28, jobs.umbrella.example): the job page (`posting`, Apply,
+- **Live, headless** (a Playwright recon script used while building the adapter and since removed, 2026-09-28,
+  jobs.umbrella.example): the job page (`posting`, Apply,
   tenant), Apply → the email step (`auth`, fields email and terms, honeypot left out). Snapshots in
   `test/fixtures/live/oracle-posting.html` and `oracle-email.html`.
 - **A saved application** (the user's browser, the Umbrella single-page flow, before filling):
@@ -213,5 +214,5 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 - **Unsupported widgets** are shown as `typeahead` and left to the user (above).
 
 ## Updating for Oracle changes
-Change `selectors.ts` (every Oracle string of the adapter), add a snapshot with `npm run recon:oracle --
-<job-url>` (public pages only) or one the user saves, and extend `oracle-live.test.ts` and the fixture.
+Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or, once it
+exists, one exported from autofill debug mode: `todo.md`, item 4), and extend `oracle-live.test.ts` and the fixture.

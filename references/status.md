@@ -18,7 +18,7 @@ As of 2026-09-30.
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions on 2026-09-30) |
-| Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time; `npm run usage:report` to measure |
+| Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
@@ -32,7 +32,7 @@ As of 2026-09-30.
   Workday fixture and with a timed-out call. Not yet used on a live run; turn it on for autofill's first one.
 - **Deterministic autofill** (`autofill_step`, 2026-10-01; [autofill](components/autofill.md)): tested on
   the planner and over MCP on the Workday fixture. Not yet seen live. The first live run should compare turns
-  per step, tokens (`npm run usage:report`), fill time and wrong values with the Tyrell and Hooli runs, and check
+  per step, tokens (from the session's transcript), fill time and wrong values with the Tyrell and Hooli runs, and check
   the strict read-back on real dropdowns (the phone country code, the phone type).
 - **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
@@ -90,7 +90,7 @@ As of 2026-09-30.
   stubs. Not yet seen: each browser's program opening a new tab in the running window (Firefox with a
   `file://` PDF in particular), Opera's Windows install path, and a Chrome user with several profiles (the
   tab opens in the profile last used, which may not be the one with the extension).
-- **The saving from turning auto memory off:** measure with `npm run usage:report` on the next session.
+- **The saving from turning auto memory off:** compare the token usage in the next session's transcript.
 - **A full onboarding in Claude Code**, including installing MiKTeX through a tool hint.
 - **`ezapply chat` with a real Claude Code:** tested with a stub `claude`. Not yet seen: Claude Code passing
   `EZAPPLY_CHAT_SESSION` on to its MCP relay (without it the session reads as unused and never restarts,
@@ -214,7 +214,7 @@ what changed from it, and each linked page gives the reason.
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
-| Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; Playwright only in the recon script |
+| Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; no Playwright (the recon scripts that used it were for the first adapter builds and are gone) |
 | Changesets, per-package READMEs, `ezapply migrate` | Not used; migrations run in `ezapply init`; documentation lives here |
 | Cover letter template generated in onboarding | A shipped default, the user's LaTeX, or rebuilt from an example letter |
 | The user runs `claude` in the workspace | `ezapply chat` (the workspace launcher), which starts Claude and gives it a fresh session when another posting is captured, so finished work isn't re-sent every turn ([cli](components/cli.md#chat-chatts)) |

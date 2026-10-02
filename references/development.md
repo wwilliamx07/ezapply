@@ -11,9 +11,6 @@ ezapply/
   package.json              npm workspaces, scripts
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
-  scripts/workday-recon.mjs live Workday check (Playwright, headless)
-  scripts/oracle-recon.mjs  live Oracle check up to the email step (Playwright, headless)
-  scripts/usage-report.mjs  token usage of a Claude Code session in the workspace
   packages/
     protocol/               shared schemas            → components/protocol.md
     companion/              MCP server, bridge, services (runs inside `ezapply chat`) → components/companion.md
@@ -36,9 +33,6 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 
 ## Scripts
 
-`scripts/` is not in the repo: d456ecc removed it and added it to `.gitignore`. The `usage:report` and
-`recon:*` entries below run only with a local copy of those scripts; without one they fail with a missing file.
-
 | Command | Does |
 |---|---|
 | `npm run setup` | `npm install`, build, `ezapply init` |
@@ -47,9 +41,6 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 | `npm run typecheck` | all packages and `tsconfig.tests.json` (tests) |
 | `npm run lint` / `npm run format` | Biome check / write |
 | `npm run ezapply -- <cmd>` | run the CLI |
-| `npm run usage:report [-- <transcript.jsonl>]` | token usage of a workspace session (default: the most recent, found from `config.json`'s workspace under `~/.claude/projects/`): turns, tokens re-sent and written, average and peak context, then per user prompt (turns, tokens, context at start → end), per tool (calls, result size, images), and per subagent (from its `.meta.json` description). Every turn re-sends the conversation, so cost ≈ turns × context; use it before and after a change meant to cut usage. Synthetic zero-usage entries and harness notifications aren't counted |
-| `npm run recon:workday -- <careers-url> [outDir]` | headless walk of a public Workday tenant up to sign-in, printing what the adapter sees and saving each page's HTML (needs `npm run build` and Playwright's Chromium) |
-| `npm run recon:oracle -- <job-url> [outDir]` | the same for a public Oracle job: the job page, then Apply to the email step, where it stops (never types anything). `RECON_CHANNEL=msedge` (or `chrome`) uses an installed browser when Playwright's Chromium isn't downloaded |
 
 ## Tests
 

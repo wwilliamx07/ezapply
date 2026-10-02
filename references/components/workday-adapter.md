@@ -290,8 +290,8 @@ renumbers the rest.
 ## Updating for Workday changes
 Change `selectors.ts` (keep every Workday string of the adapter there; what both adapters share is in
 `adapters/common/`; posting-page hooks and hosts shared
-with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` with
-`npm run recon:workday -- <careers-url>`, and extend the tests. The behavioural fixture
+with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` (saved
+from the browser, or once it exists exported from autofill debug mode: `todo.md`, item 4), and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom
 environment, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new
 adapter method needs one fixture behaviour, not two fakes.

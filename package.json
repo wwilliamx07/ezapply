@@ -18,15 +18,11 @@
     "test": "npm run build && vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ezapply": "node packages/cli/dist/main.js",
-    "recon:workday": "node scripts/workday-recon.mjs",
-    "recon:oracle": "node scripts/oracle-recon.mjs",
-    "usage:report": "node scripts/usage-report.mjs"
+    "ezapply": "node packages/cli/dist/main.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@types/node": "^24.13.6",
-    "playwright": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }

@@ -169,7 +169,7 @@ run can be compared with and without it.
 1. **(M) Profile facts and literal answers, no adapter change.** The planner with rules 1, 2 (without rows),
    3 (answers that are plain values only) and 4; `autofill_step`; the strict read-back check; the skill
    change. It uses `form.get` and `form.fill` as they are. Then one live run, compared with the Tyrell and Hooli
-   runs on turns per step, tokens (`npm run usage:report`), fill time and wrong values.
+   runs on turns per step, tokens (from the session transcripts), fill time and wrong values.
 2. **(M) Rows, strict matching, computed answers.** Workday rows; `strict: true` in the adapter (its own live
    run); answer entries with `source: profile.…`.
 3. **(M) Wider coverage, from the logs.** Hints for education years (`firstYearAttended`,
@@ -370,8 +370,7 @@ replaced.
 **Implementation, in three parts.** They can land separately, the companion part first, because it changes
 nothing in the page. **Part 1 was built on 2026-10-01**: `ezapply debug on|off|report|clean`, the records,
 `index.jsonl`, the autofill plan, `maxMB`, and the read deny. See `references/data-formats.md` and
-`development.md`, "Debugging a live run". The report is `ezapply debug report` rather than an npm script,
-because `scripts/` is not in the repo. Parts 2 and 3 are still to do.
+`development.md`, "Debugging a live run". The report is the CLI command `ezapply debug report`. Parts 2 and 3 are still to do.
 1. **(S–M) Companion only.** The call, the full result, the companion's timings, and the autofill plan. No
    adapter change, so it can ship with or right after autofill phase 1 and record that feature's first live run.
 2. **(M) The adapter trace and page hooks.** An adapter change, with its own live run.

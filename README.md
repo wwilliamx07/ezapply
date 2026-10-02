@@ -63,9 +63,6 @@ runs).
 | `npm test` | build, then vitest: unit tests, companion and `ezapply chat` end-to-end, mock GitHub, real git, TeX (when installed), and the Workday and Oracle adapters against fixtures and live snapshots |
 | `npm run typecheck` | all packages and tests |
 | `npm run lint` / `npm run format` | Biome |
-| `npm run recon:workday -- <careers-url> [outDir]` | headless check of the Workday adapter on a public tenant, saving page snapshots |
-| `npm run recon:oracle -- <job-url> [outDir]` | the same for an Oracle job, up to its email step |
-| `npm run usage:report [-- <transcript.jsonl>]` | token usage of a Claude Code session in the workspace (default: the latest): turns, context, per prompt, per tool, per subagent |
 
 TypeScript 7 note: if type errors look stale after changing a `tsconfig`, delete `packages/*/tsconfig.tsbuildinfo`.
 
