@@ -118,6 +118,14 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 - **Adapter bundles stay free of zod:** in-page code imports the protocol only through its import-free
   subpaths (`@ezapply/protocol/workday`, `/oracle`, `/timing`) or as types.
 - **No personal assumptions in code**: everything user-specific lives in the profile and config.
+- **One adapter change per live run.** Commit e390fef (2026-09-28) changed about ten things in the Workday
+  adapter at once, and live autofill got several times slower (a step's `fill_fields` past the companion's
+  120 s timeout, nine dropdowns past 110 s). c6aac3e reverted what the live runs hadn't shown working, and
+  which change caused it was never found. The fixtures can't catch this: they're built from what the adapter
+  expects. So land adapter changes one per live run, so a slowdown points at one change, and don't bundle
+  them. b5ba545 brought two of the reverted ideas back (`openListboxRetrying`, and `back()` seeing a move by
+  step index): if a live run is slower than the Oscorp and Tyrell runs ([status](status.md)), suspect those first.
+  `autofill-timing.yaml` can shorten a wait without a rebuild.
 
 ## How to…
 - **Add an MCP tool:** service method → register in the right `mcp/tools/*.ts` with a precise, short

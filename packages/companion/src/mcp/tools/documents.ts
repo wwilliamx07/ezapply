@@ -1,7 +1,7 @@
+import { ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
-import { browserLabel } from "../../util/open.js";
 import { rawTool, tool } from "../result.js";
 
 const PATH_NOTE = "Paths may be absolute or relative to the workspace root.";
@@ -181,47 +181,56 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
     ),
   );
 
+  // One tool opens the page and waits for the answer. With a separate wait call the agent opened reviews three
+  // times without waiting (2026-10-01), and the user's answers sat unread until they asked.
   server.registerTool(
-    "review_open",
+    "review_documents",
     {
-      title: "Show documents for approval",
+      title: "Have the user review documents",
       description:
         "In the after-approval attach mode: open a page in the user's browser showing these PDFs (one posting's " +
-        "resume, cover letter or bundle) to approve or ask changes for. Then call review_wait. Only approval on " +
-        "that page lets upload_file attach a document, and only in the version shown.",
+        "resume, cover letter or bundle) and wait for the answer (default up to 10 minutes): documents approved " +
+        "and change requests. The page shows the PDFs as they are now, so after any rebuild call this again with " +
+        "the changed files. Only approval on the page lets upload_file attach a document, in the version shown. " +
+        "With reviewId instead of files: wait again for a review that timed out.",
       inputSchema: {
-        files: z.array(z.string()).min(1).max(6).describe("PDFs under postings/<id>/, e.g. postings/<id>/resume.pdf."),
-      },
-    },
-    tool(s.log, "review_open", async ({ files }: { files: string[] }) => {
-      const review = await s.reviews.open(files);
-      const openedIn = await s.opener.url(review.url).catch(() => null);
-      return {
-        ...review,
-        openedBrowser: openedIn !== null,
-        ...(openedIn ? { openedIn } : {}),
-        tell: openedIn
-          ? `A review page opened in ${browserLabel(openedIn)}: approve each document, or write what should change.`
-          : `Ask the user to open ${review.url} to approve the documents or write what should change.`,
-      };
-    }),
-  );
-
-  server.registerTool(
-    "review_wait",
-    {
-      title: "Wait for the review",
-      description:
-        "Block until the user answers the review page (default up to 10 minutes). Returns approved documents and " +
-        "change requests per document; revise those, rebuild, and review_open the changed ones again.",
-      inputSchema: {
-        reviewId: z.string(),
+        files: z
+          .array(z.string())
+          .min(1)
+          .max(6)
+          .optional()
+          .describe("PDFs under postings/<id>/, e.g. postings/<id>/resume.pdf."),
+        reviewId: z.string().optional().describe("A review that timed out, to wait for again (instead of files)."),
         timeoutSeconds: z.number().int().min(5).max(900).default(600),
       },
-      annotations: { readOnlyHint: true },
     },
-    tool(s.log, "review_wait", ({ reviewId, timeoutSeconds }: { reviewId: string; timeoutSeconds: number }) =>
-      s.reviews.wait(reviewId, timeoutSeconds * 1000),
+    tool(
+      s.log,
+      "review_documents",
+      async ({ files, reviewId, timeoutSeconds }: { files?: string[]; reviewId?: string; timeoutSeconds: number }) => {
+        if ((files === undefined) === (reviewId === undefined)) {
+          throw new EzError(
+            ErrorCode.BadRequest,
+            "Give either files or reviewId.",
+            "files opens a new review; reviewId waits again for one that timed out.",
+          );
+        }
+        if (reviewId !== undefined) return { reviewId, ...(await s.reviews.wait(reviewId, timeoutSeconds * 1000)) };
+        const review = await s.reviews.open(files as string[]);
+        const openedIn = await s.opener.url(review.url).catch(() => null);
+        if (!openedIn) {
+          // Nobody will see the page unless the agent gives the user the link, so don't wait first.
+          return {
+            ...review,
+            done: false,
+            openedBrowser: false,
+            tell: `Ask the user to open ${review.url} to approve the documents or write what should change.`,
+            hint: `Then wait for the answer: review_documents { reviewId: "${review.reviewId}" }.`,
+          };
+        }
+        const answer = await s.reviews.wait(review.reviewId, timeoutSeconds * 1000);
+        return { ...review, openedIn, ...answer };
+      },
     ),
   );
 

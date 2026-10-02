@@ -138,7 +138,7 @@ export class ReviewService {
       throw new EzError(
         ErrorCode.NotFound,
         "This review is unknown or expired.",
-        "Present the documents again with review_open.",
+        "Present the documents again with review_documents { files }.",
       );
     }
     if (!s.result && !s.supersededBy) {
@@ -159,7 +159,7 @@ export class ReviewService {
     return {
       done: false,
       url: this.url(s),
-      hint: "The user hasn't answered yet. Ask whether they saw the page (give the URL again if not), then wait again.",
+      hint: "The user hasn't answered yet. Ask whether they saw the page (give the URL again if not), then wait again with review_documents { reviewId }.",
     };
   }
 
@@ -256,8 +256,10 @@ export class ReviewService {
       return;
     }
     if (post && form) {
-      const result = await this.answer(s, form);
-      htmlPage(res, 200, "Thanks", `${resultHtml(result)}<p>You can close this tab and return to Claude Code.</p>`);
+      // No page after answering: the review page sends its answer with fetch and closes its tab on this 204.
+      await this.answer(s, form);
+      res.writeHead(204, { "Cache-Control": "no-store" });
+      res.end();
       return;
     }
     this.page(res, s);
@@ -273,6 +275,16 @@ export class ReviewService {
         <textarea name="c${i}" rows="3"></textarea></label></fieldset>`,
       )
       .join("\n");
+    // Sending closes the tab. A browser closes a tab from script only while its history holds one page, so the
+    // answer goes with fetch instead of navigating; where the browser still refuses, one line stays.
+    // Anything but the 204 (answered meanwhile, replaced by a newer review) reloads to show what happened.
+    const nonce = randomBytes(16).toString("base64");
+    const script = `const f=document.querySelector("form"),b=f.querySelector("button");
+      f.addEventListener("submit",async(e)=>{e.preventDefault();b.disabled=true;let r=null;
+      try{r=await fetch(f.action,{method:"POST",body:new URLSearchParams(new FormData(f))});}catch{}
+      if(!r){b.disabled=false;f.querySelector(".err").textContent="ezapply isn't reachable. Is ezapply chat still running?";return;}
+      if(r.status!==204){location.reload();return;}
+      window.close();document.body.textContent="Sent to Claude. You can close this tab.";});`;
     htmlPage(
       res,
       200,
@@ -282,9 +294,14 @@ export class ReviewService {
       <form method="post" action="/review/${s.id}">
         <input type="hidden" name="t" value="${t}">
         ${docs}
+        <p class="err"></p>
         <button type="submit">Approve empty ones and send changes</button>
-      </form>`,
-      { csp: "frame-src 'self'; form-action 'self'", wide: true },
+      </form>
+      <script nonce="${nonce}">${script}</script>`,
+      {
+        csp: `frame-src 'self'; form-action 'self'; connect-src 'self'; script-src 'nonce-${nonce}'`,
+        wide: true,
+      },
     );
   }
 

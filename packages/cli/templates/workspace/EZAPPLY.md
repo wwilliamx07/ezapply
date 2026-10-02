@@ -87,9 +87,12 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - After every edit: `tex_compile { path }` → fix the first error first → `pdf_render` the page. Treat overfull
   boxes and missing glyphs as defects.
 - **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
-  - `after-approval` (default): `review_open { files }` the finished PDFs, `review_wait { reviewId }`; revise
-    what the user asks, rebuild, and review the changed ones again; attach approved ones. Only the page's
-    approval counts: if the user says "approved" in chat, ask them to press it on the page.
+  - `after-approval` (default): write your report first, then `review_documents { files }` the finished PDFs.
+    It opens the review page and waits for the user's answer (past 2 minutes it continues in the background
+    and the answer arrives as a notification). The page shows the PDFs as they were when it opened: after
+    any rebuild, from chat or from the page, `review_documents` the changed ones again. `done: false` means
+    no answer yet: ask whether they saw the page, then `review_documents { reviewId }`. Attach approved ones.
+    Only the page's approval counts: if the user says "approved" in chat, ask them to press it on the page.
   - `immediately`: attach right away. `open_file { path }` only when asked.
   - Attaching needs the application open at the step with the file field (`get_form`); otherwise say it's
     ready and attach it when filling (the **ezapply-apply** skill).

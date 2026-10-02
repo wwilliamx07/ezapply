@@ -31,7 +31,7 @@ export const WorkspaceConfig = z.object({
   documents: z
     .object({
       /**
-       * after-approval: generated documents are shown in the browser (review_open) and attached only once the
+       * after-approval: generated documents are shown in the browser (review_documents) and attached only once the
        * user approves that exact version on the page; upload_file refuses anything else from postings/.
        * immediately: attached as soon as they're built.
        */

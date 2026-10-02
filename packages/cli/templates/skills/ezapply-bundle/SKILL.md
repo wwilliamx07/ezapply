@@ -30,5 +30,5 @@ posting requires a single upload. ---
      `pdf_compress { path, output?, targetBytes? }` and report the result. If it can't reach the target, say
      so and suggest what to drop.
 6. Report the sections with their page ranges in one line. The bundle is a new document: in the
-   `after-approval` attach mode `review_open { files }` it and `review_wait { reviewId }` before attaching,
+   `after-approval` attach mode `review_documents { files }` it before attaching,
    even when its parts were approved; in `immediately`, `open_file { path }` it.

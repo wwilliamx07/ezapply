@@ -60,7 +60,7 @@ Tone comes from `profile/preferences.md`.
 
 ## Report and iterate
 Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode (EZAPPLY.md):
-in `after-approval`, `review_open { files }` it (with the resume if that's ready and not yet approved) and
-`review_wait { reviewId }`. Handle tweaks ("more concise", "mention X"), from chat or the review page, by
+in `after-approval`, `review_documents { files }` it (with the resume if that's ready and not yet approved).
+Handle tweaks ("more concise", "mention X"), from chat or the review page, by
 editing, recompiling, reporting in one line, and reviewing again in `after-approval`. Every build is saved in
 `.history/`, so earlier versions can be restored on request.

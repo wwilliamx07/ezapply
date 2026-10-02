@@ -71,7 +71,7 @@ overwritten; read for every form call, so a saved edit applies to the next one.
 ```yaml
 scale: 1                  # multiplies the defaults of the waits left unset (not pollMs; 0.1–10)
 # fillTimeoutSeconds: 120 # how long the companion waits for one fill_fields (10–600)
-# dropdownOpenMs: 2000    # every wait, commented out at its default, with a line on what it does
+# dropdownOpenMs: 200     # every wait, commented out at its default, with a line on what it does
 ```
 Keys and defaults: `DEFAULT_TIMING` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A
 missing file or key means the default. A mistake (bad YAML, an unknown key, a value out of range) falls back

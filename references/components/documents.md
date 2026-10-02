@@ -91,17 +91,38 @@ How a finished document reaches an application is the **attach mode**, `document
 The default is the reviewing one because what's attached goes to an employer; a user who trusts the loop can
 switch.
 
-**The review page** (`ReviewService`, `documents/review.ts`). `review_open` takes 1–6 PDFs from one posting
-folder, reads their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the `Opener`. The
-page shows each PDF in the browser's own viewer (an iframe of `/review/<id>/file/<n>`, served as
+**The review page** (`ReviewService`, `documents/review.ts`). `review_documents { files }` takes 1–6 PDFs from
+one posting folder, reads their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the
+`Opener`. The page shows each PDF in the browser's own viewer (an iframe of `/review/<id>/file/<n>`, served as
 `application/pdf`, inline, only to the same origin) with a box "What should change? Leave empty to approve
-it as shown", and one submit button. The files are served from the bytes read at `review_open`, so the user
-approves exactly what they saw even if Claude rebuilds meanwhile. Answering records each document with an
-empty box as approved and returns the others with the user's words; `review_wait` blocks until then (or its
-timeout). Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
+it as shown", and one submit button. The files are served from the bytes read when the review opened, so the
+user approves exactly what they saw even if Claude rebuilds meanwhile. Answering records each document with an
+empty box as approved and returns the others with the user's words.
+
+**One call opens and waits.** `review_documents` blocks until the answer (or its timeout, default 10 minutes).
+Claude Code moves an MCP call still running after 120 s to the background and delivers its result as a task
+notification, so a long wait doesn't hold the chat. On a timeout, `review_documents { reviewId }` waits again;
+an answer given while nothing waits is kept, and the next wait returns it at once. When no browser opened, the
+call returns right away with the URL for Claude to give the user, since nobody would see the page otherwise.
+*Why one tool:* opening and waiting used to be two tools (`review_open`, `review_wait`). In the Initrode
+session (2026-10-01) the agent opened three reviews without waiting, and the user's change requests sat in
+the companion until they asked why they'd been dropped. The skills now also say the page is a snapshot: after
+any rebuild, review the changed files again.
+
+Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
 a review expires after 2 hours, or when the chat ends. Every URL needs the random
 token, compared in constant time; wrong or missing tokens get a 404.
+
+**Sending closes the tab.** There is no page after answering: the POST answers `204`, and the page's script
+closes its tab. A browser lets a script close a tab only while the tab's history holds one page, which is the
+case for a tab the `Opener` opened on the review URL, so the script sends the answer with `fetch` instead of
+submitting the form, which would add a page. Where the browser still refuses (the user pasted the link into
+a tab they'd used), the page is replaced by one line, "Sent to Claude. You can close this tab." Any answer
+other than the 204 (the review was answered meanwhile, or replaced) reloads the page, which then says which;
+a failed request (ezapply closed) shows an error and leaves the form as filled. The script is allowed by a
+per-response nonce (`script-src 'nonce-…'`, `connect-src 'self'`). Seen working in Chromium with the tab
+opened from the command line, as the `Opener` does; not yet tried in Firefox.
 
 **Approvals** go to `postings/<id>/approvals.json`: per document (path relative to the posting folder) the
 SHA-256 of the approved bytes, when, and the review. `upload_file` in the `after-approval` mode refuses a file

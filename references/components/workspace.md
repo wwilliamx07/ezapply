@@ -113,14 +113,14 @@ when a request matches it or the user types `/ezapply-<name>`.
 
 ### Call shapes
 The skills and `EZAPPLY.md` write a tool call with its parameters: `fill_fields { fills: [{ fieldId, value,
-source, answerId? }] }`, `add_repeatable { addButtonId }`, `review_wait { reviewId }` (`?` marks an optional
+source, answerId? }] }`, `add_repeatable { addButtonId }`, `review_documents { files }` (`?` marks an optional
 one, a quoted value is one to pass as is). Every file that mentions a tool with required parameters shows
 its shape at least once, usually where it first says to call it.
 
 *Why:* Claude Code defers MCP tools, so the agent sees the ezapply tools' names but not their parameters until
 it loads them, and it tends to guess instead. In the two Oscorp runs (2026-09-29) it guessed wrong 11 times, a
 turn each: `fill_fields` with `fields`, `add_repeatable` with `buttonId` (5), `upload_file` and
-`tex_compile` with `file`, `review_open` with `paths`, `review_wait` without `reviewId`. The alternative,
+`tex_compile` with `file`, `review_open` with `paths`, `review_wait` without `reviewId` (the two review tools are now one, `review_documents`). The alternative,
 telling the skills to load the tools' schemas first, was rejected: an extra call and every form tool's schema
 in context on each application, and it depends on how Claude Code defers tools. Shapes are added only where
 the skills already call a tool, so they don't change which calls the agent makes.

@@ -251,6 +251,12 @@ Most waits end as soon as their condition holds, but some cost their full length
 page never goes quiet or a check never matches (the settle after each field, a dropdown's closed and selected
 checks). Which ones isn't measured yet; the file lets the user shorten them and see what breaks.
 
+**Defaults from the user's file (2026-10-01).** The user set six dropdown waits to 200 ms
+(`dropdownOthersClosedMs`, `dropdownOpenMs`, `dropdownOpenRetryMs`, `dropdownSelectMs`,
+`dropdownSelectRetryMs`, `dropdownClosedMs`; they were 1000–2000) on 2026-09-29, and four live applications
+ran with them on 2026-09-30 (Tyrell and Hooli on Workday, two Umbrella on Oracle): 128 fills, no "Could not open
+the dropdown", the only failures "No option matches". Those values are now the defaults.
+
 ## Removing values and attachments (`remove`)
 Workday pre-fills from the candidate's last application, so a Skills multi-select or a Cover Letter field can
 hold another job's entries. `remove(fieldId, values?)` works on `typeahead` (multi-select) and `file`

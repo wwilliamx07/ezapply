@@ -188,7 +188,7 @@ export class FormsService {
       throw new EzError(
         ErrorCode.BadRequest,
         `${basename(abs)} hasn't been approved in this version.`,
-        "Documents are attached after the user approves them: show it with review_open, wait with review_wait, " +
+        "Documents are attached after the user approves them: show it with review_documents { files }, " +
           "and attach once they approve on the page. (They can switch to attaching right away: attach_mode_set.)",
       );
     }

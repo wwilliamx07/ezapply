@@ -153,7 +153,7 @@ describe("autofill-timing.yaml", () => {
       expect(get?.params.timing).toMatchObject({
         dropdownOpenMs: 800,
         afterFieldMaxMs: 750,
-        dropdownClosedMs: 500,
+        dropdownClosedMs: 100,
         pollMs: 20,
       });
       expect(fill?.params.timing).toEqual(get?.params.timing);

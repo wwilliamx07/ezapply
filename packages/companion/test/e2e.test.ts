@@ -37,10 +37,13 @@ let dir: string;
 let handle: CompanionHandle;
 let saved: AppConfig | null;
 const sockets: WebSocket[] = [];
+/** URLs the default opener was asked to open (none reach a real browser). */
+let openedUrls: string[];
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "ezapply-test-"));
   saved = null;
+  openedUrls = [];
   handle = await startCompanion({
     config: {
       schemaVersion: 1,
@@ -56,8 +59,37 @@ beforeEach(async () => {
     saveConfig: async (c) => {
       saved = c;
     },
+    opener: {
+      file: async () => "default",
+      url: async (u) => {
+        openedUrls.push(u);
+        return "default";
+      },
+    },
   });
 });
+
+/** Start review_documents (it waits for the answer) and get the page's URL once the review is open. */
+async function startReview(client: Client, files: string[], opened = openedUrls) {
+  const result = callJson(client, "review_documents", { files });
+  const url = await waitUntil(() => opened.at(-1));
+  return { result, url, token: new URL(url).searchParams.get("t") ?? "" };
+}
+
+async function waitUntil<T>(probe: () => T | undefined, ms = 5000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = probe();
+    if (v !== undefined) return v;
+    if (Date.now() > end) throw new Error("timed out");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+function answerReview(url: string, fields: Record<string, string>) {
+  const u = new URL(url);
+  return fetch(`${u.origin}${u.pathname}`, { method: "POST", body: new URLSearchParams(fields) });
+}
 
 afterEach(async () => {
   for (const s of sockets.splice(0)) s.terminate();
@@ -899,29 +931,6 @@ describe("form tools over MCP", () => {
   });
 
   it("attaches generated documents only in a version the user approved on the review page", async () => {
-    const opened: string[] = [];
-    await handle.close();
-    handle = await startCompanion({
-      config: {
-        schemaVersion: 1,
-        host: "127.0.0.1",
-        port: 0,
-        mcpToken: MCP_TOKEN,
-        pairingToken: PAIRING,
-        workspace: join(dir, "ws"),
-      },
-      log: createLogger({ toFile: false, level: "silent" }),
-      appDataDir: join(dir, "app"),
-      secrets: new MemoryStore(),
-      saveConfig: async () => {},
-      opener: {
-        file: async () => "default",
-        url: async (u) => {
-          opened.push(u);
-          return "default";
-        },
-      },
-    });
     const ext = fakeExtension();
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
@@ -934,53 +943,68 @@ describe("form tools over MCP", () => {
 
     // The default mode: nothing generated goes out unreviewed.
     const refused = await upload("resume.pdf", "application-questions.resume");
-    expect(refused.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/review_open/) });
+    expect(refused.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/review_documents/) });
+    expect(
+      (await callJson(client, "review_documents", { files: [`postings/${cap.postingId}/resume.pdf`], reviewId: "x" }))
+        .data.error,
+    ).toMatchObject({ code: "bad_request" });
 
-    const review = (
-      await callJson(client, "review_open", {
-        files: [`postings/${cap.postingId}/resume.pdf`, `postings/${cap.postingId}/cover.pdf`],
-      })
-    ).data;
-    expect(review).toMatchObject({ openedBrowser: true, files: ["resume.pdf", "cover.pdf"] });
-    expect(opened).toEqual([review.url]);
+    // One call opens the page and waits for the answer.
+    const review = await startReview(client, [
+      `postings/${cap.postingId}/resume.pdf`,
+      `postings/${cap.postingId}/cover.pdf`,
+    ]);
+    expect(openedUrls).toEqual([review.url]);
     const page = await fetch(review.url);
     expect(page.headers.get("content-security-policy")).toContain("frame-src 'self'");
     const html = await page.text();
     expect(html).toContain("resume.pdf");
-    const token = new URL(review.url).searchParams.get("t") ?? "";
-    const pdf = await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}/file/0?t=${token}`);
+    // The only script is the page's own, allowed by nonce: it sends the answer with fetch and closes the tab.
+    const nonce = html.match(/<script nonce="([^"]+)">/)?.[1];
+    expect(page.headers.get("content-security-policy")).toContain(`script-src 'nonce-${nonce}'`);
+    expect(html).toContain("window.close()");
+    const reviewId = new URL(review.url).pathname.split("/").pop() as string;
+    const pdf = await fetch(`http://127.0.0.1:${handle.port}/review/${reviewId}/file/0?t=${review.token}`);
     expect(pdf.headers.get("content-type")).toBe("application/pdf");
     expect(await pdf.text()).toBe("%PDF-1.4 resume v1");
     // Without the token there's nothing to see or answer.
-    expect((await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}/file/0`)).status).toBe(404);
-    const post = (fields: Record<string, string>) =>
-      fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}`, {
-        method: "POST",
-        body: new URLSearchParams(fields),
-      });
-    expect((await post({ t: "wrong", c0: "", c1: "" })).status).toBe(404);
+    expect((await fetch(`http://127.0.0.1:${handle.port}/review/${reviewId}/file/0`)).status).toBe(404);
+    expect((await answerReview(review.url, { t: "wrong", c0: "", c1: "" })).status).toBe(404);
 
-    // Status and waiting before an answer.
+    // Status, and a second wait that times out, before an answer.
     expect((await callJson(client, "posting_active")).data.documents).toMatchObject({
       attachMode: "after-approval",
       approved: [],
-      openReview: { reviewId: review.reviewId },
+      openReview: { reviewId },
     });
-    expect(
-      (await callJson(client, "review_wait", { reviewId: review.reviewId, timeoutSeconds: 5 })).data,
-    ).toMatchObject({
+    expect((await callJson(client, "review_documents", { reviewId, timeoutSeconds: 5 })).data).toMatchObject({
+      reviewId,
       done: false,
+      hint: expect.stringMatching(/review_documents { reviewId }/),
     });
 
-    const waiting = callJson(client, "review_wait", { reviewId: review.reviewId, timeoutSeconds: 30 });
-    const answered = await post({ t: token, c0: "", c1: "Make the second paragraph shorter." });
-    expect(answered.status).toBe(200);
-    expect((await waiting).data).toEqual({
+    const answered = await answerReview(review.url, {
+      t: review.token,
+      c0: "",
+      c1: "Make the second paragraph shorter.",
+    });
+    // No page after answering: the 204 lets the review page close its tab.
+    expect(answered.status).toBe(204);
+    expect((await review.result).data).toEqual({
+      reviewId,
+      url: review.url,
+      postingId: cap.postingId,
+      files: ["resume.pdf", "cover.pdf"],
+      openedIn: "default",
       done: true,
       approved: ["resume.pdf"],
       changes: [{ file: "cover.pdf", request: "Make the second paragraph shorter." }],
     });
-    expect(await (await post({ t: token, c0: "", c1: "" })).text()).toContain("Already answered");
+    // An answered review answers a later wait at once.
+    expect((await callJson(client, "review_documents", { reviewId })).data).toMatchObject({ done: true });
+    expect(await (await answerReview(review.url, { t: review.token, c0: "", c1: "" })).text()).toContain(
+      "Already answered",
+    );
 
     expect((await upload("resume.pdf", "application-questions.resume")).data).toMatchObject({ ok: true });
     expect((await upload("cover.pdf", "application-questions.coverLetter")).data.error.code).toBe("bad_request");
@@ -1013,16 +1037,12 @@ describe("form tools over MCP", () => {
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume");
     await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover");
     const client = await mcpClient();
-    const review = (
-      await callJson(client, "review_open", {
-        files: [`postings/${cap.postingId}/resume.pdf`, `postings/${cap.postingId}/cover.pdf`],
-      })
-    ).data;
-    const token = new URL(review.url).searchParams.get("t") ?? "";
-    await fetch(`http://127.0.0.1:${handle.port}/review/${review.reviewId}`, {
-      method: "POST",
-      body: new URLSearchParams({ t: token, c0: "", c1: "" }),
-    });
+    const review = await startReview(client, [
+      `postings/${cap.postingId}/resume.pdf`,
+      `postings/${cap.postingId}/cover.pdf`,
+    ]);
+    await answerReview(review.url, { t: review.token, c0: "", c1: "" });
+    await review.result;
     await callJson(client, "remove_items", { fieldId: "application-questions.coverLetter" });
     await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
@@ -1083,11 +1103,13 @@ describe("form tools over MCP", () => {
 
     // While a review page waits for the user, the tab isn't switched to.
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume");
-    await callJson(client, "review_open", { files: [`postings/${cap.postingId}/resume.pdf`] });
+    const review = await startReview(client, [`postings/${cap.postingId}/resume.pdf`]);
     ext.calls.length = 0;
     await callJson(client, "get_form");
     expect(ext.calls.map((c) => c.method)).toEqual(["tab.show", "form.get"]);
     expect(ext.calls[0]?.params).toMatchObject({ activate: false });
+    await answerReview(review.url, { t: review.token, c0: "" });
+    await review.result;
     await client.close();
   });
 

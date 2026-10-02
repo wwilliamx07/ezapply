@@ -45,7 +45,7 @@ version. Use when the user asks to tailor, adjust or update their resume for a j
 
 ## Report
 Give 3–6 lines: what changed and why, plus any gaps you did not claim, and the PDF path. Then follow the
-attach mode (EZAPPLY.md): in `after-approval`, `review_open { files }` it (with the cover letter if that's
-ready too) and `review_wait { reviewId }`; each change the user writes on the page is a tweak. For tweaks,
+attach mode (EZAPPLY.md): in `after-approval`, `review_documents { files }` it (with the cover letter if
+that's ready too); each change the user writes on the page is a tweak. For tweaks,
 repeat the build-and-check loop, report in one or two lines, and review again in `after-approval`. When the
 user asks to see the changes, use `tex_diff { oldPath, newPath }` (template vs tailored).

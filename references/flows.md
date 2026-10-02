@@ -155,9 +155,9 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
 
 ## 8. Review and attach
 Once a document is finished, the attach mode (`documents.attach`, asked during onboarding) decides:
-- **after-approval** (default): `review_open` opens a page in the browser with the PDFs, each with a box for
-  changes. The user approves (empty box) or writes what should change and submits. `review_wait` returns
-  both; Claude revises the changed documents, rebuilds, and reviews them again until everything is approved.
+- **after-approval** (default): `review_documents` opens a page in the browser with the PDFs, each with a box
+  for changes, and waits. The user approves (empty box) or writes what should change and sends it; the tab
+  closes and the call returns both; Claude revises the changed documents, rebuilds, and reviews them again until everything is approved.
   Approvals are stored per exact version in `approvals.json`.
 - **immediately**: no review step.
 

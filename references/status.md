@@ -99,8 +99,10 @@ As of 2026-09-30.
   running in the page and isn't logged. The unverified dropdown changes were reverted; the typeahead's
   waits were kept because its fix worked. The fifth run (after the revert) reached the review page with
   fills of about 2.5–3 s per dropdown; every wait is now tunable in `autofill-timing.yaml`
-  ([waits](components/workday-adapter.md#waits-autofill-timingyaml)), not yet tried live. Next: per-field
-  timings in fill results.
+  ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). The user's own file, with six dropdown
+  waits at 200 ms, ran four live applications on 2026-09-30 with no dropdown failing to open; those values are
+  the defaults since 2026-10-01. Next: per-field timings in fill results
+  (debug mode in `todo.md`).
 - **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
   extra calls. A listbox closed without a choice is now closed with a press on its own button when Escape
   doesn't do it, which covers 6 of the 9. The two Oscorp runs (2026-09-29, with that press) still failed 12
@@ -131,6 +133,13 @@ As of 2026-09-30.
 - **Language rows emptied.** In the first Oscorp run the French and German language rows, filled with
   `ok: true` before Save and Continue, were empty when the agent came back to the step. Not explained; the
   skill already re-checks steps when coming forward.
+- **Review answers nobody waited for** (Initrode, 2026-10-01). The first `review_wait` ran past 120 s, Claude
+  Code moved it to the background, and the answer came back as a task notification. After that the agent
+  called `review_open` three times without `review_wait`, and once told the user to reload the open page to
+  see a rebuild (the page serves the bytes read at `review_open`). The user's change requests waited in the
+  companion until they asked why they'd been dropped; `review_wait` then returned at once. Nothing tells the
+  agent that an answer arrived with no wait attached. Since 2026-10-01 one tool, `review_documents`, opens
+  the page and waits ([why](components/documents.md#review-before-attaching)); not yet seen live.
 
 ## Deferred
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:
