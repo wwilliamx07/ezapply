@@ -56,11 +56,15 @@ For each field, the first rule that applies decides.
      `eeo-decline` when the profile says decline (the model picks the form's wording).
    - Any other key is the profile value as stored, or `not-in-profile` when it's unset.
    - `answers.<id>` keys use that answer-bank entry, as in rule 3.
-3. **Answer bank by wording.** The label, normalised by `normLabel` (NFKC, lowercase, punctuation, a trailing
-   "*" and "(required)" removed, spaces collapsed), must equal an entry's `canonical` or one of its
-   `variants`. Equality only.
-   - `sensitive` entries are left as `sensitive`, `answer: null` as `ask-user`, and entries with `source`
-     (computed from the profile) as `from-profile`.
+3. **Answer bank by wording.** The label, normalised by `normLabel`, must equal an entry's `canonical` or one
+   of its `variants`, normalised the same way. Equality only.
+   - `normLabel` applies NFKC and lowercases. It removes anything in parentheses, a trailing "*", and
+     punctuation, then collapses spaces. Forms add examples in parentheses that saved wordings leave out ("a
+     visible minority (including people who are …)"), so those don't decide the question.
+   - `sensitive` entries are left as `sensitive`, and `answer: null` as `ask-user`. Entries whose `source`
+     is a profile path (`profile.…`, computed from the profile) are left as `from-profile`. Any other
+     `source` (agents have written `source: user` for an answer the user gave) is ignored, and the answer is
+     used.
    - The value is `byCompany` for the posting's company (case and spacing aside), else `default`, else the
      plain answer.
    - **Reversed wordings:** a variant whose count of negations ("not", "no", "never", "without", "…n't") has
@@ -74,8 +78,10 @@ For each field, the first rule that applies decides.
 
 **Widgets.** Text, textarea, number, dropdown and typeahead get the value as is. Radios and checkbox groups
 list their options in the schema, so the option is chosen here with `strictMatch` and sent as its exact text
-(a checkbox group as a one-entry list); no match is `no-strict-match`. Dates and single checkboxes have no
-phase 1 rule.
+(a checkbox group as a one-entry list); no match is `no-strict-match`. A date field takes a stored date
+(`YYYY`, `YYYY-MM` or `YYYY-MM-DD`, an expected graduation date in the answer bank). Its read-back isn't
+compared, since the page shows the date its own way, and the adapter already fails a date that didn't take.
+Single checkboxes have no phase 1 rule.
 
 **Strict matching.** `strictMatch` accepts the exact option, the option without its trailing parenthetical,
 or the parenthetical alone, with case and spacing aside. The adapters' `matchOption` also accepts a unique
@@ -103,4 +109,13 @@ the whole step with a note, so a run can be compared with and without autofill.
   behavioural fixture: the fills, the reasons left, the page's values, the log, a second call keeping
   everything, and the switch off.
 
-Not yet seen live (see [status.md](../status.md)).
+## The first live run (Hooli, 2026-10-01, debug mode on)
+- **My Information:** 10 fields filled and 2 kept in 4.1 s, with no failures and no loose matches.
+- **My Experience:** LinkedIn only. Rows are phase 2, so the agent filled the step's 38 fields itself.
+- **The two question steps:** nothing filled, for two reasons, both fixed the same day:
+  - every answer the agent had saved with `source: user` was treated as computed;
+  - two labels differed from their saved wording only by a parenthetical.
+
+  Replayed on the recorded pages, the fixed planner fills 7 of those steps' fields, each with the value the
+  agent or user chose in the run.
+- **Turns:** 30 with form calls, against 34 in the 2026-09-30 Hooli run. Output tokens: 7.4k, against 9.2k.

@@ -39,6 +39,19 @@ describe("answer bank", () => {
     expect(check.unanswered?.find((u) => u.id === "gov_official_relationship")).toMatchObject({ suggested: "No" });
   });
 
+  it("says when a source isn't a profile path (who gave an answer isn't a source)", async () => {
+    await writeFile(
+      join(root, "ws/profile/answers.yaml"),
+      [
+        "schemaVersion: 1",
+        "entries:",
+        "  - { id: relocate, canonical: Are you willing to relocate?, answer: 'Yes', source: profile.jobPreferences.relocate }",
+        "  - { id: newcomer, canonical: Are you a newcomer to Canada?, answer: 'No', source: user }",
+      ].join("\n"),
+    );
+    expect((await svc.checkAnswers()).notProfileSources).toMatchObject({ ids: ["newcomer"] });
+  });
+
   it("reports YAML and schema errors with paths", async () => {
     await writeFile(
       join(root, "ws/profile/answers.yaml"),

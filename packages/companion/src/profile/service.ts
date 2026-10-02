@@ -75,6 +75,9 @@ export class ProfileService {
     if (!a.valid) return { exists: true, valid: false, errors: a.errors };
     const entries = a.value.entries;
     const unanswered = entries.filter((e) => !isAnswered(e));
+    // `source` names the profile path an answer is computed from. Agents have used it to record who gave the
+    // answer (`source: user`); say so, since only a profile path means anything to autofill.
+    const notProfile = entries.filter((e) => e.source && !e.source.startsWith("profile."));
     return {
       exists: true,
       valid: true,
@@ -88,6 +91,12 @@ export class ProfileService {
         ...(e.source ? { source: e.source } : {}),
         sensitive: e.sensitive,
       })),
+      notProfileSources: notProfile.length
+        ? {
+            ids: notProfile.map((e) => e.id),
+            hint: "source is only for a profile path the answer comes from (profile.workAuthorization…). Remove it from these entries; who gave an answer isn't recorded.",
+          }
+        : undefined,
     };
   }
 

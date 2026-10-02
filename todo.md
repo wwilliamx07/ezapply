@@ -40,8 +40,9 @@ Items 5, 7 and 9 come after debug mode.
 
 ## 1. Deterministic autofill (High, L in three phases)
 
-**Status:** phase 1 built on 2026-10-01 (`references/components/autofill.md`), and waiting for its live
-run. Building it added one rule not planned here: a saved variant phrased the other way round ("I do NOT
+**Status:** phase 1 built on 2026-10-01 and run live once (Hooli; see "The first live run" in
+`references/components/autofill.md`), then fixed for what that run showed. The fixes cover `source: user`
+answers, parentheticals in labels, and dates from the answer bank. Building it added one rule not planned here: a saved variant phrased the other way round ("I do NOT
 require…" under "Do you require…?") is never filled (`reversed-wording`), because only the model flips yes
 and no. What's below is the plan; phases 2 and 3 are still to do.
 

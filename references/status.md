@@ -30,10 +30,23 @@ As of 2026-09-30.
   drops it, the check falls back to the tenant, as before.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
   Workday fixture and with a timed-out call. Not yet used on a live run; turn it on for autofill's first one.
-- **Deterministic autofill** (`autofill_step`, 2026-10-01; [autofill](components/autofill.md)): tested on
-  the planner and over MCP on the Workday fixture. Not yet seen live. The first live run should compare turns
-  per step, tokens (from the session's transcript), fill time and wrong values with the Tyrell and Hooli runs, and check
-  the strict read-back on real dropdowns (the phone country code, the phone type).
+- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): one live run (Hooli,
+  2026-10-01). It filled My Information correctly, including the strict read-backs on the phone type and the
+  province, and nothing on the question steps; both causes were fixed afterwards. The fixes are checked on the
+  recorded pages, not yet live.
+- **Fills twice as slow per field in the 2026-10-01 Hooli run, cause unknown.** Dropdowns took about 3.5–4 s
+  each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in the 2026-09-30
+  Hooli run. Ruled out:
+  - **The waits:** the debug records show every call received the same values as before (the six dropdown
+    waits at 200 ms). Commented-out lines take the defaults, which are now those values.
+  - **The fill code:** unchanged since b5ba545, used by both runs.
+  - **The tab:** never hidden.
+  - **Debug mode:** its first part records only in the companion.
+  - **The page in general:** `list_options` opened the same tenant's dropdowns as fast as before (2.6 s for 3).
+
+  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, item 4)
+  would show which wait grew. One guess: the settle after each field (`afterFieldMaxMs`, 1.5 s) running to its
+  maximum on a page that never goes quiet.
 - **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
   reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;

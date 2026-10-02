@@ -26,7 +26,8 @@ Stored answers to screening questions.
   interest, consents, relocation, travel, start date, salary, degree, criminal history…), all unanswered,
   some with a `suggested` default or a `source` in the profile.
 - Entry: `id`, `canonical` question, `answer` (a string; `null` = always ask; or
-  `{ default, byCompany }`), `suggested` (never used on a form until confirmed), `source`, `sensitive`
+  `{ default, byCompany }`), `suggested` (never used on a form until confirmed), `source` (a profile path the answer is computed from,
+  `profile.…`; not who gave it, which `answers_check` reports as `notProfileSources`), `sensitive`
   (always ask even when answered), `variants` (other wordings seen), `notes`.
 - `answers_check` validates it (unique ids) and lists unanswered entries. The checklist counts the bank as
   done when only sensitive questions are unanswered.

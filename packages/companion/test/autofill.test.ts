@@ -42,6 +42,13 @@ const answers = [
     source: "profile.jobPreferences.relocate",
   }),
   answer({ id: "previously_employed", canonical: "Have you previously worked for us?", answer: "No" }),
+  answer({
+    id: "visible_minority",
+    canonical: "Do you identify as a visible minority?",
+    answer: "No",
+    source: "user",
+  }),
+  answer({ id: "graduation", canonical: "Expected graduation date", answer: "2030-04-30" }),
 ];
 
 function field(id: string, f: Partial<Field> = {}): Field {
@@ -77,6 +84,7 @@ describe("planStep", () => {
       {
         fieldId: "mi.firstName",
         label: "First Name",
+        kind: "text",
         value: "Jane",
         source: "profile",
         rule: "hint:identity.firstName",
@@ -84,6 +92,7 @@ describe("planStep", () => {
       {
         fieldId: "mi.email",
         label: "Email",
+        kind: "text",
         value: "jane@example.com",
         source: "profile",
         rule: "hint:contact.email",
@@ -221,10 +230,41 @@ describe("planStep", () => {
   });
 });
 
+describe("planStep, from the first live run (Hooli, 2026-10-01)", () => {
+  it("uses an answer whose source says where it came from (user), not a profile path", () => {
+    const p = plan({
+      Questions: [
+        field("q.vm", {
+          label:
+            "Do you identify as a visible minority (including people who are Black, Asian, Middle Eastern, mixed race, etc.)?",
+          kind: "dropdown",
+          currentValue: null,
+        }),
+      ],
+    });
+    // The parenthetical examples don't stop the match either.
+    expect(p.fills).toEqual([expect.objectContaining({ value: "No", answerId: "visible_minority" })]);
+  });
+
+  it("fills a stored date into a date field", () => {
+    const p = plan({
+      Questions: [
+        field("q.grad", {
+          label: "Expected graduation date (complete your studies)",
+          kind: "date",
+          currentValue: null,
+        }),
+      ],
+    });
+    expect(p.fills).toEqual([expect.objectContaining({ value: "2030-04-30", kind: "date" })]);
+  });
+});
+
 describe("checkReadBack", () => {
-  const fill = (value: PlannedFill["value"]): PlannedFill => ({
+  const fill = (value: PlannedFill["value"], kind: PlannedFill["kind"] = "dropdown"): PlannedFill => ({
     fieldId: "f",
     label: "F",
+    kind,
     value,
     source: "answer-bank",
     rule: "answer:x",
@@ -241,6 +281,10 @@ describe("checkReadBack", () => {
       ok: true,
     });
     expect(checkReadBack(fill("x"), { fieldId: "f", ok: false, error: "No option matches" })).toEqual({ ok: false });
+    // A date reads back in the page's own format.
+    expect(checkReadBack(fill("2030-04-30", "date"), { fieldId: "f", ok: true, readBack: "04/30/2030" })).toEqual({
+      ok: true,
+    });
   });
 });
 

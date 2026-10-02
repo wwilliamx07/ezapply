@@ -20,6 +20,7 @@ export type AutofillSource = "profile" | "answer-bank";
 export interface PlannedFill {
   fieldId: string;
   label: string;
+  kind: Field["kind"];
   value: FillValue;
   source: AutofillSource;
   answerId?: string;
@@ -84,6 +85,7 @@ export function planStep({ form, profile, answers, company, skip }: PlanInput): 
       plan.fills.push({
         fieldId: field.id,
         label: field.label,
+        kind: field.kind,
         value: decided.value,
         source: decided.source,
         ...(decided.answerId ? { answerId: decided.answerId } : {}),
@@ -159,7 +161,9 @@ function fromProfile(field: Field, key: string, profile: Profile): Decision {
 /** An answer-bank entry's answer for this posting, when it's a plain value. */
 function fromAnswer(field: Field, entry: AnswerEntry, company: string | undefined): Decision {
   if (entry.sensitive) return { reason: "sensitive" };
-  if (entry.source) return { reason: "from-profile" };
+  // Only a profile path means "computed from the profile" (phase 2). Agents also write `source: user` for an
+  // answer the user gave (ten such entries in the first live run's bank, 2026-10-01): that's an answer to use.
+  if (entry.source?.startsWith("profile.")) return { reason: "from-profile" };
   const a = entry.answer;
   let value: string | null;
   if (a === null || typeof a === "string") value = a;
@@ -194,8 +198,11 @@ function toWidget(field: Field, value: string, source: AutofillSource, rule: str
       if (!option) return { reason: "no-strict-match" };
       return { ...base, value: field.kind === "radio" ? option : [option] };
     }
+    case "date":
+      // A stored date (an expected graduation date); a date the page doesn't take fails in the adapter.
+      return /^\d{4}(-\d{2}){0,2}$/.test(value.trim()) ? { ...base, value: value.trim() } : { reason: "no-rule" };
     default:
-      // date, checkbox: no phase 1 rule fills them
+      // checkbox: no phase 1 rule fills one
       return { reason: "no-rule" };
   }
 }
@@ -207,6 +214,8 @@ function toWidget(field: Field, value: string, source: AutofillSource, rule: str
  */
 export function checkReadBack(fill: PlannedFill, r: FillResult): { ok: true } | { ok: false; selected?: string } {
   if (!r.ok) return { ok: false };
+  // The page shows a date its own way (04/30/2030); the adapter already fails a date that didn't take.
+  if (fill.kind === "date") return { ok: true };
   if (r.inexact?.length || r.unmatched?.length) return { ok: false, selected: r.inexact?.[0]?.selected };
   const back = r.readBack;
   if (back === undefined || back === null) return { ok: true };
@@ -228,14 +237,19 @@ export function strictMatch(wanted: string, option: string): boolean {
 
 /** A label as compared with the answer bank's wording: case, punctuation, a required mark and spacing aside. */
 export function normLabel(s: string): string {
-  return s
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[‘’]/g, "'")
-    .replace(/\(required\)|\*+\s*$/g, "")
-    .replace(/[^\p{L}\p{N}' ]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    s
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/[‘’]/g, "'")
+      // Forms add examples in parentheses that saved wordings leave out ("a visible minority (including people
+      // who are …)", "expect to graduate (complete your studies)"), and "(required)".
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\*+\s*$/g, "")
+      .replace(/[^\p{L}\p{N}' ]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 interface Wording {

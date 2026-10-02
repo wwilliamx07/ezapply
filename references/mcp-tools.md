@@ -61,7 +61,7 @@ Details: [profile-and-templates.md](components/profile-and-templates.md).
 | Tool | Input | Does |
 |---|---|---|
 | `profile_check` | — | Validate `profile.yaml`: errors with paths, or commonly-needed fields still missing |
-| `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions and sources; sensitive ids |
+| `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions and sources; sensitive ids; `notProfileSources { ids, hint }` when an entry's `source` isn't a profile path (agents have written `source: user`) |
 | `template_import` | `sourceDir` (absolute, outside the workspace), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/`; replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram`. `contentFiles` lists the `.tex` files the main file `\input`s (tailored copies need them) |
 | `template_import_example` | `sourcePath` (absolute) | Copy a sample cover letter (PDF, PNG/JPG/WebP, TXT, MD; ≤20 MB) into `templates/cover/example/`; Word → hint to export PDF |
 | `template_set_main` | `kind`, `main` (relative to `templates/<kind>/`, must stay inside it and end in `.tex`) | Record the main file and its `contentFiles`; marks a non-imported template `custom`. Returns `{ kind, main, contentFiles }` |

@@ -98,6 +98,7 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
        a question no entry covers. Never a second entry for the same question.
      - An answer the user tells you to save is meant to be used: set `sensitive: false` unless they say to
        keep asking.
+     - Don't add `source`: it names a profile path an answer is computed from, not who gave it.
      - Edit `answers.yaml` with the Edit tool (not a shell append), then `answers_check`.
    - **Dropdowns and typeaheads:** fill with your best reading of the option text: a value that matches
      nothing returns the field's `availableOptions`, so don't list first. When the exact wording decides
