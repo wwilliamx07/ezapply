@@ -40,7 +40,7 @@ export function stepWarnings(form: FormSchema, profile: Profile | null, uploaded
       seen.add(title);
       const want = profileCount(profile, list.key);
       // Workday's rows are sections like `work-experience-2`; Oracle's saved items like `work-experience.item-2`.
-      const row = new RegExp(`^${escape(slugify(title))}(-\\d+|\\.[\\w-]+-\\d+)$`);
+      const row = new RegExp(`^${escapeRegExp(slugify(title))}(-\\d+|\\.[\\w-]+-\\d+)$`);
       const rows = form.sections.filter((s) => row.test(s.id)).length;
       if (rows < want) {
         out.push(`${title}: the page has ${rows} row${rows === 1 ? "" : "s"}, the profile has ${want} ${list.name}.`);
@@ -150,6 +150,6 @@ function slugify(s: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function escape(s: string): string {
+function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
