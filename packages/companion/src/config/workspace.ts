@@ -47,6 +47,14 @@ export const WorkspaceConfig = z.object({
       autofill: z.enum(["on", "off"]).default("on"),
     })
     .default({ autofill: "on" }),
+  debug: z
+    .object({
+      /** Autofill debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */
+      autofill: z.boolean().default(false),
+      /** debug/ is kept under this size: the oldest sessions go first. */
+      maxMB: z.number().int().min(1).max(100_000).default(500),
+    })
+    .default({ autofill: false, maxMB: 500 }),
   decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
   context: z
     .object({

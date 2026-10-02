@@ -87,6 +87,17 @@ async function waitUntil<T>(probe: () => T | undefined, ms = 5000): Promise<T> {
   }
 }
 
+/** Poll an async probe until it gives a value (files written after a call returns). */
+async function poll<T>(probe: () => Promise<T | undefined>, ms = 5000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await probe();
+    if (v !== undefined) return v;
+    if (Date.now() > end) throw new Error("timed out");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 function answerReview(url: string, fields: Record<string, string>) {
   const u = new URL(url);
   return fetch(`${u.origin}${u.pathname}`, { method: "POST", body: new URLSearchParams(fields) });
@@ -774,6 +785,55 @@ describe("form tools over MCP", () => {
     const off = (await callJson(client, "autofill_step")).data;
     expect(off).toMatchObject({ filled: [], note: expect.stringMatching(/off/) });
     expect(off.sections.flatMap((s: { fields: unknown[] }) => s.fields)).toHaveLength(11);
+    await client.close();
+  });
+
+  it("in debug mode, records every form call under debug/ and keeps it out of the results", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    await writeFile(
+      join(dir, "ws", "profile", "profile.yaml"),
+      "schemaVersion: 1\nidentity: { firstName: Jane, lastName: Doe }\ncontact:\n  email: j@example.com\n  address: { city: Toronto, country: Canada }\n",
+    );
+    await writeFile(
+      join(dir, "ws", "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, debug: { autofill: true } }),
+    );
+    const client = await mcpClient();
+    const auto = (await callJson(client, "autofill_step")).data;
+    // The model overrides one automatic fill, and fills a profile fact no rule covered.
+    await callJson(client, "fill_fields", {
+      fills: [
+        { fieldId: "my-information.legalName--firstName", value: "Janet", source: "user" },
+        { fieldId: "application-questions.degreeLevel", value: "Bachelor's Degree", source: "profile" },
+      ],
+    });
+    const form = (await callJson(client, "get_form")).data;
+    expect(form.debug).toBe(true);
+    expect(auto.debug).toBe(true);
+    expect(JSON.stringify([auto, form])).not.toMatch(/"bridge"|"notes"/);
+
+    const session = join(dir, "ws", "debug", `${new Date().toISOString().slice(0, 10)}-${cap.postingId}`);
+    const index = await poll(async () => {
+      const lines = (await readFile(join(session, "index.jsonl"), "utf8").catch(() => "")).trim().split("\n");
+      return lines.length === 3 ? lines.map((l) => JSON.parse(l)) : undefined;
+    });
+    expect(index.map((l: { tool: string }) => l.tool)).toEqual(["autofill_step", "fill_fields", "get_form"]);
+    expect(index[0]).toMatchObject({ seq: 1, ok: true, autofill: { filled: 2, failed: 0 }, debug: true });
+    const record = JSON.parse(await readFile(join(session, "0001-autofill_step.json"), "utf8"));
+    expect(record.bridge.map((b: { method: string }) => b.method)).toEqual(["form.get", "form.fill", "form.get"]);
+    expect(record.notes.autofill[0]).toMatchObject({ pass: 1, left: { "work-experience-1.jobTitle": "row" } });
+    expect(record).toMatchObject({ tool: "autofill_step", posting: cap.postingId, extensionVersion: "9.9.9" });
+
+    const { debugReport } = await import("../src/forms/debug-report.js");
+    const report = await debugReport(session);
+    expect(report).toMatch(/3 form calls/);
+    expect(report).toMatch(/hint:identity\.firstName: 1 filled/);
+    expect(report).toMatch(
+      /my-information\.legalName--firstName: hint:identity\.firstName put "Jane", #2 \(user\) set "Janet"/,
+    );
+    expect(report).toMatch(/application-questions\.degreeLevel "Degree Level" \(dropdown, formField-degreeLevel/);
     await client.close();
   });
 

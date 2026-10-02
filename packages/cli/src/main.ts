@@ -22,6 +22,7 @@ import {
 } from "@ezapply/companion";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { CHAT_SESSION_ENV, findClaude, hostChat } from "./chat.js";
+import { runDebug } from "./debug.js";
 import { runDoctor } from "./doctor.js";
 import { fetchHealth } from "./health.js";
 import { runMcpRelay } from "./mcp-relay.js";
@@ -39,6 +40,7 @@ Usage:
   ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
   ezapply status                                     Check whether ezapply is running
   ezapply doctor                                     Diagnose the whole setup
+  ezapply debug on|off|report|clean                  Autofill debug mode: record every form call under debug/
   ezapply mcp                                        MCP server on stdio (Claude Code runs this)
 `;
 
@@ -53,6 +55,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdStatus();
     case "doctor":
       return runDoctor();
+    case "debug":
+      return cmdDebug(rest);
     case "mcp":
       return cmdMcp();
     case undefined:
@@ -94,6 +98,15 @@ function parsePort(raw: string): number {
     throw new EzError(ErrorCode.BadRequest, `--port must be a whole number from 1 to 65535, not "${raw}".`);
   }
   return port;
+}
+
+async function cmdDebug(args: string[]): Promise<number> {
+  const config = await loadAppConfig();
+  if (!config) {
+    process.stderr.write("No ezapply config yet: run `ezapply init` first.\n");
+    return 1;
+  }
+  return runDebug(config.workspace, args, (s) => process.stdout.write(s));
 }
 
 async function cmdInit(args: string[]): Promise<number> {

@@ -354,7 +354,10 @@ replaced.
 - `NNNN-before.html`, `NNNN-after.html`, `NNNN-fail-<fieldId>.html`, `NNNN-fail-<fieldId>.png`.
 
 **Implementation, in three parts.** They can land separately, the companion part first, because it changes
-nothing in the page.
+nothing in the page. **Part 1 was built on 2026-10-01**: `ezapply debug on|off|report|clean`, the records,
+`index.jsonl`, the autofill plan, `maxMB`, and the read deny. See `references/data-formats.md` and
+`development.md`, "Debugging a live run". The report is `ezapply debug report` rather than an npm script,
+because `scripts/` is not in the repo. Parts 2 and 3 are still to do.
 1. **(S–M) Companion only.** The call, the full result, the companion's timings, and the autofill plan. No
    adapter change, so it can ship with or right after autofill phase 1 and record that feature's first live run.
 2. **(M) The adapter trace and page hooks.** An adapter change, with its own live run.

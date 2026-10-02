@@ -36,6 +36,9 @@ Each package has `src/`, `test/`, and builds to `dist/` (the extension also to `
 
 ## Scripts
 
+`scripts/` is not in the repo: d456ecc removed it and added it to `.gitignore`. The `usage:report` and
+`recon:*` entries below run only with a local copy of those scripts; without one they fail with a missing file.
+
 | Command | Does |
 |---|---|
 | `npm run setup` | `npm install`, build, `ezapply init` |
@@ -126,6 +129,16 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   them. b5ba545 brought two of the reverted ideas back (`openListboxRetrying`, and `back()` seeing a move by
   step index): if a live run is slower than the Oscorp and Tyrell runs ([status](status.md)), suspect those first.
   `autofill-timing.yaml` can shorten a wait without a rebuild.
+
+## Debugging a live run (autofill debug mode)
+`ezapply debug on` before the run (in the user's workspace), `ezapply debug report` after it, then open the
+`NNNN-<tool>.json` records it points to ([format](data-formats.md#debugdate-postingid-companionsrcformsdebugts)).
+A record holds every request to the extension with the adapter's full answer, the tab's state, the timings,
+and for `autofill_step` the plan per field. The report's "profile fills no rule covered" lists hint
+candidates (an automation id or label to add to `PROFILE_HINTS`), and "automatic fills changed afterwards"
+lists rules to check. Built so far: the companion's part only. The adapter trace, the page hooks and saved
+markup are planned (`todo.md`, item 4), so a failure inside a filler still shows only its result. Turn it off
+(`ezapply debug off`) and `ezapply debug clean` when done: the records hold the user's data.
 
 ## How to…
 - **Add an MCP tool:** service method → register in the right `mcp/tools/*.ts` with a precise, short

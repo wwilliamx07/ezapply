@@ -13,6 +13,7 @@ workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), 
 | `init [--workspace <dir>] [--port <n>]` | Write `~/.ezapply/config.json` and create or refresh the workspace; print the next steps |
 | `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply chat`. Nothing else may write to stdout |
 | `status` | Whether an `ezapply chat` is running (its `/health`), and whether the extension is connected |
+| `debug on\|off\|report [dir]\|clean` | Autofill debug mode (`debug.ts`). `on` and `off` set `debug.autofill` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, and for autofill fills by rule, loose matches refused, automatic fills changed afterwards, and profile fills no rule covered. `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
 | `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
 
 `npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. A chat that's open keeps

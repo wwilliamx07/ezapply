@@ -57,6 +57,7 @@ dropped.
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
   "forms": { "autofill": "on" },   // or "off": autofill_step fills nothing (components/autofill.md)
+  "debug": { "autofill": false, "maxMB": 500 },   // autofill debug mode: record every form call under debug/
   "decisions": { "provider": "none" },
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
@@ -82,6 +83,27 @@ to the default for that part, is logged, and shows in `get_form` as `timingIssue
 Written by every `ezapply init`, for this OS only. POSIX: `#!/bin/sh` and `exec "<node>" "<cli main.js>" "$@"`
 (mode 755). Windows: `@echo off` and `"<node>" "<cli main.js>" %*`. Lets `./ezapply chat` run from the
 workspace ([cli](components/cli.md#init-workspace-initts)).
+
+### `debug/<date>-<postingId>/` (`companion/src/forms/debug.ts`)
+Written only while `debug.autofill` is on (`ezapply debug on`). It's read for every form call, so it applies
+to the next call. One folder per posting and day (`no-posting` when the tab isn't credited to one). The
+folder holds:
+- `index.jsonl`: one line per form call: `{ seq, ts, tool, ok, ms, queuedMs, failedFields?, tabHidden?,
+  autofill? { filled, failed, kept }, error?, debug: true }`. Reading starts here.
+- `NNNN-<tool>.json`: the whole call, with these fields:
+  - `params`: an upload's file contents are replaced by its size;
+  - the `tab`, `posting` and `postingMismatch`, `extensionVersion`, `browser`, `timing` and
+    `fillTimeoutMs`, `shown` (what `tab.show` did), and `queuedMs` (time behind earlier calls on the tab);
+  - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
+    answer before the companion slims it), or its error;
+  - `notes`: for `autofill_step`, `autofill` (per pass: the planned fills, kept fields and the reason
+    for each field left) and `readBack` (each fill's strict check);
+  - `result`: what the agent got, or `error`.
+
+A call that fails or times out is still recorded. Records are written after the call returns, off its path.
+`debug.maxMB` caps the folder: past it, the oldest sessions are deleted (never the one being written).
+`ezapply debug clean` deletes it all. It holds the user's personal data and is never sent anywhere
+([security](security.md)).
 
 ### `state.json`
 `{ schemaVersion: 1, activePostingId? }`.

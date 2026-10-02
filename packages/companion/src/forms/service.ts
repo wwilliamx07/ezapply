@@ -24,6 +24,7 @@ import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { checkReadBack, type LeftReason, type PlannedFill, planStep } from "./autofill.js";
+import { type CallRecord, DebugRecorder, stripBulk } from "./debug.js";
 import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -48,6 +49,9 @@ export interface PostingMismatch {
   hint: string;
 }
 
+/** The tab chosen for a call, before it runs. */
+type TargetBase = Pick<Target, "tab" | "posting" | "mismatch"> & { extensionVersion?: string };
+
 /** The tab a form call acts on and the posting it's credited to. */
 interface Target {
   tab: TabInfo;
@@ -62,6 +66,12 @@ interface Target {
   timingIssues: string[];
   /** What `tab.show` did just before this call; absent when the extension predates it or it failed. */
   shown?: Shown;
+  /** The bridge for this call: the same one, recorded when debug mode is on. */
+  bridge: Pick<ExtensionBridge, "call">;
+  /** Add to the call's debug record (no-op when debug mode is off). */
+  note: (key: string, value: unknown) => void;
+  /** Debug mode is on for this call. */
+  debug: boolean;
 }
 
 /** The tab brought to the front (`activated`), or left hidden: see `FormsService.show`. */
@@ -90,6 +100,7 @@ export interface TabHidden {
 export class FormsService {
   /** One queue per tab id: the page can only do one thing at a time. */
   private readonly pages = new KeyedQueue();
+  private readonly debug: DebugRecorder;
   private warnedNoTabShow = false;
 
   constructor(
@@ -99,11 +110,13 @@ export class FormsService {
     private readonly reviews: ReviewService,
     private readonly profile: ProfileService,
     private readonly log: Logger,
-  ) {}
+  ) {
+    this.debug = new DebugRecorder(ws, log);
+  }
 
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string } = {}) {
-    return this.onTab(opts.tabId, async (t) =>
-      this.view(t, await this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts),
+    return this.onTab({ tool: "get_form", params: opts }, opts.tabId, async (t) =>
+      this.view(t, await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts),
     );
   }
 
@@ -126,6 +139,8 @@ export class FormsService {
       ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
       ...tabHiddenOf(t),
       ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
+      // So debug mode isn't left on unnoticed: it records the user's data on every call.
+      ...(t.debug ? { debug: true } : {}),
     };
   }
 
@@ -136,8 +151,8 @@ export class FormsService {
    * another posting. With `forms.autofill: "off"` it fills nothing and returns the whole step as left.
    */
   async autofillStep(tabId?: number) {
-    return this.onTab(tabId, async (t) => {
-      const read = () => this.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+    return this.onTab({ tool: "autofill_step", params: {} }, tabId, async (t) => {
+      const read = () => t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
       let form = await read();
       // get_form's view of the page (it replaces get_form at the start of a step), narrowed to the fields left.
       const result = async (
@@ -176,11 +191,12 @@ export class FormsService {
       // The second pass plans fields that appeared after the first fill; a third is never needed for one step.
       for (let pass = 0; pass < 2; pass++) {
         const plan = planStep({ form, ...input, skip: handled });
+        t.note("autofill", { pass: pass + 1, fills: plan.fills, kept: plan.kept, left: Object.fromEntries(plan.left) });
         kept += plan.kept.length;
         for (const k of plan.kept) handled.add(k.fieldId);
         left = new Map([...left, ...plan.left]);
         if (plan.fills.length === 0) break;
-        const results = await this.bridge.call(
+        const results = await t.bridge.call(
           "form.fill",
           {
             fills: plan.fills.map(({ fieldId, value }) => ({ fieldId, value })),
@@ -194,6 +210,7 @@ export class FormsService {
           left.delete(f.fieldId);
           const r = results.find((x) => x.fieldId === f.fieldId) ?? { fieldId: f.fieldId, ok: false };
           const check = checkReadBack(f, r);
+          t.note("readBack", { fieldId: f.fieldId, wanted: f.value, readBack: r.readBack, ...check });
           await this.logEvent(t, {
             event: "fill",
             fieldId: f.fieldId,
@@ -215,8 +232,8 @@ export class FormsService {
   }
 
   async listOptions(fieldId: string, tabId?: number) {
-    return this.onTab(tabId, (t) =>
-      this.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000),
+    return this.onTab({ tool: "list_options", params: { fieldId } }, tabId, (t) =>
+      t.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000),
     );
   }
 
@@ -225,7 +242,7 @@ export class FormsService {
    * per field. The adapter opens them one after another; a field that fails reports its own error.
    */
   async listOptionsMany(fieldIds: string[], tabId?: number) {
-    return this.onTab(tabId, async (t) => {
+    return this.onTab({ tool: "list_options", params: { fieldIds } }, tabId, async (t) => {
       const out: Record<string, OptionInfo[] | { error: string }> = {};
       for (const fieldId of fieldIds) {
         out[fieldId] = await this.bridge
@@ -237,8 +254,8 @@ export class FormsService {
   }
 
   async searchOptions(fieldId: string, query: string, tabId?: number) {
-    return this.onTab(tabId, (t) =>
-      this.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId, timing: t.timing }, 20_000),
+    return this.onTab({ tool: "search_options", params: { fieldId, query } }, tabId, (t) =>
+      t.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId, timing: t.timing }, 20_000),
     );
   }
 
@@ -246,8 +263,8 @@ export class FormsService {
     fills: { fieldId: string; value: FillValue; source: FillSource; answerId?: string }[],
     tabId?: number,
   ): Promise<{ results: FillResult[]; postingMismatch?: PostingMismatch }> {
-    return this.onTab(tabId, async (t) => {
-      const results = await this.bridge.call(
+    return this.onTab({ tool: "fill_fields", params: { fills } }, tabId, async (t) => {
+      const results = await t.bridge.call(
         "form.fill",
         { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId, timing: t.timing },
         t.fillTimeoutMs,
@@ -293,8 +310,8 @@ export class FormsService {
       mimeType: MIME[extname(abs).toLowerCase()] ?? "application/octet-stream",
       base64: (await readFile(abs)).toString("base64"),
     };
-    return this.onTab(tabId, async (t) => {
-      const result = await this.bridge.call(
+    return this.onTab({ tool: "upload_file", params: { fieldId, path } }, tabId, async (t) => {
+      const result = await t.bridge.call(
         "form.upload",
         { fieldId, file, tabId: t.tab.tabId, timing: t.timing },
         90_000,
@@ -314,7 +331,7 @@ export class FormsService {
   }
 
   async remove(fieldId: string, values: string[] | undefined, reason: string | undefined, tabId?: number) {
-    return this.onTab(tabId, async (t) => {
+    return this.onTab({ tool: "remove_items", params: { fieldId, values, reason } }, tabId, async (t) => {
       const result = await this.bridge
         .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.remove", "remove items"));
@@ -332,7 +349,7 @@ export class FormsService {
   }
 
   async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
-    return this.onTab(tabId, async (t) => {
+    return this.onTab({ tool: "remove_repeatable", params: { sectionId, reason } }, tabId, async (t) => {
       const result = await this.bridge
         .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId, timing: t.timing }, 30_000)
         .catch(olderExtension("form.removeRepeatable", "remove rows"));
@@ -349,8 +366,8 @@ export class FormsService {
   }
 
   async addRepeatable(addButtonId: string, tabId?: number) {
-    return this.onTab(tabId, async (t) => {
-      const result = await this.bridge.call(
+    return this.onTab({ tool: "add_repeatable", params: { addButtonId } }, tabId, async (t) => {
+      const result = await t.bridge.call(
         "form.addRepeatable",
         { addButtonId, tabId: t.tab.tabId, timing: t.timing },
         20_000,
@@ -360,8 +377,8 @@ export class FormsService {
   }
 
   async next(tabId?: number) {
-    return this.onTab(tabId, async (t) => {
-      const r = await this.bridge.call("form.next", { tabId: t.tab.tabId, timing: t.timing }, 60_000);
+    return this.onTab({ tool: "go_next", params: {} }, tabId, async (t) => {
+      const r = await t.bridge.call("form.next", { tabId: t.tab.tabId, timing: t.timing }, 60_000);
       await this.logEvent(t, {
         event: "next",
         advanced: r.advanced,
@@ -377,7 +394,7 @@ export class FormsService {
   }
 
   async back(tabId?: number) {
-    return this.onTab(tabId, async (t) => {
+    return this.onTab({ tool: "go_back", params: {} }, tabId, async (t) => {
       const r = await this.bridge
         .call("form.back", { tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.back", "go back"));
@@ -387,15 +404,15 @@ export class FormsService {
   }
 
   async pageAction(action: PageAction, tabId?: number) {
-    return this.onTab(tabId, async (t) => {
-      const r = await this.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
+    return this.onTab({ tool: "page_action", params: { action } }, tabId, async (t) => {
+      const r = await t.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
       return annotate(r, t);
     });
   }
 
   async screenshot(tabId?: number) {
-    return this.onTab(tabId, (t) =>
-      this.bridge.call("tab.screenshot", { tabId: t.tab.tabId, timing: t.timing }, 15_000),
+    return this.onTab({ tool: "screenshot", params: {} }, tabId, (t) =>
+      t.bridge.call("tab.screenshot", { tabId: t.tab.tabId, timing: t.timing }, 15_000),
     );
   }
 
@@ -407,15 +424,60 @@ export class FormsService {
    * different tabs still run side by side. The waits come from autofill-timing.yaml, read for every call so an
    * edit applies to the next one.
    */
-  private async onTab<T>(tabId: number | undefined, fn: (t: Target) => Promise<T>): Promise<T> {
-    const t = await this.target(tabId);
-    return this.pages.run(String(t.tab.tabId), async () => {
+  private async onTab<T>(
+    call: { tool: string; params: Record<string, unknown> },
+    tabId: number | undefined,
+    fn: (t: Target) => Promise<T>,
+  ): Promise<T> {
+    const entered = Date.now();
+    const settings = await this.debug.settings();
+    const base = await this.target(tabId);
+    return this.pages.run(String(base.tab.tabId), async () => {
+      const record = settings.on ? this.debug.start(call.tool, call.params, Date.now() - entered) : null;
       const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws);
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
       // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
-      const shown = await this.show(t.tab.tabId);
-      return fn({ ...t, timing, fillTimeoutMs, timingIssues: issues, ...(shown ? { shown } : {}) });
+      const shown = await this.show(base.tab.tabId);
+      const t: Target = {
+        ...base,
+        timing,
+        fillTimeoutMs,
+        timingIssues: issues,
+        ...(shown ? { shown } : {}),
+        bridge: record ? recorded(this.bridge, record) : this.bridge,
+        note: record
+          ? (key, value) => {
+              record.notes[key] = [...(record.notes[key] ?? []), value];
+            }
+          : () => {},
+        debug: record !== null,
+      };
+      if (!record) return fn(t);
+      Object.assign(record, {
+        tab: base.tab,
+        ...(base.posting ? { posting: base.posting.id } : {}),
+        ...(base.mismatch ? { postingMismatch: base.mismatch } : {}),
+        ...(base.extensionVersion ? { extensionVersion: base.extensionVersion } : {}),
+        ...(typeof this.bridge.browser === "function" ? { browser: this.bridge.browser() } : {}),
+        timing,
+        fillTimeoutMs,
+        ...(shown ? { shown } : {}),
+      });
+      try {
+        const result = await fn(t);
+        this.debug.finish(record, settings, { result });
+        return result;
+      } catch (err) {
+        // A call that timed out still gets its dump: the bridge calls made before it failed, and the error.
+        this.debug.finish(record, settings, { error: err });
+        throw err;
+      }
     });
+  }
+
+  /** Resolves once every debug record is written (tests). */
+  debugIdle(): Promise<void> {
+    return this.debug.idle();
   }
 
   /**
@@ -452,8 +514,8 @@ export class FormsService {
    * tenant (the one the user is looking at, else the most recently used); else any application tab, the same
    * way. Then decide whether the active posting may be credited with what happens there.
    */
-  private async target(tabId?: number): Promise<Omit<Target, "fillTimeoutMs" | "timingIssues">> {
-    const { tabs } = await this.bridge.call("browser.status", {}, 5_000);
+  private async target(tabId?: number): Promise<TargetBase> {
+    const { tabs, extensionVersion } = await this.bridge.call("browser.status", {}, 5_000);
     const activeId = await this.postings.activeId();
     const active = activeId ? await this.postings.get(activeId).catch(() => null) : null;
     const postingTenant = active ? postingTenantOf(active) : undefined;
@@ -482,6 +544,7 @@ export class FormsService {
       return {
         tab,
         posting: null,
+        ...(extensionVersion ? { extensionVersion } : {}),
         mismatch: {
           activePosting: {
             id: active.id,
@@ -498,7 +561,7 @@ export class FormsService {
         },
       };
     }
-    return { tab, posting: active };
+    return { tab, posting: active, ...(extensionVersion ? { extensionVersion } : {}) };
   }
 
   /**
@@ -655,6 +718,30 @@ function leftSections(
         .map((f) => (left?.get(f.id) ? { ...f, reason: left.get(f.id) } : f)),
     }))
     .filter((s) => s.fields.length > 0 || s.removable);
+}
+
+/** The bridge for one debugged call: every request is added to its record with its full result and time. */
+function recorded(bridge: Pick<ExtensionBridge, "call">, record: CallRecord): Pick<ExtensionBridge, "call"> {
+  const call = async (method: string, params: Record<string, unknown>, timeoutMs?: number) => {
+    const started = Date.now();
+    const entry: CallRecord["bridge"][number] = { method, params: stripBulk(params), ms: 0 };
+    record.bridge.push(entry);
+    try {
+      const result = await (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(
+        method,
+        params,
+        timeoutMs,
+      );
+      entry.result = result;
+      return result;
+    } catch (err) {
+      entry.error = EzError.from(err).message;
+      throw err;
+    } finally {
+      entry.ms = Date.now() - started;
+    }
+  };
+  return { call: call as ExtensionBridge["call"] };
 }
 
 /** A result with what the agent must know about the tab: another posting's tenant, or a page left hidden. */

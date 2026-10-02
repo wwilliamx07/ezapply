@@ -13,6 +13,8 @@ export {
 } from "./config/app.js";
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { ENGINES, type EngineId, resolveEngine } from "./documents/tex/engines.js";
+export { DEBUG_DIR, pruneDebug } from "./forms/debug.js";
+export { debugReport, latestDebugSession } from "./forms/debug-report.js";
 export { FormsService } from "./forms/service.js";
 export { loadTiming, TIMING_FILE, timingFileTemplate } from "./forms/timing.js";
 export { KeyringStore } from "./github/secrets.js";

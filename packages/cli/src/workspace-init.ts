@@ -66,7 +66,7 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
       permissions: {
         ...perms,
         allow: union(perms.allow, ["mcp__ezapply"]),
-        deny: union(perms.deny, REPO_CACHE_DENY),
+        deny: union(perms.deny, [...REPO_CACHE_DENY, ...DEBUG_READ_DENY]),
       },
     };
   });
@@ -131,6 +131,12 @@ const REPO_CACHE_DENY = [
   "Write(./repo-cache/**)",
   "NotebookEdit(./repo-cache/**)",
 ];
+
+/**
+ * debug/ (autofill debug mode) holds the user's filled values and the pages, for working on ezapply, not for the
+ * applying agent: reading it would only cost context.
+ */
+const DEBUG_READ_DENY = ["Read(/debug/**)", "Read(./debug/**)"];
 
 const IMPORT_LINE = "@EZAPPLY.md";
 

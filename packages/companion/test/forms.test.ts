@@ -1,9 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_TIMING, type TabInfo } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
+import { pruneDebug, stripBulk } from "../src/forms/debug.js";
 import { FormsService } from "../src/forms/service.js";
 import { loadTiming, TIMING_FILE, timingFileTemplate } from "../src/forms/timing.js";
 import { createLogger } from "../src/logger.js";
@@ -187,6 +188,76 @@ describe("autofill-timing.yaml", () => {
       const loaded = await loadTiming(ws);
       expect(loaded.timing).toEqual(DEFAULT_TIMING);
       expect(loaded.issues[0]).toMatch(/couldn't be read, so the defaults are used/);
+    });
+  });
+});
+
+describe("debug mode", () => {
+  it("still records a call that timed out, with the bridge calls made before it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
+    try {
+      await writeFile(
+        join(dir, "ezapply.config.json"),
+        JSON.stringify({ schemaVersion: 1, debug: { autofill: true } }),
+      );
+      const bridge = {
+        call: async (method: string) => {
+          if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
+          throw new Error("Request form.fill timed out after 120000 ms");
+        },
+      } as unknown as ExtensionBridge;
+      const f = forms(bridge, workspaceAt(dir));
+      await expect(f.fill([{ fieldId: "a", value: "x", source: "user" }], 7)).rejects.toThrow(/timed out/);
+      await f.debugIdle();
+      const session = join(dir, "debug", `${new Date().toISOString().slice(0, 10)}-no-posting`);
+      const record = JSON.parse(await readFile(join(session, "0001-fill_fields.json"), "utf8"));
+      expect(record).toMatchObject({
+        tool: "fill_fields",
+        params: { fills: [{ fieldId: "a", value: "x", source: "user" }] },
+        bridge: [{ method: "form.fill", error: expect.stringMatching(/timed out/) }],
+        error: { message: expect.stringMatching(/timed out/) },
+      });
+      expect(record.bridge[0].params).not.toHaveProperty("timing");
+      const index = JSON.parse((await readFile(join(session, "index.jsonl"), "utf8")).trim());
+      expect(index).toMatchObject({ seq: 1, tool: "fill_fields", ok: false, debug: true });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("records nothing when it's off", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
+    try {
+      const f = forms(slowBridge().bridge, workspaceAt(dir));
+      await f.listOptions("gender", 7);
+      await f.debugIdle();
+      await expect(readdir(join(dir, "debug"))).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps debug/ under its size, deleting the oldest sessions but never the current one", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
+    try {
+      for (const name of ["2026-09-01-a", "2026-09-02-b", "2026-09-03-c"]) {
+        await mkdir(join(dir, name));
+        await writeFile(join(dir, name, "0001-get_form.json"), "x".repeat(1000));
+      }
+      expect(await pruneDebug(dir, 1500, join(dir, "2026-09-01-a"))).toEqual([
+        join(dir, "2026-09-02-b"),
+        join(dir, "2026-09-03-c"),
+      ]);
+      expect(await readdir(dir)).toEqual(["2026-09-01-a"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drops an upload's file contents from the record, keeping its size", () => {
+    expect(stripBulk({ fieldId: "f", file: { name: "a.pdf", base64: "AAAA" }, tabId: 7, timing: {} })).toEqual({
+      fieldId: "f",
+      file: { name: "a.pdf", bytes: 3 },
     });
   });
 });
