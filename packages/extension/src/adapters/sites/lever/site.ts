@@ -22,7 +22,8 @@ import { checkboxDriver, checkboxGroupDriver, radioDriver, selectDriver, textDri
  * server-rendered page with Submit at the end. Each question is an `.application-question` with an
  * `.application-label`; native inputs, selects, radio and checkbox groups; a location field that suggests places as
  * you type. Built from a live application page (2026-10-03) and checked on one live (filling, never submitting).
- * The resume input sends the file to Lever to read at once, so it wasn't tried live.
+ * The resume input sends the file to Lever to read at once, so it wasn't tried live. See
+ * references/components/sites.md.
  */
 
 const SEL = {

@@ -1,24 +1,25 @@
-# Oracle adapter (`packages/extension/src/adapters/oracle/`)
+# Oracle adapter (`packages/extension/src/adapters/sites/oracle/`)
 
 Reads an Oracle Recruiting Cloud application (Oracle's "Candidate Experience") into a
-[`FormSchema`](protocol.md#form-schema) and fills it for Claude, with the same API as the
-[Workday adapter](workday-adapter.md), so the background, the companion, the MCP tools and the skill treat
-both alike. Built into `oracle-main.js` and injected into the page's **MAIN world**: the page is Knockout
+[`FormSchema`](protocol.md#form-schema) and fills it for Claude. Oracle is a site definition on the
+[adapter engine](adapters.md), with drivers of its own, so it has the same API as every other site and the
+background, the companion, the MCP tools and the skill treat them alike. Built into `oracle-main.js` and injected into the page's **MAIN world**: the page is Knockout
 components with React widgets inside (`cx-select`, `cx-select-pills`), and React widgets respond only to
 events that reach React's own root listener, which the MAIN world dispatches like a user's.
 
 | File | Role |
 |---|---|
-| `main.ts` | Bundle entry: defines `window.__ezapplyOracle` (non-enumerable) unless the same `ADAPTER_VERSION` is already there |
-| `api.ts` | `createOracleApi(doc, getUrl)`: the methods the background calls, and `installSubmitGuard` (the [shared guard](#never-submitting) with Oracle's submit test) |
-| `extract.ts` | Page detection, fields, sections, saved items, step, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton` |
+| `site.ts` | The definition: page rules, the step key (URL and step), repeat rules (a timeline entry's delete button revealed by hovering, an inline form's errors), fill rules (page order, stale errors, scroll before upload, new errors only), the waits, messages |
+| `main.ts` | Bundle entry: `install(oracle)`, which defines `window.__ezapply_oracle` ([engine](adapters.md#the-api-apits)) |
+| `page.ts` | Page detection, fields (`oracleFields`), saved items and rows (`oracleRows`), add and Save buttons (`oracleAddButtons`), step, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton`, and the value readers the drivers use |
 | `fill.ts` | One filler per widget, option listing and search, uploads, removals |
+| `widgets.ts` | `ORACLE_WIDGETS`: the fillers and readers of `fill.ts` and `page.ts` as drivers |
 | `selectors.ts` | **Every Oracle-specific string of the adapter**: class hooks, button texts, `PROFILE_HINTS`. URL detection and the tenant come from `@ezapply/protocol/oracle` ([protocol](protocol.md)) |
 
-Shared with the Workday adapter, in `adapters/common/`: `dom.ts` (text, visibility, events, `waitFor`,
-`settle`, `matchOption`, `parseDate`, React props), `timing.ts` (the waits) and `guard.ts` (the submit guard).
-Like Workday's, the adapter takes every constructor from the element's own window, so it runs the same in
-the page and in jsdom.
+The engine (`adapters/engine/`) does the rest, as for every site: the API, ids and sections, the fill loop,
+next and back, the submit guard, the waits ([adapters](adapters.md)). When the adapter moved onto it
+(2026-10-03), its fillers and readers moved unchanged and the golden schemas stayed equal. It hasn't run live
+since.
 
 ## Which pages
 
@@ -36,14 +37,15 @@ applications share it, which is what the companion compares ([tab choice](../mcp
 
 Workday's hosts are fixed and listed in the manifest. Oracle's can be any host, so the manifest declares
 `optional_host_permissions: ["https://*/*"]` and the extension holds only the Oracle origins the user
-granted, one at a time:
-- **Set posting on an Oracle page** asks for that origin. The request is made synchronously inside the click
+granted, one at a time. Every site whose registry entry says `per-origin` works this way (Greenhouse, Lever and
+Ashby too: [sites](sites.md)):
+- **Set posting on such a page** asks for that origin. The request is made synchronously inside the click
   handler: Firefox accepts `permissions.request` only while handling the user's action, before anything is
   awaited. Already granted, it resolves without asking; declined, the capture still works (the click's
   `activeTab` is enough for it). The posting and the application are on the same origin, so granting at
   capture covers the application.
-- **The options page** lists open Oracle tabs whose origin isn't granted, each with **Grant access**.
-- A form call on an ungranted Oracle tab fails with that hint (`forms.ts`, `requireSiteAccess`).
+- **The options page** lists open tabs of those sites whose origin isn't granted, each with **Grant access**.
+- A form call on an ungranted tab fails with that hint (`forms.ts`, `requireSiteAccess`).
 
 Why not `*.oraclecloud.com` in `host_permissions`: it wouldn't cover vanity domains, which need the
 per-origin grant anyway, and it would reach every Oracle Cloud customer's own staff applications on those
@@ -112,7 +114,8 @@ The "Import your profile" pre-section (LinkedIn and Indeed import) holds no fiel
   `tenant`. An alert region whose content is all hidden (a closed dialog's wrapper) is skipped.
 
 ## Filling
-Every filler acts, waits, and reads back, like Workday's. `fill` handles the fields **in page order**,
+Every filler acts, waits, and reads back, like Workday's. `fill` handles the fields **in page order** (the
+definition's `fill.order: "page"`),
 whatever order they came in, and returns results in the order asked: the address lists depend on each other
 (country → province → city → postal code), each loading its options for the choice above it. A fill sent
 `strict` matches list options, pills and radios only strictly, as on [Workday](workday-adapter.md#filling); a
@@ -180,11 +183,13 @@ profile (the live run skipped the user's languages and certification).
 ## Never submitting
 `isSubmitControl`: the pagination's submit button (`.apply-flow-pagination__submit-button`) or a control
 reading "Submit" / "Submit Application". Fill, remove, add and page-action calls refuse to touch one, `next`
-never presses one, and the submit guard (`common/guard.ts`, installed once per document) cancels any
+never presses one, and the submit guard (`engine/guard.ts`, installed once per document) cancels any
 untrusted event aimed at one. The email step's Next is not a submit control.
 
 ## Waits
-The same named waits as Workday's (`autofill-timing.yaml`, [waits](workday-adapter.md#waits-autofill-timingyaml)):
+Oracle's registry entry holds the standard waits, and `autofill-timing.yaml` changes them for Oracle under
+`oracle:` ([waits owned by the site](adapters.md#waits-owned-by-the-site),
+[Workday's waits](workday-adapter.md#waits-autofill-timingyaml)). They're the same named waits as Workday's:
 `dropdown*` for the lists, `typeahead*Results*` for a list's search, `checkMs` for pills, radios and
 checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` for items and Save, `step*`,
 `pageAction*`, `afterField*`.
@@ -209,7 +214,8 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
   phone number, stale "required" errors, and "Saved" as an error. The **Cover Letter** upload field didn't
   appear in `get_form` on the live page, though the page the user saved earlier has one; why is unknown
   (Claude put the cover letter under Additional Documents). Next time, a saved copy of the page will tell.
-- **Not yet live:** language and license tiles, deletes, the multi-page flow, confirmation detection.
+- **Not yet live:** language and license tiles, deletes, the multi-page flow, confirmation detection, and the
+  adapter on the engine (2026-10-03; its golden schemas and behaviour tests are unchanged).
 
 ## Limits
 - **English button texts.** Apply, Use My Profile, Next, Previous, Submit and the confirmation wording are

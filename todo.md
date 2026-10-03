@@ -11,16 +11,16 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 
 | # | Proposal | Value | Effort | Needs first |
 |---|----------|-------|--------|-------------|
-| 1 | Modular adapters: a site is a definition | High | L | — (3 before its phases 4–5) |
-| 2 | Embedded application forms | High | M | 1 |
+| 1 | Modular adapters: live runs left | High | S | — |
+| 2 | Embedded application forms | High | M | — |
 | 3 | Deterministic autofill: live runs left | High | S | — |
 | 4 | Tie each application to its posting | High | M | — |
 | 5 | The companion runs the hand-off checklist | High | M | — |
 | 6 | Autofill debug mode | High | L | — |
-| 7 | More application sites, and Oracle follow-ups | High | M per site | 1 (2 for embedded sites) |
+| 7 | More application sites, and Oracle follow-ups | High | M per site | pages saved from real applications (2 for embedded sites) |
 | 8 | Show what changed in a document | Medium | M | — |
 | 9 | Application tracker | Medium | S–M | — |
-| 10 | A skill for building adapters | Medium | M | 1, 6 |
+| 10 | A skill for building adapters | Medium | M | 6 |
 | 11 | Login manager | Medium | L | — |
 
 Suggested order:
@@ -30,278 +30,37 @@ Suggested order:
 4. ~~A live run with debug mode on~~ (Hooli, 2026-10-01): autofill phase 1, posting matching and the
    checklist; its fixes are in.
 5. ~~Autofill phases 2 and 3~~ (built 2026-10-02).
-6. **Next: modular adapters** (item 1). Its phases 1 and 2 change no adapter's behaviour; then the first new
-   sites on the engine (item 7), with embedded forms (item 2) for Greenhouse and iCIMS.
-7. The autofill live runs (item 3) whenever the user next applies on Workday or Oracle, with debug mode on.
-   They go before item 1 moves Oracle and Workday onto the engine (its phases 4 and 5).
-8. The rest of debug mode (item 6): the adapter trace, built into item 1's engine, then markup.
+6. ~~Modular adapters~~ (item 1, built 2026-10-03): the engine, Workday and Oracle on it, and Greenhouse, Lever
+   and Ashby.
+7. **Next:** the live runs (items 1 and 3) whenever the user next applies on Workday or Oracle, with debug mode
+   on. They test `strict` and the engine together.
+8. Embedded forms (item 2), so Greenhouse and the other boards work inside employers' career pages.
+9. The rest of debug mode (item 6): the adapter trace, in the engine, then markup.
 
-Item 10 comes after item 1.
+Item 10 comes after a site or two more are built by hand from saved pages (item 7).
 
 ---
 
 ## 1. Modular adapters: a site is a definition (High, L)
 
-**Goal.** Adding a job site should mean describing it, not writing an adapter. A site definition says:
-1. which page is which: posting, sign-in, start choice, step, review, confirmation;
-2. where the buttons are: apply, next, back, submit, add a row, delete a row, save an inline form, the start-page
-   choices;
-3. which kinds of fields exist, by naming the widget drivers its fields use;
-4. where each field is and where its prompt is: the field's container, its label, help text, error, required
-   mark and section;
-5. code only for a widget no shared driver handles: how to put an answer into Workday's dropdown or Oracle's
-   cx-select.
+**Status:** built on 2026-10-03. What's built is described in `references/components/adapters.md` (the engine,
+definitions, shared drivers, waits owned by each site), `sites.md` (Greenhouse, Lever, Ashby) and the protocol's
+site registry (`references/components/protocol.md`).
+- The registry, the schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) and per-site waits.
+- One engine; Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal.
+- Shared drivers, and three new sites chosen by market share among those with public application pages:
+  Greenhouse, Lever and Ashby, each checked live with fake values and never submitted.
+- No generic definition: a site's page kinds and Submit test come from its own pages, never guesses. Building a
+  definition is item 10's skill.
 
-One engine does the rest, written once:
-- the adapter API the background calls;
-- the extraction loop and field ids;
-- rows and saved items;
-- the fill loop, with its waits and checks;
-- moving between steps;
-- the submit guard, strict option matching and the waits.
-
-The companion and the agent keep the same `FormSchema` and tools.
-
-**Why now.** The two adapters are about 3,500 lines: Workday 1,600, Oracle 1,650, `common/` 280. The user's
-postings so far: Symplicity (the school's co-op portal, 9), Workday (3), Oracle (2), Ashby (Cohere), Greenhouse
-embedded on Initrode's site, iCIMS embedded on careers.example.com, and Nakatomi's own site. At 1,600 lines a site,
-covering them isn't practical. Most of each adapter repeats the other: the API, ids, sections, rows, errors and
-notices, the fill loop, next and back, the guard. What really differs per site is the markup (where things
-are) and a few widgets.
-
-Simplify Copilot covers 57 providers the same way, one engine plus data per provider (studied 2026-10-02).
-Their data needs label rules for every question on every provider ("sponsor", "require our assistance"). Ours
-won't: the agent reads every field's prompt, so a definition only has to say where the prompt is.
-
-**What doesn't change.**
-- The adapter API: `getForm`, `listOptions`, `searchOptions`, `fill`, `upload`, `remove`, `removeRepeatable`,
-  `addRepeatable`, `next`, `back`, `pageAction`, `setTiming`, `blockedSubmitAttempts`, `version`.
-- `FormSchema` and its field ids (golden tests hold them).
-- The MCP tools and the skills.
-- Injection into the page's MAIN world on demand, one bundle per site.
-
-**Today, and after.**
-
-| Today | After |
-|---|---|
-| `workday/selectors.ts`, `oracle/selectors.ts`, the page and field parts of each `extract.ts` | `sites/<site>/site.ts`: the definition |
-| Widget code spread over `fill.ts` and `extract.ts` (`currentValue`, `knownOptions`, `fieldKind`) | `widgets/`: shared drivers, plus `sites/<site>/widgets.ts` for the site's own |
-| Two `api.ts`, two extraction loops, ids, rows, errors | `engine/` |
-| `common/dom.ts`, `guard.ts`, `timing.ts` | `engine/`, unchanged |
-| Two `main.ts`, `ADAPTERS` in `background/forms.ts`, the site list in `build.mjs` | generated from the site registry |
-| Detection, tenant and job in `protocol/src/browser.ts`, `workday.ts`, `oracle.ts`; `FORM_SITES`; the Workday posting hooks and locale segment | `protocol/src/sites/`: one registry entry per site |
-| The companion's `form.adapter === "oracle"` (autofill's `rowsToAdd` and `missingItems`, the hand-off check in `FormsService.checks`) and Oracle's id formats in `forms/lists.ts` | facts in the schema (below) |
-| Oracle's site access in the background, Set posting and the options page | per registry entry: fixed hosts, or origins granted one at a time |
-
-### The site definition
-`extension/src/adapters/sites/<site>/site.ts`. It's TypeScript, not JSON: typed, able to hold a small function
-where a selector isn't enough, tested like code, and bundled with the extension. It's never fetched remotely.
-Manifest V3 forbids remote code, and every change to what touches a form should be reviewed and tested.
-
-```ts
-interface SiteDefinition {
-  id: SiteId;
-  pages: {                                   // the first that matches; "step" when the page has fields
-    confirmation?: Signal; auth?: Signal; startChoice?: Signal; posting?: Signal; review?: Signal;
-  };
-  step?: { title: Find<string>; index?: Find<number>; total?: Find<number> };
-  fields: {
-    container: string;                       // one field: Workday [data-automation-id^="formField-"], Oracle .input-row
-    skip?: string;                           // never a field: a honeypot, a nested container
-    prompt: Locator[];                       // the question: label[for], legend, aria-labelledby… (first with text)
-    help?: Locator[];
-    error?: Locator[];
-    required?: (container: HTMLElement) => boolean;
-    section: (container: HTMLElement) => string;              // the heading it sits under
-    key?: (container: HTMLElement, prompt: string) => string; // default: control id without its render counter, else the prompt
-    more?: (doc: Document) => Candidate[];   // fields outside containers: Oracle's phone halves, uploads, agreements
-  };
-  widgets: WidgetDriver[];                   // the site's own first, then shared; the first that recognises a field decides its kind
-  buttons: {
-    next: Locator[];
-    back?: Locator[];
-    submit: Locator[];                       // also caught by the shared text rule ("Submit", "Submit application")
-    actions?: Partial<Record<PageAction, Locator[]>>;
-    add?: { button: string; section: (b: HTMLElement) => string | undefined; opens: "row" | "form" };
-    save?: string;                           // an inline form's Save
-  };
-  rows?: { delete: string };                 // a row: a section whose container holds its own delete button
-  items?: { saved: string; title: Find<string>; delete: string; revealOnHover?: boolean };
-  alerts: { selector: string; notice?: (text: string) => boolean };
-  hints: { key: (field: Field) => string | undefined; table: Record<string, string> };
-  fill?: { order?: "given" | "page"; waitForStaleErrors?: boolean };
-}
-```
-
-A `Locator` is a CSS selector, a function, or `byText(/^(next|continue)$/i, within?)`. The first one that finds
-something wins, so an element can be known by several automation ids, as now.
-
-### Widget drivers
-```ts
-interface WidgetDriver {
-  kind: FieldKind;
-  is(c: HTMLElement): boolean;                         // this container holds this widget
-  value(c: HTMLElement): Field["currentValue"];
-  options?(c: HTMLElement): string[] | undefined;      // known up front: radios, pills
-  dateParts?(c: HTMLElement): DatePart[];
-  multiple?(c: HTMLElement): boolean;
-  fill(c: HTMLElement, value: FillValue, opts: { strict: boolean }): Promise<FillOutcome>;
-  list?(c: HTMLElement): Promise<OptionInfo[]>;
-  search?(c: HTMLElement, query: string): Promise<OptionInfo[]>;
-  remove?(c: HTMLElement, values?: string[] | null): Promise<RemoveOutcome>;
-  upload?(c: HTMLElement, file: File): Promise<FillOutcome>;
-}
-```
-
-**Shared drivers** (`adapters/widgets/`), each for plain markup and the ARIA patterns most sites use:
-- **text:** text, textarea, number, email, tel and url inputs. Native setter and events, React's handler as a
-  fallback, and a phone number the page reformats counts as taken.
-- **native widgets:** `<select>`, a radio group, a checkbox, a checkbox group, date and month inputs.
-- **file:** a file input (`DataTransfer`, then a drop on the drop zone). Done when a new file name shows;
-  removes attached files too.
-- **ARIA combobox** with a listbox: `role=combobox`, `aria-controls`, type to filter, options as `role=option`.
-  This covers react-select and most React and Vue form kits.
-- **toggle buttons** (`aria-pressed`), as a radio or checkbox group: Oracle's pills.
-- **password:** recognised, never filled.
-
-A site can pass options to a shared driver (which event opens it, how long to wait) before it needs a driver of
-its own.
-
-**Site drivers, moved as they are:**
-- Workday: the listbox dropdown, the prompt (a typeahead with nested menus), the split date, the drop zone.
-- Oracle: cx-select, the date lists, the attachment buttons, and the widgets it reports but can't drive (JET
-  comboboxes, the multi-select).
-
-### The engine (`adapters/engine/`)
-**`extract.ts`.** For each field container, the first driver that recognises it gives a `Field`:
-- the id `<section slug>.<key>`, with `#n` for repeats;
-- prompt, help, error, required mark, value, options and hint.
-
-Around the fields it also builds:
-- sections, with rows marked `removable`, and saved items;
-- add and save buttons (`add.<section slug>`, `save.<block>`);
-- the page kind, step, `nextLabel` and `backLabel`;
-- errors and messages, and the tenant (from the registry).
-
-**`api.ts`.** `createAdapter(site)` implements the API above, doing what both adapters do now:
-- **fill:** in the order the site asks; a settle after each field; the error check afterwards (with Oracle's
-  wait for a stale error);
-- **add a row:** waits for more fields. An inline form's Save waits for the form to close or to show errors;
-- **remove a row:** by the row's own button (hovering first where the site asks), confirming a dialog;
-- **next and back:** by a step key (index, title, URL), waiting for the new step's fields. They refuse on review,
-  confirmation and sign-in, and at any submit control;
-- **page actions**, and the guard.
-
-**`dom.ts`, `guard.ts`, `timing.ts`** come from `common/`, unchanged.
-
-### The site registry (protocol)
-`protocol/src/sites/` holds one entry per site:
-- `id`, `isUrl(url)`, `tenant(url)`, `job(url)`;
-- the posting-page hooks the companion reads, and URL canonicalisation (Workday's locale segment);
-- host permissions: fixed hosts in the manifest, or origins granted one at a time at Set posting, as Oracle's
-  are.
-
-Everything that knows the list of sites comes from it:
-- `detectSite`, `FORM_SITES`, `isFormSite`, `siteTenant`, `siteJob` and canonical URLs;
-- the build's site list and the manifest's host permissions (`manifest.test.ts` already compares those);
-- site access in the background, Set posting and the options page.
-
-A new site's only protocol change is its registry entry.
-
-### Facts in the schema, instead of site names in the companion
-Each definition produces these, and the companion reads them instead of `form.adapter` or Oracle's id formats.
-A new site then needs no companion change.
-- **`addButtons[].opens`:** `"row"` (Workday's Add) or `"form"` (Oracle's Add Language); a `save.*` button stays
-  a Save. Used by autofill's `rowsToAdd` and `missingItems`, and by the checklist.
-- **`Section.saved: true`** on a saved item, with its list where the page says so (Oracle's timeline columns,
-  experience and education).
-- **`FormSchema.lastPage: true`** when Submit is the only way on (Oracle's single page, any single-page site).
-  Used by the hand-off.
-
-### Adding a site, afterwards
-1. Save the application's pages: posting, each step, review. Item 6's markup export makes one live run enough.
-2. Write the registry entry, the definition, and a fixture built from the saved pages.
-3. Use shared drivers first; write a site driver only for a widget they can't drive.
-4. Pass the conformance test, do a live run with debug mode on, and write the site's reference page.
-
-For a site of plain HTML and common ARIA widgets, step 2 should be most of the work: a definition of 100 to 200
-lines.
-
-### Tests
-- **Golden schemas, before anything moves.** Write `getForm()` of every fixture state and live snapshot to
-  `extension/test/golden/`:
-  - Workday: the step, each fixture option, after an Add, review;
-  - Oracle: the single page, each section of the multi-page flow, Welcome Back, the language form open;
-  - every live snapshot.
-
-  The ported adapters must give the same JSON, apart from the new schema facts.
-- **The behaviour tests** (`workday.test.ts`, `oracle.test.ts`, the companion's e2e tests) run unchanged
-  against the ported adapters. `createWorkdayApi` and `createOracleApi` stay, as `createAdapter(site)`.
-- **Driver tests** on minimal markup, per shared driver: fill, read back, a strict miss, list, remove.
-- **A plain-HTML fixture** (`generic-fixture.ts`):
-  - labels by `for`, by wrapping, by `aria-labelledby`, and by `fieldset`/`legend`;
-  - a native select, radios, checkboxes and a file input;
-  - a react-select-style combobox;
-  - a repeatable section;
-  - Next and Submit.
-
-  The engine is built against it, with no site code.
-- **Conformance, per site** (`sites.test.ts`, run for every registered site on its fixture):
-  - every field has a prompt and a kind;
-  - ids are the same on two reads;
-  - the guard blocks the site's Submit, by click and by Enter;
-  - `next` refuses on review;
-  - each saved page gets its page kind.
-
-### Phases
-"One adapter change per live run" holds. A phase that moves an existing adapter's code waits for a live run of
-its own, after item 3's live runs (which test `strict`).
-1. **(S–M) Registry and schema facts.**
-   - The protocol registry, with detection, tenant, job, canonical URLs and permissions taken from it.
-   - The three schema facts, emitted by both adapters (an extraction change only) and read by the companion
-     instead of `adapter === "oracle"`.
-   - No filler changes.
-2. **(M–L) Engine and shared drivers**, built beside the two adapters on the plain-HTML fixture. Nothing existing
-   moves, so landing it needs no live run.
-3. **(M per site) The first new sites on the engine**, picked from the user's postings:
-   - Ashby (Cohere), on its own host;
-   - Symplicity, with the most postings; its application is the school portal's own;
-   - then Greenhouse and iCIMS, together with item 2: in the user's postings both are embedded.
-
-   Each one gets saved pages, a definition, a fixture and a live run.
-4. **(M) Oracle on the engine**, after item 3's Oracle run: its definition, its drivers moved, golden schemas
-   equal, one live run.
-5. **(M–L) Workday on the engine**, after item 3's Workday run:
-   - its drivers moved verbatim, with no logic change;
-   - golden schemas equal;
-   - one live run with debug mode on, compared with the previous run's timings.
-6. **(S) Clean-up.**
-   - The old adapter folders go.
-   - In the reference: `components/adapters.md` (the engine, definitions and drivers), the Workday and Oracle
-     pages cut down to their definitions and drivers, and "Add a job site" in `development.md` rewritten.
-
-### Challenges and open questions
-- **Moving Workday's fillers is the riskiest part** (it's how e390fef broke autofill), so it goes last: verbatim,
-  checked against golden schemas, with a live run of its own. Item 6's adapter trace belongs in the engine (one
-  place: every driver call and wait). Building the trace into the engine before phase 5 would make that live run
-  a traced one.
-- **Sites that almost fit a shared driver**: a combobox that opens only on mousedown, a list that renders late.
-  Start with options on the shared driver, and write a site driver only when those run out.
-- **Best effort on any site.** The plain-HTML definition (shared drivers, prompts by `label` and `aria-*`,
-  buttons by text) could run on a site with no definition, on origins the user grants, as Oracle's are. That's
-  the most reach for the least work, but page kinds and the submit test are guesses there. Decide after
-  phase 3 shows how far it gets on Ashby and Symplicity.
-- **Shadow DOM** (some enterprise sites): the engine's queries would have to look into open shadow roots. None of
-  the sites above needs it.
-- **Waits per site.** `autofill-timing.yaml` is one set of waits for every site. Keep it, and add per-site
-  sections only when a site needs different waits.
-
-**References**:
-- a new `components/adapters.md`;
-- `components/workday-adapter.md`, `components/oracle-adapter.md`, `protocol.md`, `extension.md`, `companion.md`;
-- `autofill.md` and `mcp-tools.md` (the schema facts);
-- `development.md` ("Add a job site");
-- `security.md` (the submit test per site).
+**Left:**
+1. **The live runs of Workday and Oracle on the engine.** The move is an adapter change that went in before
+   item 3's live runs, so those runs now test `strict` and the move together. Run them with debug mode on and
+   compare with the 2026-09-30 runs (`references/status.md`).
+2. **A real application on Greenhouse, Lever or Ashby** through the extension, with debug mode on: uploads on
+   Lever and Ashby (never tried: they send the file to the provider on attaching), the confirmation page, and
+   Set posting on their pages.
+3. **Item 6's adapter trace** belongs in the engine: every driver call and wait goes through it now.
 
 ## 2. Embedded application forms (High, M)
 
@@ -338,7 +97,7 @@ Greenhouse's. The form tools act on a whole tab, chosen by the tab's URL (`resol
 - A frame's id changes when it reloads. The companion resolves the frame again on every call, never caching it.
 - Some embeds move to a new frame on each step. A frame that disappears mid-call fails the call, as a closed tab
   does.
-- Needs item 1: the embedded providers (Greenhouse, iCIMS) are new sites.
+- Greenhouse, the most common embedded board, is built (item 1); iCIMS isn't yet (item 7).
 
 ## 3. Deterministic autofill (High, L in three phases)
 
@@ -346,12 +105,13 @@ Greenhouse's. The form tools act on a whole tab, chosen by the tab's URL (`resol
 described in `references/components/autofill.md`. Phase 1 ran live once (Hooli); phases 2 and 3 were replayed on
 that run's recorded pages, not yet run live.
 
-**Left: the live runs.** In order, so a problem points at one change. Both go before item 1 moves the
-Oracle and Workday adapters onto the engine (its phases 4 and 5):
+**Left: the live runs.** In order, so a problem points at one change. Workday and Oracle now run on item 1's
+engine (moved 2026-10-03, before these runs), so each also tests that move:
 1. A Workday run with debug mode on (`ezapply debug on`, then `ezapply debug report`). It checks rows (adding them,
-   mapping them, the language levels), computed answers and the chunked fills, and `strict` in the adapter, the
-   one adapter change. If it's slower than the 2026-09-30 runs, suspect `strict` first, then the suspects in
-   "One adapter change per live run" (`references/development.md`).
+   mapping them, the language levels), computed answers and the chunked fills, and two adapter changes: `strict`
+   and the move onto the engine. If it's slower than the 2026-09-30 runs, compare the debug records' timings with
+   those runs and suspect the engine's fill loop, then `strict`, then the suspects in "One adapter change per
+   live run" (`references/development.md`).
 2. An Oracle run: the link fields, and the work, education and language entries added through their inline forms.
    The work and education forms have never been seen, so their dates are matched by label on trust, and the
    language levels by the wordings the fixture models.
@@ -538,9 +298,8 @@ nothing in the page. **Part 1 was built on 2026-10-01**: `ezapply debug on|off|r
 2. **(M) The adapter trace and page hooks.** An adapter change, with its own live run.
 3. **(M) Markup, screenshots and `ezapply debug export`.**
 
-- *Adapter* (`extension/src/adapters/common/trace.ts`): a `trace` object every adapter calls at the points
-  listed above. Once item 1's engine exists, the trace goes there instead: one place, every driver call and
-  wait. It's a no-op unless debug is on. The extension sets it with `setDebug(options)` next to `setTiming`, in
+- *Adapter* (`extension/src/adapters/engine/trace.ts`): a `trace` object the engine calls at the points
+  listed above: one place, since every driver call and every wait goes through the engine (item 1). It's a no-op unless debug is on. The extension sets it with `setDebug(options)` next to `setTiming`, in
   the same `executeScript` (`extension/src/background/forms.ts`, `callAdapter`). The adapter returns
   `{ __ok, __debug }`. The companion strips `__debug` before anything reaches the agent.
 - *Page hooks*: the error, console and request hooks, and the mutation observer, install at the start of a
@@ -623,10 +382,17 @@ run).
 
 ## 7. More application sites, and Oracle follow-ups (High, M per site)
 
-**Sites.** Each new site is a definition on item 1's engine (its phase 3). In the order of the user's postings:
-Ashby (Cohere), Symplicity (the school's co-op portal, most of the postings), then Greenhouse (Initrode) and
-iCIMS (Duff), which are embedded in the employer's page (item 2). Then Lever and the providers the user meets
-next. Count the sites behind the captured postings (`meta.json` `url` and `frameUrl`) again before each choice.
+**Sites.** Each new site is a definition on item 1's engine, chosen by how many employers use it (market-share
+counts, `references/components/sites.md`), not by one user's postings. Built: Workday, Oracle, Greenhouse,
+Lever, Ashby. Next, the most common left, each needing pages saved from a real application because public
+pages can't be used:
+1. **iCIMS:** blocks headless browsers; also often embedded in the employer's page (item 2).
+2. **SuccessFactors** and **Taleo:** applications behind a candidate account on each employer's site.
+3. **SmartRecruiters:** bot protection (DataDome) on its application pages. Never worked around.
+4. **BrassRing:** behind a candidate account.
+
+For each: the user starts an application in their own browser and saves each step's page (item 6's markup
+export makes one run enough), then the steps in "Add a job site" (`references/development.md`).
 
 **Oracle follow-ups** (`references/components/oracle-adapter.md`): re-run a live application to confirm the
 fixes from the first one and add languages and certifications; find out why the Cover Letter field was missing
@@ -636,10 +402,8 @@ languages.
 
 **Challenges and open questions.**
 - Each site needs a real application step saved. Debug mode (6) makes the first live run produce it.
-- A single-page form puts Submit next to every field. The guard must block it for keyboard (Enter in a text
-  field) as well as clicks: item 1's conformance test checks both for every site.
-- Symplicity's application lives inside the school's portal, behind the student's sign-in. Its documents may come
-  from the portal's own document library rather than an upload: look at a real application before planning it.
+- Account-based sites (SuccessFactors, Taleo, BrassRing, iCIMS) start with sign-in or account creation, which
+  is the user's (item 11), and often an "upload your resume to prefill" step before the form.
 
 ## 8. Show what changed in a document (Medium, M)
 
@@ -691,6 +455,10 @@ its report, and the site's reference page.
 **How.** The steps are "Add a job site" in `references/development.md`. The skill links to that and adds the
 procedure around it: what to save, in what order to build, which tests to write first, and the checklist for
 the live run. It should not copy development.md's list, or the two will drift.
+- It brings the live-check script used for Greenhouse, Lever and Ashby
+  (`references/components/adapters.md#checking-a-site-live`) into the repo, with this machine's paths made
+  options: headless Chrome or Edge over the DevTools protocol, the site's built bundle injected into the page's
+  main world, the adapter's methods called with fake values, never Submit, no uploads to a third party.
 
 **Challenges and open questions.**
 - The hard part is getting real markup of application steps, which needs an account and an application in

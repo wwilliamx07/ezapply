@@ -15,10 +15,10 @@ const tabId = z
   .number()
   .int()
   .optional()
-  .describe("Defaults to the application tab (Workday or Oracle) of the active posting.");
+  .describe("Defaults to the application tab (on any supported site) of the active posting.");
 
 /**
- * Application form tools (Workday and Oracle Recruiting Cloud). Logging, status moves, tab choice and the posting check live in FormsService; a result
+ * Application form tools (every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby). Logging, status moves, tab choice and the posting check live in FormsService; a result
  * carries `postingMismatch` when the tab is another posting's (other tenant or requisition; calls that change the
  * page are refused with `posting_mismatch`), and
  * `tabHidden` when the application tab is still hidden after being brought to the front (the browser throttles it).
@@ -29,7 +29,8 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Read application page",
       description:
-        "Read the current application page (Workday or Oracle Recruiting Cloud; `adapter` says which): pageKind " +
+        "Read the current application page (Workday, Oracle Recruiting Cloud, Greenhouse, Lever or Ashby; `adapter` " +
+        "says which): pageKind " +
         "(posting, auth, start-choice, step, review, confirmation), step, " +
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
         "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
@@ -237,7 +238,9 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Next step",
       description:
         "Press Next / Save and Continue. Refuses on the review page and on any Submit button: the user always " +
-        "submits (Oracle's single-page applications have only Submit: fill every section, then hand over). Returns whether the step advanced (its index, title or page kind changed), the new " +
+        "submits (one-page applications, `lastPage` in get_form: Greenhouse, Lever, Ashby and many Oracle sites, have " +
+        "only Submit: fill every field, then hand over). Returns whether the step advanced (its index, title or page " +
+        "kind changed), the new " +
         "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`. " +
         "Returns once the new step shows its fields. At the review page, `notAttached` lists approved documents " +
         "never attached: go back and attach them before handing off.",

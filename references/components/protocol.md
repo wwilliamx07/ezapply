@@ -9,17 +9,42 @@ so a change here is a change to the contract between them.
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` (`workday`, `oracle` or `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (a Workday tenant or an Oracle career site), `siteJob(url)` (the job a Workday or Oracle URL is for: the Workday requisition, the Oracle job id) and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site, else `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
+| `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `SiteAccess`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `fixedHostPermissions()`, `optionalHostPermissions()`; no zod (`@ezapply/protocol/sites`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
-| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, or without a leading rank like "5 - "), `strictIndex` ([autofill](autofill.md#strict-matching)) |
-| `timing.ts` | `DEFAULT_TIMING` (every adapter wait, in ms), `TIMING_DOCS`, `resolveTiming(overrides, scale)`; no imports (imported as `@ezapply/protocol/timing` by the adapters) ([waits](workday-adapter.md#waits-autofill-timingyaml)) |
-| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
-| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
+| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, without a leading rank like "5 - ", or without a trailing dialling code: "Canada" for Greenhouse's "Canada +1"), `strictIndex` ([autofill](autofill.md#strict-matching)) |
+| `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
+| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
+| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
+| `greenhouse.ts`, `lever.ts`, `ashby.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`) ([sites](sites.md)) |
 
-The package exports `.` (everything), and `./workday`, `./oracle` and `./timing` for the in-page adapters:
+The package exports `.` (everything), and `./workday`, `./oracle`, `./sites`, `./match` and `./timing` for the in-page adapters:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
 waits, making each adapter 850 KB instead of 60 KB). `detectSite` counts only candidate-facing Workday hosts
 as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
+
+## The site registry (`sites.ts`)
+Every job site whose application forms ezapply fills has one entry (`SiteInfo`), and everything that knows the
+list of sites derives from it, so a new site's only protocol change is its entry (plus its URL module):
+
+| Field | Meaning |
+|---|---|
+| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby` (each also in `SiteId`) |
+| `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
+| `isUrl(url)` | A posting or application page of the site |
+| `tenant(url)`, `job(url)` | The employer's space and the job, lowercased |
+| `canonicalPath?(pathname)` | The posting's identifying path, when the site varies it for the same job (a locale segment, an application page) |
+| `access` | `{ kind: "fixed", hosts }` (in the manifest, granted at install: Workday) or `{ kind: "per-origin" }` (each origin granted on its own, at Set posting or from the options page: the rest) |
+| `waits` | The site's own waits ([waits owned by the site](adapters.md#waits-owned-by-the-site)); all start from `STANDARD_WAITS` |
+
+Derived from it: `detectSite`, `FORM_SITES`, `siteTenant`, `siteJob`, the companion's canonical posting URLs
+(`siteOfUrl(url)?.canonicalPath`), the extension's bundles and manifest permissions (`build.mjs`), site access in
+the background, Set posting and the options page, and `loadTiming`'s per-site sections. `sites.test.ts` checks
+that the registry and `SiteId` name the same sites.
+
+**Why per-origin for the hosted boards.** Greenhouse, Lever and Ashby have fixed hosts and could be in the
+manifest, but every host there is a permission warning at install and on update for a site the user may never
+use. Asked for at Set posting, one grant covers that host's every board.
 
 ## Bridge handshake
 
@@ -65,8 +90,8 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 | `posting.capture` | `CapturePayload` → `CaptureResult { postingId, isNew, company?, role? }` |
 
 `ExtensionApi` (served by the extension). Every `form.*` and `tab.*` method also takes `timing?` (name → ms):
-the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml`; the keys and
-defaults are `DEFAULT_TIMING` in `timing.ts` ([waits](workday-adapter.md#waits-autofill-timingyaml)). Unknown
+the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml` against the tab's
+site's waits; the keys are `STANDARD_WAITS`'s in `timing.ts` ([waits](adapters.md#waits-owned-by-the-site)). Unknown
 keys are ignored and an older extension strips the field, so it came without a version bump.
 
 | Method | Params → result |
@@ -89,12 +114,15 @@ keys are ignored and an older extension strips the field, so it came without a v
 ## Form schema
 
 What a site adapter reports of an application page (`FormSchema`; Claude gets a leaner copy, see
-[mcp-tools](../mcp-tools.md#forms)): `adapter` (`workday` or `oracle`), `tabId`, `url`, `tenant?`, `pageKind`,
-`step? { index?, total?, title }`, `sections[] { id, title, fields[], removable? }`,
-`addButtons[] { id, label, section? }` (`section`: the heading the button sits under; on Oracle also the
-`save.<block>` button of an open inline form), `actions[]` (page
+[mcp-tools](../mcp-tools.md#forms)): `adapter` (the site id), `tabId`, `url`, `tenant?`, `pageKind`,
+`step? { index?, total?, title }`, `sections[] { id, title, fields[], removable?, saved? }` (`saved`: a saved
+item, shown as a summary with no fields: Oracle's tiles and timeline entries), `addButtons[] { id, label,
+section?, kind? }` (`section`: the heading the button sits under; `kind`: `row` adds a row of fields, `form`
+opens an inline form, `save` is an open inline form's Save, `save.<block>` on Oracle), `actions[]` (page
 actions available), `errors[]`, `messages?` (notices such as "resume.pdf successfully uploaded", which live
-Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
+Workday shows in the same alert region as errors), `nextLabel?`, `lastPage?` (a step whose only way on is
+Submit: Oracle's last or only page, every one-page site), `backLabel?`. The companion reads `kind`, `saved` and
+`lastPage` instead of the site's name, so a new site needs no companion change.
 
 - `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown` (Oracle has no
   `review`: its last page is a `step` whose `nextLabel` is Submit).
@@ -138,9 +166,11 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
   `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
-  `PROTOCOL_VERSION` stayed 2 through these.
+  `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict`, and
+  `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
+  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

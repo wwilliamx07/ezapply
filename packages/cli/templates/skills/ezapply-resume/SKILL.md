@@ -1,7 +1,7 @@
 ---
 name: ezapply-resume
-description: Tailor the user's one-page LaTeX resume to the active job posting, or revise the tailored
-version. Use when the user asks to tailor, adjust or update their resume for a job. ---
+description: Tailor the user's one-page LaTeX resume to the active job posting, or revise the tailored version. Use when the user asks to tailor, adjust or update their resume for a job.
+---
 
 # Tailor the resume
 

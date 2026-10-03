@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-02.
+As of 2026-10-03.
 
 ## Done
 | Area | State |
@@ -15,6 +15,8 @@ As of 2026-10-02.
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
 | Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
 | Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
+| Adapters: one engine, a definition per site | A site registry in the protocol (detection, tenant, job, canonical paths, access, waits), from which the extension's bundles, manifest permissions, site access and the companion's tab choice derive; one adapter engine (API, extraction, ids, rows, fill loop, next and back, guard) with a definition per site; shared widget drivers (native controls, react-select through its props, toggle buttons, a search combobox, file fields); waits owned by each site, with per-site sections in `autofill-timing.yaml`; schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) instead of site names in the companion. Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal ([adapters](components/adapters.md)) |
+| Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted (2026-10-03; [sites](components/sites.md)) |
 | Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; the rest replayed on that run's records |
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
@@ -24,6 +26,16 @@ As of 2026-10-02.
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
+- **Workday and Oracle on the engine** (2026-10-03). Their fillers and readers moved unchanged, the golden
+  schemas of every fixture state and live snapshot are equal, and every behaviour test and the companion's e2e
+  tests pass. Not yet run live. This is an adapter change made before the autofill live runs, against the plan
+  ("One adapter change per live run" in [development](development.md)): the next Workday and Oracle runs test
+  `strict` and the move together. If one is slower or fails where the last ones didn't, compare its debug
+  records with the 2026-09-30 runs, and suspect the engine's fill loop (its waits after each field are the
+  same calls as before) before `strict`.
+- **Greenhouse, Lever and Ashby with the extension** (2026-10-03). Checked live through their built bundles in
+  headless Edge, never in a real application through ezapply. Not tried: uploads on Lever and Ashby (they send
+  the file to the provider on attaching), their confirmation pages, and the posting capture on their pages.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Not yet seen: whether
@@ -175,6 +187,11 @@ As of 2026-10-02.
   the page and waits ([why](components/documents.md#review-before-attaching)); not yet seen live.
 
 ## Deferred
+**More of the most common providers.** iCIMS, SmartRecruiters, SuccessFactors, Taleo and BrassRing couldn't be
+built from public pages: their applications sit behind candidate accounts, block headless browsers, or show
+a bot challenge, which ezapply doesn't work around. Each needs pages saved from a real application
+([sites](components/sites.md#why-these-three), `todo.md` item 7).
+
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:
 moving `~/.ezapply/daemon.json` to `config.json` (and `init` deleting `daemon-state.json`), and `ezapply chat`
 shutting down an earlier build's daemon found on its port. Both can go once no such install is left.
@@ -234,6 +251,7 @@ what changed from it, and each linked page gives the reason.
 | Long-running daemon started by hand or at login | No daemon: the companion runs inside `ezapply chat` (after a stage where `ezapply mcp` started it on demand and it stopped when idle) ([architecture](architecture.md#processes-and-lifecycle)) |
 | `ezapply init` then a manual daemon start, a pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
+| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby ([adapters](components/adapters.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
 | Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; no Playwright (the recon scripts that used it were for the first adapter builds and are gone) |

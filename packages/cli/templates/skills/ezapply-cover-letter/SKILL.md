@@ -1,7 +1,7 @@
 ---
 name: ezapply-cover-letter
-description: Write or revise a cover letter for the active job posting using the user's cover letter template,
-profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one. ---
+description: Write or revise a cover letter for the active job posting using the user's cover letter template, profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one.
+---
 
 # Cover letter
 

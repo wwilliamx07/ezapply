@@ -68,15 +68,20 @@ comment wins ([documents](components/documents.md#tex-engines-texenginests)). `l
 when latexmk runs, which a comment never selects.
 
 ### `autofill-timing.yaml` (`companion/src/forms/timing.ts`)
-The form adapters' waits (Workday and Oracle use the same named waits), for the user to tune. Written by `ezapply init` if missing and never
+The form adapters' waits, for the user to tune. Every site uses the same named waits, each site with values of
+its own ([waits owned by the site](components/adapters.md#waits-owned-by-the-site)). Written by `ezapply init` if missing and never
 overwritten; read for every form call, so a saved edit applies to the next one.
 ```yaml
 scale: 1                  # multiplies the defaults of the waits left unset (not pollMs; 0.1–10)
 # fillTimeoutSeconds: 120 # how long the companion waits for one fill_fields (10–600)
 # dropdownOpenMs: 200     # every wait, commented out at its default, with a line on what it does
+# workday:                # a site's own section: its keys change that site only, over the top-level ones
+#   dropdownOpenMs: 400
 ```
-Keys and defaults: `DEFAULT_TIMING` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A
-missing file or key means the default. A mistake (bad YAML, an unknown key, a value out of range) falls back
+Keys: `STANDARD_WAITS` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A top-level key
+changes the wait on every site; a key under a site's id (`workday:`, `oracle:`, `greenhouse:`, `lever:`,
+`ashby:`) changes it on that site only and wins. The defaults are each site's own waits (its registry entry);
+where they differ between sites the template lists each site's. A missing file or key means the site's own. A mistake (bad YAML, an unknown key, a value out of range) falls back
 to the default for that part, is logged, and shows in `get_form` as `timingIssues`; it never fails a call.
 
 ### `ezapply` / `ezapply.cmd` (workspace launcher, `cli/src/workspace-init.ts`)
@@ -135,14 +140,15 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
-from), `pageTitle`, `site` (`workday` | `oracle` | `generic`, of the content), `tenant?` (the Workday tenant or the
-Oracle career site as `host/site`, read from the URL), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
+from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `generic`, of the content), `tenant?` (the
+employer's space on its site, read from the URL: a Workday tenant, an Oracle career site as `host/site`, a
+Greenhouse board, a Lever company, an Ashby organization), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
 `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
 ### `form-log.jsonl`
 One JSON object per line, each with `ts`. Written only for form activity on this posting's application tab:
-its tenant (Workday tenant or Oracle career site) and, when both URLs name one, its job (requisition); or when
+its tenant (a Workday tenant, an Oracle career site, a Greenhouse board…) and, when both URLs name one, its job (requisition); or when
 either has no tenant:
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
   `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`,

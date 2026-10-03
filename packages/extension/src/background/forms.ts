@@ -5,12 +5,16 @@ import {
   EzError,
   type Handlers,
   isFormSite,
+  SITES,
   type SiteId,
   siteInfo,
 } from "@ezapply/protocol";
 import { ext } from "../ext.js";
 
 type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
+
+/** The sites the form tools work on, as the user knows them. */
+const SUPPORTED = SITES.map((s) => s.name).join(", ");
 
 /** A site's adapter bundle (`<site>-main.js`, built per registry entry) and the name it defines on the window. */
 const adapterOf = (site: SiteId) =>
@@ -19,7 +23,7 @@ const adapterOf = (site: SiteId) =>
 const siteOf = (tab: chrome.tabs.Tab) => (tab.url ? detectSite(tab.url) : "generic");
 
 /**
- * Pick the tab to act on: explicit id, else the focused window's active application tab (Workday or Oracle),
+ * Pick the tab to act on: explicit id, else the focused window's active application tab (of a registry site),
  * else the most recent one. The companion normally passes an explicit id (it prefers the active posting's
  * tenant); the fallback serves callers that don't.
  */
@@ -38,7 +42,7 @@ async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
   if (forms[0]) return forms[0];
   throw new EzError(
     ErrorCode.NotFound,
-    "No Workday or Oracle application tab is open.",
+    `No application tab is open on a supported site (${SUPPORTED}).`,
     "Ask the user to open the application (click Apply on the posting) in the browser.",
   );
 }
@@ -48,8 +52,8 @@ function requireFormSite(tab: chrome.tabs.Tab): { tabId: number; site: SiteId } 
   if (!tab.id || !isFormSite(site)) {
     throw new EzError(
       ErrorCode.BadRequest,
-      `Tab ${tab.id} is not a Workday or Oracle application page (${tab.url ?? "unknown"}).`,
-      "Autofill supports Workday and Oracle Recruiting Cloud sites.",
+      `Tab ${tab.id} is not an application page of a supported site (${tab.url ?? "unknown"}).`,
+      `The form tools support ${SUPPORTED}.`,
     );
   }
   return { tabId: tab.id, site };

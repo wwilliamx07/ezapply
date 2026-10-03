@@ -1,7 +1,7 @@
 ---
 name: ezapply-repos
-description: Choose which GitHub repositories feed the project knowledge base, or change the selection later.
-Use when the user wants to add or remove repos, or during onboarding. ---
+description: Choose which GitHub repositories feed the project knowledge base, or change the selection later. Use when the user wants to add or remove repos, or during onboarding.
+---
 
 # Repository selection
 

@@ -22,8 +22,9 @@ step with it):
 1. Read the page (`form.get`). If it isn't a `step` page, if the tab belongs to another posting
    (`postingMismatch`), if `forms.autofill` is `"off"`, or if `profile.yaml` is missing or invalid, nothing is
    filled. The result is then `get_form`'s, with `filled: []` and a `note` saying why.
-2. **Add rows** the page lacks (`rowsToAdd`): for each add button whose list has fewer rows (Workday) or link
-   fields (Oracle's Add Another Link) than the profile has entries, press it that many times (at most ten),
+2. **Add rows** the page lacks (`rowsToAdd`): for each add button that adds a row (`kind` not `form` or
+   `save`) whose list has fewer rows (Workday) or link fields (Oracle's Add Another Link) than the profile has
+   entries, press it that many times (at most ten),
    reading the page after each press. Each press is logged as `add-row`.
 3. **Plan and fill, twice.** Plan the step (`planStep`). A dropdown whose value has several wordings (a degree, a
    language level) needs its options first: they are listed once per option key (`optionKey`: the automation id,
@@ -32,8 +33,9 @@ step with it):
    checked (`checkReadBack`) and each fill logged. Then the step is read and planned once more, skipping the
    fields already handled: that fills fields that appeared because of a fill (a province list after the country,
    an end date after "I currently work here" is unticked). There is never a third pass.
-4. **Oracle's item forms** (`missingItems`): for each work, education and language entry no saved item names,
-   press its add button (Add Experience, Add Education, Add Language), plan the fields that appeared as that
+4. **Item forms** (`missingItems`; today Oracle's): for each work, education and language entry no saved item
+   names, press its add button that opens an inline form (`kind: "form"`: Add Experience, Add Education, Add
+   Language), plan the fields that appeared as that
    entry's row, fill them, and press the form's Save (`save.*`). Logged as `add-item`. A form that doesn't open
    skips the rest of its list. A Save the page refuses stops there: the form stays open, its fields are in the
    result, and the Save is in `failed` with the page's error.
@@ -75,6 +77,8 @@ For each field, the first rule that applies decides.
    - `contact.phone.countryCode` takes the profile's country. Workday lists "Canada (+1)", and Canada and the
      US share +1.
    - `contact.phone.type` is capitalised (`mobile` → "Mobile").
+   - `identity.fullName` (one field for the whole name: Lever's and Ashby's) is first, middle and last name
+     joined with spaces.
    - `eeo.*` fills only from the profile. It's left as `eeo-unset` when the value is missing, and as
      `eeo-decline` when the profile says decline (the model picks the form's wording).
    - Any other key is the profile value as stored, or `not-in-profile` when it's unset.
@@ -145,7 +149,10 @@ wordings, so trying would cost two opens a field.
 
 ## Oracle's item forms
 Oracle adds work, education, language and license entries through an inline form with its own Save
-([oracle-adapter](oracle-adapter.md#repeatable-items)). `missingItems` compares the saved items (sections like
+([oracle-adapter](oracle-adapter.md#repeatable-items)). The planner knows these by the schema's facts, not the
+site's name: a saved item is a section marked `saved`, an add button that opens a form has `kind: "form"`, and a
+form's Save has `kind: "save"`, so another site with inline forms would get the same flow. `missingItems`
+compares the saved items (sections like
 `work-and-education-history.experience-1` and `languages.item-1`, titled "Languages: French, Fluent") with the
 profile: an entry is there when a saved item's title contains its company, school or language as whole words
 (a company called "A" isn't in every title with an "a"). Each missing one
@@ -179,7 +186,8 @@ few aliases (USA, U.S., United States of America; UK, Great Britain). Short code
 ## Strict matching
 `strictMatch` (`protocol/src/match.ts`) accepts, with case, spacing, Unicode width and curly apostrophes aside:
 the option itself; the option without its trailing parenthetical, or the parenthetical alone ("Canada (+1)",
-"Structured Query Language (SQL)"); and the option without a leading rank ("5 - Fluent"). The adapters'
+"Structured Query Language (SQL)"); the option without a leading rank ("5 - Fluent"); and the option without a
+trailing dialling code (Greenhouse's "Canada +1"). The adapters'
 `matchOption` also accepts a unique prefix or substring, so "Yes" can pick "Yes, I will require sponsorship".
 That's fine for the model, which reads the read-back, but not for a pass nobody checks field by field.
 

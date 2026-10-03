@@ -10,7 +10,9 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
    that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`), and on
    Workday the leading locale segment (`/en-US/`) dropped: Workday links to the same job with and without
    it. On Oracle (`oracleJobPath`) the language segment is dropped and so is everything after the job id, so
-   a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
+   a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. Each registry site
+   says its own (`canonicalPath`): Lever drops `/apply` and Ashby `/application`, so a capture of the
+   application is the posting's ([registry](protocol.md#the-site-registry-sitests)). A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
    matched by their `canonicalUrl` and by their `url` canonicalized again, so postings saved before a
    canonicalization change still match.
 2. **Extraction** (`extractPosting`, below) from the visible HTML.
@@ -42,8 +44,9 @@ reaches `posting.md`.
   Indeed nothing (their job paths, `/jobs/view/<id>` and `/viewjob`, don't name the company), except Indeed
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
-- **Tenant:** a Workday posting's tenant, or an Oracle career site's (`oracleTenant`: host and site number,
-  `jobs.umbrella.example/cx_1`), from the content's URL.
+- **Tenant:** a Workday posting's tenant, or for any other registry site its own reading of the content's URL
+  (`siteTenant`): an Oracle career site (host and site number, `jobs.umbrella.example/cx_1`), a Greenhouse board, a
+  Lever company, an Ashby organization.
 - Body: on Workday, the job description container; elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
@@ -70,7 +73,7 @@ compiler output, `.previews/` rendered pages, and `form-log.jsonl`.
 ## Status
 `captured`, `drafting`, `attached`, `filled`, `submitted`, `archived`. Skills set `drafting`; the form
 tools move it forward automatically (`attached` on upload, `filled` at review, `submitted` on the
-confirmation page), never backward, and only for the posting whose tenant (Workday tenant or Oracle career site) the application
+confirmation page), never backward, and only for the posting whose tenant (a Workday tenant, an Oracle career site, a Greenhouse board…) the application
 tab is on
 ([mcp-tools](../mcp-tools.md#forms)). `archived` is set by hand.
 

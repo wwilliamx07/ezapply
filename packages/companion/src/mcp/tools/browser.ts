@@ -73,7 +73,8 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
           steps:
             "Click Load Temporary Add-on and choose this file. Firefox removes it when it closes; load it again and " +
             "call extension_pair next time. If its options page says it has no access to Workday sites, click Grant site access. " +
-            "Oracle career sites are granted one at a time: clicking the ezapply button (Set posting) on one asks for it.",
+            "Oracle career sites and Greenhouse, Lever and Ashby boards are granted one site at a time: clicking the " +
+            "ezapply button (Set posting) on one asks for it.",
           manifest: firefox,
         },
         ...(built

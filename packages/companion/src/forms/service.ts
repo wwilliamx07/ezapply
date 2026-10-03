@@ -12,6 +12,7 @@ import {
   type PageAction,
   type PostingMeta,
   type PostingStatus,
+  SITES,
   sameJob,
   siteJob,
   siteTenant,
@@ -681,7 +682,7 @@ export class FormsService {
   }
 
   /**
-   * Choose the tab: the one asked for; else an application tab (Workday or Oracle) on the active posting's
+   * Choose the tab: the one asked for; else an application tab (a registry site's) on the active posting's
    * tenant (the one the user is looking at, else the most recently used); else any application tab, the same
    * way. Then decide whether the active posting may be credited with what happens there.
    */
@@ -710,7 +711,7 @@ export class FormsService {
       if (!tab) {
         throw new EzError(
           ErrorCode.NotFound,
-          "No Workday or Oracle application tab is open.",
+          `No application tab is open on a supported site (${SITES.map((s) => s.name).join(", ")}).`,
           "Ask the user to open the application (click Apply on the posting) in the browser.",
         );
       }
@@ -880,7 +881,7 @@ function refuseOtherPosting(t: Target): void {
   );
 }
 
-/** The tenant a posting belongs to: read from its URL when it's a Workday or Oracle page, else as stored. */
+/** The tenant a posting belongs to: read from its URL when it's a registry site's page, else as stored. */
 function postingTenantOf(meta: PostingMeta): string | undefined {
   return siteTenant(meta.url) ?? meta.tenant;
 }

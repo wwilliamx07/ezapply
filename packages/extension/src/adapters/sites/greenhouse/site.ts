@@ -20,10 +20,10 @@ import { reactSelectDriver } from "../../widgets/react-select.js";
 
 /**
  * Greenhouse job boards (`job-boards.greenhouse.io`, the older `boards.greenhouse.io`, and the embed companies load
- * in a frame): the posting and a one-page application, Submit at the end. Fields sit in `.field-wrapper`s with
- * labels tied by `for`; lists are react-select; files are hidden inputs behind "Attach". Built from the live pages of
- * four boards (2026-10-03) and checked on one live (filling, never submitting). See
- * references/components/sites.md.
+ * in a frame): the posting and a one-page application, Submit at the end. Text fields sit in `.text-input-wrapper`s,
+ * lists in `.select__container`s (react-select), files in `.file-upload`s (hidden inputs behind "Attach"), choices in
+ * fieldsets; prompts are labels tied by `for`. Built from the live pages of four boards (2026-10-03) and checked on
+ * one live (filling, never submitting). See references/components/sites.md.
  */
 
 const SEL = {

@@ -119,6 +119,6 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 4. **Ask, don't guess** on EEO, disability, veteran and salary questions the user hasn't answered in
    `profile/`, and on any answer-bank entry marked `sensitive` or with a `null` answer. Read
    `profile/answers.yaml` before asking anything it may hold.
-5. **Never submit an application.** Stop at the review page (on a single-page Oracle application, once every
-   section is filled); the user presses Submit.
+5. **Never submit an application.** Stop at the review page (on a one-page application, once every field is
+   filled); the user presses Submit.
 6. **Repos are read-only.**

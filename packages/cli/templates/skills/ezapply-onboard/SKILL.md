@@ -1,8 +1,7 @@
 ---
 name: ezapply-onboard
-description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base,
-resume import and profile, cover letter template, screening-question answers, preferences). Use when the user
-says onboard, set up, or get started, or when workspace_check reports missing steps. ---
+description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base, resume import and profile, cover letter template, screening-question answers, preferences). Use when the user says onboard, set up, or get started, or when workspace_check reports missing steps.
+---
 
 # Onboarding
 

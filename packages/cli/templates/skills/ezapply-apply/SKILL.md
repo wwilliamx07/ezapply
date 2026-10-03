@@ -1,23 +1,23 @@
 ---
 name: ezapply-apply
-description: Fill out the Workday or Oracle application for the active posting, step by step, and attach the
-tailored documents, stopping at the review page (or Oracle's Submit) for the user to submit. Use when the user
-asks to fill, apply, autofill, attach documents, or continue an application. ---
+description: Fill out the job application (Workday, Oracle, Greenhouse, Lever or Ashby) for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
+---
 
-# Fill a Workday or Oracle application
+# Fill a job application
 
 **Never submit.** `go_next` refuses on the review page and every Submit control is blocked. Don't look
 for workarounds; the user presses Submit.
 
-The form tools work on Workday (`*.myworkdayjobs.com`, `*.myworkdaysite.com`) and Oracle Recruiting Cloud
-career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); `get_form` says which in
-`adapter`. Oracle differs in a few ways: see **Oracle applications** below.
+The form tools work on Workday (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), Oracle Recruiting Cloud
+career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain), and Greenhouse, Lever and Ashby
+job boards; `get_form` says which in `adapter`. Oracle differs in a few ways: see **Oracle applications** below;
+Greenhouse, Lever and Ashby are one page: see **One-page applications**.
 
 ## Before starting
 1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind,
    even when the documents come first: no question is asked of the user before the answer bank is read.
-   The form tools pick the application tab for this posting (its Workday tenant or Oracle career site, and
-   its requisition) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
+   The form tools pick the application tab for this posting (its employer on the site: a Workday tenant, an
+   Oracle career site, a Greenhouse board…, and its job) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
    `posting_mismatch` error from a tool that changes the page, means the tab is another posting's (another
    company, or another job at the same one): nothing ran. Stop, tell the user, and follow its hint (activate
    the right posting, or switch tabs).
@@ -176,8 +176,17 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
   `remove_items` takes it off. Additional documents take several files.
 - The email field comes from the sign-in and is read-only.
 
+## One-page applications (Greenhouse, Lever, Ashby)
+- **The whole application is one page** whose only button is Submit (`lastPage`, `nextLabel` Submit, `go_next`
+  refuses). Fill everything, attach the files, then go to **Hand-off**.
+- **The name is often one field** (Lever's "Full name", Ashby's "Name"): the whole name, as the profile has it.
+- **A location field searches as you type.** Fill it with the place as the site lists it (`search_options`
+  shows how); a city alone can match several, and then the result lists the suggestions: pick the user's.
+- **Questions are the employer's own**, below the standard ones, often with Yes/No buttons (read as `radio`).
+
 ## Hand-off (review page)
-On Oracle, this is when every section is filled and Submit is the only way on. If `go_next` or `get_form`
+On a one-page application (Greenhouse, Lever, Ashby, and many Oracle sites), this is when every field is filled
+and Submit is the only way on. If `go_next` or `get_form`
 shows `notAttached`, an approved document never went in: `go_back` to the step with the file field, upload
 it, and come forward again before handing off. Stop. The page's `handoff` (on `get_form` or
 `autofill_step`) is the summary of this application from its log: build the message from it, not from memory.

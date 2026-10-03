@@ -1,33 +1,29 @@
-# Workday adapter (`packages/extension/src/adapters/workday/`)
+# Workday adapter (`packages/extension/src/adapters/sites/workday/`)
 
 Reads a Workday application page into a [`FormSchema`](protocol.md#form-schema) and fills it, one step at
-a time, for Claude. Built into `workday-main.js` and injected into the page's **MAIN world**, because some
+a time, for Claude. Workday is a site definition on the [adapter engine](adapters.md), with drivers of its own
+for its widgets. Built into `workday-main.js` and injected into the page's **MAIN world**, because some
 Workday widgets are React components that only respond to React's own handlers, which isolated-world
 content scripts can't reach.
 
 | File | Role |
 |---|---|
-| `main.ts` | Bundle entry: defines `window.__ezapplyWorkday` (non-enumerable) unless the same `ADAPTER_VERSION` is already there. The build stamps it with a hash of the bundle ([extension builds](extension.md#builds-npm-run-build--w-ezapplyextension)); unbundled, in tests, it's `"dev"` |
-| `api.ts` | `createWorkdayApi(doc, getUrl)`: the methods the background calls, plus `installSubmitGuard` (the shared guard with Workday's submit test) |
-| `extract.ts` | Page detection, field extraction, step info, errors, page actions, `isSubmitControl`, `nextButton` |
-| `fill.ts` | One filler per field kind, option listing and search, uploads |
+| `site.ts` | The definition: page rules, the step key (index and title), repeat rules, the waits (with the wait for a new step's fields), messages |
+| `main.ts` | Bundle entry: `install(workday)`, which defines `window.__ezapply_workday` ([engine](adapters.md#the-api-apits)) |
+| `page.ts` | Page detection, fields (`workdayFields`), rows (`workdayRows`), add buttons (`workdayAddButtons`), step info, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton`, and the value readers the drivers use |
+| `fill.ts` | One filler per field kind, option listing and search, uploads, removals |
+| `widgets.ts` | `WORKDAY_WIDGETS`: the fillers and readers of `fill.ts` and `page.ts` as drivers, in the order a field's kind is decided |
 | `selectors.ts` | **Every Workday-specific string of the adapter**: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS`. The posting-page hooks the companion reads too, the Workday hosts and tenant parsing come from `@ezapply/protocol/workday` ([protocol](protocol.md)) |
 
-Shared with the [Oracle adapter](oracle-adapter.md), in `adapters/common/`:
+The engine (`adapters/engine/`) does the rest, the same for every site: the API, ids and sections, the fill
+loop, next and back, the submit guard, the waits, and the DOM helpers (`dom.ts`: visibility, which in jsdom means
+`hidden`, `aria-hidden` or an inline `display: none` up the tree; pointer and keyboard sequences; `typeChar`;
+`settle`; `waitFor`; `matchOption`; `parseDate`) ([adapters](adapters.md)). When the adapter moved onto it
+(2026-10-03), its fillers and readers moved unchanged and the golden schemas stayed equal. It hasn't run live
+since.
 
-| File | Role |
-|---|---|
-| `dom.ts` | DOM helpers: text normalization, visibility (in jsdom: `hidden`, `aria-hidden` or an inline `display: none` up the tree), native value setter, pointer/keyboard sequences, `typeChar` (one typed character), `settle`, `waitFor`, `matchOption`, `parseDate`, React prop access, `win(node)` |
-| `timing.ts` | `T`, the waits in use, and `setTiming` ([waits](#waits-autofill-timingyaml)); the defaults come from `@ezapply/protocol/timing`, not the protocol's index, which would bring zod into the bundle |
-| `guard.ts` | `installSubmitGuard(doc, isSubmit)`: the [submit guard](#never-submitting), given the adapter's own submit test |
-
-**No globals.** Event, observer, `File`, `DataTransfer` and element-prototype constructors come from the
-element's own window (`win(node)`), never from globals. The adapter behaves the same in the page, in a jsdom
-test environment, and in a jsdom window created inside a Node test, which is how the companion's e2e tests
-drive it.
-
-## API (`window.__ezapplyWorkday`)
-`getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
+## API (`window.__ezapply_workday`)
+The engine's ([adapters](adapters.md#the-api-apits)): `getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
 `remove(fieldId, values?)`, `addRepeatable(addButtonId)`, `removeRepeatable(sectionId)`, `next()`, `back()`,
 `pageAction(action)`, `blockedSubmitAttempts()`, `setTiming(timing)` (the background calls it before every
 method). The field registry from the last extraction is kept; a
@@ -205,7 +201,7 @@ on every move of the second live run, and waited the full 12 s on two of them; t
 move. Notices go to `messages`, not `errors`. Returns
 `{ advanced, pageKind, step?, errors, messages?, refusedReason? }`.
 
-**Waiting for the new step's fields** (`stepFields`, after `next()` and `back()` see a move): up to
+**Waiting for the new step's fields** (the definition's `afterStep` wait, after `next()` and `back()` see a move): up to
 `stepFieldsMs` (3 s) for the step to show at least one field, checked every 150 ms, then the usual quiet
 wait. Workday moves the progress bar before it renders the step: in the Oscorp runs a `get_form` straight after
 `go_next` read an empty step (no sections) four times, and one or two seconds later the questions were there.
@@ -237,19 +233,21 @@ element may be re-rendered, so its disappearance alone proves nothing). Returns
 Workday renumbers the rows after it, so their field ids change. The row and delete-button hooks are best
 knowledge of Workday's markup, unverified on a live tenant.
 
-**Attached files** (`attachedFiles` in `extract.ts`) are listed once each: the `file-upload-item-name` elements
+**Attached files** (`attachedFiles` in `page.ts`) are listed once each: the `file-upload-item-name` elements
 with their row (`file-upload-item` / `file-upload-successful`), or the rows themselves when a tenant has no
 name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
 
 ## Waits (`autofill-timing.yaml`)
 Every wait the adapter makes (about 46: after each field, opening and closing a dropdown, a typeahead's
-search, typing a date, uploads, rows, steps) is a named value in `T` (`timing.ts`), with its default and a
-line on what it's for in `DEFAULT_TIMING` / `TIMING_DOCS` (`protocol/src/timing.ts`). The companion reads
-the user's `autofill-timing.yaml` for every form call ([format](../data-formats.md#autofill-timingyaml)),
-resolves it against the defaults (`scale` multiplies the defaults of the waits it leaves unset; a wait it
-sets is used as written) and sends the result as the call's `timing`; the background
-calls `setTiming` before the method, so an edit applies to the next call. No `timing` (an older companion) or
-`null` restores the defaults, since `T` lives on in the page between calls. Of the poll intervals only
+search, typing a date, uploads, rows, steps) is a named value in `T` (`engine/timing.ts`), with a line on what
+it's for in `TIMING_DOCS` (`protocol/src/timing.ts`). Workday's values are its registry entry's waits: the
+standard ones (`STANDARD_WAITS`), which were measured here
+([waits owned by the site](adapters.md#waits-owned-by-the-site)). The companion reads the user's
+`autofill-timing.yaml` for every form call ([format](../data-formats.md#autofill-timingyaml-companionsrcformstimingts)): its top-level keys
+and those under `workday:`. It resolves them against Workday's waits (`scale` multiplies the waits it leaves
+unset; a wait it sets is used as written) and sends the result as the call's `timing`; the background calls
+`setTiming` before the method, so an edit applies to the next call. No `timing` (an older companion) or `null`
+restores Workday's own, since `T` lives on in the page between calls. Of the poll intervals only
 `waitFor`'s default is configurable (`pollMs`); the waits with their own interval (typeahead results
 100 ms, uploads 200/250 ms, steps 150 ms) keep it.
 
@@ -295,8 +293,8 @@ renumbers the rest.
 - There is no general click or script tool in the MCP surface.
 
 ## Updating for Workday changes
-Change `selectors.ts` (keep every Workday string of the adapter there; what both adapters share is in
-`adapters/common/`; posting-page hooks and hosts shared
+Change `selectors.ts` (keep every Workday string of the adapter there; what every site shares is in
+`adapters/engine/` and `adapters/widgets/`; posting-page hooks and hosts shared
 with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` (saved
 from the browser, or once it exists exported from autofill debug mode: `todo.md`, item 6), and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom
