@@ -1,6 +1,6 @@
 # ezapply: todo
 
-Proposals, as of 2026-10-01. Finished work is described in `references/` (what still needs a live run, and
+Proposals, as of 2026-10-03. Finished work is described in `references/` (what still needs a live run, and
 what the live runs found, is in `references/status.md`) and in git history.
 
 Each proposal is rated for how much it helps one person apply faster without lowering quality or honesty.
@@ -11,204 +11,365 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 
 | # | Proposal | Value | Effort | Needs first |
 |---|----------|-------|--------|-------------|
-| 1 | Deterministic autofill | High | L (three M phases) | — (4 helps phases 2–3) |
-| 2 | Tie each application to its posting | High | M | — |
-| 3 | The companion runs the hand-off checklist | High | M | — |
-| 4 | Autofill debug mode | High | L | — |
-| 5 | More application sites, and Oracle follow-ups | High | L per site | 4, 7 help |
-| 6 | Show what changed in a document | Medium | M | — |
-| 7 | More modular adapters | Medium | L | 4 |
-| 8 | Application tracker | Medium | S–M | — |
-| 9 | A skill for building adapters | Medium | M | 4, 7 |
-| 10 | Login manager | Medium | L | — |
+| 1 | Modular adapters: a site is a definition | High | L | — (3 before its phases 4–5) |
+| 2 | Embedded application forms | High | M | 1 |
+| 3 | Deterministic autofill: live runs left | High | S | — |
+| 4 | Tie each application to its posting | High | M | — |
+| 5 | The companion runs the hand-off checklist | High | M | — |
+| 6 | Autofill debug mode | High | L | — |
+| 7 | More application sites, and Oracle follow-ups | High | M per site | 1 (2 for embedded sites) |
+| 8 | Show what changed in a document | Medium | M | — |
+| 9 | Application tracker | Medium | S–M | — |
+| 10 | A skill for building adapters | Medium | M | 1, 6 |
+| 11 | Login manager | Medium | L | — |
 
 Suggested order:
 1. ~~Autofill phase 1~~ (built 2026-10-01).
 2. ~~Debug mode's companion part~~ (built 2026-10-01).
-3. ~~Items 2 and 3~~ (built 2026-10-01).
-4. **Next: a live run** with debug mode on (`ezapply debug on`). It checks autofill, posting matching and the
-   checklist together; none of them changed the adapter, so a slowdown still points at the adapter's own
-   suspects. Read it with `ezapply debug report`.
-5. The rest of debug mode (the adapter trace, then markup), one adapter change per live run.
-6. Autofill phases 2 and 3, each adapter change in its own live run. The companion-only parts (Workday rows,
-   computed answers, language rows) can land before them, but after step 4, so any wrong fill from the first
-   run is traced to one feature.
+3. ~~Items 4 and 5~~ (built 2026-10-01).
+4. ~~A live run with debug mode on~~ (Hooli, 2026-10-01): autofill phase 1, posting matching and the
+   checklist; its fixes are in.
+5. ~~Autofill phases 2 and 3~~ (built 2026-10-02).
+6. **Next: modular adapters** (item 1). Its phases 1 and 2 change no adapter's behaviour; then the first new
+   sites on the engine (item 7), with embedded forms (item 2) for Greenhouse and iCIMS.
+7. The autofill live runs (item 3) whenever the user next applies on Workday or Oracle, with debug mode on.
+   They go before item 1 moves Oracle and Workday onto the engine (its phases 4 and 5).
+8. The rest of debug mode (item 6): the adapter trace, built into item 1's engine, then markup.
 
-Items 5, 7 and 9 come after debug mode.
+Item 10 comes after item 1.
 
 ---
 
-## 1. Deterministic autofill (High, L in three phases)
+## 1. Modular adapters: a site is a definition (High, L)
 
-**Status:** phase 1 built on 2026-10-01 and run live once (Hooli; see "The first live run" in
-`references/components/autofill.md`), then fixed for what that run showed. The fixes cover `source: user`
-answers, parentheticals in labels, and dates from the answer bank. Building it added one rule not planned here: a saved variant phrased the other way round ("I do NOT
-require…" under "Do you require…?") is never filled (`reversed-wording`), because only the model flips yes
-and no. What's below is the plan; phases 2 and 3 are still to do.
+**Goal.** Adding a job site should mean describing it, not writing an adapter. A site definition says:
+1. which page is which: posting, sign-in, start choice, step, review, confirmation;
+2. where the buttons are: apply, next, back, submit, add a row, delete a row, save an inline form, the start-page
+   choices;
+3. which kinds of fields exist, by naming the widget drivers its fields use;
+4. where each field is and where its prompt is: the field's container, its label, help text, error, required
+   mark and section;
+5. code only for a widget no shared driver handles: how to put an answer into Workday's dropdown or Oracle's
+   cx-select.
 
-**Why.** In the four applications of 2026-09-30 and 2026-10-01 (Tyrell, Hooli, two Umbrella), the agent made 128
-fills:
+One engine does the rest, written once:
+- the adapter API the background calls;
+- the extraction loop and field ids;
+- rows and saved items;
+- the fill loop, with its waits and checks;
+- moving between steps;
+- the submit guard, strict option matching and the waits.
 
-| Source | Fills |
-|--------|-------|
-| `profile` | 87 |
-| `judgment` | 17 |
-| `user` | 15 |
-| `answer-bank` | 7 |
-| `computed` | 2 |
+The companion and the agent keep the same `FormSchema` and tools.
 
-So about three in four fills copied a value the companion already has. About 50 of the 87 profile fills were
-on fields the extractors already hint (`hint.profileKey`, including Oracle's EEO codes). The rest were:
-- education years (`firstYearAttended`, `lastYearAttended`);
-- website rows (`siteLink-2`);
-- language rows (language, native, and proficiencies under hashed ids);
-- the skills list;
-- screening questions the agent answered from the profile.
+**Why now.** The two adapters are about 3,500 lines: Workday 1,600, Oracle 1,650, `common/` 280. The user's
+postings so far: Symplicity (the school's co-op portal, 9), Workday (3), Oracle (2), Ashby (Cohere), Greenhouse
+embedded on Initrode's site, iCIMS embedded on careers.example.com, and Nakatomi's own site. At 1,600 lines a site,
+covering them isn't practical. Most of each adapter repeats the other: the API, ids, sections, rows, errors and
+notices, the fill loop, next and back, the guard. What really differs per site is the markup (where things
+are) and a few widgets.
 
-Each step today puts the whole schema into the conversation, and the model writes every value back out in
-`fill_fields`. Every turn re-sends the conversation, so this costs tokens on every later turn too. A
-deterministic pass costs fewer tokens and turns, gives the same answer every time, and leaves the model's
-attention for the fields that need it.
+Simplify Copilot covers 57 providers the same way, one engine plus data per provider (studied 2026-10-02).
+Their data needs label rules for every question on every provider ("sponsor", "require our assistance"). Ours
+won't: the agent reads every field's prompt, so a definition only has to say where the prompt is.
 
-**What changes for the agent.** A new form tool, `autofill_step { tabId? }`, replaces the step's first
-`get_form`:
-1. It reads the step (`form.get`).
-2. On Workday, it adds rows until the page's work and education rows match the profile (see **Rows**).
-3. It plans fills from the rules below and sends them in one `form.fill`.
-4. It reads the step once more, for fields that appeared because of a fill (a province list after the country,
-   the end date after unticking "I currently work here"), then plans and fills those.
-5. It returns:
-   - `filled`: `{ fieldId, label, value, rule }` per field, kept short;
-   - `replaced`: pre-filled values it overwrote, `{ fieldId, was, now }`;
-   - `failed`: fill results that didn't take, with `error` and `availableOptions`, or `inexact` with what got
-     selected;
-   - `left`: the step as `get_form` would show it, but only the fields it didn't fill, each with a `reason`
-     (`no-rule`, `sensitive`, `eeo-unset`, `multi-select`, `file`, `no-strict-match`, `extra-row`), plus
-     sections, add buttons, errors and `nextLabel`;
-   - `posting`, `tabHidden` and the other notices, as on every form call.
+**What doesn't change.**
+- The adapter API: `getForm`, `listOptions`, `searchOptions`, `fill`, `upload`, `remove`, `removeRepeatable`,
+  `addRepeatable`, `next`, `back`, `pageAction`, `setTiming`, `blockedSubmitAttempts`, `version`.
+- `FormSchema` and its field ids (golden tests hold them).
+- The MCP tools and the skills.
+- Injection into the page's MAIN world on demand, one bundle per site.
 
-The `ezapply-apply` step becomes: `autofill_step` → glance over `filled` → decide `left` as now (answer bank by
-meaning, ask the user, judgment) → fix `failed` → one `fill_fields` → `go_next`. The model stays the
-reviewer: it sees every value that went in, without having to write each one.
+**Today, and after.**
 
-**The planner** (`companion/src/forms/autofill.ts`) is a pure function,
-`planStep(form, profile, answers, posting) → { fills, left, rows }`. It has no DOM and no adapter calls, so it
-is unit-tested on its own and can run on schemas extracted from saved live pages (item 4). For each field, the
-first rule that applies decides:
+| Today | After |
+|---|---|
+| `workday/selectors.ts`, `oracle/selectors.ts`, the page and field parts of each `extract.ts` | `sites/<site>/site.ts`: the definition |
+| Widget code spread over `fill.ts` and `extract.ts` (`currentValue`, `knownOptions`, `fieldKind`) | `widgets/`: shared drivers, plus `sites/<site>/widgets.ts` for the site's own |
+| Two `api.ts`, two extraction loops, ids, rows, errors | `engine/` |
+| `common/dom.ts`, `guard.ts`, `timing.ts` | `engine/`, unchanged |
+| Two `main.ts`, `ADAPTERS` in `background/forms.ts`, the site list in `build.mjs` | generated from the site registry |
+| Detection, tenant and job in `protocol/src/browser.ts`, `workday.ts`, `oracle.ts`; `FORM_SITES`; the Workday posting hooks and locale segment | `protocol/src/sites/`: one registry entry per site |
+| The companion's `form.adapter === "oracle"` (autofill's `rowsToAdd` and `missingItems`, the hand-off check in `FormsService.checks`) and Oracle's id formats in `forms/lists.ts` | facts in the schema (below) |
+| Oracle's site access in the background, Set posting and the options page | per registry entry: fixed hosts, or origins granted one at a time |
 
-1. **Never automatic** (the field goes to `left`):
-   - `password` and `file` fields;
-   - a `typeahead` with `multiple` (which skills to list is judgment);
-   - a field in a row the planner didn't map to a profile entry;
-   - an answer-bank entry with `sensitive: true` or `answer: null` (`salary_expectation` is both).
-2. **Profile hint** (`hint.profileKey`), only where the field's section fits the key:
-   - `work[]` only in `work-experience-N` rows, and `education[]` only in `education-N` rows;
-   - `contact.*` not in sections about references or emergency contacts.
+### The site definition
+`extension/src/adapters/sites/<site>/site.ts`. It's TypeScript, not JSON: typed, able to hold a small function
+where a selector isn't enough, tested like code, and bundled with the extension. It's never fetched remotely.
+Manifest V3 forbids remote code, and every change to what touches a form should be reviewed and tested.
 
-   Values, formatted for the widget:
+```ts
+interface SiteDefinition {
+  id: SiteId;
+  pages: {                                   // the first that matches; "step" when the page has fields
+    confirmation?: Signal; auth?: Signal; startChoice?: Signal; posting?: Signal; review?: Signal;
+  };
+  step?: { title: Find<string>; index?: Find<number>; total?: Find<number> };
+  fields: {
+    container: string;                       // one field: Workday [data-automation-id^="formField-"], Oracle .input-row
+    skip?: string;                           // never a field: a honeypot, a nested container
+    prompt: Locator[];                       // the question: label[for], legend, aria-labelledby… (first with text)
+    help?: Locator[];
+    error?: Locator[];
+    required?: (container: HTMLElement) => boolean;
+    section: (container: HTMLElement) => string;              // the heading it sits under
+    key?: (container: HTMLElement, prompt: string) => string; // default: control id without its render counter, else the prompt
+    more?: (doc: Document) => Candidate[];   // fields outside containers: Oracle's phone halves, uploads, agreements
+  };
+  widgets: WidgetDriver[];                   // the site's own first, then shared; the first that recognises a field decides its kind
+  buttons: {
+    next: Locator[];
+    back?: Locator[];
+    submit: Locator[];                       // also caught by the shared text rule ("Submit", "Submit application")
+    actions?: Partial<Record<PageAction, Locator[]>>;
+    add?: { button: string; section: (b: HTMLElement) => string | undefined; opens: "row" | "form" };
+    save?: string;                           // an inline form's Save
+  };
+  rows?: { delete: string };                 // a row: a section whose container holds its own delete button
+  items?: { saved: string; title: Find<string>; delete: string; revealOnHover?: boolean };
+  alerts: { selector: string; notice?: (text: string) => boolean };
+  hints: { key: (field: Field) => string | undefined; table: Record<string, string> };
+  fill?: { order?: "given" | "page"; waitForStaleErrors?: boolean };
+}
+```
 
-   | Key | Value |
-   |-----|-------|
-   | `identity.*`, `contact.email`, address lines, city, postal code, `links.*` | as stored |
-   | `contact.address.country`, `contact.address.region` | as stored, matched strictly (see below) |
-   | `contact.phone.countryCode` | the option naming the profile's country ("Canada (+1)"), never by "+1" alone (Canada and the US share it) |
-   | `contact.phone.type` | `mobile` → "Mobile" |
-   | `work[].start`, `work[].end`, `education[].start`, `education[].end` | `YYYY-MM`, or `YYYY` when the field's `dateParts` has only a year |
-   | `work[].end` = null | "I currently work here" ticked; the end date left empty |
-   | `work[].highlights` | the bullets joined by line breaks |
-   | `education[].school`, `degree`, `field` | matched strictly; a miss goes to `left` with the options seen |
-   | `eeo.*` | only when set in the profile; otherwise `left`, and the skill asks |
-   | `answers.<id>` | that answer-bank entry, as in rule 3 |
-3. **Answer bank by wording.** The field's label equals an entry's `canonical` or one of its `variants`, both
-   normalised: lowercase, Unicode NFKC, spaces collapsed, punctuation and a trailing "*" or "(required)" taken
-   off.
-   - Equality only, nothing fuzzy, so "I do NOT require sponsorship" can't match "Do you require
-     sponsorship?".
-   - The value is `byCompany[<posting company>]`, else `default`, else `answer`.
-   - Entries with `source: profile.…` (sponsorship, relocation, start date) are resolved from the profile in
-     phase 2.
-4. **Already right:** the field's `currentValue` equals the planned value. It's skipped, and counted as kept.
-5. Anything else goes to `left` with `no-rule`.
+A `Locator` is a CSS selector, a function, or `byText(/^(next|continue)$/i, within?)`. The first one that finds
+something wins, so an element can be known by several automation ids, as now.
 
-**Options must match strictly.** The adapters' `matchOption` falls back to a prefix or substring match, so
-"Yes" picks "Yes, I will require sponsorship" when that is the only option starting with "Yes". That is fine
-for the model, which reads the read-back. It isn't fine for a pass nobody checks field by field.
-- Radio and checkbox-group options are in the schema. The planner matches them strictly (the exact text, or
-  the label without its parenthetical, or the parenthetical alone) and sends the exact option, or leaves the
-  field.
-- Dropdowns and typeaheads list their options only when opened. In phase 1 the planner sends the value and
-  checks the read-back strictly. A read-back that isn't a strict match goes to `failed` as `inexact`, with what
-  got selected. The field holds that wrong value until it's fixed, so the skill says to fix every `failed`
-  entry before `go_next`.
-- In phase 2, `form.fill` takes `strict: true` per fill, and the adapter refuses instead of picking a near
-  match. That is an adapter change, so it gets its own live run.
+### Widget drivers
+```ts
+interface WidgetDriver {
+  kind: FieldKind;
+  is(c: HTMLElement): boolean;                         // this container holds this widget
+  value(c: HTMLElement): Field["currentValue"];
+  options?(c: HTMLElement): string[] | undefined;      // known up front: radios, pills
+  dateParts?(c: HTMLElement): DatePart[];
+  multiple?(c: HTMLElement): boolean;
+  fill(c: HTMLElement, value: FillValue, opts: { strict: boolean }): Promise<FillOutcome>;
+  list?(c: HTMLElement): Promise<OptionInfo[]>;
+  search?(c: HTMLElement, query: string): Promise<OptionInfo[]>;
+  remove?(c: HTMLElement, values?: string[] | null): Promise<RemoveOutcome>;
+  upload?(c: HTMLElement, file: File): Promise<FillOutcome>;
+}
+```
 
-**Rows (Workday).** Work and education rows are sections named `work-experience-N` and `education-N`.
-- Rows are matched to profile entries in two passes. First, rows whose company or school already equals an
-  entry, as on a form pre-filled from the last application. Then the remaining rows, in profile order.
-- With fewer rows than entries, the planner presses the section's add button (`add.work-experience`) and reads
-  the step again after each press, until the counts match.
-- With more rows than entries, nothing is removed. The extra rows go to `left` as `extra-row`, and the model
-  decides with `remove_repeatable { sectionId, reason }`. Removing a row is destructive, and the user may want
-  an older job on the form.
-- Oracle's inline add-and-save item forms come in phase 3.
+**Shared drivers** (`adapters/widgets/`), each for plain markup and the ARIA patterns most sites use:
+- **text:** text, textarea, number, email, tel and url inputs. Native setter and events, React's handler as a
+  fallback, and a phone number the page reformats counts as taken.
+- **native widgets:** `<select>`, a radio group, a checkbox, a checkbox group, date and month inputs.
+- **file:** a file input (`DataTransfer`, then a drop on the drop zone). Done when a new file name shows;
+  removes attached files too.
+- **ARIA combobox** with a listbox: `role=combobox`, `aria-controls`, type to filter, options as `role=option`.
+  This covers react-select and most React and Vue form kits.
+- **toggle buttons** (`aria-pressed`), as a radio or checkbox group: Oracle's pills.
+- **password:** recognised, never filled.
 
-**Values carried over from a previous application.** Text, dropdown, radio and date fields are overwritten
-with the profile's value and listed in `replaced`, so the hand-off can name them. Multi-selects and files are
-never touched (they go to `left`), because filling only adds to them; clearing them stays the model's job, as
-now.
+A site can pass options to a shared driver (which event opens it, how long to wait) before it needs a driver of
+its own.
 
-**Logging.** Fill events in `form-log.jsonl` keep `source: profile` or `answer-bank` and `answerId`, and add
-`auto: true` and `rule`, such as `hint:contact.email`, `answer:how_heard` or `row:work[1].title`. The hand-off
-lists answers from the user and from judgment as now. The checklist (item 3) adds the automatic fills by
-section.
+**Site drivers, moved as they are:**
+- Workday: the listbox dropdown, the prompt (a typeahead with nested menus), the split date, the drop zone.
+- Oracle: cx-select, the date lists, the attachment buttons, and the widgets it reports but can't drive (JET
+  comboboxes, the multi-select).
 
-**Config.** `forms.autofill` in `ezapply.config.json`, `"on"` (the default) or `"off"`. When it's off, `autofill_step` fills nothing and returns the whole step in `left`, so a
-run can be compared with and without it.
+### The engine (`adapters/engine/`)
+**`extract.ts`.** For each field container, the first driver that recognises it gives a `Field`:
+- the id `<section slug>.<key>`, with `#n` for repeats;
+- prompt, help, error, required mark, value, options and hint.
 
-**Phases.**
-1. **(M) Profile facts and literal answers, no adapter change.** The planner with rules 1, 2 (without rows),
-   3 (answers that are plain values only) and 4; `autofill_step`; the strict read-back check; the skill
-   change. It uses `form.get` and `form.fill` as they are. Then one live run, compared with the Tyrell and Hooli
-   runs on turns per step, tokens (from the session transcripts), fill time and wrong values.
-2. **(M) Rows, strict matching, computed answers.** Workday rows; `strict: true` in the adapter (its own live
-   run); answer entries with `source: profile.…`.
-3. **(M) Wider coverage, from the logs.** Hints for education years (`firstYearAttended`,
-   `lastYearAttended`) and website rows (`siteLink-N`). Language rows matched by label within a languages
-   section, because their proficiency fields have hashed ids. Oracle's item forms.
+Around the fields it also builds:
+- sections, with rows marked `removable`, and saved items;
+- add and save buttons (`add.<section slug>`, `save.<block>`);
+- the page kind, step, `nextLabel` and `backLabel`;
+- errors and messages, and the tenant (from the registry).
+
+**`api.ts`.** `createAdapter(site)` implements the API above, doing what both adapters do now:
+- **fill:** in the order the site asks; a settle after each field; the error check afterwards (with Oracle's
+  wait for a stale error);
+- **add a row:** waits for more fields. An inline form's Save waits for the form to close or to show errors;
+- **remove a row:** by the row's own button (hovering first where the site asks), confirming a dialog;
+- **next and back:** by a step key (index, title, URL), waiting for the new step's fields. They refuse on review,
+  confirmation and sign-in, and at any submit control;
+- **page actions**, and the guard.
+
+**`dom.ts`, `guard.ts`, `timing.ts`** come from `common/`, unchanged.
+
+### The site registry (protocol)
+`protocol/src/sites/` holds one entry per site:
+- `id`, `isUrl(url)`, `tenant(url)`, `job(url)`;
+- the posting-page hooks the companion reads, and URL canonicalisation (Workday's locale segment);
+- host permissions: fixed hosts in the manifest, or origins granted one at a time at Set posting, as Oracle's
+  are.
+
+Everything that knows the list of sites comes from it:
+- `detectSite`, `FORM_SITES`, `isFormSite`, `siteTenant`, `siteJob` and canonical URLs;
+- the build's site list and the manifest's host permissions (`manifest.test.ts` already compares those);
+- site access in the background, Set posting and the options page.
+
+A new site's only protocol change is its registry entry.
+
+### Facts in the schema, instead of site names in the companion
+Each definition produces these, and the companion reads them instead of `form.adapter` or Oracle's id formats.
+A new site then needs no companion change.
+- **`addButtons[].opens`:** `"row"` (Workday's Add) or `"form"` (Oracle's Add Language); a `save.*` button stays
+  a Save. Used by autofill's `rowsToAdd` and `missingItems`, and by the checklist.
+- **`Section.saved: true`** on a saved item, with its list where the page says so (Oracle's timeline columns,
+  experience and education).
+- **`FormSchema.lastPage: true`** when Submit is the only way on (Oracle's single page, any single-page site).
+  Used by the hand-off.
+
+### Adding a site, afterwards
+1. Save the application's pages: posting, each step, review. Item 6's markup export makes one live run enough.
+2. Write the registry entry, the definition, and a fixture built from the saved pages.
+3. Use shared drivers first; write a site driver only for a widget they can't drive.
+4. Pass the conformance test, do a live run with debug mode on, and write the site's reference page.
+
+For a site of plain HTML and common ARIA widgets, step 2 should be most of the work: a definition of 100 to 200
+lines.
+
+### Tests
+- **Golden schemas, before anything moves.** Write `getForm()` of every fixture state and live snapshot to
+  `extension/test/golden/`:
+  - Workday: the step, each fixture option, after an Add, review;
+  - Oracle: the single page, each section of the multi-page flow, Welcome Back, the language form open;
+  - every live snapshot.
+
+  The ported adapters must give the same JSON, apart from the new schema facts.
+- **The behaviour tests** (`workday.test.ts`, `oracle.test.ts`, the companion's e2e tests) run unchanged
+  against the ported adapters. `createWorkdayApi` and `createOracleApi` stay, as `createAdapter(site)`.
+- **Driver tests** on minimal markup, per shared driver: fill, read back, a strict miss, list, remove.
+- **A plain-HTML fixture** (`generic-fixture.ts`):
+  - labels by `for`, by wrapping, by `aria-labelledby`, and by `fieldset`/`legend`;
+  - a native select, radios, checkboxes and a file input;
+  - a react-select-style combobox;
+  - a repeatable section;
+  - Next and Submit.
+
+  The engine is built against it, with no site code.
+- **Conformance, per site** (`sites.test.ts`, run for every registered site on its fixture):
+  - every field has a prompt and a kind;
+  - ids are the same on two reads;
+  - the guard blocks the site's Submit, by click and by Enter;
+  - `next` refuses on review;
+  - each saved page gets its page kind.
+
+### Phases
+"One adapter change per live run" holds. A phase that moves an existing adapter's code waits for a live run of
+its own, after item 3's live runs (which test `strict`).
+1. **(S–M) Registry and schema facts.**
+   - The protocol registry, with detection, tenant, job, canonical URLs and permissions taken from it.
+   - The three schema facts, emitted by both adapters (an extraction change only) and read by the companion
+     instead of `adapter === "oracle"`.
+   - No filler changes.
+2. **(M–L) Engine and shared drivers**, built beside the two adapters on the plain-HTML fixture. Nothing existing
+   moves, so landing it needs no live run.
+3. **(M per site) The first new sites on the engine**, picked from the user's postings:
+   - Ashby (Cohere), on its own host;
+   - Symplicity, with the most postings; its application is the school portal's own;
+   - then Greenhouse and iCIMS, together with item 2: in the user's postings both are embedded.
+
+   Each one gets saved pages, a definition, a fixture and a live run.
+4. **(M) Oracle on the engine**, after item 3's Oracle run: its definition, its drivers moved, golden schemas
+   equal, one live run.
+5. **(M–L) Workday on the engine**, after item 3's Workday run:
+   - its drivers moved verbatim, with no logic change;
+   - golden schemas equal;
+   - one live run with debug mode on, compared with the previous run's timings.
+6. **(S) Clean-up.**
+   - The old adapter folders go.
+   - In the reference: `components/adapters.md` (the engine, definitions and drivers), the Workday and Oracle
+     pages cut down to their definitions and drivers, and "Add a job site" in `development.md` rewritten.
+
+### Challenges and open questions
+- **Moving Workday's fillers is the riskiest part** (it's how e390fef broke autofill), so it goes last: verbatim,
+  checked against golden schemas, with a live run of its own. Item 6's adapter trace belongs in the engine (one
+  place: every driver call and wait). Building the trace into the engine before phase 5 would make that live run
+  a traced one.
+- **Sites that almost fit a shared driver**: a combobox that opens only on mousedown, a list that renders late.
+  Start with options on the shared driver, and write a site driver only when those run out.
+- **Best effort on any site.** The plain-HTML definition (shared drivers, prompts by `label` and `aria-*`,
+  buttons by text) could run on a site with no definition, on origins the user grants, as Oracle's are. That's
+  the most reach for the least work, but page kinds and the submit test are guesses there. Decide after
+  phase 3 shows how far it gets on Ashby and Symplicity.
+- **Shadow DOM** (some enterprise sites): the engine's queries would have to look into open shadow roots. None of
+  the sites above needs it.
+- **Waits per site.** `autofill-timing.yaml` is one set of waits for every site. Keep it, and add per-site
+  sections only when a site needs different waits.
+
+**References**:
+- a new `components/adapters.md`;
+- `components/workday-adapter.md`, `components/oracle-adapter.md`, `protocol.md`, `extension.md`, `companion.md`;
+- `autofill.md` and `mcp-tools.md` (the schema facts);
+- `development.md` ("Add a job site");
+- `security.md` (the submit test per site).
+
+## 2. Embedded application forms (High, M)
+
+**Why.** Company career pages often embed their ATS. In the user's postings, Duff's careers page holds an iCIMS
+application (`careers.example.com/…?icims=1`), and Initrode's (`careers.example.org/…?gh_jid=…`) holds
+Greenhouse's. The form tools act on a whole tab, chosen by the tab's URL (`resolveTab` in
+`background/forms.ts`), so a form inside a frame is never found. Capture already handles this for postings:
+`capture/frames.ts` picks the frame that holds the posting, and `meta.json` keeps its `frameUrl`.
+
+**How.**
+- **Find form frames.** The background asks each frame of the tab for its URL (`scripting.executeScript` with
+  `allFrames`; only frames on hosts the extension may access answer) and runs the registry's `isUrl` (item 1)
+  on each. `browser.status` lists, per tab, `frames: [{ frameId, url, site }]` for the frames on a form site.
+- **Target a frame.** Form methods take a `frameId` next to the `tabId`, and `callAdapter` injects into
+  `{ tabId, frameIds: [frameId] }`. `FormSchema` gains `frameId`. Each frame gets its own adapter instance and
+  submit guard.
+- **Choose the frame.** `FormsService.target` picks the tab, then the frame on the posting's tenant (by the
+  frame's URL), then any form frame. When the top frame is the form itself, nothing changes. For a posting
+  captured from an embedded board, its tenant and job come from `frameUrl`.
+- **Forms rendered straight into the company's page** (no frame): recognised by a DOM signature in the site's
+  definition (a `form` posting to `greenhouse.io`, Greenhouse's embed container), on origins the user grants at
+  Set posting, as Oracle's are.
+- **Permissions.** Each embedded provider's hosts (Greenhouse, iCIMS, Lever, Ashby…) are optional host
+  permissions. They're asked for once, at Set posting on a page that embeds one (the click is the user gesture
+  Chrome needs), and listed in the options page, as Oracle's origins are.
+- **What stays per tab:** `tab.show`, `screenshot` (the whole tab) and the hidden-tab check.
 
 **Tests.**
-- Planner, table-driven:
-  - each formatting rule;
-  - a reversed-polarity variant doesn't match its opposite;
-  - `byCompany` beats `default`;
-  - `sensitive` and `null` answers are left;
-  - a value that's already right is kept;
-  - a `city` field in a references section is left;
-  - rows are mapped by company before order;
-  - the province list is filled on the second pass after the country.
-- Companion end-to-end, with the Workday behavioural fixture: `autofill_step` fills the name-and-address step,
-  logs `auto` events, and leaves only the screening questions in `left`.
-- With debug mode (item 4): planner tests over steps exported from live runs.
+- Background: a tab's form frames listed with their sites, and injection aimed at one frame.
+- e2e: a fake tab whose page holds a form frame. `get_form` reads the frame, the posting is credited by the
+  frame's tenant, and the submit guard runs in the frame.
 
 **Challenges and open questions.**
-- **A wrong hint now fills silently.** The safeguards are the section-fit check, `filled` in the result, and
-  the automatic fills listed at the hand-off. Is a glance at `filled` on each step enough, or should the user
-  see them only at the hand-off?
-- **Country and province names.** The profile may hold "ON" where the list says "Ontario", or "United States"
-  where it says "United States of America". Add a small alias table, or leave every strict miss to the model?
-  Start with the strict miss going to `left`; the debug report (item 4) shows which aliases come up.
-- **Role descriptions.** Copy the profile's highlights as they are, or tailor them to the posting as the
-  resume is? Default: copy as they are.
-- **Size of one fill.** A step with three work rows is about 25 fields. The Tyrell step of about 20 fields
-  took 22 s, well under the 120 s fill timeout, but split the fill by section if a step plans more than about
-  40 fields.
-- **`authorizedIn` needs the posting's country**, and `meta.json`'s `location` is free text. This is for
-  phase 2.
-- **How compact `filled` must be.** The model needs the label to notice a wrong value, but every label costs
-  tokens. Measure on the first live run.
+- A frame's id changes when it reloads. The companion resolves the frame again on every call, never caching it.
+- Some embeds move to a new frame on each step. A frame that disappears mid-call fails the call, as a closed tab
+  does.
+- Needs item 1: the embedded providers (Greenhouse, iCIMS) are new sites.
 
-## 2. Tie each application to its posting (High, M)
+## 3. Deterministic autofill (High, L in three phases)
+
+**Status:** all three phases built (phase 1 on 2026-10-01, phases 2 and 3 on 2026-10-02). What's built is
+described in `references/components/autofill.md`. Phase 1 ran live once (Hooli); phases 2 and 3 were replayed on
+that run's recorded pages, not yet run live.
+
+**Left: the live runs.** In order, so a problem points at one change. Both go before item 1 moves the
+Oracle and Workday adapters onto the engine (its phases 4 and 5):
+1. A Workday run with debug mode on (`ezapply debug on`, then `ezapply debug report`). It checks rows (adding them,
+   mapping them, the language levels), computed answers and the chunked fills, and `strict` in the adapter, the
+   one adapter change. If it's slower than the 2026-09-30 runs, suspect `strict` first, then the suspects in
+   "One adapter change per live run" (`references/development.md`).
+2. An Oracle run: the link fields, and the work, education and language entries added through their inline forms.
+   The work and education forms have never been seen, so their dates are matched by label on trust, and the
+   language levels by the wordings the fixture models.
+
+**Open questions, to answer from those runs:**
+- **A wrong fill now happens silently.** The safeguards are the section-fit check, `filled` in the result, and
+  the automatic fills listed at the hand-off. Is a glance at `filled` on each step enough?
+- **Country and province names.** The profile may hold "ON" where the list says "Ontario". A strict miss goes to
+  the model; the debug report's loose-match section shows which aliases come up.
+- **Role descriptions** are the profile's highlights as stored, not tailored to the posting as the resume is. The
+  replay showed the agent reword one. Keep as stored?
+- **Language levels** are one level per language for every skill (reading, writing, speaking). The agent rated
+  one language's reading and writing a step lower. Keep one level, or add per-skill levels to the profile?
+- **How compact `filled` must be.** The model needs the label to notice a wrong value, but every label costs
+  tokens. Measure on the next live run.
+- **Workday's certification rows and Oracle's licenses** aren't filled: no live run has shown their fields.
+
+## 4. Tie each application to its posting (High, M)
 
 **Status:** built on 2026-10-01: requisition matching from the URLs, and refusing calls that change the page
 (`references/mcp-tools.md`, "Which posting"). Left: the live check on the sign-in redirect, and the job-title
@@ -235,9 +396,9 @@ Also covers "stronger application form identification".
 - A posting captured from a job board (no tenant, no requisition) can't be matched. Keep allowing it with a
   warning, or ask the user once per tab?
 - "Form identification" could also mean recognising page kinds better (fewer `unknown`). There's no data on
-  how often `unknown` happens; debug mode (4) would show it.
+  how often `unknown` happens; debug mode (6) would show it.
 
-## 3. The companion runs the hand-off checklist (High, M)
+## 5. The companion runs the hand-off checklist (High, M)
 
 **Status:** built on 2026-10-01 (`references/mcp-tools.md`, "The hand-off checklist"). The warnings are given
 during the step too, on `get_form` and `autofill_step`, so most are fixed before `go_next` instead of after a
@@ -247,7 +408,7 @@ run.
 **Why.** The hand-off list in `ezapply-apply` (documents attached, every add-button section filled, files left
 from a previous application removed, answers from the user or from judgment flagged) is kept by the model from
 memory over many steps. Live runs missed parts of it: the cover letter twice (now caught by `notAttached`),
-and sections that start empty are easy to miss. With autofill (item 1) it also lists what was filled
+and sections that start empty are easy to miss. With autofill (item 3) it also lists what was filled
 automatically, by section. The companion already has most of the facts: `form-log.jsonl`,
 `approvals.json`, `profile.yaml` and every `get_form` it served.
 
@@ -269,7 +430,7 @@ automatically, by section. The companion already has most of the facts: `form-lo
 - Oracle's one-page forms and saved inline items count differently from Workday's rows.
 - Should the checklist block anything? Proposal: no. It informs; the user still presses Submit.
 
-## 4. Autofill debug mode (High, L)
+## 6. Autofill debug mode (High, L)
 
 A config flag that makes every form call dump everything needed to debug it.
 
@@ -349,7 +510,7 @@ While it's on, `get_form` results carry `debug: true`, so the user doesn't leave
   because debugging needs them (a field that should hold a value and doesn't).
 - **A screenshot at each failure**, when the tab is on screen. It goes to disk, never into the conversation.
 
-**For `autofill_step` (item 1), the plan as well.** The planner runs in the companion, so its record needs no
+**For `autofill_step` (item 3), the plan as well.** The planner runs in the companion, so its record needs no
 adapter change. Per field it holds:
 - the rule tried and its outcome: the hint and whether the section fit; the answer entry and which variant
   matched; the value before and after formatting; the strict match and the read-back;
@@ -378,9 +539,10 @@ nothing in the page. **Part 1 was built on 2026-10-01**: `ezapply debug on|off|r
 3. **(M) Markup, screenshots and `ezapply debug export`.**
 
 - *Adapter* (`extension/src/adapters/common/trace.ts`): a `trace` object every adapter calls at the points
-  listed above. It's a no-op unless debug is on. The extension sets it with `setDebug(options)` next to
-  `setTiming`, in the same `executeScript` (`extension/src/background/forms.ts`, `callAdapter`). The adapter
-  returns `{ __ok, __debug }`. The companion strips `__debug` before anything reaches the agent.
+  listed above. Once item 1's engine exists, the trace goes there instead: one place, every driver call and
+  wait. It's a no-op unless debug is on. The extension sets it with `setDebug(options)` next to `setTiming`, in
+  the same `executeScript` (`extension/src/background/forms.ts`, `callAdapter`). The adapter returns
+  `{ __ok, __debug }`. The companion strips `__debug` before anything reaches the agent.
 - *Page hooks*: the error, console and request hooks, and the mutation observer, install at the start of a
   debugged call and come off at its end, so a call without debug runs exactly as today.
 - *Size*: markup and traces travel back through the bridge (64 MB `maxPayload`). A Workday step's cleaned
@@ -422,8 +584,8 @@ third-party markup and could still hold something the scrub missed.
    - automatic fills the model or user later changed, which point to a wrong rule;
    - automatic fills that failed, by rule;
    - fields the model filled with `source: profile` that no rule covered, with automation id, label and
-     section. These are candidates for new hints: the roughly 37 unhinted profile fills above are what phase 3
-     of item 1 works from;
+     section. These are candidates for new hints or row labels (phase 3 of item 3 came from the first such
+     list: education years, website rows, language rows);
    - strict-match misses with the options seen, which are candidates for an alias.
 2. For a failure, read its `NNNN-*.json` trace and the `fail-` markup to find where the adapter's picture of
    the page and the real page diverged.
@@ -456,14 +618,15 @@ run).
 - The trace calls touch every filler. Landing them is itself an adapter change, so the first live run with
   debug off must match the Tyrell run's timings before the trace is trusted.
 - Screenshots need the tab on screen. A failure on a hidden tab gets markup only.
-- Without debug mode, autofill phase 1 has only the `rule` on each `form-log.jsonl` event to go on. That's
-  enough to count wrong and missing rules, but not to see the page that caused them.
+- Without debug mode, autofill has only the `rule` on each `form-log.jsonl` event to go on. That's enough to
+  count wrong and missing rules, but not to see the page that caused them.
 
-## 5. More application sites, and Oracle follow-ups (High, L per site)
+## 7. More application sites, and Oracle follow-ups (High, M per site)
 
-**Greenhouse, Lever, Ashby.** Plain HTML forms, common for software jobs, same adapter API, site detection in
-`protocol/src/browser.ts`; "Add a job site" in `references/development.md`. They submit from a single page,
-so the submit guard matters more.
+**Sites.** Each new site is a definition on item 1's engine (its phase 3). In the order of the user's postings:
+Ashby (Cohere), Symplicity (the school's co-op portal, most of the postings), then Greenhouse (Initrode) and
+iCIMS (Duff), which are embedded in the employer's page (item 2). Then Lever and the providers the user meets
+next. Count the sites behind the captured postings (`meta.json` `url` and `frameUrl`) again before each choice.
 
 **Oracle follow-ups** (`references/components/oracle-adapter.md`): re-run a live application to confirm the
 fixes from the first one and add languages and certifications; find out why the Cover Letter field was missing
@@ -472,14 +635,13 @@ the multi-select dropdown (preferred locations) and JET comboboxes, now left to 
 languages.
 
 **Challenges and open questions.**
-- Each site needs a real application step saved. Debug mode (4) makes the first live run produce it.
-- Greenhouse and Lever are often embedded in the employer's page in an iframe, so detection and the tenant
-  come from the frame, not the tab.
+- Each site needs a real application step saved. Debug mode (6) makes the first live run produce it.
 - A single-page form puts Submit next to every field. The guard must block it for keyboard (Enter in a text
-  field) as well as clicks.
-- Which site first? Count the sites behind the user's captured postings (`meta.json` `url`) before choosing.
+  field) as well as clicks: item 1's conformance test checks both for every site.
+- Symplicity's application lives inside the school's portal, behind the student's sign-in. Its documents may come
+  from the portal's own document library rather than an upload: look at a real application before planning it.
 
-## 6. Show what changed in a document (Medium, M)
+## 8. Show what changed in a document (Medium, M)
 
 **Why.** In the 2026-10-01 session the user asked "wheres the changes" after a revision, and the agent had to
 read the PDF's text back to show them. Each review round is a full re-read for the user. `tex_diff` exists, but
@@ -500,25 +662,7 @@ compares the template with the tailored file, needs latexdiff, and isn't on the 
 - Should approvals be per diff ("approve these changes") or stay per version? Per version keeps the
   hash-based guarantee simple; the diff is only a reading aid.
 
-## 7. More modular adapters (Medium, L)
-
-**Now.** `adapters/common/` has `dom.ts`, `guard.ts` and `timing.ts`. Each site's `extract.ts` and `fill.ts`
-(about 500–670 lines each) carry their own widget code: dropdowns, typeaheads, dates, files, repeatable rows.
-
-**How.**
-- Pull widget drivers into `adapters/common/widgets/`: native input and select, ARIA combobox and listbox,
-  typeahead, radio and checkbox groups, date, file, repeatable section, and the option matcher (exact,
-  parenthetical, bare name). Each takes its selectors and timing from the site.
-- A site adapter becomes page-kind detection, field discovery (mapping each field to a widget kind), its
-  selectors and navigation. A plain-HTML site (5) should then be mostly configuration.
-
-**Challenges and open questions.**
-- Moving Workday's fillers is exactly the kind of change that broke autofill in e390fef. Do it after debug mode
-  (4), one widget per live run, with the behavioural fixtures as the safety net.
-- Workday's listbox and Oracle's JET widgets may share little. The payoff is mostly for the next sites, so
-  build the common widgets with the first new site instead of refactoring the two existing adapters first.
-
-## 8. Application tracker (Medium, S–M)
+## 9. Application tracker (Medium, S–M)
 
 **What.** "What's in flight?": each posting's status, deadline, date submitted, and postings drafted but not
 applied to. `meta.json` has `deadline` and `status`; `form-log.jsonl` has the confirmation step.
@@ -537,12 +681,12 @@ applied to. `meta.json` has `deadline` and `status`; `form-log.jsonl` has the co
 - Reminders: Claude Code's scheduled tasks only run while a session is open. Real reminders need the OS
   scheduler or a calendar, which is more than this needs. Leave out at first.
 
-## 9. A skill for building adapters (Medium, M)
+## 10. A skill for building adapters (Medium, M)
 
 **What.** A skill in this repo (`.claude/skills/`, for Claude working on ezapply, not the workspace) that walks
-through adding a site: saving the site's pages, writing `selectors.ts` and the extractor against the saved
-markup, the behavioural fixture, fill tests, routing and permissions, a first live run with debug mode on,
-reading its report, and the component page.
+through adding a site: saving the site's pages, writing its registry entry and definition (item 1) against
+the saved markup, the fixture, the conformance test, permissions, a first live run with debug mode on, reading
+its report, and the site's reference page.
 
 **How.** The steps are "Add a job site" in `references/development.md`. The skill links to that and adds the
 procedure around it: what to save, in what order to build, which tests to write first, and the checklist for
@@ -550,10 +694,10 @@ the live run. It should not copy development.md's list, or the two will drift.
 
 **Challenges and open questions.**
 - The hard part is getting real markup of application steps, which needs an account and an application in
-  progress. The user has to drive that; debug mode (4) makes one run enough.
+  progress. The user has to drive that; debug mode (6) makes one run enough.
 - Its worth depends on how many sites get added. With one or two more, `development.md` may be enough.
 
-## 10. Login manager (Medium, L)
+## 11. Login manager (Medium, L)
 
 **Why.** Workday wants an account per employer, and Oracle sends a code to the email each time. Signing in is
 the step where the user does the most typing. The skills now say: never fill passwords or account forms.
@@ -575,4 +719,4 @@ the step where the user does the most typing. The skills now say: never fill pas
 - Email codes (Oracle, Workday's verification) still need the user, unless ezapply reads their mail, which is
   out of scope.
 - Recommendation: the first option now. Revisit the second only if signing in is still the slowest part of an
-  application after 1–4.
+  application after items 3–6.
