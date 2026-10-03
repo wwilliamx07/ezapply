@@ -55,3 +55,9 @@ export function oracleTenant(url: string): string | undefined {
 export function oracleJobPath(pathname: string): string {
   return pathname.replace(ORACLE_LOCALE_SEGMENT, "$1").replace(/(\/job\/[^/]+)\/.*$/i, "$1");
 }
+
+/** The job id an Oracle URL is for (`…/job/42/apply/section/1` → `42`), lowercased. */
+export function oracleJob(url: string): string | undefined {
+  if (!oracleTenant(url)) return undefined;
+  return /\/job\/([^/]+)/i.exec(new URL(url).pathname)?.[1]?.toLowerCase();
+}

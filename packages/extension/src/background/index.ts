@@ -1,4 +1,4 @@
-import { type CapturePayload, detectSite, EzError, isOracleUrl } from "@ezapply/protocol";
+import { type CapturePayload, detectSite, EzError, siteOfUrl } from "@ezapply/protocol";
 import { z } from "zod";
 import { capturePage, type PageCapture } from "../capture/capture.js";
 import { chooseFrame, type FrameCapture, unreadableBoard } from "../capture/frames.js";
@@ -49,10 +49,10 @@ connection.onState((s) => {
 // ---- Set posting -----------------------------------------------------------------------------
 
 ext.action.onClicked.addListener((tab) => {
-  // An Oracle career site can be on any host, so access to it is asked for here, while the click still counts
-  // as the user's gesture: Firefox accepts permissions.request only synchronously inside the handler. Already
-  // granted, it resolves without asking. Declined, the capture still works (the click grants activeTab).
-  if (tab.url && isOracleUrl(tab.url)) {
+  // A site granted per origin (an Oracle career site can be on any host) is asked for here, while the click still
+  // counts as the user's gesture: Firefox accepts permissions.request only synchronously inside the handler.
+  // Already granted, it resolves without asking. Declined, the capture still works (the click grants activeTab).
+  if (tab.url && siteOfUrl(tab.url)?.access.kind === "per-origin") {
     void ext.permissions.request({ origins: [`${new URL(tab.url).origin}/*`] }).catch(() => false);
   }
   void setPosting(tab);

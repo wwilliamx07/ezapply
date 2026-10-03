@@ -27,7 +27,7 @@ export function listOf(title: string): ListKey | undefined {
  * (`save.*`) adds nothing by itself.
  */
 export function listOfButton(b: FormSchema["addButtons"][number]): ListKey | undefined {
-  if (b.id.startsWith("save.")) return undefined;
+  if (b.kind === "save" || b.id.startsWith("save.")) return undefined;
   return listOf(b.label) ?? (b.section ? listOf(b.section) : undefined);
 }
 
@@ -46,7 +46,7 @@ export function rowOf(s: Section): ListKey | undefined {
  */
 export function savedItemOf(s: Section): ListKey | undefined {
   const kind = /\.([a-z]+)-\d+$/.exec(s.id)?.[1];
-  if (!kind || s.fields.length > 0) return undefined;
+  if (!kind || !s.saved) return undefined;
   if (kind === "experience") return "work";
   if (kind === "education") return "education";
   return listOf(s.title.split(":")[0] ?? "");

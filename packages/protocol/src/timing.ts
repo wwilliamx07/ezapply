@@ -1,11 +1,13 @@
 /**
- * The waits the form adapters (Workday, Oracle) use, in milliseconds. The companion reads the user's overrides from
- * `autofill-timing.yaml` in the workspace and sends the resolved values with every form call; without them the
- * adapter uses these defaults. A "quiet" wait ends once the page has stopped changing for that long; its "max"
- * ends it regardless. Other waits end as soon as what they wait for happens, so they only cost their full
- * length when it doesn't.
+ * The waits the form adapters use, in milliseconds. Each site owns its waits: its registry entry (`sites.ts`)
+ * says how long each one is, and the adapter's engine only waits where the site's definition says. These are the
+ * standard values a site starts from (measured on Workday, the first site). The companion reads the user's
+ * overrides from `autofill-timing.yaml`, resolves them against the site's own waits, and sends the result with
+ * every form call. A "quiet" wait ends once the page has stopped changing for that long; its "max" ends it
+ * regardless. Other waits end as soon as what they wait for happens, so they only cost their full length when it
+ * doesn't.
  */
-export const DEFAULT_TIMING = {
+export const STANDARD_WAITS = {
   pollMs: 50,
   afterFieldQuietMs: 120,
   afterFieldMaxMs: 1500,
@@ -55,7 +57,7 @@ export const DEFAULT_TIMING = {
   pageActionMaxMs: 8000,
 } as const;
 
-export type TimingKey = keyof typeof DEFAULT_TIMING;
+export type TimingKey = keyof typeof STANDARD_WAITS;
 export type Timing = Record<TimingKey, number>;
 
 /** What each wait is for, written into `autofill-timing.yaml` next to it. */
@@ -110,16 +112,16 @@ export const TIMING_DOCS: Record<TimingKey, string> = {
 };
 
 /**
- * Resolve overrides against the defaults. A value that is set is used as written; `scale` multiplies the defaults
- * of the rest (not pollMs), so "scale: 0.5" with one wait set explicitly keeps that one. Unknown keys and bad
- * values fall back to the default.
+ * Resolve overrides against a site's own waits (`base`). A value that is set is used as written; `scale`
+ * multiplies the site's values for the rest (not pollMs), so "scale: 0.5" with one wait set explicitly keeps that
+ * one. Unknown keys and bad values fall back to the site's value.
  */
-export function resolveTiming(overrides?: Partial<Record<string, unknown>> | null, scale = 1): Timing {
-  const out = { ...DEFAULT_TIMING } as Timing;
-  for (const key of Object.keys(DEFAULT_TIMING) as TimingKey[]) {
+export function resolveTiming(base: Timing, overrides?: Partial<Record<string, unknown>> | null, scale = 1): Timing {
+  const out = { ...base };
+  for (const key of Object.keys(STANDARD_WAITS) as TimingKey[]) {
     const v = overrides?.[key];
     const set = typeof v === "number" && Number.isFinite(v) && v >= 0;
-    const value = set ? v : key === "pollMs" ? DEFAULT_TIMING[key] : DEFAULT_TIMING[key] * scale;
+    const value = set ? v : key === "pollMs" ? base[key] : base[key] * scale;
     out[key] = key === "pollMs" ? Math.max(1, Math.round(value)) : Math.round(value);
   }
   return out;

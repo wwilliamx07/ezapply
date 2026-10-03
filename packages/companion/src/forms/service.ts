@@ -605,7 +605,7 @@ export class FormsService {
     const base = await this.target(tabId);
     return this.pages.run(String(base.tab.tabId), async () => {
       const record = settings.on ? this.debug.start(call.tool, call.params, Date.now() - entered) : null;
-      const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws);
+      const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws, base.tab.site);
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
       // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
       const shown = await this.show(base.tab.tabId);
@@ -777,7 +777,7 @@ export class FormsService {
       );
       const profile = await this.profile.profile();
       const warnings = stepWarnings(form, profile.exists && profile.valid ? profile.value : null, uploaded);
-      const end = form.pageKind === "review" || (form.adapter === "oracle" && /submit/i.test(form.nextLabel ?? ""));
+      const end = form.pageKind === "review" || form.lastPage === true;
       return {
         ...(form.pageKind === "step" && warnings.length ? { checklist: warnings } : {}),
         ...(end ? { handoff: handoff(events) } : {}),

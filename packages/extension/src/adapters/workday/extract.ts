@@ -243,7 +243,12 @@ export function extract(doc: Document, url: string): Extraction {
     sections: [...sections.values()],
     addButtons: [...addButtons.entries()].map(([id, el]) => {
       const section = addSections.get(el);
-      return { id, label: norm(el.getAttribute("aria-label")) || text(el), ...(section ? { section } : {}) };
+      return {
+        id,
+        label: norm(el.getAttribute("aria-label")) || text(el),
+        ...(section ? { section } : {}),
+        kind: "row" as const,
+      };
     }),
     actions: pageActions(doc),
     errors: pageErrors(doc),

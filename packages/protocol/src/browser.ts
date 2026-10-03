@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { isOracleUrl, oracleTenant } from "./oracle.js";
 import { SiteId } from "./postings.js";
-import { isWorkdayUrl, workdayTenant } from "./workday.js";
+import { FORM_SITE_IDS, siteOfUrl } from "./sites.js";
 
 /**
  * Browsers the companion can open pages and files in. The extension reports which one it runs in, so what
@@ -43,47 +42,30 @@ export const BrowserStatus = z.object({
 });
 export type BrowserStatus = z.infer<typeof BrowserStatus>;
 
-/** Site detection shared by the extension and the companion. */
+/** Site detection shared by the extension and the companion: the registry's site for the URL, else generic. */
 export function detectSite(url: string): SiteId {
-  if (isWorkdayUrl(url)) return "workday";
-  if (isOracleUrl(url)) return "oracle";
-  return "generic";
+  return siteOfUrl(url)?.id ?? "generic";
 }
 
-/** The sites whose application forms ezapply reads and fills, each with its own adapter. */
-export const FORM_SITES: readonly SiteId[] = ["workday", "oracle"];
+/** The sites whose application forms ezapply reads and fills, each with its own adapter: the registry. */
+export const FORM_SITES: readonly SiteId[] = FORM_SITE_IDS;
 
 export function isFormSite(site: SiteId): boolean {
   return FORM_SITES.includes(site);
 }
 
-/** The tenant an application or posting URL belongs to: a Workday tenant or an Oracle career site. */
+/** The tenant an application or posting URL belongs to on its site (a Workday tenant, an Oracle career site). */
 export function siteTenant(url: string): string | undefined {
-  return workdayTenant(url) ?? oracleTenant(url);
+  return siteOfUrl(url)?.tenant(url);
 }
 
 /**
- * The job an application or posting URL is for, lowercased: on Workday the requisition at the end of the job's
- * path segment (`…/job/Toronto/Engineer_JR1000001-1/apply` or `…/details/Engineer_JR1000001-1` → `jr1000001-1`),
- * on Oracle the job id (`…/job/42/apply/section/1` → `42`). Undefined when the URL doesn't name one. Two
- * postings at one company share a tenant; this tells their applications apart.
+ * The job an application or posting URL is for, lowercased (a Workday requisition, an Oracle job id), as its
+ * site reads it. Undefined when the URL doesn't name one. Two postings at one company share a tenant; this tells
+ * their applications apart.
  */
 export function siteJob(url: string): string | undefined {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return undefined;
-  }
-  if (oracleTenant(url)) return /\/job\/([^/]+)/i.exec(u.pathname)?.[1]?.toLowerCase();
-  if (!workdayTenant(url)) return undefined;
-  const parts = u.pathname.split("/").filter(Boolean);
-  const start = parts.findIndex((p) => /^(job|details)$/i.test(p));
-  if (start < 0) return undefined;
-  const apply = parts.findIndex((p, i) => i > start && /^apply$/i.test(p));
-  const slug = parts.slice(start + 1, apply < 0 ? undefined : apply).at(-1);
-  const req = slug ? /_([^_]+)$/.exec(decodeURIComponent(slug))?.[1] : undefined;
-  return req?.toLowerCase();
+  return siteOfUrl(url)?.job(url);
 }
 
 /**

@@ -248,30 +248,35 @@
       "id": "languages.item-1",
       "title": "Languages: French, Fluent",
       "fields": [],
-      "removable": true
+      "removable": true,
+      "saved": true
     },
     {
       "id": "work-and-education-history.experience-1",
       "title": "Work and Education History: Acme Corp, Intern",
       "fields": [],
-      "removable": true
+      "removable": true,
+      "saved": true
     }
   ],
   "addButtons": [
     {
       "id": "add.link",
       "label": "Add Another Link",
-      "section": "Resume and URLs"
+      "section": "Resume and URLs",
+      "kind": "row"
     },
     {
       "id": "add.experience",
       "label": "Add Experience",
-      "section": "Work and Education History"
+      "section": "Work and Education History",
+      "kind": "form"
     },
     {
       "id": "add.language",
       "label": "Add Language",
-      "section": "Languages"
+      "section": "Languages",
+      "kind": "form"
     }
   ],
   "actions": [],
@@ -279,5 +284,6 @@
   "messages": [
     "Saved"
   ],
-  "nextLabel": "Submit"
+  "nextLabel": "Submit",
+  "lastPage": true
 }

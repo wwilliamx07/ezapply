@@ -370,7 +370,10 @@ export function fieldError(row: HTMLElement): string | undefined {
 
 export function extract(doc: Document, url: string): Extraction {
   const fields = new Map<string, FieldRef>();
-  const sections = new Map<string, { id: string; title: string; fields: Field[]; removable?: boolean }>();
+  const sections = new Map<
+    string,
+    { id: string; title: string; fields: Field[]; removable?: boolean; saved?: boolean }
+  >();
   const repeats = new Map<string, number>();
 
   for (const c of candidates(doc)) {
@@ -419,11 +422,11 @@ export function extract(doc: Document, url: string): Extraction {
     let id = `${blockId}.${item.kind === "timeline" ? timelineColumn(item.el) : "item"}-1`;
     for (let n = 2; rows.has(id) || sections.has(id); n++) id = id.replace(/-\d+$/, `-${n}`);
     rows.set(id, item);
-    sections.set(id, { id, title: `${blockTitle(item.el)}: ${item.title}`, fields: [], removable: true });
+    sections.set(id, { id, title: `${blockTitle(item.el)}: ${item.title}`, fields: [], removable: true, saved: true });
   }
 
   const addButtons = new Map<string, HTMLElement>();
-  const addInfo: { id: string; label: string; section?: string }[] = [];
+  const addInfo: FormSchema["addButtons"] = [];
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.addButton)) {
     if (!isVisible(b) || !enabled(b) || b.classList.contains(SEL.addButtonHidden)) continue;
     const label = labelOf(b) || "Add";
@@ -431,7 +434,8 @@ export function extract(doc: Document, url: string): Extraction {
     let id = `add.${key}`;
     for (let n = 2; addButtons.has(id); n++) id = `add.${key}#${n}`;
     addButtons.set(id, b);
-    addInfo.push({ id, label, section: blockTitle(b) });
+    // Add Another Link adds a link row at once; the others open an inline form.
+    addInfo.push({ id, label, section: blockTitle(b), kind: b.matches(SEL.addRow) ? "row" : "form" });
   }
   // An open inline form is added by its Save button: offered like an add button, named after its block.
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.inlineSave)) {
@@ -440,7 +444,7 @@ export function extract(doc: Document, url: string): Extraction {
     let id = `save.${slug(section)}`;
     for (let n = 2; addButtons.has(id); n++) id = `save.${slug(section)}#${n}`;
     addButtons.set(id, b);
-    addInfo.push({ id, label: labelOf(b) || "Save", section });
+    addInfo.push({ id, label: labelOf(b) || "Save", section, kind: "save" });
   }
 
   const next = nextButton(doc);
@@ -448,11 +452,12 @@ export function extract(doc: Document, url: string): Extraction {
   const step = stepInfo(doc);
   const messages = pageMessages(doc);
   const tenant = oracleTenant(url);
+  const pageKind = detectPage(doc, url, fields.size);
   const schema: PageSchema = {
     adapter: "oracle",
     url,
     ...(tenant ? { tenant } : {}),
-    pageKind: detectPage(doc, url, fields.size),
+    pageKind,
     ...(step ? { step } : {}),
     sections: [...sections.values()],
     addButtons: addInfo,
@@ -460,6 +465,7 @@ export function extract(doc: Document, url: string): Extraction {
     errors: pageErrors(doc),
     ...(messages.length ? { messages } : {}),
     ...(next ? { nextLabel: labelOf(next) } : {}),
+    ...(pageKind === "step" && next && isSubmitControl(next) ? { lastPage: true } : {}),
     ...(back ? { backLabel: labelOf(back) } : {}),
   };
   return { schema, fields, addButtons, rows };

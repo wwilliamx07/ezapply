@@ -41,5 +41,6 @@
   "actions": [],
   "errors": [],
   "nextLabel": "Submit",
+  "lastPage": true,
   "backLabel": "Previous"
 }

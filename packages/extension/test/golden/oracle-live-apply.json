@@ -540,30 +540,36 @@
     {
       "id": "add.link",
       "label": "Add Another Link",
-      "section": "Resume and URLs"
+      "section": "Resume and URLs",
+      "kind": "row"
     },
     {
       "id": "add.experience",
       "label": "Add Experience",
-      "section": "Work and Education History"
+      "section": "Work and Education History",
+      "kind": "form"
     },
     {
       "id": "add.education",
       "label": "Add Education",
-      "section": "Work and Education History"
+      "section": "Work and Education History",
+      "kind": "form"
     },
     {
       "id": "add.language",
       "label": "Add Language",
-      "section": "Languages"
+      "section": "Languages",
+      "kind": "form"
     },
     {
       "id": "add.license",
       "label": "Add License",
-      "section": "Licenses and Certificates"
+      "section": "Licenses and Certificates",
+      "kind": "form"
     }
   ],
   "actions": [],
   "errors": [],
-  "nextLabel": "Submit"
+  "nextLabel": "Submit",
+  "lastPage": true
 }

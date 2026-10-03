@@ -3,13 +3,11 @@ import { join } from "node:path";
 import {
   type CapturePayload,
   type CaptureResult,
-  detectSite,
   ErrorCode,
   EzError,
-  oracleJobPath,
   PostingMeta,
   type PostingMetaPatch,
-  WORKDAY_LOCALE_SEGMENT,
+  siteOfUrl,
 } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
 import { exists, readJson, writeFileAtomic, writeJsonAtomic } from "../util/fs.js";
@@ -251,13 +249,7 @@ export function canonicalizeUrl(raw: string): string {
   const keep = new URLSearchParams();
   for (const [k, v] of u.searchParams) if (JOB_ID_PARAMS.has(k.toLowerCase())) keep.set(k, v);
   const query = keep.toString();
-  const site = detectSite(raw);
-  const pathname =
-    site === "workday"
-      ? u.pathname.replace(WORKDAY_LOCALE_SEGMENT, "")
-      : site === "oracle"
-        ? oracleJobPath(u.pathname)
-        : u.pathname;
+  const pathname = siteOfUrl(raw)?.canonicalPath?.(u.pathname) ?? u.pathname;
   const path = pathname.replace(/\/+$/, "") || "/";
   return `${u.protocol}//${u.hostname.toLowerCase()}${u.port ? `:${u.port}` : ""}${path}${query ? `?${query}` : ""}`;
 }

@@ -70,6 +70,8 @@ export const SEL = {
   addButton:
     "button.apply-flow-profile-item-tile__new-tile, button.apply-flow-profile-item-button--add, button.candidate-links__add-link",
   addButtonHidden: "candidate-links__add-link--hidden",
+  /** The add button that adds a row of fields at once (another link), not an inline form. */
+  addRow: "button.candidate-links__add-link",
   /** Saves an open inline form (a language, a license, a work or education entry). */
   inlineSave: "[data-qa='profileItemInlineSaveButton'], [data-qa='addTimelineItemDialogButton']",
   /** What an inline form shows when Save finds a problem: field errors, or a message under the form. */

@@ -20,6 +20,10 @@
       "types": "./dist/match.d.ts",
       "default": "./dist/match.js"
     },
+    "./sites": {
+      "types": "./dist/sites.d.ts",
+      "default": "./dist/sites.js"
+    },
     "./timing": {
       "types": "./dist/timing.d.ts",
       "default": "./dist/timing.js"

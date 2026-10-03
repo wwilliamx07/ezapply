@@ -48,6 +48,11 @@ export const Section = z.object({
   fields: z.array(Field),
   /** A repeatable row (e.g. "Work Experience 2") with its own Delete button: remove_repeatable can remove it. */
   removable: z.boolean().optional(),
+  /**
+   * A saved item: an entry the page shows as a summary with no fields (Oracle's language tile, its work and
+   * education timeline). Its id ends in its kind and number (`languages.item-1`, `….experience-1`).
+   */
+  saved: z.boolean().optional(),
 });
 export type Section = z.infer<typeof Section>;
 
@@ -68,7 +73,18 @@ export const FormSchema = z.object({
    * Buttons that add rows to repeatable sections. `section` is the heading the button sits under ("Work
    * Experience", "Websites"), since live Workday labels them all just "Add" or "Add Another".
    */
-  addButtons: z.array(z.object({ id: z.string(), label: z.string(), section: z.string().optional() })),
+  addButtons: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      section: z.string().optional(),
+      /**
+       * What pressing it does: `row` adds a row of fields (Workday's Add, Oracle's Add Another Link), `form` opens
+       * an inline form whose Save adds the item (Oracle's Add Language), `save` is such a form's Save (`save.*`).
+       */
+      kind: z.enum(["row", "form", "save"]).optional(),
+    }),
+  ),
   /** Page-level actions available (start-choice / posting pages). */
   actions: z.array(PageAction),
   errors: z.array(z.string()),
@@ -76,6 +92,11 @@ export const FormSchema = z.object({
   messages: z.array(z.string()).optional(),
   /** Label of the forward button (e.g. "Save and Continue", "Submit"). */
   nextLabel: z.string().optional(),
+  /**
+   * A step whose only way on is Submit (Oracle's single-page application, the last section of a multi-page one, any
+   * single-page form): the user presses it, so this is where the hand-off happens, as on a review page.
+   */
+  lastPage: z.boolean().optional(),
   /** Label of the button back to the previous step, when there is one. */
   backLabel: z.string().optional(),
 });

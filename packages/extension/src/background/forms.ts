@@ -6,16 +6,15 @@ import {
   type Handlers,
   isFormSite,
   type SiteId,
+  siteInfo,
 } from "@ezapply/protocol";
 import { ext } from "../ext.js";
 
 type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
 
-/** Each site's adapter bundle and the name it defines on the page's window. */
-const ADAPTERS: Partial<Record<SiteId, { file: string; global: string }>> = {
-  workday: { file: "workday-main.js", global: "__ezapplyWorkday" },
-  oracle: { file: "oracle-main.js", global: "__ezapplyOracle" },
-};
+/** A site's adapter bundle (`<site>-main.js`, built per registry entry) and the name it defines on the window. */
+const adapterOf = (site: SiteId) =>
+  siteInfo(site) ? { file: `${site}-main.js`, global: `__ezapply_${site}` } : undefined;
 
 const siteOf = (tab: chrome.tabs.Tab) => (tab.url ? detectSite(tab.url) : "generic");
 
@@ -57,13 +56,15 @@ function requireFormSite(tab: chrome.tabs.Tab): { tabId: number; site: SiteId } 
 }
 
 /**
- * The extension must hold the tab's origin: Workday's hosts come with the install (Firefox lets the user withhold
- * or revoke them); an Oracle site is granted one origin at a time, by Set posting on it or the options page.
+ * The extension must hold the tab's origin. A site with fixed hosts (Workday) gets them with the install (Firefox
+ * lets the user withhold or revoke them); a site granted per origin (Oracle) gets one origin at a time, by Set
+ * posting on it or the options page.
  */
 async function requireSiteAccess(tabId: number, site: SiteId): Promise<void> {
   const { url } = await ext.tabs.get(tabId);
   if (!url || (await ext.permissions.contains({ origins: [`${new URL(url).origin}/*`] }))) return;
-  if (site === "oracle") {
+  const info = siteInfo(site);
+  if (info?.access.kind === "per-origin") {
     throw new EzError(
       ErrorCode.BadRequest,
       `The extension has no access to ${new URL(url).host} yet.`,
@@ -73,7 +74,7 @@ async function requireSiteAccess(tabId: number, site: SiteId): Promise<void> {
   }
   throw new EzError(
     ErrorCode.BadRequest,
-    "The extension does not have access to Workday sites.",
+    `The extension does not have access to ${info?.name ?? site} sites.`,
     "Ask the user to open the ezapply extension options and click Grant site access.",
   );
 }
@@ -91,7 +92,7 @@ async function callAdapter<T>(
   timing?: Timing,
 ): Promise<T> {
   const { tabId, site } = target;
-  const adapter = ADAPTERS[site];
+  const adapter = adapterOf(site);
   if (!adapter) throw new EzError(ErrorCode.BadRequest, `No form adapter for ${site} pages.`);
   await requireSiteAccess(tabId, site);
   await ext.scripting.executeScript({ target: { tabId }, files: [adapter.file], world: "MAIN" });

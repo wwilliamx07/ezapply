@@ -163,7 +163,8 @@
     {
       "id": "add.link",
       "label": "Add Another Link",
-      "section": "Resume and URLs"
+      "section": "Resume and URLs",
+      "kind": "row"
     }
   ],
   "actions": [],

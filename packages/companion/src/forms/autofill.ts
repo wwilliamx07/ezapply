@@ -683,7 +683,8 @@ export function rowsToAdd(form: FormSchema, profile: Profile): { addButtonId: st
   for (const b of form.addButtons) {
     const list = listOfButton(b);
     if (!list || !ROW_LISTS.includes(list) || out.some((o) => o.list === list)) continue;
-    if (form.adapter === "oracle" && list !== "links") continue;
+    // An inline form's entries are added one by one (`missingItems`), not as rows.
+    if (b.kind === "form") continue;
     const missing = profileCount(profile, list, form) - (slots.get(list)?.length ?? 0);
     if (missing > 0) out.push({ addButtonId: b.id, list, count: Math.min(missing, 10) });
   }
@@ -698,10 +699,9 @@ export function missingItems(
   form: FormSchema,
   profile: Profile,
 ): { list: ListKey; addButtonId: string; index: number; name: string }[] {
-  if (form.adapter !== "oracle") return [];
   const out: { list: ListKey; addButtonId: string; index: number; name: string }[] = [];
   for (const list of ["work", "education", "languages"] as const) {
-    const button = form.addButtons.find((b) => listOfButton(b) === list);
+    const button = form.addButtons.find((b) => b.kind === "form" && listOfButton(b) === list);
     if (!button) continue;
     const saved = form.sections
       .filter((s) => savedItemOf(s) === list)

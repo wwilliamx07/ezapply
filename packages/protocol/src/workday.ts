@@ -58,3 +58,30 @@ export const WORKDAY_POSTING = {
   locations: "locations",
   requisitionId: "requisitionId",
 } as const;
+
+/**
+ * The job a Workday URL is for, lowercased: the requisition at the end of the job's path segment
+ * (`…/job/Toronto/Engineer_JR1000001-1/apply` or `…/details/Engineer_JR1000001-1` → `jr1000001-1`). Undefined when
+ * the URL names none.
+ */
+export function workdayJob(url: string): string | undefined {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return undefined;
+  }
+  if (!workdayTenant(url)) return undefined;
+  const parts = u.pathname.split("/").filter(Boolean);
+  const start = parts.findIndex((p) => /^(job|details)$/i.test(p));
+  if (start < 0) return undefined;
+  const apply = parts.findIndex((p, i) => i > start && /^apply$/i.test(p));
+  const slug = parts.slice(start + 1, apply < 0 ? undefined : apply).at(-1);
+  const req = slug ? /_([^_]+)$/.exec(decodeURIComponent(slug))?.[1] : undefined;
+  return req?.toLowerCase();
+}
+
+/** A posting's identifying path: without the locale segment, which the same job's links have or lack. */
+export function workdayCanonicalPath(pathname: string): string {
+  return pathname.replace(WORKDAY_LOCALE_SEGMENT, "");
+}

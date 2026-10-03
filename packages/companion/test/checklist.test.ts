@@ -29,7 +29,7 @@ const field = (id: string, f: Partial<Field> = {}): Field => ({
 });
 
 function form(
-  sections: { id: string; title: string; fields?: Field[] }[],
+  sections: { id: string; title: string; fields?: Field[]; saved?: boolean }[],
   addButtons: FormSchema["addButtons"],
   adapter = "workday",
 ): FormSchema {
@@ -55,7 +55,7 @@ describe("stepWarnings", () => {
       ],
       [
         { id: "add.work-experience", label: "Add", section: "Work Experience" },
-        { id: "add.education", label: "Add", section: "Education" },
+        { id: "add.education", label: "Add", section: "Education", kind: "row" },
         { id: "add.languages", label: "Add", section: "Languages" },
         { id: "add.websites", label: "Add", section: "Websites" },
       ],
@@ -71,12 +71,12 @@ describe("stepWarnings", () => {
   it("counts Oracle's saved items, and skips an open form's Save button", () => {
     const f = form(
       [
-        { id: "languages.item-1", title: "Languages: English" },
-        { id: "languages.item-2", title: "Languages: French" },
+        { id: "languages.item-1", title: "Languages: English", saved: true },
+        { id: "languages.item-2", title: "Languages: French", saved: true },
       ],
       [
-        { id: "add.language", label: "Add Language", section: "Languages" },
-        { id: "save.languages", label: "Save", section: "Languages" },
+        { id: "add.language", label: "Add Language", section: "Languages", kind: "form" },
+        { id: "save.languages", label: "Save", section: "Languages", kind: "save" },
       ],
       "oracle",
     );
@@ -86,7 +86,7 @@ describe("stepWarnings", () => {
   it("tells Oracle's work and education apart under one section, and counts link fields", () => {
     const f = form(
       [
-        { id: "work-and-education-history.experience-1", title: "Work and Education History: A, Dev" },
+        { id: "work-and-education-history.experience-1", title: "Work and Education History: A, Dev", saved: true },
         {
           id: "resume-and-urls",
           title: "Resume and URLs",
@@ -94,9 +94,9 @@ describe("stepWarnings", () => {
         },
       ],
       [
-        { id: "add.link", label: "Add Another Link", section: "Resume and URLs" },
-        { id: "add.experience", label: "Add Experience", section: "Work and Education History" },
-        { id: "add.education", label: "Add Education", section: "Work and Education History" },
+        { id: "add.link", label: "Add Another Link", section: "Resume and URLs", kind: "row" },
+        { id: "add.experience", label: "Add Experience", section: "Work and Education History", kind: "form" },
+        { id: "add.education", label: "Add Education", section: "Work and Education History", kind: "form" },
       ],
       "oracle",
     );

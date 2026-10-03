@@ -481,15 +481,15 @@ describe("timing", () => {
 
   it("uses the waits the companion sends, and the defaults again without them", async () => {
     const { T } = await import("../src/adapters/common/timing.js");
-    const { DEFAULT_TIMING } = await import("@ezapply/protocol");
+    const { STANDARD_WAITS } = await import("@ezapply/protocol");
     // A search that finds nothing waits typeaheadNoResultsMs for "No Items." to stay (2 s by default).
-    api.setTiming({ ...DEFAULT_TIMING, typeaheadNoResultsMs: 100 });
+    api.setTiming({ ...STANDARD_WAITS, typeaheadNoResultsMs: 100 });
     let started = Date.now();
     expect(await api.searchOptions(id("formField-skills"), "lua")).toEqual([]);
     expect(Date.now() - started).toBeLessThan(1500);
 
     api.setTiming(null);
-    expect(T).toEqual(DEFAULT_TIMING);
+    expect(T).toEqual(STANDARD_WAITS);
     started = Date.now();
     expect(await api.searchOptions(id("formField-skills"), "lua")).toEqual([]);
     expect(Date.now() - started).toBeGreaterThanOrEqual(2000);
@@ -497,9 +497,9 @@ describe("timing", () => {
 
   it("ignores unknown keys and bad values", async () => {
     const { T } = await import("../src/adapters/common/timing.js");
-    const { DEFAULT_TIMING } = await import("@ezapply/protocol");
+    const { STANDARD_WAITS } = await import("@ezapply/protocol");
     api.setTiming({ dropdownOpenMs: 700, bogus: 1, stepMs: -5 } as never);
-    expect(T).toEqual({ ...DEFAULT_TIMING, dropdownOpenMs: 700 });
+    expect(T).toEqual({ ...STANDARD_WAITS, dropdownOpenMs: 700 });
   });
 });
 
@@ -542,8 +542,8 @@ describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't c
     beforeEach(async () => {
       fixture = buildWorkdayStep(document, { liveDropdowns: true, dismissedIgnoresNextPress: true });
       api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
-      const { DEFAULT_TIMING } = await import("@ezapply/protocol");
-      api.setTiming({ ...DEFAULT_TIMING, dropdownOpenMs: 300, dropdownOpenRetryMs: 300 });
+      const { STANDARD_WAITS } = await import("@ezapply/protocol");
+      api.setTiming({ ...STANDARD_WAITS, dropdownOpenMs: 300, dropdownOpenRetryMs: 300 });
     });
     afterEach(() => api.setTiming(null));
 

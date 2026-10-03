@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_TIMING, type TabInfo } from "@ezapply/protocol";
+import { STANDARD_WAITS, type TabInfo } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
 import { pruneDebug, stripBulk } from "../src/forms/debug.js";
@@ -138,10 +138,10 @@ describe("autofill-timing.yaml", () => {
 
   it("sends the defaults without a file, and the template changes nothing", async () => {
     await withFile(null, async (ws) => {
-      expect(await loadTiming(ws)).toEqual({ timing: DEFAULT_TIMING, fillTimeoutMs: 120_000, issues: [] });
+      expect(await loadTiming(ws)).toEqual({ timing: STANDARD_WAITS, fillTimeoutMs: 120_000, issues: [] });
     });
     await withFile(timingFileTemplate(), async (ws) => {
-      expect(await loadTiming(ws)).toEqual({ timing: DEFAULT_TIMING, fillTimeoutMs: 120_000, issues: [] });
+      expect(await loadTiming(ws)).toEqual({ timing: STANDARD_WAITS, fillTimeoutMs: 120_000, issues: [] });
     });
   });
 
@@ -187,7 +187,7 @@ describe("autofill-timing.yaml", () => {
     });
     await withFile("dropdownOpenMs: [\n", async (ws) => {
       const loaded = await loadTiming(ws);
-      expect(loaded.timing).toEqual(DEFAULT_TIMING);
+      expect(loaded.timing).toEqual(STANDARD_WAITS);
       expect(loaded.issues[0]).toMatch(/couldn't be read, so the defaults are used/);
     });
   });

@@ -162,12 +162,14 @@
     {
       "id": "add.work-experience",
       "label": "Add Work Experience",
-      "section": "Work Experience"
+      "section": "Work Experience",
+      "kind": "row"
     },
     {
       "id": "add.websites",
       "label": "Add",
-      "section": "Websites"
+      "section": "Websites",
+      "kind": "row"
     }
   ],
   "actions": [],

@@ -392,7 +392,7 @@ function myExperience(rows: { work: number; education: number; languages: number
     sections,
     addButtons: [
       { id: "add.work-experience", label: rows.work ? "Add Another" : "Add", section: "Work Experience" },
-      { id: "add.education", label: "Add", section: "Education" },
+      { id: "add.education", label: "Add", section: "Education", kind: "row" },
       { id: "add.languages", label: "Add", section: "Languages" },
       { id: "add.websites", label: "Add", section: "Websites" },
     ],
@@ -529,7 +529,7 @@ describe("links and Oracle items", () => {
           fields: [field("resume-and-urls.siteLink-1", { label: "Link 1", currentValue: "https://github.com/jane/" })],
         },
       ],
-      [{ id: "add.link", label: "Add Another Link", section: "Resume and URLs" }],
+      [{ id: "add.link", label: "Add Another Link", section: "Resume and URLs", kind: "row" }],
     );
     expect(rowsToAdd(form, full)).toEqual([{ addButtonId: "add.link", list: "links", count: 1 }]);
     form.sections[0]?.fields.push(field("resume-and-urls.siteLink-2", { label: "Link 2" }));
@@ -544,18 +544,19 @@ describe("links and Oracle items", () => {
   it("finds the entries no saved item names, and plans an opened item form for one", () => {
     const form = oracle(
       [
-        { id: "languages.item-1", title: "Languages: French, Fluent", fields: [], removable: true },
+        { id: "languages.item-1", title: "Languages: French, Fluent", fields: [], removable: true, saved: true },
         {
           id: "work-and-education-history.experience-1",
           title: "Work and Education History: Acme, Developer",
           fields: [],
           removable: true,
+          saved: true,
         },
       ],
       [
-        { id: "add.experience", label: "Add Experience", section: "Work and Education History" },
-        { id: "add.education", label: "Add Education", section: "Work and Education History" },
-        { id: "add.language", label: "Add Language", section: "Languages" },
+        { id: "add.experience", label: "Add Experience", section: "Work and Education History", kind: "form" },
+        { id: "add.education", label: "Add Education", section: "Work and Education History", kind: "form" },
+        { id: "add.language", label: "Add Language", section: "Languages", kind: "form" },
       ],
     );
     expect(missingItems(form, full).map((m) => [m.list, m.addButtonId, m.index, m.name])).toEqual([
@@ -606,9 +607,12 @@ describe("rows and items, edge cases", () => {
           title: "Work and Education History: Alpha Corp, Analyst",
           fields: [],
           removable: true,
+          saved: true,
         },
       ],
-      addButtons: [{ id: "add.experience", label: "Add Experience", section: "Work and Education History" }],
+      addButtons: [
+        { id: "add.experience", label: "Add Experience", section: "Work and Education History", kind: "form" },
+      ],
       actions: [],
       errors: [],
     };
