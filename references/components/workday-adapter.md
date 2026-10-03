@@ -109,6 +109,13 @@ permit" doesn't match "Yes", by design. The bare-name and parenthetical rules an
 worked live: 12 of 15 skills given as plain names ("Java", "SQL", "AWS") were selected under Workday's own
 names.
 
+**Strict fills.** A fill sent with `strict: true` (`autofill_step` sends every fill so, except a city or postal
+code: [autofill](autofill.md#strict-matching)) matches dropdown, radio, checkbox-group and typeahead options
+only by `strictIndex` (`protocol/src/match.ts`): the option, its bare name or parenthetical, or the option
+without a leading rank ("5 - Fluent" for "Fluent"); never a prefix or substring. A dropdown miss fails with
+`No option matches "…" exactly.` and the options; a typeahead miss is `unmatched` with its search's options. A
+single-select prompt that selects an option itself on Enter still does: that's `inexact`. Not yet run live.
+
 ### Finding a dropdown's listbox
 Live Workday gives the dropdown button no usable `aria-controls`, and a closed listbox stays on screen for a
 moment while it animates away. The adapter used to take the first visible `[role="listbox"]`, so right
@@ -291,7 +298,7 @@ renumbers the rest.
 Change `selectors.ts` (keep every Workday string of the adapter there; what both adapters share is in
 `adapters/common/`; posting-page hooks and hosts shared
 with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` (saved
-from the browser, or once it exists exported from autofill debug mode: `todo.md`, item 4), and extend the tests. The behavioural fixture
+from the browser, or once it exists exported from autofill debug mode: `todo.md`, item 6), and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom
 environment, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new
 adapter method needs one fixture behaviour, not two fakes.

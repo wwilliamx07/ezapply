@@ -114,7 +114,7 @@ export function createWorkdayApi(doc: Document, getUrl: () => string) {
         try {
           const r = ref(f.fieldId);
           r.container.scrollIntoView?.({ block: "center" });
-          out.push({ fieldId: f.fieldId, ...(await fillField(r, f.value)) });
+          out.push({ fieldId: f.fieldId, ...(await fillField(r, f.value, f.strict === true)) });
         } catch (err) {
           out.push({ fieldId: f.fieldId, ok: false, error: (err as Error).message });
         }

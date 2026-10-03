@@ -80,6 +80,25 @@ describe("filling", () => {
     expect(document.getElementById("lb-country")).toBeNull(); // listbox closed afterwards
   });
 
+  it("with strict, takes only an option the value names, and says which options there were", async () => {
+    const [loose, radio, typeahead] = await api.fill([
+      { fieldId: id("formField-countryDropdown"), value: "united states", strict: true },
+      { fieldId: id("formField-previousWorker"), value: "N", strict: true },
+      { fieldId: id("formField-source"), value: "Company", strict: true },
+    ]);
+    expect(loose).toMatchObject({
+      ok: false,
+      error: 'No option matches "united states" exactly.',
+      availableOptions: ["Canada", "United States of America", "United Kingdom"],
+    });
+    expect(radio).toMatchObject({ ok: false, availableOptions: ["Yes", "No"] });
+    expect(typeahead).toMatchObject({ ok: false, unmatched: [{ value: "Company" }], readBack: [] });
+    const [exact] = await api.fill([
+      { fieldId: id("formField-countryDropdown"), value: "United States of America", strict: true },
+    ]);
+    expect(exact).toMatchObject({ ok: true, readBack: "United States of America" });
+  });
+
   it("selects typeahead options, including through a nested menu", async () => {
     const [flat] = await api.fill([{ fieldId: id("formField-source"), value: "Company Website" }]);
     expect(flat).toMatchObject({ ok: true, readBack: ["Company Website"] });
@@ -328,6 +347,13 @@ describe("matching option text", () => {
   it("doesn't guess between two options that both fit", () => {
     const eligible = ["Yes, I am a citizen or permanent resident of Canada", "Yes, I possess a temporary work permit"];
     expect(matchOption("Yes", eligible)).toBe(-1);
+  });
+
+  it("strictly, takes the option, its bare name or parenthetical, or it without a rank, and nothing looser", () => {
+    expect(matchOption("python", ["Python Development", "Python (Programming Language)"], true)).toBe(1);
+    expect(matchOption("Fluent", ["1 - Beginner", "5 - Fluent"], true)).toBe(1);
+    expect(matchOption("Yes", ["Yes, I will require sponsorship", "No"], true)).toBe(-1);
+    expect(matchOption("Yes", ["Yes, I will require sponsorship", "No"])).toBe(0);
   });
 });
 

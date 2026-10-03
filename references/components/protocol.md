@@ -11,6 +11,7 @@ so a change here is a change to the contract between them.
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, `detectSite(url)` (`workday`, `oracle` or `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (a Workday tenant or an Oracle career site), `siteJob(url)` (the job a Workday or Oracle URL is for: the Workday requisition, the Oracle job id) and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
+| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, or without a leading rank like "5 - "), `strictIndex` ([autofill](autofill.md#strict-matching)) |
 | `timing.ts` | `DEFAULT_TIMING` (every adapter wait, in ms), `TIMING_DOCS`, `resolveTiming(overrides, scale)`; no imports (imported as `@ezapply/protocol/timing` by the adapters) ([waits](workday-adapter.md#waits-autofill-timingyaml)) |
 | `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
 | `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
@@ -104,6 +105,9 @@ Workday shows in the same alert region as errors), `nextLabel?`, `backLabel?`.
   `currentValue` (string, string[], boolean or null), `error?`, `hint? { profileKey }`.
 - `FieldKind`: `text`, `textarea`, `number`, `password`, `date`, `dropdown`, `typeahead`, `radio`,
   `checkbox`, `checkbox-group`, `file`.
+- `FillAction`: `{ fieldId, value, strict? }`. `strict`: take only an option the value names strictly
+  (`match.ts`), never the adapters' looser prefix or substring match; a miss fails with the options seen.
+  `autofill_step` sends it, since nobody checks its fills one by one; an adapter built before it ignores it.
 - `FillValue`: a string, a string array, or a boolean. `FillResult`: `{ fieldId, ok, readBack?, error?,
   availableOptions?, unmatched?, inexact? }`: `unmatched[] { value, suggestions[] }` lists typeahead entries
   that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which

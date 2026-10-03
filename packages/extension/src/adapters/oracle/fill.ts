@@ -36,7 +36,8 @@ type Result = Omit<FillResult, "fieldId">;
 const fail = (error: string, extra: Partial<Result> = {}): Result => ({ ok: false, error, ...extra });
 const same = (a: string, b: string) => norm(a).toLowerCase() === norm(b).toLowerCase();
 
-export async function fillField(ref: FieldRef, value: FillValue): Promise<Result> {
+/** `strict`: options only by `strictIndex` (see `matchOption`); a miss fails with the options seen. */
+export async function fillField(ref: FieldRef, value: FillValue, strict = false): Promise<Result> {
   const c = ref.container;
   switch (ref.field.kind) {
     case "text":
@@ -47,12 +48,14 @@ export async function fillField(ref: FieldRef, value: FillValue): Promise<Result
       return fail("Password fields are never filled by ezapply. Ask the user to type it.");
     case "dropdown": {
       const input = await waitFor(() => comboInput(c), T.dropdownOpenMs);
-      return input ? fillCombo(input, [asString(value)]) : fail("The list didn't load.");
+      return input ? fillCombo(input, [asString(value)], strict) : fail("The list didn't load.");
     }
     case "radio":
-      return pillButtons(c).length ? fillPills(c, [asString(value)], false) : fillRadio(c, asString(value));
+      return pillButtons(c).length
+        ? fillPills(c, [asString(value)], false, strict)
+        : fillRadio(c, asString(value), strict);
     case "checkbox-group":
-      return fillPills(c, Array.isArray(value) ? value : [asString(value)], true);
+      return fillPills(c, Array.isArray(value) ? value : [asString(value)], true, strict);
     case "checkbox":
       return fillCheckbox(c, value === true || /^(true|yes|checked)$/i.test(String(value)));
     case "date":
@@ -200,13 +203,16 @@ async function typeQuery(field: HTMLInputElement, query: string): Promise<void> 
   await settle(input.ownerDocument, T.typeaheadResultsQuietMs, T.typeaheadResultsMaxMs);
 }
 
-/** The option for the first candidate that matches one exactly, else the closest match of the first. */
-function pick(candidates: string[], labels: string[]): number {
+/**
+ * The option for the first candidate that matches one exactly, else the closest match of the first (only a strict
+ * one with `strict`).
+ */
+function pick(candidates: string[], labels: string[], strict: boolean): number {
   for (const c of candidates) {
     const i = labels.findIndex((l) => same(l, c));
     if (i >= 0) return i;
   }
-  return matchOption(candidates[0] ?? "", labels);
+  return matchOption(candidates[0] ?? "", labels, strict);
 }
 
 async function choose(field: HTMLInputElement, option: HTMLElement, wanted: string): Promise<boolean> {
@@ -221,14 +227,14 @@ async function choose(field: HTMLInputElement, option: HTMLElement, wanted: stri
  * Choose an option: from the list as it opens, else by typing the value and choosing from the results. An
  * auto-suggest field (free text with suggestions) keeps the typed text when no suggestion matches.
  */
-export async function fillCombo(field: HTMLInputElement, candidates: string[]): Promise<Result> {
+export async function fillCombo(field: HTMLInputElement, candidates: string[], strict = false): Promise<Result> {
   const value = candidates[0] ?? "";
   const input = () => live(field);
   if (input().readOnly) return fail("This field is read-only on the page.", { readBack: input().value });
   if (candidates.some((c) => shows(input().value, c))) return { ok: true, readBack: input().value };
   if (!(await openCombo(input()))) return fail("Could not open the list.");
   let labels = comboOptions(input()).map(optionText);
-  let idx = pick(candidates, labels);
+  let idx = pick(candidates, labels, strict);
   // Search by the value, then by its first part: a server-side search finds "K2K 3E9" but not the full label
   // "K2K 3E9, Kanata, Ontario" (seen live).
   const queries = [...new Set([value, value.split(",")[0]?.trim() ?? ""])].filter(Boolean);
@@ -236,7 +242,7 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[]): 
     if (idx >= 0) break;
     await typeQuery(input(), query);
     labels = comboOptions(input()).map(optionText);
-    idx = pick(candidates, labels);
+    idx = pick(candidates, labels, strict);
   }
   if (idx < 0) {
     if (input().classList.contains(SEL.comboAutoSuggest)) {
@@ -246,7 +252,9 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[]): 
         : fail("The page did not keep the text.", { readBack: input().value });
     }
     await closeCombo(input());
-    return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
+    return fail(`No option matches "${value}"${strict ? " exactly" : ""}.`, {
+      availableOptions: labels.filter(Boolean).slice(0, 80),
+    });
   }
   const wanted = labels[idx] as string;
   await choose(field, comboOptions(input())[idx] as HTMLElement, wanted);
@@ -292,12 +300,12 @@ async function setPill(pill: HTMLElement, want: boolean): Promise<boolean> {
 }
 
 /** Short option lists shown as toggle buttons: one pressed (radio), or several (checkbox group). */
-async function fillPills(c: HTMLElement, wanted: string[], multiple: boolean): Promise<Result> {
+async function fillPills(c: HTMLElement, wanted: string[], multiple: boolean, strict: boolean): Promise<Result> {
   const pills = pillButtons(c);
   const labels = pills.map(pillLabel);
   const targets = new Set<number>();
   for (const w of wanted) {
-    const idx = matchOption(w, labels);
+    const idx = matchOption(w, labels, strict);
     if (idx < 0) return fail(`No option matches "${w}".`, { availableOptions: labels });
     targets.add(idx);
   }
@@ -313,10 +321,10 @@ async function fillPills(c: HTMLElement, wanted: string[], multiple: boolean): P
     : fail("Some options did not change.", { readBack });
 }
 
-async function fillRadio(c: HTMLElement, value: string): Promise<Result> {
+async function fillRadio(c: HTMLElement, value: string, strict: boolean): Promise<Result> {
   const radios = [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
   const labels = radios.map(radioLabel);
-  const idx = matchOption(value, labels);
+  const idx = matchOption(value, labels, strict);
   if (idx < 0) return fail(`No option matches "${value}".`, { availableOptions: labels });
   const radio = radios[idx] as HTMLInputElement;
   // Knockout's checked binding reads the input on click.

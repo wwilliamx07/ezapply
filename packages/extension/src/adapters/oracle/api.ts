@@ -113,7 +113,7 @@ export function createOracleApi(doc: Document, getUrl: () => string) {
           // Look the field up again: an earlier fill may have re-rendered the rows after it.
           const r = ref(f.fieldId);
           r.container.scrollIntoView?.({ block: "center" });
-          results.set(f, { fieldId: f.fieldId, ...(await fillField(r, f.value)) });
+          results.set(f, { fieldId: f.fieldId, ...(await fillField(r, f.value, f.strict === true)) });
         } catch (err) {
           results.set(f, { fieldId: f.fieldId, ok: false, error: (err as Error).message });
         }

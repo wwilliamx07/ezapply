@@ -84,7 +84,12 @@ export type FormSchema = z.infer<typeof FormSchema>;
 export const FillValue = z.union([z.string(), z.array(z.string()), z.boolean()]);
 export type FillValue = z.infer<typeof FillValue>;
 
-export const FillAction = z.object({ fieldId: z.string(), value: FillValue });
+/**
+ * `strict`: take only an option the value names strictly (`match.ts`: exact, without or as its parenthetical,
+ * without a leading rank), never the adapters' looser prefix or substring match. A miss fails with the options
+ * seen. Sent by autofill_step, whose fills nobody checks field by field. An adapter built before it ignores it.
+ */
+export const FillAction = z.object({ fieldId: z.string(), value: FillValue, strict: z.boolean().optional() });
 export type FillAction = z.infer<typeof FillAction>;
 
 export const FillResult = z.object({

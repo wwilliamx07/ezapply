@@ -35,7 +35,8 @@ type Result = Omit<FillResult, "fieldId">;
 
 const fail = (error: string, extra: Partial<Result> = {}): Result => ({ ok: false, error, ...extra });
 
-export async function fillField(ref: FieldRef, value: FillValue): Promise<Result> {
+/** `strict`: options only by `strictIndex` (see `matchOption`); a miss fails with the options seen. */
+export async function fillField(ref: FieldRef, value: FillValue, strict = false): Promise<Result> {
   const c = ref.container;
   switch (ref.field.kind) {
     case "text":
@@ -45,15 +46,15 @@ export async function fillField(ref: FieldRef, value: FillValue): Promise<Result
     case "password":
       return fail("Password fields are never filled by ezapply. Ask the user to type it.");
     case "dropdown":
-      return fillDropdown(c, asString(value));
+      return fillDropdown(c, asString(value), strict);
     case "typeahead":
-      return fillTypeahead(c, Array.isArray(value) ? value : [asString(value)]);
+      return fillTypeahead(c, Array.isArray(value) ? value : [asString(value)], strict);
     case "radio":
-      return fillRadio(c, asString(value));
+      return fillRadio(c, asString(value), strict);
     case "checkbox":
       return fillCheckbox(c, value === true || /^(true|yes|checked)$/i.test(String(value)));
     case "checkbox-group":
-      return fillCheckboxGroup(c, Array.isArray(value) ? value : [asString(value)]);
+      return fillCheckboxGroup(c, Array.isArray(value) ? value : [asString(value)], strict);
     case "date":
       return fillDate(c, asString(value));
     case "file":
@@ -189,14 +190,16 @@ export async function listDropdown(c: HTMLElement): Promise<OptionInfo[]> {
   return labels;
 }
 
-async function fillDropdown(c: HTMLElement, value: string): Promise<Result> {
+async function fillDropdown(c: HTMLElement, value: string, strict: boolean): Promise<Result> {
   const opened = await openListboxRetrying(c);
   if (!opened) return fail("Could not open the dropdown.");
   const labels = opened.options.map(text);
-  const idx = matchOption(value, labels);
+  const idx = matchOption(value, labels, strict);
   if (idx < 0) {
     await closeListbox(opened, false);
-    return fail(`No option matches "${value}".`, { availableOptions: labels.filter(Boolean).slice(0, 80) });
+    return fail(`No option matches "${value}"${strict ? " exactly" : ""}.`, {
+      availableOptions: labels.filter(Boolean).slice(0, 80),
+    });
   }
   const option = opened.options[idx] as HTMLElement;
   const wanted = labels[idx] as string;
@@ -324,7 +327,11 @@ const lower = (s: string) => norm(s).toLowerCase();
  * the item to select, earlier ones open categories. Returns the selected label, or the options seen when a
  * segment matched nothing.
  */
-async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: string } | { options: string[] }> {
+async function selectPath(
+  c: HTMLElement,
+  path: string[],
+  strict: boolean,
+): Promise<{ selected: string } | { options: string[] }> {
   if (path.length > 1) {
     const input = c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
     if (input) press(input);
@@ -340,7 +347,7 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
     }, T.typeaheadOptionsMs);
     if (!options) return { options: [] };
     const labels = options.map(text);
-    const idx = matchOption(segment, labels);
+    const idx = matchOption(segment, labels, strict);
     if (idx < 0) return { options: [...new Set(labels)] };
     const option = options[idx] as HTMLElement;
     selected = labels[idx] as string;
@@ -359,7 +366,7 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
  * showed, and the rest are still selected (seen live: a skills list stopped at its first unmatched entry).
  * When Workday selects an option itself on Enter (single-select prompts do), it's reported in `inexact`.
  */
-async function fillTypeahead(c: HTMLElement, values: string[]): Promise<Result> {
+async function fillTypeahead(c: HTMLElement, values: string[], strict: boolean): Promise<Result> {
   const unmatched: { value: string; suggestions: string[] }[] = [];
   const inexact: { value: string; selected: string }[] = [];
   const input = () => c.querySelector("input") ?? c;
@@ -371,7 +378,7 @@ async function fillTypeahead(c: HTMLElement, values: string[]): Promise<Result> 
     const leaf = path.at(-1) ?? value;
     if (path.length === 0 || selectedItems(c).some((s) => lower(s) === lower(leaf))) continue;
     const before = new Set(selectedItems(c).map(lower));
-    const outcome = await selectPath(c, path);
+    const outcome = await selectPath(c, path, strict);
     if ("selected" in outcome) {
       if (!selectedItems(c).some((s) => lower(s) === lower(outcome.selected))) {
         unmatched.push({ value, suggestions: [] });
@@ -405,10 +412,10 @@ function isChecked(i: HTMLInputElement): boolean {
   return i.checked || i.getAttribute("aria-checked") === "true";
 }
 
-async function fillRadio(c: HTMLElement, value: string): Promise<Result> {
+async function fillRadio(c: HTMLElement, value: string, strict: boolean): Promise<Result> {
   const radios = [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
   const labels = radios.map(optionLabel);
-  const idx = matchOption(value, labels);
+  const idx = matchOption(value, labels, strict);
   if (idx < 0) return fail(`No option matches "${value}".`, { availableOptions: labels });
   const radio = radios[idx] as HTMLInputElement;
   press(radio);
@@ -434,12 +441,12 @@ async function fillCheckbox(c: HTMLElement, want: boolean): Promise<Result> {
   return (await setCheckbox(box, want)) ? { ok: true, readBack: want } : fail("Checkbox did not change.");
 }
 
-async function fillCheckboxGroup(c: HTMLElement, wanted: string[]): Promise<Result> {
+async function fillCheckboxGroup(c: HTMLElement, wanted: string[], strict: boolean): Promise<Result> {
   const boxes = [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
   const labels = boxes.map(optionLabel);
   const targets = new Set<number>();
   for (const w of wanted) {
-    const idx = matchOption(w, labels);
+    const idx = matchOption(w, labels, strict);
     if (idx < 0) return fail(`No option matches "${w}".`, { availableOptions: labels });
     targets.add(idx);
   }

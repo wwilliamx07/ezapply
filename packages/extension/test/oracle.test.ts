@@ -162,6 +162,17 @@ describe("filling", () => {
     expect(fields()["address.country"]?.currentValue).toBe("Finland");
   });
 
+  it("with strict, refuses a list option or a pill the value only begins", async () => {
+    const [list, pill] = await api.fill([
+      { fieldId: "address.country", value: "Fin", strict: true },
+      { fieldId: "contact-information.title", value: "Ms", strict: true },
+    ]);
+    expect(list).toMatchObject({ ok: false, error: 'No option matches "Fin" exactly.' });
+    expect(pill).toMatchObject({ ok: false, availableOptions: ["Miss", "Mr.", "Mrs.", "Ms."] });
+    const [exact] = await api.fill([{ fieldId: "contact-information.title", value: "ms.", strict: true }]);
+    expect(exact).toMatchObject({ ok: true, readBack: "Ms." });
+  });
+
   it("lists and searches a dropdown's options", async () => {
     expect((await api.listOptions("address.country")).map((o) => o.label)).toContain("Finland");
     await api.fill([{ fieldId: "address.country", value: "United States" }]);

@@ -114,12 +114,14 @@ The "Import your profile" pre-section (LinkedIn and Indeed import) holds no fiel
 ## Filling
 Every filler acts, waits, and reads back, like Workday's. `fill` handles the fields **in page order**,
 whatever order they came in, and returns results in the order asked: the address lists depend on each other
-(country → province → city → postal code), each loading its options for the choice above it.
+(country → province → city → postal code), each loading its options for the choice above it. A fill sent
+`strict` matches list options, pills and radios only strictly, as on [Workday](workday-adapter.md#filling); a
+date's month, day and year lists are matched as before, since the adapter builds their values itself.
 
 | Kind | Approach |
 |---|---|
 | text, number, textarea | Native setter + `input`/`change` (Knockout's `value` binding reads on change, `textInput` on input), then focus leaves. A read-only input is refused. A phone number the page reformats (`416-555-0100` shown as `(416) 555-0100`, live) counts when the digits are the same |
-| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler. An option matching the value (`matchOption`) is pressed; else the value is typed, and once the options change (or "no results" shows) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
+| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler. An option matching the value (`matchOption`; with `strict`, only a strict match: see [Workday's strict fills](workday-adapter.md#filling)) is pressed; else the value is typed, and once the options change (or "no results" shows) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
 | radio (pills) | Press the matching pill unless already pressed: a pressed single-choice pill unselects itself when pressed again |
 | radio (native) | Press the input (Knockout's `checked` binding reads it on click), else its label |
 | checkbox-group (pills) | Press each pill whose state must change |
@@ -157,6 +159,9 @@ Work and education (a timeline), languages and licenses (tiles) are added throug
 Add Another Link adds a link row directly. `removeRepeatable(sectionId)` deletes a saved item: a tile by its
 delete button; a timeline entry by the delete button it shows only while hovered (the adapter hovers it
 first), after which the page removes it a second later. Done once there are fewer saved items.
+
+`autofill_step` runs this flow by itself for each work, education and language entry of the profile that no
+saved item names ([autofill](autofill.md#oracles-item-forms)).
 
 Adding one education and two work entries through the inline form and Save **worked live** (2026-09-29).
 Languages and licenses (tiles) and the deletes are still unverified live. An empty block shows no fields,
@@ -215,4 +220,4 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 
 ## Updating for Oracle changes
 Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or, once it
-exists, one exported from autofill debug mode: `todo.md`, item 4), and extend `oracle-live.test.ts` and the fixture.
+exists, one exported from autofill debug mode: `todo.md`, item 6), and extend `oracle-live.test.ts` and the fixture.
