@@ -1,0 +1,45 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1",
+  "tenant": "jobs.acme.com/cx_1",
+  "pageKind": "step",
+  "step": {
+    "title": "More About You",
+    "index": 3,
+    "total": 3
+  },
+  "sections": [
+    {
+      "id": "additional-documents",
+      "title": "Additional Documents",
+      "fields": [
+        {
+          "id": "additional-documents.attachment",
+          "label": "Attachment",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "agreements",
+      "title": "Agreements",
+      "fields": [
+        {
+          "id": "agreements.job-alerts-checkbox",
+          "label": "I agree to receive updates about new job opportunities.",
+          "required": false,
+          "kind": "checkbox",
+          "currentValue": false
+        }
+      ]
+    }
+  ],
+  "addButtons": [],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Submit",
+  "backLabel": "Previous"
+}

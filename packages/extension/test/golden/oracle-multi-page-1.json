@@ -1,0 +1,172 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1",
+  "tenant": "jobs.acme.com/cx_1",
+  "pageKind": "step",
+  "step": {
+    "title": "Personal Info",
+    "index": 1,
+    "total": 3
+  },
+  "sections": [
+    {
+      "id": "resume-and-urls",
+      "title": "Resume and URLs",
+      "fields": [
+        {
+          "id": "resume-and-urls.resume",
+          "label": "Resume",
+          "required": true,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.cover-letter",
+          "label": "Cover Letter",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.siteLink-1",
+          "label": "Link 1",
+          "required": false,
+          "kind": "text",
+          "currentValue": ""
+        }
+      ]
+    },
+    {
+      "id": "contact-information",
+      "title": "Contact Information",
+      "fields": [
+        {
+          "id": "contact-information.lastName",
+          "label": "Last Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.lastName"
+          }
+        },
+        {
+          "id": "contact-information.firstName",
+          "label": "First Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.firstName"
+          }
+        },
+        {
+          "id": "contact-information.title",
+          "label": "Title",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Miss",
+            "Mr.",
+            "Mrs.",
+            "Ms."
+          ]
+        },
+        {
+          "id": "contact-information.email",
+          "label": "Email Address",
+          "required": false,
+          "kind": "text",
+          "currentValue": "jo@example.com",
+          "helpText": "Read-only on this page.",
+          "hint": {
+            "profileKey": "contact.email"
+          }
+        },
+        {
+          "id": "contact-information.phoneCountryCode",
+          "label": "Phone Number: country code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.phone.countryCode"
+          }
+        },
+        {
+          "id": "contact-information.phoneNumber",
+          "label": "Phone Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.phone.number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "address",
+      "title": "Address",
+      "fields": [
+        {
+          "id": "address.country",
+          "label": "Country",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.country"
+          }
+        },
+        {
+          "id": "address.addressLine1",
+          "label": "Street and House Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.address.line1"
+          }
+        },
+        {
+          "id": "address.city",
+          "label": "City",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.city"
+          }
+        },
+        {
+          "id": "address.postalCode",
+          "label": "Postal Code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.postalCode"
+          }
+        }
+      ]
+    }
+  ],
+  "addButtons": [
+    {
+      "id": "add.link",
+      "label": "Add Another Link",
+      "section": "Resume and URLs"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Next"
+}

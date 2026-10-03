@@ -1,0 +1,12 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.umbrella.example/en/sites/CX_1/job/10001",
+  "tenant": "jobs.umbrella.example/cx_1",
+  "pageKind": "posting",
+  "sections": [],
+  "addButtons": [],
+  "actions": [
+    "apply"
+  ],
+  "errors": []
+}

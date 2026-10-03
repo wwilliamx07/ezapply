@@ -1,0 +1,569 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.umbrella.example/en/sites/CX_1/job/10001/apply/section/1",
+  "tenant": "jobs.umbrella.example/cx_1",
+  "pageKind": "step",
+  "step": {
+    "title": "Personal Info · Job Application Questions · Experience and Skills · More About You"
+  },
+  "sections": [
+    {
+      "id": "resume-and-urls",
+      "title": "Resume and URLs",
+      "fields": [
+        {
+          "id": "resume-and-urls.resume",
+          "label": "Resume",
+          "required": true,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.cover-letter",
+          "label": "Cover Letter",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.siteLink-1",
+          "label": "Link 1",
+          "required": false,
+          "kind": "text",
+          "currentValue": ""
+        }
+      ]
+    },
+    {
+      "id": "extra-information",
+      "title": "Extra Information",
+      "fields": [
+        {
+          "id": "extra-information.areYouOkayToKeepYourCandidateD",
+          "label": "Are you okay to keep your candidate data for 2 years?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contact-information",
+      "title": "Contact Information",
+      "fields": [
+        {
+          "id": "contact-information.lastName",
+          "label": "Last Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.lastName"
+          }
+        },
+        {
+          "id": "contact-information.firstName",
+          "label": "First Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.firstName"
+          }
+        },
+        {
+          "id": "contact-information.title",
+          "label": "Title",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Miss",
+            "Mr.",
+            "Mrs.",
+            "Ms.",
+            "Unknown"
+          ]
+        },
+        {
+          "id": "contact-information.middleNames",
+          "label": "Middle Name",
+          "required": false,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.middleName"
+          }
+        },
+        {
+          "id": "contact-information.email",
+          "label": "Email Address",
+          "required": false,
+          "kind": "text",
+          "currentValue": "",
+          "helpText": "Read-only on this page.",
+          "hint": {
+            "profileKey": "contact.email"
+          }
+        },
+        {
+          "id": "contact-information.phoneCountryCode",
+          "label": "Phone Number: country code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.phone.countryCode"
+          }
+        },
+        {
+          "id": "contact-information.phoneNumber",
+          "label": "Phone Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.phone.number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "address",
+      "title": "Address",
+      "fields": [
+        {
+          "id": "address.country",
+          "label": "Country",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.country"
+          }
+        },
+        {
+          "id": "address.addressLine1",
+          "label": "Street and House Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.address.line1"
+          }
+        },
+        {
+          "id": "address.addressLine2",
+          "label": "2nd address line",
+          "required": false,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.address.line2"
+          }
+        },
+        {
+          "id": "address.city",
+          "label": "City",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.city"
+          }
+        },
+        {
+          "id": "address.region2",
+          "label": "Province",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.region"
+          }
+        },
+        {
+          "id": "address.addlAddressAttribute1",
+          "label": "State/Province Code",
+          "required": false,
+          "kind": "text",
+          "currentValue": ""
+        },
+        {
+          "id": "address.postalCode",
+          "label": "Postal Code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.postalCode"
+          }
+        },
+        {
+          "id": "address.addlAddressAttribute4",
+          "label": "Care Of",
+          "required": false,
+          "kind": "text",
+          "currentValue": ""
+        }
+      ]
+    },
+    {
+      "id": "application-questions",
+      "title": "Application Questions",
+      "fields": [
+        {
+          "id": "application-questions.do-you-require-any-accommodations-or-sup",
+          "label": "Do you require any accommodations or support during the recruitment process?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.will-you-have-graduated-prior-to-the-sta",
+          "label": "Will you have graduated prior to the start of the co-op/internship?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.if-you-re-currently-enrolled-in-a-colleg",
+          "label": "If you're currently enrolled in a college or university, kindly indicate your current academic year.",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "First Year",
+            "Second Year",
+            "Third Year",
+            "Fourth Year",
+            "Fifth Year"
+          ]
+        },
+        {
+          "id": "application-questions.where-did-you-first-hear-about-this-posi",
+          "label": "Where did you first hear about this position?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "New Jobs in Your Area Newsletter",
+            "Technical Career Path/MyGrowth Portal",
+            "Manager recommendation",
+            "Colleague recommendation",
+            "Recruiter recommendation",
+            "Opportunity Marketplace",
+            "Local Talent Pool/Pipeline",
+            "Internal Job Fair Event"
+          ]
+        },
+        {
+          "id": "application-questions.have-you-previously-worked-for-umbrella-as-",
+          "label": "Have you previously worked for Umbrella as a student (co-op, university relations, intern and/or future tech)? If so, when?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.please-indicate-the-total-number-co-op-s",
+          "label": "Please indicate the total number co-op/ student internships or work terms you have completed",
+          "required": true,
+          "kind": "textarea",
+          "currentValue": ""
+        },
+        {
+          "id": "application-questions.are-you-currently-enrolled-in-a-co-op-pr",
+          "label": "Are you currently enrolled in a co-op program? If so, will you be able to provide a confirmation of your enrollment from a recognized post-secondary University or College?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.can-you-provide-an-official-or-unofficia",
+          "label": "Can you provide an official or unofficial educational transcript for your college or university?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.are-you-legally-authorized-to-work-in-ca",
+          "label": "Are you legally authorized to work in Canada?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.what-is-your-expected-year-of-graduation",
+          "label": "What is your expected year of graduation?",
+          "required": true,
+          "kind": "date",
+          "currentValue": null,
+          "dateParts": [
+            "MM",
+            "DD",
+            "YYYY"
+          ]
+        },
+        {
+          "id": "application-questions.if-currently-enrolled-in-a-college-or-un",
+          "label": "If currently enrolled in a college or university, please indicate your major.",
+          "required": true,
+          "kind": "textarea",
+          "currentValue": ""
+        },
+        {
+          "id": "application-questions.are-you-currently-enrolled-in-an-accredi",
+          "label": "Are you currently enrolled in an accredited Canadian College or University?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.do-you-have-any-active-non-compete-non-s",
+          "label": "Do you have any active non-compete, non-solicit, confidentiality, and/or non-disclosure agreements with your current or previous employer?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.i-was-previously-employed-directly-by-no",
+          "label": "I was previously employed directly by Umbrella or a subsidiary of Umbrella, not as a subcontractor.",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.do-you-currently-work-for-the-government",
+          "label": "Do you currently work for the government?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "work-preferences",
+      "title": "Work Preferences",
+      "fields": [
+        {
+          "id": "work-preferences.partAssignFlag",
+          "label": "Consider Part Time Work",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "work-preferences.flexibleWorkFlag",
+          "label": "Work a Flexible Schedule",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "disability-information",
+      "title": "Disability Information",
+      "fields": [
+        {
+          "id": "disability-information.CA-STANDARD-ORA_DISABILITY_STATUS-STANDARD",
+          "label": "Do you have a disability?",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes, I have a disability (or previously had a disability)",
+            "No, I don't have a disability",
+            "I do not wish to answer"
+          ],
+          "hint": {
+            "profileKey": "eeo.disability"
+          }
+        },
+        {
+          "id": "disability-information.CA-STANDARD-ORA_DISABILITY_CATEGORY-STANDARD",
+          "label": "Category",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true
+        }
+      ]
+    },
+    {
+      "id": "diversity-information",
+      "title": "Diversity Information",
+      "fields": [
+        {
+          "id": "diversity-information.CA-STANDARD-ORA_ETHNICITY-STANDARD",
+          "label": "Ethnicity",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "eeo.race"
+          }
+        },
+        {
+          "id": "diversity-information.CA-STANDARD-ORA_GENDER-STANDARD",
+          "label": "Gender",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "eeo.gender"
+          }
+        },
+        {
+          "id": "diversity-information.CA-DFF-areYouIndigenous-ATTRIBUTE4",
+          "label": "Are you Indigenous?",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true
+        },
+        {
+          "id": "diversity-information.CA-DFF-a2lgbtqia-ATTRIBUTE6",
+          "label": "Do you identify as 2SLGBTQIA+?",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true
+        },
+        {
+          "id": "diversity-information.CA-DFF-taxCode-ATTRIBUTE5",
+          "label": "Tax code",
+          "required": false,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true
+        }
+      ]
+    },
+    {
+      "id": "additonal-documents",
+      "title": "Additonal Documents",
+      "fields": [
+        {
+          "id": "additonal-documents.attachment",
+          "label": "Attachment",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "more-about-you",
+      "title": "More About You",
+      "fields": [
+        {
+          "id": "more-about-you.job-alerts-checkbox",
+          "label": "I agree to receive updates about new job opportunities.",
+          "required": false,
+          "kind": "checkbox",
+          "currentValue": false
+        },
+        {
+          "id": "more-about-you.i-agree-to-receive-marketing-communications",
+          "label": "I agree to receive marketing communications",
+          "required": false,
+          "kind": "checkbox",
+          "currentValue": false
+        }
+      ]
+    }
+  ],
+  "addButtons": [
+    {
+      "id": "add.link",
+      "label": "Add Another Link",
+      "section": "Resume and URLs"
+    },
+    {
+      "id": "add.experience",
+      "label": "Add Experience",
+      "section": "Work and Education History"
+    },
+    {
+      "id": "add.education",
+      "label": "Add Education",
+      "section": "Work and Education History"
+    },
+    {
+      "id": "add.language",
+      "label": "Add Language",
+      "section": "Languages"
+    },
+    {
+      "id": "add.license",
+      "label": "Add License",
+      "section": "Licenses and Certificates"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Submit"
+}

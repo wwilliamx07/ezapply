@@ -1,0 +1,15 @@
+{
+  "adapter": "workday",
+  "url": "https://initech.wd5.myworkdayjobs.com/en-US/InitechCareers/job/x",
+  "tenant": "initech",
+  "pageKind": "start-choice",
+  "sections": [],
+  "addButtons": [],
+  "actions": [
+    "apply",
+    "apply_manually",
+    "autofill_with_resume",
+    "use_last_application"
+  ],
+  "errors": []
+}

@@ -1,0 +1,96 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1",
+  "tenant": "jobs.acme.com/cx_1",
+  "pageKind": "step",
+  "step": {
+    "title": "Job Application Questions",
+    "index": 2,
+    "total": 3
+  },
+  "sections": [
+    {
+      "id": "application-questions",
+      "title": "Application Questions",
+      "fields": [
+        {
+          "id": "application-questions.do-you-require-any-accommodations",
+          "label": "Do you require any accommodations?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.are-you-legally-authorized-to-work-in-ca",
+          "label": "Are you legally authorized to work in Canada?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.number-of-co-op-terms-completed",
+          "label": "Number of co-op terms completed",
+          "required": true,
+          "kind": "textarea",
+          "currentValue": ""
+        },
+        {
+          "id": "application-questions.expected-graduation-date",
+          "label": "Expected graduation date",
+          "required": true,
+          "kind": "date",
+          "currentValue": null,
+          "dateParts": [
+            "MM",
+            "DD",
+            "YYYY"
+          ]
+        },
+        {
+          "id": "application-questions.which-areas-interest-you",
+          "label": "Which areas interest you?",
+          "required": false,
+          "kind": "checkbox-group",
+          "currentValue": [],
+          "options": [
+            "Firmware",
+            "DSP",
+            "Hardware",
+            "Test"
+          ],
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "work-and-education-history.experience-1",
+      "title": "Work and Education History: Acme Corp, Intern",
+      "fields": [],
+      "removable": true
+    }
+  ],
+  "addButtons": [
+    {
+      "id": "add.experience",
+      "label": "Add Experience",
+      "section": "Work and Education History"
+    },
+    {
+      "id": "add.language",
+      "label": "Add Language",
+      "section": "Languages"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Next",
+  "backLabel": "Previous"
+}

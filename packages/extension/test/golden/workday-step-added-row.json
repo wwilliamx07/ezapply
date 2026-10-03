@@ -1,0 +1,194 @@
+{
+  "adapter": "workday",
+  "url": "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply",
+  "tenant": "acme",
+  "pageKind": "step",
+  "step": {
+    "title": "My Information",
+    "index": 1,
+    "total": 3
+  },
+  "sections": [
+    {
+      "id": "my-information",
+      "title": "My Information",
+      "fields": [
+        {
+          "id": "my-information.legalName--firstName",
+          "automationId": "formField-legalName--firstName",
+          "label": "First Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.firstName"
+          }
+        },
+        {
+          "id": "my-information.countryDropdown",
+          "automationId": "formField-countryDropdown",
+          "label": "Country",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.country"
+          }
+        },
+        {
+          "id": "my-information.source",
+          "automationId": "formField-source",
+          "label": "How Did You Hear About Us?",
+          "required": true,
+          "kind": "typeahead",
+          "currentValue": [],
+          "optionsLazy": true,
+          "multiple": false,
+          "hint": {
+            "profileKey": "answers.how_heard"
+          }
+        },
+        {
+          "id": "my-information.skills",
+          "automationId": "formField-skills",
+          "label": "Skills",
+          "required": false,
+          "kind": "typeahead",
+          "currentValue": [
+            "Java",
+            "COBOL",
+            "Customer Service",
+            "Fortran"
+          ],
+          "optionsLazy": true,
+          "multiple": false
+        }
+      ]
+    },
+    {
+      "id": "application-questions",
+      "title": "Application Questions",
+      "fields": [
+        {
+          "id": "application-questions.previousWorker",
+          "automationId": "formField-previousWorker",
+          "label": "Have you previously worked for Acme?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ],
+          "hint": {
+            "profileKey": "answers.previously_employed"
+          }
+        },
+        {
+          "id": "application-questions.degreeLevel",
+          "automationId": "formField-degreeLevel",
+          "label": "Degree Level",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true
+        },
+        {
+          "id": "application-questions.agreement",
+          "automationId": "formField-agreement",
+          "label": "I agree to the privacy notice",
+          "required": false,
+          "kind": "checkbox",
+          "currentValue": false
+        },
+        {
+          "id": "application-questions.startDate",
+          "automationId": "formField-startDate",
+          "label": "Available Start Date",
+          "required": false,
+          "kind": "date",
+          "currentValue": null,
+          "dateParts": [
+            "MM",
+            "YYYY"
+          ],
+          "hint": {
+            "profileKey": "work[].start"
+          }
+        },
+        {
+          "id": "application-questions.resume",
+          "automationId": "formField-resume",
+          "label": "Resume/CV",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "application-questions.coverLetter",
+          "automationId": "formField-coverLetter",
+          "label": "Cover Letter",
+          "required": false,
+          "kind": "file",
+          "currentValue": [
+            "cover.pdf"
+          ],
+          "multiple": false
+        }
+      ]
+    },
+    {
+      "id": "work-experience-1",
+      "title": "Work Experience 1",
+      "fields": [
+        {
+          "id": "work-experience-1.jobTitle",
+          "automationId": "formField-jobTitle",
+          "label": "Job Title",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "work[].title"
+          }
+        }
+      ],
+      "removable": true
+    },
+    {
+      "id": "work-experience-2",
+      "title": "Work Experience 2",
+      "fields": [
+        {
+          "id": "work-experience-2.jobTitle",
+          "automationId": "formField-jobTitle",
+          "label": "Job Title",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "work[].title"
+          }
+        }
+      ],
+      "removable": true
+    }
+  ],
+  "addButtons": [
+    {
+      "id": "add.work-experience",
+      "label": "Add Work Experience",
+      "section": "Work Experience"
+    },
+    {
+      "id": "add.websites",
+      "label": "Add",
+      "section": "Websites"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Save and Continue"
+}

@@ -1,0 +1,15 @@
+{
+  "adapter": "workday",
+  "url": "https://initech.wd5.myworkdayjobs.com/en-US/InitechCareers/job/x",
+  "tenant": "initech",
+  "pageKind": "auth",
+  "step": {
+    "title": "Create Account/Sign In",
+    "index": 1,
+    "total": 6
+  },
+  "sections": [],
+  "addButtons": [],
+  "actions": [],
+  "errors": []
+}

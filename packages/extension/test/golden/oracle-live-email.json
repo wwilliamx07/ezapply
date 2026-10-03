@@ -1,0 +1,32 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.umbrella.example/en/sites/CX_1/job/10001/apply/email",
+  "tenant": "jobs.umbrella.example/cx_1",
+  "pageKind": "auth",
+  "sections": [
+    {
+      "id": "main",
+      "title": "Main",
+      "fields": [
+        {
+          "id": "main.primary-email",
+          "label": "Email Address",
+          "required": true,
+          "kind": "text",
+          "currentValue": ""
+        },
+        {
+          "id": "main.legal-disclaimer-checkbox",
+          "label": "I agree with the terms and conditions",
+          "required": true,
+          "kind": "checkbox",
+          "currentValue": false
+        }
+      ]
+    }
+  ],
+  "addButtons": [],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Next"
+}

@@ -1,0 +1,28 @@
+{
+  "adapter": "workday",
+  "url": "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply",
+  "tenant": "acme",
+  "pageKind": "review",
+  "step": {
+    "title": "Review",
+    "index": 3,
+    "total": 3
+  },
+  "sections": [],
+  "addButtons": [
+    {
+      "id": "add.work-experience",
+      "label": "Add Work Experience",
+      "section": "Work Experience"
+    },
+    {
+      "id": "add.websites",
+      "label": "Add",
+      "section": "Websites"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Submit",
+  "backLabel": "Back"
+}

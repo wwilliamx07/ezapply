@@ -1,0 +1,276 @@
+{
+  "adapter": "oracle",
+  "url": "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1",
+  "tenant": "jobs.acme.com/cx_1",
+  "pageKind": "step",
+  "step": {
+    "title": "Personal Info · Job Application Questions · More About You"
+  },
+  "sections": [
+    {
+      "id": "resume-and-urls",
+      "title": "Resume and URLs",
+      "fields": [
+        {
+          "id": "resume-and-urls.resume",
+          "label": "Resume",
+          "required": false,
+          "kind": "file",
+          "currentValue": [
+            "old.pdf"
+          ],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.cover-letter",
+          "label": "Cover Letter",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": false
+        },
+        {
+          "id": "resume-and-urls.siteLink-1",
+          "label": "Link 1",
+          "required": false,
+          "kind": "text",
+          "currentValue": ""
+        }
+      ]
+    },
+    {
+      "id": "contact-information",
+      "title": "Contact Information",
+      "fields": [
+        {
+          "id": "contact-information.lastName",
+          "label": "Last Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.lastName"
+          }
+        },
+        {
+          "id": "contact-information.firstName",
+          "label": "First Name",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "identity.firstName"
+          }
+        },
+        {
+          "id": "contact-information.title",
+          "label": "Title",
+          "required": false,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Miss",
+            "Mr.",
+            "Mrs.",
+            "Ms."
+          ]
+        },
+        {
+          "id": "contact-information.email",
+          "label": "Email Address",
+          "required": false,
+          "kind": "text",
+          "currentValue": "jo@example.com",
+          "helpText": "Read-only on this page.",
+          "hint": {
+            "profileKey": "contact.email"
+          }
+        },
+        {
+          "id": "contact-information.phoneCountryCode",
+          "label": "Phone Number: country code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.phone.countryCode"
+          }
+        },
+        {
+          "id": "contact-information.phoneNumber",
+          "label": "Phone Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.phone.number"
+          }
+        }
+      ]
+    },
+    {
+      "id": "address",
+      "title": "Address",
+      "fields": [
+        {
+          "id": "address.country",
+          "label": "Country",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.country"
+          }
+        },
+        {
+          "id": "address.addressLine1",
+          "label": "Street and House Number",
+          "required": true,
+          "kind": "text",
+          "currentValue": "",
+          "hint": {
+            "profileKey": "contact.address.line1"
+          }
+        },
+        {
+          "id": "address.city",
+          "label": "City",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.city"
+          }
+        },
+        {
+          "id": "address.postalCode",
+          "label": "Postal Code",
+          "required": true,
+          "kind": "dropdown",
+          "currentValue": null,
+          "optionsLazy": true,
+          "hint": {
+            "profileKey": "contact.address.postalCode"
+          }
+        }
+      ]
+    },
+    {
+      "id": "application-questions",
+      "title": "Application Questions",
+      "fields": [
+        {
+          "id": "application-questions.do-you-require-any-accommodations",
+          "label": "Do you require any accommodations?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.are-you-legally-authorized-to-work-in-ca",
+          "label": "Are you legally authorized to work in Canada?",
+          "required": true,
+          "kind": "radio",
+          "currentValue": null,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "application-questions.number-of-co-op-terms-completed",
+          "label": "Number of co-op terms completed",
+          "required": true,
+          "kind": "textarea",
+          "currentValue": ""
+        },
+        {
+          "id": "application-questions.expected-graduation-date",
+          "label": "Expected graduation date",
+          "required": true,
+          "kind": "date",
+          "currentValue": null,
+          "dateParts": [
+            "MM",
+            "DD",
+            "YYYY"
+          ]
+        },
+        {
+          "id": "application-questions.which-areas-interest-you",
+          "label": "Which areas interest you?",
+          "required": false,
+          "kind": "checkbox-group",
+          "currentValue": [],
+          "options": [
+            "Firmware",
+            "DSP",
+            "Hardware",
+            "Test"
+          ],
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "additional-documents",
+      "title": "Additional Documents",
+      "fields": [
+        {
+          "id": "additional-documents.attachment",
+          "label": "Attachment",
+          "required": false,
+          "kind": "file",
+          "currentValue": [],
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "agreements",
+      "title": "Agreements",
+      "fields": [
+        {
+          "id": "agreements.job-alerts-checkbox",
+          "label": "I agree to receive updates about new job opportunities.",
+          "required": false,
+          "kind": "checkbox",
+          "currentValue": false
+        }
+      ]
+    },
+    {
+      "id": "work-and-education-history.experience-1",
+      "title": "Work and Education History: Acme Corp, Intern",
+      "fields": [],
+      "removable": true
+    }
+  ],
+  "addButtons": [
+    {
+      "id": "add.link",
+      "label": "Add Another Link",
+      "section": "Resume and URLs"
+    },
+    {
+      "id": "add.experience",
+      "label": "Add Experience",
+      "section": "Work and Education History"
+    },
+    {
+      "id": "add.language",
+      "label": "Add Language",
+      "section": "Languages"
+    }
+  ],
+  "actions": [],
+  "errors": [],
+  "nextLabel": "Submit"
+}
