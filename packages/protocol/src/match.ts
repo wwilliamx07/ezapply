@@ -7,7 +7,8 @@
  * - the option itself;
  * - the option without its trailing parenthetical, or the parenthetical alone ("Python" → "Python (Programming
  *   Language)", "SQL" → "Structured Query Language (SQL)", "Canada" → "Canada (+1)");
- * - the option without a leading rank ("Fluent" → "5 - Fluent", seen live on Workday's language levels).
+ * - the option without a leading rank ("Fluent" → "5 - Fluent", seen live on Workday's language levels);
+ * - the option without a trailing dialling code ("Canada" → "Canada +1", seen live on Greenhouse's phone country).
  *
  * It never accepts a prefix or a substring, which the adapters' loose `matchOption` does: "Yes" picking "Yes, I
  * will require sponsorship" is fine for the model, which reads the read-back, not for a fill nobody checks field
@@ -29,6 +30,9 @@ function optionForms(option: string): string[] {
   if (paren) out.push(paren);
   const unranked = o.replace(/^\d+\s*[-–.):]\s*/, "");
   if (unranked !== o && unranked) out.push(unranked);
+  // A country with its dialling code after it ("Canada +1", seen live on Greenhouse's phone country list).
+  const undialled = o.replace(/\s+\+\d{1,4}$/, "");
+  if (undialled !== o && undialled) out.push(undialled);
   return out;
 }
 

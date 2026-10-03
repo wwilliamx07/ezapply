@@ -4,11 +4,14 @@
  * extension's `adapters/sites/`); detection, tenants, jobs, permissions, the extension's build and its manifest all
  * come from this list. No zod: the adapters import it (`@ezapply/protocol/sites`).
  */
+import { ashbyCanonicalPath, ashbyJob, ashbyTenant, isAshbyUrl } from "./ashby.js";
+import { greenhouseJob, greenhouseTenant, isGreenhouseUrl } from "./greenhouse.js";
+import { isLeverUrl, leverCanonicalPath, leverJob, leverTenant } from "./lever.js";
 import { isOracleUrl, ORACLE_OPTIONAL_HOST_PERMISSIONS, oracleJob, oracleJobPath, oracleTenant } from "./oracle.js";
 import { STANDARD_WAITS, type Timing } from "./timing.js";
 import { isWorkdayUrl, WORKDAY_HOST_PERMISSIONS, workdayCanonicalPath, workdayJob, workdayTenant } from "./workday.js";
 
-export type FormSiteId = "workday" | "oracle";
+export type FormSiteId = "workday" | "oracle" | "greenhouse" | "lever" | "ashby";
 
 /**
  * How the extension gets access to a site's pages: `fixed` hosts are in the manifest (granted at install);
@@ -53,6 +56,37 @@ export const SITES: readonly SiteInfo[] = [
     tenant: oracleTenant,
     job: oracleJob,
     canonicalPath: oracleJobPath,
+    access: { kind: "per-origin" },
+    waits: { ...STANDARD_WAITS },
+  },
+  // The hosted boards below are granted per origin too: one grant covers a host's every board, and asking at Set
+  // posting adds no warning to the extension's install.
+  {
+    id: "greenhouse",
+    name: "Greenhouse",
+    isUrl: isGreenhouseUrl,
+    tenant: greenhouseTenant,
+    job: greenhouseJob,
+    access: { kind: "per-origin" },
+    waits: { ...STANDARD_WAITS },
+  },
+  {
+    id: "lever",
+    name: "Lever",
+    isUrl: isLeverUrl,
+    tenant: leverTenant,
+    job: leverJob,
+    canonicalPath: leverCanonicalPath,
+    access: { kind: "per-origin" },
+    waits: { ...STANDARD_WAITS },
+  },
+  {
+    id: "ashby",
+    name: "Ashby",
+    isUrl: isAshbyUrl,
+    tenant: ashbyTenant,
+    job: ashbyJob,
+    canonicalPath: ashbyCanonicalPath,
     access: { kind: "per-origin" },
     waits: { ...STANDARD_WAITS },
   },

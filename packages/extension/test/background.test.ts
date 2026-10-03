@@ -80,9 +80,19 @@ describe("Set posting", () => {
     expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["https://jobs.umbrella.example/*"] });
   });
 
-  it("asks nothing on other pages", async () => {
-    await click("https://boards.greenhouse.io/acme/jobs/1");
-    expect(chromeStub.permissions.request).not.toHaveBeenCalled();
+  it("asks for any site granted per origin the same way: a Greenhouse board", async () => {
+    await click("https://job-boards.greenhouse.io/acme/jobs/1");
+    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["https://job-boards.greenhouse.io/*"] });
+  });
+
+  it("asks nothing on Workday (its hosts come with the install) or on pages of no form site", async () => {
+    for (const url of [
+      "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x",
+      "https://www.example.com/careers/1",
+    ]) {
+      await click(url);
+      expect(chromeStub.permissions.request).not.toHaveBeenCalled();
+    }
   });
 });
 

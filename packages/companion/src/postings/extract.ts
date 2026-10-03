@@ -1,4 +1,4 @@
-import { detectSite, oracleTenant, type SiteId, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
+import { detectSite, type SiteId, siteTenant, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
@@ -61,8 +61,9 @@ export function extractPosting(input: {
   const company = ld.company ?? fromTitle.company ?? companyFromUrl(input.url);
   const location = ld.location ?? workday.location;
   const reqId = ld.reqId ?? workday.reqId;
-  // Oracle career sites: host and site number, so the application tab can be matched to this posting.
-  const tenant = workday.tenant ?? (site === "oracle" ? oracleTenant(contentUrl) : undefined);
+  // The employer's space on its site (an Oracle career site's host and site number, a Greenhouse board), so the
+  // application tab can be matched to this posting.
+  const tenant = workday.tenant ?? siteTenant(contentUrl);
 
   const header = [
     `# ${role ?? input.pageTitle}`,

@@ -238,6 +238,10 @@ function fromProfile(field: Field, key: string, ctx: Ctx): Decision {
   } else if (key === "contact.phone.type") {
     const t = profile.contact.phone?.type;
     value = t ? t[0]?.toUpperCase() + t.slice(1) : undefined;
+  } else if (key === "identity.fullName") {
+    // One field for the whole name (Lever's "Full name", Ashby's "Legal Name"): first, middle, last.
+    const { firstName, middleName, lastName } = profile.identity;
+    value = [firstName, middleName, lastName].filter((p) => p?.trim()).join(" ");
   } else {
     const v = at(profile, key);
     value = typeof v === "string" && v.trim() ? v : undefined;
