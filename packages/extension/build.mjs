@@ -40,7 +40,7 @@ const VERSION_PLACEHOLDER = "@ADAPTER_VER"; // 12 characters, like the hash
 for (const { id: site } of SITES) {
   const adapter = await build({
     ...common,
-    entryPoints: [join(root, `src/adapters/${site}/main.ts`)],
+    entryPoints: [join(root, `src/adapters/sites/${site}/main.ts`)],
     outfile: join(dist, `${site}-main.js`),
     format: "iife",
     define: { __ADAPTER_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },

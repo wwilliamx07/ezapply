@@ -13,8 +13,8 @@ import {
   text,
   waitFor,
   win,
-} from "../common/dom.js";
-import { T } from "../common/timing.js";
+} from "../../engine/dom.js";
+import { T } from "../../engine/timing.js";
 import {
   attachedFiles,
   comboInput,
@@ -28,7 +28,7 @@ import {
   pillLabel,
   pillPressed,
   radioLabel,
-} from "./extract.js";
+} from "./page.js";
 import { SEL, TEXT } from "./selectors.js";
 
 type Result = Omit<FillResult, "fieldId">;

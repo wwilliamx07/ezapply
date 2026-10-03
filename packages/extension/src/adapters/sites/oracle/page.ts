@@ -1,12 +1,18 @@
 import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
-import { oracleTenant } from "@ezapply/protocol/oracle";
-import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../common/dom.js";
+import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../../engine/dom.js";
+import type { AddButtonSpot, FieldSpot, RowSpot, SectionSpot, WidgetDriver } from "../../engine/types.js";
 import { hintFor, SEL, TEXT } from "./selectors.js";
 
-export type PageSchema = Omit<FormSchema, "tabId">;
+/**
+ * Where things are on an Oracle Recruiting Cloud page: its fields and their prompts (form rows, the phone's two
+ * halves, agreements, attachments), blocks, saved items, add and Save buttons, the page kind, the step, errors,
+ * and the buttons. The engine (`adapters/engine/`) reads the page through these; `widgets.ts` says how each kind
+ * of field reads and fills.
+ */
 
+/** A field as the fillers need it: its kind and its container. */
 export interface FieldRef {
-  field: Field;
+  field: Pick<Field, "kind">;
   container: HTMLElement;
 }
 
@@ -17,21 +23,12 @@ export interface ItemRef {
   kind: "tile" | "timeline";
 }
 
-export interface Extraction {
-  schema: PageSchema;
-  fields: Map<string, FieldRef>;
-  /** Add buttons and the Save buttons of open inline forms, by id. */
-  addButtons: Map<string, HTMLElement>;
-  /** Saved items that can be deleted, by section id. */
-  rows: Map<string, ItemRef>;
-}
-
 // ---- page level ---------------------------------------------------------------------------------
 
 const visibleButtons = (scope: ParentNode) =>
   [...scope.querySelectorAll<HTMLElement>("button, [role='button'], a, input[type='submit']")].filter(isVisible);
 
-const labelOf = (b: Element) =>
+export const labelOf = (b: Element) =>
   norm(`${text(b) || b.getAttribute("aria-label") || b.getAttribute("title") || (b as HTMLInputElement).value || ""}`);
 
 const enabled = (b: HTMLElement) => !(b as HTMLButtonElement).disabled && b.getAttribute("aria-disabled") !== "true";
@@ -368,107 +365,78 @@ export function fieldError(row: HTMLElement): string | undefined {
   return undefined;
 }
 
-export function extract(doc: Document, url: string): Extraction {
-  const fields = new Map<string, FieldRef>();
-  const sections = new Map<
-    string,
-    { id: string; title: string; fields: Field[]; removable?: boolean; saved?: boolean }
-  >();
-  const repeats = new Map<string, number>();
-
+/** Every field on the page, in page order, each with the driver for its kind. */
+export function oracleFields(doc: Document, widgets: Partial<Record<FieldKind, WidgetDriver>>): FieldSpot[] {
+  const out: FieldSpot[] = [];
   for (const c of candidates(doc)) {
-    const sectionTitle = blockTitle(c.container);
-    const sectionId = slug(sectionTitle);
+    const driver = widgets[c.kind];
+    if (!driver) continue;
     // Screening questions are keyed by long numbers; their label reads better and is as stable.
-    const base = !c.key || /^\d/.test(c.key) ? slug(c.label).slice(0, 40) : c.key;
-    let id = `${sectionId}.${base}`;
-    const seen = repeats.get(id) ?? 0;
-    repeats.set(id, seen + 1);
-    if (seen > 0) id = `${id}#${seen + 1}`;
-
-    const field: Field = {
-      id,
-      label: c.label || base,
-      required: c.required,
-      kind: c.kind,
-      currentValue: currentValue(c.container, c.kind),
-    };
+    const key = !c.key || /^\d/.test(c.key) ? slug(c.label).slice(0, 40) : c.key;
     const help = helpText(c.row, c.label);
     const readOnly = c.kind === "text" && c.container.querySelector("input[readonly]");
-    if (readOnly) field.helpText = [help, "Read-only on this page."].filter(Boolean).join(" ");
-    else if (help) field.helpText = help;
-    const options = knownOptions(c.container, c.kind);
-    if (options) field.options = options;
-    if (c.kind === "dropdown") field.optionsLazy = true;
-    if (c.kind === "date") field.dateParts = dateParts(c.container);
-    if (c.kind === "file") field.multiple = Boolean(c.container.closest(SEL.miscBlock));
-    if (c.kind === "checkbox-group") field.multiple = true;
+    const helpShown = readOnly ? [help, "Read-only on this page."].filter(Boolean).join(" ") : help;
     const error = fieldError(c.row);
-    if (error) field.error = error;
     const hint = hintFor(c.key);
-    if (hint) field.hint = { profileKey: hint };
-
-    fields.set(id, { field, container: c.container });
-    const section = sections.get(sectionId) ?? { id: sectionId, title: sectionTitle, fields: [] };
-    section.fields.push(field);
-    sections.set(sectionId, section);
+    out.push({
+      container: c.container,
+      driver,
+      key,
+      label: c.label || key,
+      section: blockTitle(c.container),
+      required: c.required,
+      ...(helpShown ? { help: helpShown } : {}),
+      ...(error ? { error } : {}),
+      ...(hint ? { hint } : {}),
+    });
   }
+  return out;
+}
 
-  // Saved items (a language, a license, a work or education entry) are summaries, not fields: each is a
-  // section of its own, removable when it has a delete control.
-  const rows = new Map<string, ItemRef>();
+/** How many form rows are on screen: an add button that opens a form or a link row adds some. */
+export function visibleRowCount(doc: Document): number {
+  return [...doc.querySelectorAll(SEL.row)].filter(isVisible).length;
+}
+
+/**
+ * Saved items (a language, a license, a work or education entry) are summaries, not fields: each is a section of
+ * its own, removable when it has a delete control (`languages.item-1`, `work-and-education-history.experience-1`).
+ */
+export function oracleRows(doc: Document, sections: ReadonlyMap<string, SectionSpot>): RowSpot[] {
+  const out: RowSpot[] = [];
+  const taken = new Set(sections.keys());
   for (const item of savedItems(doc)) {
     const blockId = slug(blockTitle(item.el));
     let id = `${blockId}.${item.kind === "timeline" ? timelineColumn(item.el) : "item"}-1`;
-    for (let n = 2; rows.has(id) || sections.has(id); n++) id = id.replace(/-\d+$/, `-${n}`);
-    rows.set(id, item);
-    sections.set(id, { id, title: `${blockTitle(item.el)}: ${item.title}`, fields: [], removable: true, saved: true });
+    for (let n = 2; taken.has(id); n++) id = id.replace(/-\d+$/, `-${n}`);
+    taken.add(id);
+    out.push({
+      sectionId: id,
+      title: item.title,
+      sectionTitle: `${blockTitle(item.el)}: ${item.title}`,
+      el: item.el,
+      saved: true,
+    });
   }
+  return out;
+}
 
-  const addButtons = new Map<string, HTMLElement>();
-  const addInfo: FormSchema["addButtons"] = [];
+/** The add buttons, and the Save button of an open inline form, offered like an add button named after its block. */
+export function oracleAddButtons(doc: Document): AddButtonSpot[] {
+  const out: AddButtonSpot[] = [];
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.addButton)) {
     if (!isVisible(b) || !enabled(b) || b.classList.contains(SEL.addButtonHidden)) continue;
     const label = labelOf(b) || "Add";
     const key = slug(label.replace(/^add\s+(another\s+)?/i, "")) || slug(blockTitle(b));
-    let id = `add.${key}`;
-    for (let n = 2; addButtons.has(id); n++) id = `add.${key}#${n}`;
-    addButtons.set(id, b);
     // Add Another Link adds a link row at once; the others open an inline form.
-    addInfo.push({ id, label, section: blockTitle(b), kind: b.matches(SEL.addRow) ? "row" : "form" });
+    out.push({ el: b, key: `add.${key}`, label, section: blockTitle(b), kind: b.matches(SEL.addRow) ? "row" : "form" });
   }
-  // An open inline form is added by its Save button: offered like an add button, named after its block.
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.inlineSave)) {
     if (!isVisible(b)) continue;
     const section = blockTitle(b);
-    let id = `save.${slug(section)}`;
-    for (let n = 2; addButtons.has(id); n++) id = `save.${slug(section)}#${n}`;
-    addButtons.set(id, b);
-    addInfo.push({ id, label: labelOf(b) || "Save", section, kind: "save" });
+    out.push({ el: b, key: `save.${slug(section)}`, label: labelOf(b) || "Save", section, kind: "save" });
   }
-
-  const next = nextButton(doc);
-  const back = backButton(doc);
-  const step = stepInfo(doc);
-  const messages = pageMessages(doc);
-  const tenant = oracleTenant(url);
-  const pageKind = detectPage(doc, url, fields.size);
-  const schema: PageSchema = {
-    adapter: "oracle",
-    url,
-    ...(tenant ? { tenant } : {}),
-    pageKind,
-    ...(step ? { step } : {}),
-    sections: [...sections.values()],
-    addButtons: addInfo,
-    actions: pageActions(doc),
-    errors: pageErrors(doc),
-    ...(messages.length ? { messages } : {}),
-    ...(next ? { nextLabel: labelOf(next) } : {}),
-    ...(pageKind === "step" && next && isSubmitControl(next) ? { lastPage: true } : {}),
-    ...(back ? { backLabel: labelOf(back) } : {}),
-  };
-  return { schema, fields, addButtons, rows };
+  return out;
 }
 
 function timelineColumn(el: HTMLElement): string {
@@ -542,7 +510,7 @@ export function datePartInputs(c: HTMLElement): { part: "MM" | "DD" | "YYYY"; in
   return out;
 }
 
-function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
+export function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
   return datePartInputs(c).map((p) => p.part);
 }
 
@@ -588,7 +556,7 @@ export function dateValue(c: HTMLElement): string | null {
     .join("-");
 }
 
-function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
+export function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
   switch (kind) {
     case "text":
     case "number":
@@ -629,7 +597,7 @@ function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
   }
 }
 
-function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
+export function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
   if (kind !== "radio" && kind !== "checkbox-group") return undefined;
   const pills = pillButtons(c);
   if (pills.length) return pills.map(pillLabel);

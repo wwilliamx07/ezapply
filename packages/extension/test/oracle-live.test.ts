@@ -2,7 +2,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { extract } from "../src/adapters/oracle/extract.js";
+import { oracle } from "../src/adapters/sites/oracle/site.js";
+import { extractPage } from "./adapters.js";
+
+const extract = (doc: Document, url: string) => extractPage(oracle, doc, url);
 
 const load = (name: string, url: string) => {
   const html = readFileSync(join(import.meta.dirname, "fixtures", "live", `${name}.html`), "utf8");

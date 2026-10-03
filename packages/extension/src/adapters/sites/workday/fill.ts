@@ -16,8 +16,8 @@ import {
   typeChar,
   waitFor,
   win,
-} from "../common/dom.js";
-import { T } from "../common/timing.js";
+} from "../../engine/dom.js";
+import { T } from "../../engine/timing.js";
 import {
   attachedFiles,
   datePartInput,
@@ -28,7 +28,7 @@ import {
   fieldKind,
   isSubmitControl,
   optionLabel,
-} from "./extract.js";
+} from "./page.js";
 import { SEL, within } from "./selectors.js";
 
 type Result = Omit<FillResult, "fieldId">;

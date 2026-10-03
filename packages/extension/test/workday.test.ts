@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { matchOption, press } from "../src/adapters/common/dom.js";
-import { createWorkdayApi, installSubmitGuard } from "../src/adapters/workday/api.js";
+import { matchOption, press } from "../src/adapters/engine/dom.js";
+import { installSubmitGuard as installGuard } from "../src/adapters/engine/guard.js";
+import { workday } from "../src/adapters/sites/workday/site.js";
+import { createWorkdayApi } from "./adapters.js";
+
+const installSubmitGuard = (doc: Document) => installGuard(doc, workday.page.isSubmit);
+
 import { buildWorkdayStep, installDomShims } from "./workday-fixture.js";
 
 installDomShims(document.defaultView as Window);
@@ -480,7 +485,7 @@ describe("timing", () => {
   afterEach(() => api.setTiming(null));
 
   it("uses the waits the companion sends, and the defaults again without them", async () => {
-    const { T } = await import("../src/adapters/common/timing.js");
+    const { T } = await import("../src/adapters/engine/timing.js");
     const { STANDARD_WAITS } = await import("@ezapply/protocol");
     // A search that finds nothing waits typeaheadNoResultsMs for "No Items." to stay (2 s by default).
     api.setTiming({ ...STANDARD_WAITS, typeaheadNoResultsMs: 100 });
@@ -496,7 +501,7 @@ describe("timing", () => {
   }, 20_000);
 
   it("ignores unknown keys and bad values", async () => {
-    const { T } = await import("../src/adapters/common/timing.js");
+    const { T } = await import("../src/adapters/engine/timing.js");
     const { STANDARD_WAITS } = await import("@ezapply/protocol");
     api.setTiming({ dropdownOpenMs: 700, bogus: 1, stepMs: -5 } as never);
     expect(T).toEqual({ ...STANDARD_WAITS, dropdownOpenMs: 700 });

@@ -18,8 +18,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createOracleApi } from "../../extension/src/adapters/oracle/api.js";
-import { createWorkdayApi } from "../../extension/src/adapters/workday/api.js";
+import { createOracleApi, createWorkdayApi } from "../../extension/test/adapters.js";
 import { buildOracleApplication } from "../../extension/test/oracle-fixture.js";
 import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
 import type { AppConfig } from "../src/config/app.js";

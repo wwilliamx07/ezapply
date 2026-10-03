@@ -2,8 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createOracleApi } from "../src/adapters/oracle/api.js";
-import { createWorkdayApi } from "../src/adapters/workday/api.js";
+import { createOracleApi, createWorkdayApi } from "./adapters.js";
 import { buildOracleApplication } from "./oracle-fixture.js";
 import { buildWorkdayStep, installDomShims } from "./workday-fixture.js";
 

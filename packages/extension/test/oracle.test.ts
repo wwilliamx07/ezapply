@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { createOracleApi } from "../src/adapters/oracle/api.js";
+import { createOracleApi } from "./adapters.js";
 import { buildOracleApplication } from "./oracle-fixture.js";
 import { installDomShims } from "./workday-fixture.js";
 

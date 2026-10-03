@@ -1,28 +1,18 @@
 import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
-import { workdayTenant } from "@ezapply/protocol/workday";
-import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../common/dom.js";
+import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../../engine/dom.js";
+import type { AddButtonSpot, FieldSpot, RowSpot, SectionSpot, WidgetDriver } from "../../engine/types.js";
 import { hintKey, PROFILE_HINTS, SEL } from "./selectors.js";
 
-export type PageSchema = Omit<FormSchema, "tabId">;
+/**
+ * Where things are on a Workday page: its fields and their prompts, sections, rows, add buttons, the page kind,
+ * the step, errors, and the buttons. The engine (`adapters/engine/`) reads the page through these; `widgets.ts`
+ * says how each kind of field reads and fills.
+ */
 
+/** A field as the fillers need it: its kind and its container. */
 export interface FieldRef {
-  field: Field;
+  field: Pick<Field, "kind">;
   container: HTMLElement;
-}
-
-/** A repeatable row (one work-history entry) and the button that deletes it. */
-export interface RowRef {
-  title: string;
-  row: HTMLElement;
-  button: HTMLElement;
-}
-
-export interface Extraction {
-  schema: PageSchema;
-  fields: Map<string, FieldRef>;
-  addButtons: Map<string, HTMLElement>;
-  /** Removable rows by section id. */
-  rows: Map<string, RowRef>;
 }
 
 const SUBMIT_TEXT = /^\s*submit(\s+application)?\s*$/i;
@@ -152,111 +142,74 @@ export function detectPage(doc: Document, fieldCount: number): PageKind {
 
 // ---- fields -------------------------------------------------------------------------------------
 
-export function extract(doc: Document, url: string): Extraction {
-  const fields = new Map<string, FieldRef>();
-  const sections = new Map<string, { id: string; title: string; fields: Field[]; removable?: boolean }>();
-  const firstContainer = new Map<string, HTMLElement>();
-  const containers = [...doc.querySelectorAll<HTMLElement>(SEL.fieldContainer)].filter(
-    // Skip containers nested in another container (composite widgets).
+/** Field containers: each `formField-*` on screen, not one nested in another (composite widgets). */
+const containers = (doc: Document) =>
+  [...doc.querySelectorAll<HTMLElement>(SEL.fieldContainer)].filter(
     (c) => isVisible(c) && !c.parentElement?.closest(SEL.fieldContainer),
   );
-  const repeats = new Map<string, number>();
 
-  for (const container of containers) {
-    const kind = fieldKind(container);
-    if (!kind) continue;
+/** Every field on the page: its container, kind (the first of `widgets` that recognises it) and prompt. */
+export function workdayFields(doc: Document, widgets: readonly WidgetDriver[]): FieldSpot[] {
+  const out: FieldSpot[] = [];
+  for (const container of containers(doc)) {
+    const driver = widgets.find((w) => w.is(container));
+    if (!driver) continue;
     const automationId = container.getAttribute("data-automation-id") ?? undefined;
-    const label = fieldLabel(container, kind);
-    const sectionTitle = sectionTitleOf(container);
-    const sectionId = slug(sectionTitle);
-    // A bare "formField-" (seen live on the Resume/CV field) gives no key: use the label.
-    const baseKey = automationId?.replace(/^formField-/, "") || slug(label);
-    let id = `${sectionId}.${baseKey}`;
-    const seen = repeats.get(id) ?? 0;
-    repeats.set(id, seen + 1);
-    if (seen > 0) id = `${id}#${seen + 1}`;
-
-    const field: Field = {
-      id,
-      ...(automationId ? { automationId } : {}),
-      label,
-      required: isRequired(container),
-      kind,
-      currentValue: currentValue(container, kind),
-    };
+    const label = fieldLabel(container, driver.kind);
     const help = text(container.querySelector(SEL.helpText));
-    if (help && help !== label) field.helpText = help.slice(0, 500);
-    const options = knownOptions(container, kind);
-    if (options) field.options = options;
-    if (kind === "dropdown" || kind === "typeahead") field.optionsLazy = true;
-    if (kind === "date") field.dateParts = dateParts(container);
-    if (kind === "typeahead" || kind === "file") field.multiple = isMultiple(container, kind);
     const error = fieldError(container);
-    if (error) field.error = error;
-    if (automationId) {
-      const hint = PROFILE_HINTS[hintKey(automationId)];
-      if (hint) field.hint = { profileKey: hint };
-    }
-
-    fields.set(id, { field, container });
-    const section = sections.get(sectionId) ?? { id: sectionId, title: sectionTitle, fields: [] };
-    section.fields.push(field);
-    sections.set(sectionId, section);
-    if (!firstContainer.has(sectionId)) firstContainer.set(sectionId, container);
+    const hint = automationId ? PROFILE_HINTS[hintKey(automationId)] : undefined;
+    out.push({
+      container,
+      driver,
+      // A bare "formField-" (seen live on the Resume/CV field) gives no key: use the label.
+      key: automationId?.replace(/^formField-/, "") || slug(label),
+      label,
+      section: sectionTitleOf(container),
+      required: isRequired(container),
+      ...(automationId ? { automationId } : {}),
+      ...(help && help !== label ? { help: help.slice(0, 500) } : {}),
+      ...(error ? { error } : {}),
+      ...(hint ? { hint } : {}),
+    });
   }
+  return out;
+}
 
-  const rows = new Map<string, RowRef>();
-  for (const [sectionId, container] of firstContainer) {
-    const section = sections.get(sectionId);
-    const found = section && rowOf(container, sectionId, section.title);
-    if (!found || !section) continue;
-    rows.set(sectionId, found);
-    section.removable = true;
+/** How many field containers the page has, shown or not: an added row adds some, a removed one takes some away. */
+export function fieldContainerCount(doc: Document): number {
+  return doc.querySelectorAll(SEL.fieldContainer).length;
+}
+
+/** Each section whose first field sits in a row with its own Delete button. */
+export function workdayRows(_doc: Document, sections: ReadonlyMap<string, SectionSpot>): RowSpot[] {
+  const out: RowSpot[] = [];
+  for (const [sectionId, { title, first }] of sections) {
+    const found = rowOf(first, sectionId, title);
+    if (found) out.push({ sectionId, title: found.title, el: found.row, button: found.button });
   }
+  return out;
+}
 
-  // Live Workday labels every add button "Add" (or "Add Another" once a row exists), so each is named by the
-  // section heading above it: add.work-experience, add.websites.
-  const addButtons = new Map<string, HTMLElement>();
-  const addSections = new Map<HTMLElement, string>();
+/**
+ * Live Workday labels every add button "Add" (or "Add Another" once a row exists), so each is named by the
+ * section heading above it: add.work-experience, add.websites.
+ */
+export function workdayAddButtons(doc: Document): AddButtonSpot[] {
+  const out: AddButtonSpot[] = [];
   for (const b of doc.querySelectorAll<HTMLElement>(SEL.addButton)) {
     if (!isVisible(b)) continue;
     const label = norm(b.getAttribute("aria-label")) || text(b) || "Add";
     const section = addButtonSection(b);
-    const key = slug(section ?? label);
-    let id = `add.${key}`;
-    for (let n = 2; addButtons.has(id); n++) id = `add.${key}#${n}`;
-    addButtons.set(id, b);
-    if (section) addSections.set(b, section);
+    out.push({
+      el: b,
+      key: `add.${slug(section ?? label)}`,
+      label: norm(b.getAttribute("aria-label")) || text(b),
+      ...(section ? { section } : {}),
+      kind: "row",
+    });
   }
-
-  const next = nextButton(doc);
-  const back = backButton(doc);
-  const step = stepInfo(doc);
-  const messages = pageMessages(doc);
-  const tenant = workdayTenant(url);
-  const schema: PageSchema = {
-    adapter: "workday",
-    url,
-    ...(tenant ? { tenant } : {}),
-    pageKind: detectPage(doc, fields.size),
-    ...(step ? { step } : {}),
-    sections: [...sections.values()],
-    addButtons: [...addButtons.entries()].map(([id, el]) => {
-      const section = addSections.get(el);
-      return {
-        id,
-        label: norm(el.getAttribute("aria-label")) || text(el),
-        ...(section ? { section } : {}),
-        kind: "row" as const,
-      };
-    }),
-    actions: pageActions(doc),
-    errors: pageErrors(doc),
-    ...(messages.length ? { messages } : {}),
-    ...(next ? { nextLabel: text(next) } : {}),
-    ...(back ? { backLabel: text(back) } : {}),
-  };
-  return { schema, fields, addButtons, rows };
+  return out;
 }
 
 const HEADING = "h1,h2,h3,h4,h5,legend,[role='heading']";
@@ -285,7 +238,11 @@ function addButtonSection(b: HTMLElement): string | undefined {
  * section. Rows and their delete buttons are best knowledge of Workday's markup, unverified on a live
  * tenant (they sit behind sign-in).
  */
-function rowOf(container: HTMLElement, sectionId: string, title: string): RowRef | undefined {
+function rowOf(
+  container: HTMLElement,
+  sectionId: string,
+  title: string,
+): { title: string; row: HTMLElement; button: HTMLElement } | undefined {
   const doc = container.ownerDocument;
   for (let el = container.parentElement; el && el !== doc.body; el = el.parentElement) {
     const inside = [...el.querySelectorAll<HTMLElement>(SEL.fieldContainer)];
@@ -362,7 +319,7 @@ function sectionTitleOf(c: HTMLElement): string {
   return "Main";
 }
 
-function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
+export function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
   switch (kind) {
     case "text":
     case "number":
@@ -421,7 +378,7 @@ export function optionLabel(input: HTMLInputElement): string {
   return cleanLabel(text(byFor ?? wrap) || input.getAttribute("aria-label") || input.value);
 }
 
-function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
+export function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
   if (kind === "radio") return [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(optionLabel);
   if (kind === "checkbox-group")
     return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(optionLabel);
@@ -463,7 +420,7 @@ export function dateValue(c: HTMLElement): string | null {
     .join("-");
 }
 
-function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
+export function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
   const has = (l: string) => Boolean(c.querySelector(`input[aria-label="${l}" i]`));
   return [
     ...(has("Month") ? (["MM"] as const) : []),
@@ -472,7 +429,7 @@ function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
   ];
 }
 
-function isMultiple(c: HTMLElement, kind: FieldKind): boolean {
+export function isMultiple(c: HTMLElement, kind: FieldKind): boolean {
   if (kind === "file") return Boolean((c.querySelector('input[type="file"]') as HTMLInputElement | null)?.multiple);
   const ms = c.querySelector(SEL.multiSelect);
   return (
