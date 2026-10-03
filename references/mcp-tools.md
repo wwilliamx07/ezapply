@@ -119,10 +119,13 @@ the same way; where Oracle differs, the tool descriptions say so.
   kept by the companion instead of the model's memory. Live runs missed parts of it: the cover letter twice
   (now `notAttached`), and sections that start empty are easy to miss.
   - `stepWarnings` runs on each step page (`get_form`, `autofill_step`, and `go_next` as the step is
-    left). It flags an add-button section whose rows differ from the profile's list. Sections are matched by
-    title: work, education, languages, certifications, and links besides LinkedIn. Rows are Workday's
-    `<section>-N` sections or Oracle's saved items `<section>.<kind>-N`; Oracle's `save.*` buttons are
-    skipped. It also flags a file field holding a file no upload of this application made.
+    left). It flags an add button's list whose rows differ from the profile's. The list comes from the
+    button's label, else its section (`forms/lists.ts`; by label first because Oracle's Add Experience and Add
+    Education share one section): work, education, languages, certifications, and links. Links count LinkedIn
+    only when the page has no LinkedIn field of its own. Rows are Workday's `<list>-N` sections, Oracle's saved
+    items (`….experience-N` is work, `….education-N` education, `<block>.item-N` the block's list) and link
+    fields ("Link 1"); Oracle's `save.*` buttons are skipped. It also flags a file field holding a file no upload
+    of this application made.
   - Warnings are things to check, never errors: a row count can be right on purpose.
   - `handoff` is built from `form-log.jsonl`:
     - `steps`: the warnings from the last `step-check` of each step that still had any;
@@ -154,7 +157,7 @@ the same way; where Oracle differs, the tool descriptions say so.
 
 | Tool | Input | Does |
 |---|---|---|
-| `autofill_step` | `tabId?` | Starts every step instead of `get_form`. Fills, without the model, what `profile.yaml` and `answers.yaml` settle, then returns `get_form`'s view with only the fields left (each with `reason`), plus `filled` (`{ fieldId, label, value, rule, was? }`), `failed` (with `error`, `availableOptions` or `inexact`) and `kept`. Fills nothing (`note` says why) off a `step` page, on another posting's tab, with `forms.autofill: "off"`, or without a valid profile ([autofill](components/autofill.md)) |
+| `autofill_step` | `tabId?` | Starts every step instead of `get_form`. Fills, without the model, what `profile.yaml` and `answers.yaml` settle: hinted profile fields, work, education, language and website rows (adding the rows the profile needs), link fields, Oracle's work, education and language entries (each added through its inline form and saved), and questions worded as an answer-bank entry, with a plain answer or one computed from the profile. Fills go `strict`. Returns `get_form`'s view with only the fields left (each with `reason`; a dropdown left as `no-strict-match` with the `options` listed), plus `filled` (`{ fieldId, label, value, rule, was? }`), `failed` (with `error`, `availableOptions` or `inexact`; also an add or Save the page refused), `added` (rows and items added) and `kept`. Logs `add-row` and `add-item` events besides the fills. Fills nothing (`note` says why) off a `step` page, on another posting's tab, with `forms.autofill: "off"`, or without a valid profile ([autofill](components/autofill.md)) |
 | `get_form` | `onlyEmpty?`, `section?`, `tabId?` | The page's `FormSchema`, lean: `required` only when true, `multiple` only when true, `options` only when non-empty, no `automationId` or `optionsLazy` (dropdowns and typeaheads always list options on demand). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose id or title contains it. Add buttons carry their `section` (ids like `add.work-experience`); notices such as upload confirmations are in `messages`, not `errors`. Adds `posting` (the id it's credited to) or `postingMismatch`, and `timingIssues` when `autofill-timing.yaml` has mistakes ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). Seeing `review` sets status `filled`, and adds `notAttached` when approved documents never went in (see `upload_file`); `confirmation` sets `submitted`. On a step of a posting this tab is credited to, `checklist`: warnings about the step (see **The hand-off checklist** below). On the review page, or an Oracle page whose only way on is Submit, `handoff`. `debug: true` while autofill debug mode records every form call ([format](data-formats.md#debugdate-postingid-companionsrcformsdebugts)), so it isn't left on unnoticed |
 | `list_options` | `fieldIds?` (or `fieldId?`), `tabId?` | Options of dropdowns or a typeahead's top level (`hasChildren` = nested menu). `fieldIds` → `{ <fieldId>: options \| { error } }`, one call for a whole step (the adapter opens them one after another); `fieldId` alone → that field's options. The description says a miss in `fill_fields` returns the options anyway, so listing first is only for questions whose wording decides the answer |
 | `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead (on Oracle, a dropdown: its lists search as you type) and return matches, each label once, once the results for this query are in |

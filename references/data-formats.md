@@ -96,8 +96,9 @@ folder holds:
     `fillTimeoutMs`, `shown` (what `tab.show` did), and `queuedMs` (time behind earlier calls on the tab);
   - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
     answer before the companion slims it), or its error;
-  - `notes`: for `autofill_step`, `autofill` (per pass: the planned fills, kept fields and the reason
-    for each field left) and `readBack` (each fill's strict check);
+  - `notes`: for `autofill_step`, `autofill` (per stage, `stage` being `pass 1`, `pass 2` or an Oracle item
+    like `item:languages[0]`: the planned fills, kept fields, the reason for each field left, and the dropdown
+    options listed so far) and `readBack` (each fill's strict check);
   - `result`: what the agent got, or `error`.
 
 A call that fails or times out is still recorded. Records are written after the call returns, off its path.
@@ -144,8 +145,13 @@ One JSON object per line, each with `ts`. Written only for form activity on this
 its tenant (Workday tenant or Oracle career site) and, when both URLs name one, its job (requisition); or when
 either has no tenant:
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
-  `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`)
-  mark a fill by `autofill_step`, with `was` when it overwrote a value; one that took a loose match is `ok: false` with `error: "inexact: …"`
+  `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`,
+  `computed:sponsorship_now`, `row:work[1].title`, `item:languages[0].level`, `link:links[1].url`) mark a fill by
+  `autofill_step`, with `was` when it overwrote a value; one that took a loose match is `ok: false` with
+  `error: "inexact: …"`
+- `{ event: "add-row", addButtonId, auto: true, ok, error? }`: a row `autofill_step` added for the profile's list
+- `{ event: "add-item", list, item, auto: true, ok, error? }`: an Oracle item (`item` names the entry: a company,
+  school or language) `autofill_step` added through its inline form; `ok` once its Save took
 - `{ event: "step-check", step?, stepIndex?, warnings[] }`: written by `go_next` before it moves, with what
   still looked off on the step (`checklist`); the review page's `handoff.steps` reads the last per step
 - `{ event: "upload", fieldId, file, ok, error? }`

@@ -1,5 +1,6 @@
 import type { FormSchema } from "@ezapply/protocol";
 import type { Profile } from "../profile/schema.js";
+import { hasLinkedInField, LISTS, listOfButton, listSlots, profileCount } from "./lists.js";
 
 /**
  * The hand-off checklist, kept by the companion instead of the model's memory. The ezapply-apply skill asks for a
@@ -13,15 +14,6 @@ import type { Profile } from "../profile/schema.js";
  * be right on purpose (the user left out an old job).
  */
 
-/** The profile lists that add-button sections are filled from, matched by section title. */
-const LISTS: { key: "work" | "education" | "languages" | "certifications" | "links"; title: RegExp; name: string }[] = [
-  { key: "work", title: /work|employment|experience/i, name: "work entries" },
-  { key: "education", title: /education/i, name: "education entries" },
-  { key: "languages", title: /language/i, name: "languages" },
-  { key: "certifications", title: /certif|licen/i, name: "certifications" },
-  { key: "links", title: /website|link|social|url/i, name: "links besides LinkedIn" },
-];
-
 /**
  * What looks off on this step: a repeatable section whose row count differs from the profile's list, and file
  * fields holding files this application didn't upload. `uploaded` holds the file names uploaded to this
@@ -31,22 +23,23 @@ export function stepWarnings(form: FormSchema, profile: Profile | null, uploaded
   const out: string[] = [];
   if (profile) {
     const seen = new Set<string>();
+    const slots = listSlots(form);
     for (const b of form.addButtons) {
-      // Oracle offers an open inline form's Save as a button too; it isn't another list.
-      if (b.id.startsWith("save.")) continue;
+      // By the button's label first: Oracle's Add Experience and Add Education share one section.
+      const list = listOfButton(b);
+      if (!list || seen.has(list)) continue;
+      seen.add(list);
       const title = b.section ?? b.label;
-      const list = LISTS.find((l) => l.title.test(title));
-      if (!list || seen.has(title)) continue;
-      seen.add(title);
-      const want = profileCount(profile, list.key);
-      // Workday's rows are sections like `work-experience-2`; Oracle's saved items like `work-experience.item-2`.
-      const row = new RegExp(`^${escapeRegExp(slugify(title))}(-\\d+|\\.[\\w-]+-\\d+)$`);
-      const rows = form.sections.filter((s) => row.test(s.id)).length;
+      const withLinkedIn = list === "links" && !hasLinkedInField(form);
+      const name = withLinkedIn ? "links" : (LISTS.find((l) => l.key === list)?.name ?? list);
+      const want = profileCount(profile, list, form);
+      // Workday's rows (`work-experience-2`), Oracle's saved items (`languages.item-2`) and link fields.
+      const rows = slots.get(list)?.length ?? 0;
       if (rows < want) {
-        out.push(`${title}: the page has ${rows} row${rows === 1 ? "" : "s"}, the profile has ${want} ${list.name}.`);
+        out.push(`${title}: the page has ${rows} row${rows === 1 ? "" : "s"}, the profile has ${want} ${name}.`);
       } else if (rows > want) {
         out.push(
-          `${title}: the page has ${rows} rows, the profile has ${want} ${list.name} (left from a previous application?).`,
+          `${title}: the page has ${rows} rows, the profile has ${want} ${name} (left from a previous application?).`,
         );
       }
     }
@@ -135,21 +128,4 @@ export function handoff(events: LogEvent[]): Handoff {
       .map((f) => ({ fieldId: f.fieldId as string, was: f.was, now: f.value })),
     removed,
   };
-}
-
-function profileCount(p: Profile, key: (typeof LISTS)[number]["key"]): number {
-  if (key === "links") return [p.links.github, p.links.portfolio].filter(Boolean).length + p.links.other.length;
-  return p[key].length;
-}
-
-/** As the Workday extractor makes section ids: lowercase, non-alphanumerics to "-". */
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

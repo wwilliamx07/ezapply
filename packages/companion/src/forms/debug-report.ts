@@ -176,7 +176,9 @@ function table(rows: string[][], head: string[]): string {
     .join("\n");
 }
 
+/** Counted per rule, rows together: `row:work[1].title` counts as `row:work[].title`. */
 function bump(m: Map<string, { filled: number; failed: number }>, rule: string, k: "filled" | "failed") {
+  rule = rule.replace(/\[\d+\]/g, "[]");
   const v = m.get(rule) ?? { filled: 0, failed: 0 };
   v[k]++;
   m.set(rule, v);

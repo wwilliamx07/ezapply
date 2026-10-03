@@ -25,7 +25,17 @@ import type { PostingsService } from "../postings/service.js";
 import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
-import { checkReadBack, type LeftReason, type PlannedFill, planStep } from "./autofill.js";
+import {
+  checkReadBack,
+  type LeftReason,
+  missingItems,
+  optionKey,
+  type PlanInput,
+  type PlannedFill,
+  planStep,
+  rowsToAdd,
+  type StepPlan,
+} from "./autofill.js";
 import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
 import { type CallRecord, DebugRecorder, stripBulk } from "./debug.js";
 import { loadTiming } from "./timing.js";
@@ -153,90 +163,220 @@ export class FormsService {
 
   /**
    * Fill what the profile and the answer bank decide on this step without the model (see `forms/autofill.ts`),
-   * then return what was filled and only the fields left to decide. Two passes: fields that appear because of a
-   * fill (a province list after the country) are planned on a second read. Never fills a tab that belongs to
-   * another posting. With `forms.autofill: "off"` it fills nothing and returns the whole step as left.
+   * then return what was filled and only the fields left to decide. In order:
+   * 1. Add the rows the page lacks for the profile's lists (Workday's work, education, language and website rows;
+   *    Oracle's link fields), reading the page after each press.
+   * 2. Plan and fill, twice: fields that appear because of a fill (a province list after the country, an end date
+   *    after "I currently work here" is unticked) are planned on a second read. A dropdown whose value depends on
+   *    its options (a degree, a language level) has them listed first, once per option key.
+   * 3. On Oracle, add each work, education and language entry the page doesn't hold through its inline form:
+   *    open, fill, Save. A Save the page refuses stops there, with the form left open for the model.
+   * Never fills a tab that belongs to another posting. With `forms.autofill: "off"` it fills nothing and returns
+   * the whole step as left.
    */
   async autofillStep(tabId?: number) {
     return this.onTab({ tool: "autofill_step", params: {} }, tabId, async (t) => {
       const read = () => t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+      const press = (addButtonId: string) =>
+        t.bridge.call("form.addRepeatable", { addButtonId, tabId: t.tab.tabId, timing: t.timing }, 20_000);
       let form = await read();
+      const run: AutofillRun = { filled: [], failed: [], kept: 0, added: [], left: new Map(), options: new Map() };
       // get_form's view of the page (it replaces get_form at the start of a step), narrowed to the fields left.
-      const result = async (
-        filled: AutofilledField[],
-        failed: AutofillFailure[],
-        kept: number,
-        left: Map<string, LeftReason> | null,
-        note?: string,
-      ) => {
+      const result = async (note?: string) => {
         const view = await this.view(t, form, {});
-        const sections = leftSections(view.sections, failed, left);
-        return { ...view, sections, filled, failed, kept, ...(note ? { note } : {}) };
+        const sections = leftSections(view.sections, run.failed, note ? null : run.left, optionsLeft(form, run));
+        return {
+          ...view,
+          sections,
+          filled: run.filled,
+          failed: run.failed,
+          kept: run.kept,
+          ...(run.added.length ? { added: run.added } : {}),
+          ...(note ? { note } : {}),
+        };
       };
-      const nothing = (note: string) => result([], [], 0, null, note);
-      if (form.pageKind !== "step") return nothing(`Nothing to autofill on a ${form.pageKind} page.`);
-      if (t.mismatch) return nothing("Not filled: this tab belongs to another posting.");
+      if (form.pageKind !== "step") return result(`Nothing to autofill on a ${form.pageKind} page.`);
+      if (t.mismatch) return result("Not filled: this tab belongs to another posting.");
       if ((await this.ws.readConfig()).forms.autofill === "off") {
-        return nothing("Autofill is off (forms.autofill in ezapply.config.json).");
+        return result("Autofill is off (forms.autofill in ezapply.config.json).");
       }
       const profile = await this.profile.profile();
       if (!profile.exists || !profile.valid) {
-        return nothing("Not filled: profile/profile.yaml is missing or invalid (profile_check).");
+        return result("Not filled: profile/profile.yaml is missing or invalid (profile_check).");
       }
       const answers = await this.profile.answers();
       const input = {
         profile: profile.value,
         answers: answers.exists && answers.valid ? answers.value.entries : [],
         ...(t.posting?.company ? { company: t.posting.company } : {}),
+        ...(t.posting?.location ? { location: t.posting.location } : {}),
       };
 
-      const filled: AutofilledField[] = [];
-      const failed: AutofillFailure[] = [];
-      let kept = 0;
-      const handled = new Set<string>();
-      let left = new Map<string, LeftReason>();
-      // The second pass plans fields that appeared after the first fill; a third is never needed for one step.
-      for (let pass = 0; pass < 2; pass++) {
-        const plan = planStep({ form, ...input, skip: handled });
-        t.note("autofill", { pass: pass + 1, fills: plan.fills, kept: plan.kept, left: Object.fromEntries(plan.left) });
-        kept += plan.kept.length;
-        for (const k of plan.kept) handled.add(k.fieldId);
-        left = new Map([...left, ...plan.left]);
-        if (plan.fills.length === 0) break;
-        const results = await t.bridge.call(
-          "form.fill",
-          {
-            fills: plan.fills.map(({ fieldId, value }) => ({ fieldId, value })),
-            tabId: t.tab.tabId,
-            timing: t.timing,
-          },
-          t.fillTimeoutMs,
-        );
-        for (const f of plan.fills) {
-          handled.add(f.fieldId);
-          left.delete(f.fieldId);
-          const r = results.find((x) => x.fieldId === f.fieldId) ?? { fieldId: f.fieldId, ok: false };
-          const check = checkReadBack(f, r);
-          t.note("readBack", { fieldId: f.fieldId, wanted: f.value, readBack: r.readBack, ...check });
+      // 1. The rows the profile needs. Reading after each press: the new row's fields are on the page by then.
+      for (const add of rowsToAdd(form, input.profile)) {
+        let done = 0;
+        for (let i = 0; i < add.count; i++) {
+          const r = await press(add.addButtonId);
           await this.logEvent(t, {
-            event: "fill",
-            fieldId: f.fieldId,
-            value: f.value,
-            source: f.source,
-            ...(f.answerId ? { answerId: f.answerId } : {}),
+            event: "add-row",
+            addButtonId: add.addButtonId,
             auto: true,
-            rule: f.rule,
-            ...(f.was !== undefined ? { was: f.was } : {}),
-            ok: check.ok,
-            ...(r.error ? { error: r.error } : !check.ok && r.ok ? { error: `inexact: ${check.selected ?? "?"}` } : {}),
+            ok: r.ok,
+            ...(r.error ? { error: r.error } : {}),
           });
-          if (check.ok) filled.push(filledEntry(f));
-          else failed.push(failure(f, r, check.selected));
+          if (!r.ok) {
+            run.failed.push({
+              fieldId: add.addButtonId,
+              label: "Add",
+              value: add.list,
+              rule: `add:${add.list}`,
+              ...(r.error ? { error: r.error } : {}),
+            });
+            break;
+          }
+          done++;
+          form = await read();
         }
+        if (done) run.added.push(`${add.list}: ${done} row${done === 1 ? "" : "s"} added (${add.addButtonId})`);
+      }
+
+      // 2. Two passes; a third is never needed for one step.
+      const handled = new Set<string>();
+      for (let pass = 0; pass < 2; pass++) {
+        const plan = await this.planWithOptions(t, run, { form, ...input, skip: handled }, handled, `pass ${pass + 1}`);
+        if (plan.fills.length === 0) break;
+        await this.fillPlanned(t, run, plan.fills, handled);
         form = await read();
       }
-      return result(filled, failed, kept, left);
+
+      // 3. Oracle's inline item forms, one entry at a time. A form that doesn't open skips the rest of its list;
+      // a Save the page refuses stops everything, since its form stays open.
+      const unopened = new Set<string>();
+      for (const item of missingItems(form, input.profile)) {
+        if (unopened.has(item.list)) continue;
+        const rule = `item:${item.list}[${item.index}]`;
+        const ids = (f: FormSchema) => f.sections.flatMap((s) => s.fields.map((x) => x.id));
+        const before = new Set(ids(form));
+        const opened = await press(item.addButtonId);
+        form = await read();
+        const fresh = ids(form).filter((id) => !before.has(id));
+        if (!opened.ok || fresh.length === 0) {
+          const error = opened.error ?? "No form opened.";
+          run.failed.push({ fieldId: item.addButtonId, label: `Add ${item.name}`, value: item.name, rule, error });
+          unopened.add(item.list);
+          continue;
+        }
+        const plan = await this.planWithOptions(
+          t,
+          run,
+          { form, ...input, item: { list: item.list, index: item.index, fieldIds: new Set(fresh) } },
+          handled,
+          rule,
+        );
+        await this.fillPlanned(t, run, plan.fills, handled);
+        form = await read();
+        const save = form.addButtons.find((b) => b.id.startsWith("save."));
+        const saved = save ? await press(save.id) : { ok: false, error: "The form has no Save button." };
+        await this.logEvent(t, {
+          event: "add-item",
+          list: item.list,
+          item: item.name,
+          auto: true,
+          ok: saved.ok,
+          ...(saved.error ? { error: saved.error } : {}),
+        });
+        form = await read();
+        if (!saved.ok) {
+          // The form stays open with what the page wants: its fields are in the result for the model.
+          run.failed.push({
+            fieldId: save?.id ?? item.addButtonId,
+            label: `Save ${item.name}`,
+            value: item.name,
+            rule,
+            ...(saved.error ? { error: saved.error } : {}),
+          });
+          break;
+        }
+        run.added.push(`${item.list}: ${item.name} saved`);
+      }
+      return result();
     });
+  }
+
+  /**
+   * Plan, and when a dropdown's value depends on its options, list them (one field per option key: Workday's
+   * language levels repeat their automation id in every row) and plan again. A list that fails counts as listed
+   * with no options, so the field is left as `no-strict-match`. Kept fields join `handled`.
+   */
+  private async planWithOptions(
+    t: Target,
+    run: AutofillRun,
+    input: PlanInput,
+    handled: Set<string>,
+    stage: string,
+  ): Promise<StepPlan> {
+    const withOptions = (): PlanInput => ({ ...input, options: run.options });
+    let plan = planStep(withOptions());
+    if (plan.needOptions.size) {
+      for (const [key, fieldId] of plan.needOptions) {
+        const options = await t.bridge
+          .call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000)
+          .then((o) => o.map((x) => x.label).filter((l) => l && !/^select one$/i.test(l)))
+          .catch(() => null);
+        run.options.set(key, options);
+      }
+      plan = planStep(withOptions());
+    }
+    t.note("autofill", {
+      stage,
+      fills: plan.fills,
+      kept: plan.kept,
+      left: Object.fromEntries(plan.left),
+      ...(run.options.size ? { options: Object.fromEntries(run.options) } : {}),
+    });
+    run.kept += plan.kept.length;
+    for (const k of plan.kept) handled.add(k.fieldId);
+    for (const [id, reason] of plan.left) run.left.set(id, reason);
+    return plan;
+  }
+
+  /**
+   * Send planned fills, `strict` (unless `loose`), in chunks of whole sections (about 25 fields each: a step with three work rows
+   * plans 40 or more, and one fill of 38 fields took 93 s live, against a 120 s timeout). Check and log each.
+   */
+  private async fillPlanned(t: Target, run: AutofillRun, fills: PlannedFill[], handled: Set<string>): Promise<void> {
+    for (const chunk of chunkBySection(fills, 25)) {
+      const results = await t.bridge.call(
+        "form.fill",
+        {
+          fills: chunk.map(({ fieldId, value, loose }) => ({ fieldId, value, ...(loose ? {} : { strict: true }) })),
+          tabId: t.tab.tabId,
+          timing: t.timing,
+        },
+        t.fillTimeoutMs,
+      );
+      for (const f of chunk) {
+        handled.add(f.fieldId);
+        run.left.delete(f.fieldId);
+        const r = results.find((x) => x.fieldId === f.fieldId) ?? { fieldId: f.fieldId, ok: false };
+        const check = checkReadBack(f, r);
+        t.note("readBack", { fieldId: f.fieldId, wanted: f.value, readBack: r.readBack, ...check });
+        await this.logEvent(t, {
+          event: "fill",
+          fieldId: f.fieldId,
+          value: f.value,
+          source: f.source,
+          ...(f.answerId ? { answerId: f.answerId } : {}),
+          auto: true,
+          rule: f.rule,
+          ...(f.was !== undefined ? { was: f.was } : {}),
+          ok: check.ok,
+          ...(r.error ? { error: r.error } : !check.ok && r.ok ? { error: `inexact: ${check.selected ?? "?"}` } : {}),
+        });
+        if (check.ok) run.filled.push(filledEntry(f));
+        else run.failed.push(failure(f, r, check.selected));
+      }
+    }
   }
 
   async listOptions(fieldId: string, tabId?: number) {
@@ -806,15 +946,62 @@ function failure(f: PlannedFill, r: FillResult, selected: string | undefined): A
   };
 }
 
+/** What one autofill_step call has done so far. */
+interface AutofillRun {
+  filled: AutofilledField[];
+  failed: AutofillFailure[];
+  kept: number;
+  /** Rows and Oracle items added: "work: 1 row added (add.work-experience)", "languages: French saved". */
+  added: string[];
+  left: Map<string, LeftReason>;
+  /** Dropdown options listed in this call, by option key; null when listing failed. */
+  options: Map<string, string[] | null>;
+}
+
+/**
+ * Fills in chunks of whole sections, each chunk up to `max` fields unless one section alone is bigger. Fills come
+ * in page order, so a section's fills are together.
+ */
+export function chunkBySection<T extends { fieldId: string }>(fills: T[], max: number): T[][] {
+  const bySection: T[][] = [];
+  for (const f of fills) {
+    const section = f.fieldId.split(".")[0];
+    const last = bySection.at(-1);
+    if (last && last[0]?.fieldId.split(".")[0] === section) last.push(f);
+    else bySection.push([f]);
+  }
+  const chunks: T[][] = [];
+  for (const group of bySection) {
+    const last = chunks.at(-1);
+    if (last && last.length + group.length <= max) last.push(...group);
+    else chunks.push([...group]);
+  }
+  return chunks;
+}
+
+/** The options autofill listed for fields left as `no-strict-match`, so the model needn't list them again. */
+function optionsLeft(form: FormSchema, run: AutofillRun): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const s of form.sections) {
+    for (const f of s.fields) {
+      const options = run.left.get(f.id) === "no-strict-match" ? run.options.get(optionKey(f)) : undefined;
+      if (options?.length) out.set(f.id, options);
+    }
+  }
+  return out;
+}
+
 /**
  * autofill_step's sections: only the fields left to decide, each with why, and not the ones that failed (those
  * are in `failed`). `left: null` means nothing was planned, so every field is left. Rows marked removable stay
- * even when empty, so remove_repeatable can still find them.
+ * even when empty, so remove_repeatable can still find them. A dropdown left as `no-strict-match` carries the
+ * options autofill listed for it.
  */
 function leftSections(
   sections: ReturnType<typeof leanForm>["sections"],
   failed: AutofillFailure[],
   left: Map<string, LeftReason> | null,
+  options: Map<string, string[]> = new Map(),
 ) {
   const failedIds = new Set(failed.map((f) => f.fieldId));
   return sections
@@ -822,7 +1009,11 @@ function leftSections(
       ...s,
       fields: s.fields
         .filter((f) => !failedIds.has(f.id) && (left === null || left.has(f.id)))
-        .map((f) => (left?.get(f.id) ? { ...f, reason: left.get(f.id) } : f)),
+        .map((f) => {
+          const reason = left?.get(f.id);
+          const listed = options.get(f.id);
+          return { ...f, ...(reason ? { reason } : {}), ...(listed && !f.options ? { options: listed } : {}) };
+        }),
     }))
     .filter((s) => s.fields.length > 0 || s.removable);
 }

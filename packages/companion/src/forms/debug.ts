@@ -44,7 +44,7 @@ export interface CallRecord {
   fillTimeoutMs?: number;
   shown?: unknown;
   bridge: { method: string; params: Record<string, unknown>; ms: number; result?: unknown; error?: string }[];
-  /** Extra notes from the call, such as autofill_step's plan per pass. */
+  /** Extra notes from the call, such as autofill_step's plan per stage (each pass, each Oracle item). */
   notes: Record<string, unknown[]>;
   result?: unknown;
   error?: { code: string; message: string };

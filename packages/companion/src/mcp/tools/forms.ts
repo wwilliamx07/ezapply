@@ -55,13 +55,16 @@ export function registerFormTools(server: McpServer, s: Services): void {
       title: "Autofill the step",
       description:
         "Start every application step with this instead of get_form. It fills, without you, what profile.yaml and " +
-        "answers.yaml decide (profile fields the page marks, outside work and education rows; questions whose " +
-        "wording equals an answers.yaml entry with a plain answer), then returns: `filled` (each field, value and " +
-        "rule; `was` = a value it replaced, left from a previous application), `failed` (fills that didn't take, " +
-        "or `inexact`: the page holds a near match, so set the right option), `kept` (fields already right), and " +
-        "the step as get_form shows it with only the fields left to decide, each with its `reason`. Check " +
-        "`filled` for anything wrong, fix `failed`, then fill the rest in one fill_fields call. On a page that " +
-        "isn't an application step, or another posting's tab, it fills nothing and says why in `note`.",
+        "answers.yaml decide: profile fields the page marks; work, education, language and website rows (adding " +
+        "rows the profile needs; on Oracle, adding and saving each missing entry through its inline form); link " +
+        "fields; questions whose wording equals an answers.yaml entry, with a plain answer or one computed from " +
+        "the profile. It returns: `filled` (each field, value and rule; `was` = a value it replaced, left from a " +
+        "previous application), `failed` (fills that didn't take, or `inexact`: the page holds a near match, so " +
+        "set the right option; also an add or Save the page refused), `added` (rows and items it added), `kept` " +
+        "(fields already right), and the step as get_form shows it with only the fields left to decide, each with " +
+        "its `reason`. Check `filled` for anything wrong, fix `failed`, then fill the rest in one fill_fields " +
+        "call. On a page that isn't an application step, or another posting's tab, it fills nothing and says why " +
+        "in `note`.",
       inputSchema: { tabId },
     },
     tool(s.log, "autofill_step", ({ tabId }: { tabId?: number }) => s.forms.autofillStep(tabId)),

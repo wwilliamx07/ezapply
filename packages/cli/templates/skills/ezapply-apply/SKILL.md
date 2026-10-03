@@ -46,28 +46,37 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
      last resort, only when neither of you can tell (see **Screenshots**).
 
 ## Each step
-1. `autofill_step`. It fills, without you, what `profile.yaml` and `answers.yaml` settle (profile fields the
-   page marks, outside work and education rows; questions worded exactly as an answer-bank entry with a plain
-   answer), and returns:
+1. `autofill_step`. It fills, without you, what `profile.yaml` and `answers.yaml` settle: profile fields the
+   page marks; work, education, language and website rows (it adds the rows the profile needs); link fields;
+   on Oracle, each work, education and language entry through its inline form, saved; and questions worded
+   exactly as an answer-bank entry, with a plain answer or one computed from the profile (sponsorship,
+   relocation, work authorization for the job's country). It returns:
    - `filled`: glance at it. A value wrong for this form goes, corrected, into your `fill_fields`. `was` is a
-     value it replaced, left from a previous application: list those in the hand-off.
+     value it replaced, left from a previous application: list those in the hand-off. Role descriptions are
+     the profile's highlights as stored, and language levels a fixed mapping: change them only if the user
+     wants.
+   - `added`: the rows and items it added. List them in the step's report.
    - `failed`: fix each from its `error` or `availableOptions`. `inexact` means the page holds a near match
-     now, so set the right option.
+     now, so set the right option. A failed `add.*` or `save.*` is a row or Oracle item the page refused: on
+     Oracle the form is still open with its fields in the result, so fill what it wants and `add_repeatable`
+     the `save.*` button again.
    - the step's sections with only the fields left, each with its `reason`. `reversed-wording`: an
      answer-bank variant phrased the other way round ("I do NOT…"), so flip its yes and no. `eeo-decline`: pick
-     the form's decline option. `row`: work and education rows (below). A `note` says when it filled
-     nothing (another page kind, another posting's tab, autofill off): then treat the result as `get_form`'s.
+     the form's decline option. `no-strict-match`: none of the field's options is the profile's value; the
+     field lists the `options` it saw, so pick from them. `extra-row`: a row beyond the profile's entries
+     (below). `row`: a list it doesn't fill (certifications). A `note` says when it filled nothing (another page
+     kind, another posting's tab, autofill off): then treat the result as `get_form`'s.
    - `checklist` (here and on `get_form`): what looks off on this step: a list section whose rows don't
      match the profile, a file this application didn't upload. Fix it on this step, or say why not in the
      hand-off (the user left out an old job on purpose).
 
    Then decide a value for every field left that is empty or wrong:
    - **Profile facts** (a `hint` is given, or the label clearly matches): use `profile.yaml`, formatted for
-     the widget. Work history and education rows map to `work[i]` / `education[i]` in order. Use
-     `add_repeatable { addButtonId }` until the row counts match, then `get_form` again. Rows carried over
-     from a previous application that the profile doesn't have (get_form marks such sections `removable`) go
-     with `remove_repeatable { sectionId, reason? }`; later rows' field ids change, so `get_form` again after
-     each.
+     the widget. Rows `autofill_step` left (`extra-row`: more rows than the profile has entries, usually
+     carried over from a previous application) go with `remove_repeatable { sectionId, reason? }` when the
+     user doesn't want them; later rows' field ids change, so `get_form` again after each. For a list it
+     doesn't fill (certifications), `add_repeatable { addButtonId }` until the rows match the profile, then
+     `get_form` again.
    - **Every add button is a list to fill.** Go through `addButtons` and match each `section` to the
      profile: work → `work`, education → `education`, languages → `languages`, licenses or certificates →
      `certifications`, links or websites → `links`. Add each profile entry the page doesn't hold yet. A
@@ -157,11 +166,12 @@ career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain); 
   or `search_options` first for long ones (cities, schools).
 - **Address lists depend on each other** (country, then province, then city, then postal code). Fill them in
   one call; the adapter fills in page order so each list loads for the choice above it.
-- **Work history, education, languages, licenses** are added through an inline form, one entry at a time
-  (`languages` and `certifications` from the profile too, not only work and education): `add_repeatable` its
-  `add.*` button, `get_form`, `fill_fields` the new fields, then `add_repeatable` the form's
-  `save.<section>` button. An error means the page wants more: fill it and save again. Saved items show as
-  `removable` sections; `remove_repeatable` deletes one.
+- **Work history, education, languages, licenses** are added through an inline form, one entry at a time.
+  `autofill_step` adds the profile's work, education and language entries itself (`added`). Licenses
+  (`certifications`), and an entry whose Save it reported in `failed`, are yours: `add_repeatable` its `add.*`
+  button, `get_form`, `fill_fields` the new fields, then `add_repeatable` the form's `save.<section>` button. An
+  error means the page wants more: fill it and save again. Saved items show as `removable` sections;
+  `remove_repeatable` deletes one.
 - **Attachments:** a resume or cover letter already on the candidate's profile blocks a new upload until
   `remove_items` takes it off. Additional documents take several files.
 - The email field comes from the sign-in and is read-only.

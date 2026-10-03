@@ -64,7 +64,7 @@ describe("stepWarnings", () => {
       "Work Experience: the page has 1 row, the profile has 2 work entries.",
       "Education: the page has 2 rows, the profile has 1 education entries (left from a previous application?).",
       "Languages: the page has 0 rows, the profile has 2 languages.",
-      "Websites: the page has 0 rows, the profile has 1 links besides LinkedIn.",
+      "Websites: the page has 0 rows, the profile has 1 links.",
     ]);
   });
 
@@ -81,6 +81,29 @@ describe("stepWarnings", () => {
       "oracle",
     );
     expect(stepWarnings(f, profile, new Set())).toEqual([]);
+  });
+
+  it("tells Oracle's work and education apart under one section, and counts link fields", () => {
+    const f = form(
+      [
+        { id: "work-and-education-history.experience-1", title: "Work and Education History: A, Dev" },
+        {
+          id: "resume-and-urls",
+          title: "Resume and URLs",
+          fields: [field("resume-and-urls.siteLink-1", { label: "Link 1" })],
+        },
+      ],
+      [
+        { id: "add.link", label: "Add Another Link", section: "Resume and URLs" },
+        { id: "add.experience", label: "Add Experience", section: "Work and Education History" },
+        { id: "add.education", label: "Add Education", section: "Work and Education History" },
+      ],
+      "oracle",
+    );
+    expect(stepWarnings(f, profile, new Set())).toEqual([
+      "Work and Education History: the page has 1 row, the profile has 2 work entries.",
+      "Work and Education History: the page has 0 rows, the profile has 1 education entries.",
+    ]);
   });
 
   it("flags files this application didn't upload", () => {

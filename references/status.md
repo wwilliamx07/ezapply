@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-09-30.
+As of 2026-10-02.
 
 ## Done
 | Area | State |
@@ -15,6 +15,7 @@ As of 2026-09-30.
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
 | Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
 | Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
+| Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; the rest replayed on that run's records |
 | Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions on 2026-09-30) |
@@ -29,11 +30,19 @@ As of 2026-09-30.
   Workday's application URL keeps the job path (`…/Title_R123/apply/…`) through sign-in and every step. If it
   drops it, the check falls back to the tenant, as before.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
-  Workday fixture and with a timed-out call. Not yet used on a live run; turn it on for autofill's first one.
-- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): one live run (Hooli,
-  2026-10-01). It filled My Information correctly, including the strict read-backs on the phone type and the
-  province, and nothing on the question steps; both causes were fixed afterwards. The fixes are checked on the
-  recorded pages, not yet live.
+  Workday fixture and with a timed-out call, then used on one live run (Hooli, 2026-10-01), whose records
+  checked autofill's plan and ruled out the waits in the slowdown below.
+- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): one live run of its first
+  phase (Hooli, 2026-10-01). It filled My Information correctly, including the strict read-backs on the phone
+  type and the province, and nothing on the question steps; both causes were fixed afterwards. The rest was
+  built on 2026-10-02: work, education, language and website rows (adding the rows), link fields, Oracle's item
+  forms, computed answers, options listed for values with several wordings, fills in chunks, and `strict` fills
+  in both adapters. Replayed on that run's recorded pages, it adds the rows the agent added and fills 34 of the
+  37 row fields with the agent's own values (the other three: a reworded role description and two language
+  levels the agent judged lower) and 8 question fields as chosen in the run. Not yet run live. `strict` is
+  an adapter change ("One adapter change per live run" in [development](development.md)): a slower next run
+  points at it first. Oracle's work and education forms have never been seen, so their fields are matched by
+  hint and label on trust.
 - **Fills twice as slow per field in the 2026-10-01 Hooli run, cause unknown.** Dropdowns took about 3.5–4 s
   each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in the 2026-09-30
   Hooli run. Ruled out:
@@ -44,7 +53,7 @@ As of 2026-09-30.
   - **Debug mode:** its first part records only in the companion.
   - **The page in general:** `list_options` opened the same tenant's dropdowns as fast as before (2.6 s for 3).
 
-  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, item 4)
+  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, item 6)
   would show which wait grew. One guess: the settle after each field (`afterFieldMaxMs`, 1.5 s) running to its
   maximum on a page that never goes quiet.
 - **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
