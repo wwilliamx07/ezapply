@@ -6,6 +6,7 @@ import {
   optionalHostPermissions,
   SITES,
   SiteId,
+  siteInfo,
   siteJob,
   siteOfUrl,
   siteTenant,
@@ -47,6 +48,15 @@ describe("Greenhouse", () => {
     expect(siteJob("https://job-boards.greenhouse.io/vandelay/jobs/1000000001")).toBe("1000000001");
     const embed = "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000000002";
     expect([siteTenant(embed), siteJob(embed)]).toEqual(["acme", "1000000002"]);
+  });
+
+  it("reads the job a company's careers page names for its embedded board, and only there", () => {
+    const greenhouse = siteInfo("greenhouse");
+    const page = "https://careers.example.com/jobs/1000039/software-engineering-intern/?gh_src=dv1&gh_jid=1000039";
+    expect(greenhouse?.hostPageJob?.(page)).toBe("1000039");
+    expect(greenhouse?.hostPageJob?.("https://job-boards.greenhouse.io/vandelay/jobs/1?gh_jid=2")).toBeUndefined();
+    expect(greenhouse?.hostPageJob?.("https://acme.com/careers?gh_jid=abc")).toBeUndefined();
+    expect(SITES.filter((s) => s.hostPageJob).map((s) => s.id)).toEqual(["greenhouse"]);
   });
 });
 

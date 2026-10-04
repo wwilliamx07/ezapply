@@ -1,7 +1,39 @@
 ---
 name: ezapply-onboard
-description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base, resume import and profile, cover letter template, screening-question answers, preferences). Use when the user says onboard, set up, or get started, or when workspace_check reports missing steps.
+description: Set up or resume ezapply onboarding (GitHub login and repo selection, project knowledge base, resume import and profile, cover letter template, screening-question answers, preferences), and keep the workspace current. Use when the user says onboard, set up, or get started, when workspace_check reports missing steps, or when workspace_changes lists changes.
 ---
+
+# Keeping the workspace current
+
+When `workspace_changes { refresh? }` lists changes, the knowledge base, a template, the profile or the cover
+letter's fields are behind what they come from. Never re-import, re-index or change the profile without the
+user's agreement: these cost time, and the templates and profile are theirs.
+
+1. Tell the user what changed, one short line per change (its `summary`). Say which ones the request in hand
+   needs first (`affects`): a resume tailored from a template whose source moved, a form filled from a profile
+   behind the resume. Ask whether to update now, after this posting, or later. Mark the ones put off with
+   `workspace_change_mark { id, as: "later" }`, so later sessions in this chat don't ask again.
+2. Work in this order, since each feeds the next:
+   - **`template-source`:** confirm first, then `template_import { sourceDir, kind, replace: true }` with the
+     folder from the summary. The old copy moves to `templates/.old/`. If it held a fix made at onboarding
+     (a font path, a `% !TEX program` line), carry it over and compile. If the user says the difference doesn't
+     matter, mark it `done` instead.
+   - **`resume-edited`:** update `profile/profile.yaml` from the change's `diff` alone, with the Edit tool: add
+     or change only what the diff shows (a new job, a degree, skills, reworded highlights). Keep what the resume
+     never held (address, work authorization, answers given in chat). A job or degree gone from the resume is
+     asked about, not deleted: forms often want the full history. `profile_check`, then mark it `done`. A diff
+     that touches nothing in the profile (layout, spacing) is marked `done` too.
+   - **`profile-identity`:** update the cover template's name and contact fields (`\myname`, `\mycontact`) from
+     the profile, `tex_compile { path }`, `pdf_render { path, page? }`, then mark it `done`.
+   - **`repo-pushed`:** run the **ezapply-index-repo** skill for each repo, in parallel subagents when there are
+     more than two. Its `knowledge_mark_indexed { repo }` ends the change. If `claims_list` was read earlier in this
+     session, read it again afterwards.
+   - **`repo-deselected`:** ask whether to delete that repo's knowledge and cache (mark it `done`, which deletes
+     them) or select the repo again (the **ezapply-repos** skill).
+3. Finish with one line on what was updated, then carry on with the user's request.
+
+`notChecked` lists what couldn't be checked. Mention it only when the user can fix it: an expired GitHub login
+(its hint says `github_login`), or a template's source folder that has moved.
 
 # Onboarding
 

@@ -19,7 +19,7 @@ export { strictMatch };
  * bank, without the model. Pure: no page, no files, so every rule is tested on its own and on schemas extracted
  * from saved pages.
  *
- * Why: in the four applications of 2026-09-30 and 2026-10-01, 87 of 128 fills copied a profile value, and the
+ * Why: in four live applications, 87 of 128 fills copied a profile value, and the
  * model wrote each one out after reading the whole step. Filling those here saves the tokens and turns, and gives
  * the same answer every time. The model still decides everything that needs judgment, and sees what was filled.
  *
@@ -254,7 +254,7 @@ function fromProfile(field: Field, key: string, ctx: Ctx): Decision {
 function fromAnswer(field: Field, entry: AnswerEntry, ctx: Ctx): Decision {
   if (entry.sensitive) return { reason: "sensitive" };
   // Only a profile path means "computed from the profile". Agents also write `source: user` for an answer the
-  // user gave (ten such entries in the first live run's bank, 2026-10-01): that's an answer to use.
+  // user gave (ten such entries in one live run's bank): that's an answer to use.
   if (entry.source?.startsWith("profile.")) {
     const computed = computeAnswer(entry, field, ctx);
     if (computed !== undefined) {
@@ -401,8 +401,8 @@ const KEY_SLOT: Partial<Record<ListKey, Slot>> = {
   links: "url",
 };
 
-const LEVEL_LABEL =
-  /proficien|level|reading|writing|speaking|comprehension|overall|oral|written|spoken|listening|fluency/;
+/** Workday tenants label levels differently: one with bare verbs ("Read", "Speak", "Write"), another with "Reading". */
+const LEVEL_LABEL = /proficien|level|\b(read|writ|speak|spoken|oral|listen)|comprehension|overall|fluency/;
 
 /**
  * Which part of the entry a row field takes: the hint when there is one (Workday's `work[].title`), else the label.

@@ -18,7 +18,9 @@ describe("Oracle career sites", () => {
 
   it("reads the tenant as host and site number, the same for a job and its application", () => {
     expect(oracleTenant("https://Jobs.Umbrella.example/en/sites/CX_1/job/10001")).toBe("jobs.umbrella.example/cx_1");
-    expect(oracleTenant("https://jobs.umbrella.example/en/sites/CX_1/job/10001/apply/email")).toBe("jobs.umbrella.example/cx_1");
+    expect(oracleTenant("https://jobs.umbrella.example/en/sites/CX_1/job/10001/apply/email")).toBe(
+      "jobs.umbrella.example/cx_1",
+    );
     expect(oracleTenant("https://example.com/jobs/1")).toBeUndefined();
     expect(siteTenant("https://acme.wd5.myworkdayjobs.com/en-US/External/job/x")).toBe("acme");
     expect(siteTenant("https://jobs.umbrella.example/en/sites/CX_1/my-profile")).toBe("jobs.umbrella.example/cx_1");

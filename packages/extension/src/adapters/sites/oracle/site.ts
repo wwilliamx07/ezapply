@@ -8,6 +8,7 @@ import {
   backButton,
   detectPage,
   isSubmitControl,
+  jobInfo,
   labelOf,
   nextButton,
   oracleAddButtons,
@@ -38,6 +39,7 @@ export const oracle: SiteDefinition = {
   page: {
     kind: detectPage,
     step: stepInfo,
+    job: jobInfo,
     stepKey: (doc, url) => `${url}|${JSON.stringify(stepInfo(doc) ?? null)}`,
     errors: pageErrors,
     messages: pageMessages,

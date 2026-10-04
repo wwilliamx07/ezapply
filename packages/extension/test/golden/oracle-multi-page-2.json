@@ -95,5 +95,8 @@
   "actions": [],
   "errors": [],
   "nextLabel": "Next",
-  "backLabel": "Previous"
+  "backLabel": "Previous",
+  "job": {
+    "title": "Firmware Engineer"
+  }
 }

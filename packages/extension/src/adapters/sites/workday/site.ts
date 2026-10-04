@@ -1,5 +1,6 @@
 import { siteInfo } from "@ezapply/protocol/sites";
 import { settle, text, waitFor } from "../../engine/dom.js";
+import { titledJob } from "../../engine/standard.js";
 import { T } from "../../engine/timing.js";
 import type { SiteDefinition } from "../../engine/types.js";
 import { confirmRemoval } from "./fill.js";
@@ -41,6 +42,7 @@ export const workday: SiteDefinition = {
   rows: workdayRows,
   page: {
     kind: (doc, _url, fieldCount) => detectPage(doc, fieldCount),
+    job: (doc) => titledJob(text(doc.querySelector(SEL.jobTitle))),
     step: stepInfo,
     // Live step titles are often all "Application", so a move is seen in the index as well as the title.
     stepKey: (doc) => {

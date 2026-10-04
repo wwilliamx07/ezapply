@@ -1,10 +1,11 @@
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CapturePayload,
   type CaptureResult,
   ErrorCode,
   EzError,
+  type PostingApplication,
   PostingMeta,
   type PostingMetaPatch,
   siteOfUrl,
@@ -13,6 +14,7 @@ import type { Logger } from "../logger.js";
 import { exists, readJson, writeFileAtomic, writeJsonAtomic } from "../util/fs.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { applicationFromUrl, checkReqId, findApplication } from "./application.js";
 import { extractPosting } from "./extract.js";
 
 export interface PostingFile {
@@ -42,6 +44,8 @@ const POSTING_ID = /^[\w.-]+$/;
 export class PostingsService {
   private readonly queue = new KeyedQueue();
   private readonly activeListeners = new Set<() => void>();
+  /** Postings whose capture was searched for an application this run and held none (not searched again). */
+  private readonly searched = new Set<string>();
 
   constructor(
     private readonly ws: Workspace,
@@ -140,9 +144,65 @@ export class PostingsService {
   }
 
   updateMeta(id: string, patch: PostingMetaPatch): Promise<PostingMeta> {
+    if (patch.reqId !== undefined) {
+      const req = checkReqId(patch.reqId);
+      if (!req.ok) {
+        throw new EzError(
+          ErrorCode.BadRequest,
+          req.reason,
+          "reqId is the job's requisition or id as the employer shows it (Req100010, R-0000100575, 1000454). " +
+            "Put the title in role.",
+        );
+      }
+      patch = { ...patch, reqId: req.value };
+      // A requisition can pick the application among several links on the captured page.
+      this.searched.delete(id);
+    }
     return this.serialize(async () => {
       const meta = await this.get(id);
       const next = PostingMeta.parse({ ...meta, ...stripUndefined(patch), updatedAt: new Date().toISOString() });
+      await writeJsonAtomic(this.metaPath(id), next);
+      return next;
+    });
+  }
+
+  /**
+   * The application the posting is tied to: as stored, else its own URL's when that's a form site's page, else
+   * found in its capture (postings captured before applications were looked for), and then saved.
+   */
+  async application(id: string): Promise<PostingApplication | undefined> {
+    const meta = await this.get(id);
+    const known = meta.application ?? applicationFromUrl(meta);
+    if (known || this.searched.has(id)) return known;
+    const html = await readFile(join(this.folder(id), "capture", "raw.html"), "utf8").catch(() => null);
+    const found =
+      html === null
+        ? undefined
+        : findApplication({
+            html,
+            url: meta.url,
+            ...(meta.frameUrl ? { frameUrl: meta.frameUrl } : {}),
+            ...(meta.reqId ? { reqId: meta.reqId } : {}),
+            at: new Date().toISOString(),
+          });
+    if (!found) {
+      this.searched.add(id);
+      return undefined;
+    }
+    await this.setApplication(id, found, { keep: true });
+    this.log.info({ id, application: found }, "posting tied to its application from its capture");
+    return found;
+  }
+
+  /**
+   * Tie the posting to an application. `keep`: only if it has none (a binding found on the way never replaces
+   * what the capture or the user said).
+   */
+  setApplication(id: string, application: PostingApplication, opts: { keep?: boolean } = {}): Promise<PostingMeta> {
+    return this.serialize(async () => {
+      const meta = await this.get(id);
+      if (opts.keep && meta.application) return meta;
+      const next = PostingMeta.parse({ ...meta, application, updatedAt: new Date().toISOString() });
       await writeJsonAtomic(this.metaPath(id), next);
       return next;
     });
@@ -172,6 +232,24 @@ export class PostingsService {
 
     const now = new Date().toISOString();
     const id = existing?.id ?? (await this.newId(p.capturedAt, extracted.company, extracted.role ?? p.pageTitle));
+    // What the user said wins over what the page shows; a fresh page wins over an earlier binding.
+    const reqId = existing?.reqId ?? extracted.reqId;
+    const found = applicationFromUrl({
+      url: p.url,
+      capturedAt: p.capturedAt,
+      ...(p.frameUrl ? { frameUrl: p.frameUrl } : {}),
+    })
+      ? undefined
+      : findApplication({
+          html: p.html,
+          url: p.url,
+          ...(p.frameUrl ? { frameUrl: p.frameUrl } : {}),
+          ...(reqId ? { reqId } : {}),
+          at: now,
+        });
+    const application =
+      existing?.application?.from === "user" ? existing.application : (found ?? existing?.application);
+    this.searched.delete(id);
     const folder = this.folder(id);
     await mkdir(join(folder, "capture"), { recursive: true });
     await Promise.all([
@@ -195,12 +273,13 @@ export class PostingsService {
       tenant: extracted.tenant ?? existing?.tenant,
       company: existing?.company ?? extracted.company,
       role: existing?.role ?? extracted.role,
-      reqId: existing?.reqId ?? extracted.reqId,
+      reqId,
       location: existing?.location ?? extracted.location,
       deadline: existing?.deadline,
       bundleRequired: existing?.bundleRequired,
       status: existing?.status ?? "captured",
       tabId: p.tabId,
+      ...(application ? { application } : {}),
       capturedAt: p.capturedAt,
       updatedAt: now,
     });

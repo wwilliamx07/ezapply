@@ -78,6 +78,9 @@ const SKILLS = [
   "React Native",
 ];
 
+/** A row's Delete as live: a plain button with a trash icon, no automation id or label. */
+const ROW_DELETE = '<button><span><svg class="wd-icon-trash wd-icon"></svg></span>Delete</button>';
+
 export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submitClicks: () => number } {
   doc.body.innerHTML = `
   <div data-automation-id="applyFlowPage">
@@ -145,7 +148,7 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     </fieldset>
     <div role="group" id="we" aria-labelledby="we-h">
       <div class="we-row"><h4 id="we-h">Work Experience 1</h4>
-        <button data-automation-id="panel-set-delete-button" aria-label="Delete Work Experience 1">Delete</button>
+        ${ROW_DELETE}
         <div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>
       </div>
       <button data-automation-id="Add" aria-label="Add Work Experience">Add Another</button>
@@ -418,18 +421,17 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     [...doc.querySelectorAll(".we-row")].forEach((row, i) => {
       const h = row.querySelector("h4") as HTMLElement;
       h.textContent = `Work Experience ${i + 1}`;
-      row.querySelector("button")?.setAttribute("aria-label", `Delete Work Experience ${i + 1}`);
     });
   };
   doc.querySelector('[data-automation-id="Add"]')?.addEventListener("click", () => {
     const row = doc.createElement("div");
     row.className = "we-row";
-    row.innerHTML = `<h4></h4><button data-automation-id="panel-set-delete-button">Delete</button><div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>`;
+    row.innerHTML = `<h4></h4>${ROW_DELETE}<div data-automation-id="formField-jobTitle"><label>Job Title*</label><input type="text"></div>`;
     doc.getElementById("we")?.insertBefore(row, doc.querySelector('[data-automation-id="Add"]'));
     renumber();
   });
   doc.getElementById("we")?.addEventListener("click", (e) => {
-    const row = (e.target as Element).closest?.('[data-automation-id="panel-set-delete-button"]')?.closest(".we-row");
+    const row = (e.target as Element).closest?.("button:has(.wd-icon-trash)")?.closest(".we-row");
     if (!row) return;
     const dialog = doc.createElement("div");
     dialog.setAttribute("role", "dialog");

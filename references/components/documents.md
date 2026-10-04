@@ -104,8 +104,8 @@ Claude Code moves an MCP call still running after 120 s to the background and de
 notification, so a long wait doesn't hold the chat. On a timeout, `review_documents { reviewId }` waits again;
 an answer given while nothing waits is kept, and the next wait returns it at once. When no browser opened, the
 call returns right away with the URL for Claude to give the user, since nobody would see the page otherwise.
-*Why one tool:* opening and waiting used to be two tools (`review_open`, `review_wait`). In the Initrode
-session (2026-10-01) the agent opened three reviews without waiting, and the user's change requests sat in
+*Why one tool:* opening and waiting used to be two tools (`review_open`, `review_wait`). In one
+session the agent opened three reviews without waiting, and the user's change requests sat in
 the companion until they asked why they'd been dropped. The skills now also say the page is a snapshot: after
 any rebuild, review the changed files again.
 

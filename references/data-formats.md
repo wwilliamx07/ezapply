@@ -56,13 +56,20 @@ dropped.
   },
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
-  "forms": { "autofill": "on" },   // or "off": autofill_step fills nothing (components/autofill.md)
+  "forms": {
+    "autofill": "on",       // or "off": autofill_step fills nothing (components/autofill.md)
+    "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
+  },
   "debug": { "autofill": false, "maxMB": 500 },   // autofill debug mode: record every form call under debug/
   "decisions": { "provider": "none" },
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
 ```
-Every field has a default; a missing file means all defaults. `tex.engine` applies only to `.tex` files
+Every field has a default; a missing file means all defaults. `forms.focusBrowser` is read for every form
+call, so a change applies to the next one, and a bad value falls back to `"on"` instead of failing every form
+call. On is the default because the window is usually in front during a fill anyway (the user is waiting on
+it), and Workday's split dates weren't taken with the window behind another app; off keeps the terminal in front
+and its keyboard focus mid-fill ([the tab in front](mcp-tools.md#forms)). `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
@@ -94,11 +101,17 @@ Written only while `debug.autofill` is on (`ezapply debug on`). It's read for ev
 to the next call. One folder per posting and day (`no-posting` when the tab isn't credited to one). The
 folder holds:
 - `index.jsonl`: one line per form call: `{ seq, ts, tool, ok, ms, queuedMs, failedFields?, tabHidden?,
-  autofill? { filled, failed, kept }, error?, debug: true }`. Reading starts here.
+  windowInBackground?, autofill? { filled, failed, kept }, error?, debug: true }`. Reading starts here.
+  `windowInBackground`: the page had no focus (`shown.focused` false), so the browser window was behind
+  another app, usually the terminal.
 - `NNNN-<tool>.json`: the whole call, with these fields:
   - `params`: an upload's file contents are replaced by its size;
-  - the `tab`, `posting` and `postingMismatch`, `extensionVersion`, `browser`, `timing` and
-    `fillTimeoutMs`, `shown` (what `tab.show` did), and `queuedMs` (time behind earlier calls on the tab);
+  - the `tab`, `posting`, `postingMatch` (verdict and evidence), `application` and `postingMismatch`,
+    `extensionVersion`, `browser`, `timing` and
+    `fillTimeoutMs`, `shown` (what `tab.show` did and saw: `activated`, `changesPage`, `focusWindow` (the
+    window was asked to come to the front), `windowFocused` (the extension raised it), `hidden`, `focused`,
+    `reviewPending`),
+    and `queuedMs` (time behind earlier calls on the tab);
   - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
     answer before the companion slims it), or its error;
   - `notes`: for `autofill_step`, `autofill` (per stage, `stage` being `pass 1`, `pass 2` or an Oracle item
@@ -112,7 +125,14 @@ A call that fails or times out is still recorded. Records are written after the 
 ([security](security.md)).
 
 ### `state.json`
-`{ schemaVersion: 1, activePostingId? }`.
+`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at } } }`.
+
+`synced` is what the workspace check ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes))
+compares against: `resume`, the hash of the resume template's main file and content files when the profile was
+last brought in line with it; `profileIdentity`, the hash of the profile's `identity`, `contact` and `links`
+when the cover template's fields were last set from them. Both are 12 hex characters of SHA-256 and written
+by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`). Writes to `state.json`
+run one at a time.
 
 ### `.mcp.json`, `.claude/settings.json`
 Claude Code's own formats; ezapply's entries are described in [workspace.md](components/workspace.md#claude-code-settings).
@@ -143,13 +163,22 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `generic`, of the content), `tenant?` (the
 employer's space on its site, read from the URL: a Workday tenant, an Oracle career site as `host/site`, a
 Greenhouse board, a Lever company, an Ashby organization), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
-`capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
+`application?`, `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
+`application` (`PostingApplication`): the application the posting is tied to, `{ url, site, tenant?, job?, from,
+at }`. `from`: `apply-link` (the captured page links to it), `host-page-job` (the page's URL names an embedded
+board's job: Greenhouse's `gh_jid`; no tenant), `bound` (the first form call that changed a page bound the tab),
+`user` (`posting_activate { id, tabId }`). A posting on a form site's own page needs none: its URL is its
+application (`posting-url`, worked out, not stored). Postings captured before it existed get it from
+`capture/raw.html` the first time they're active in a form call. A re-capture keeps a `user` one, else takes what
+the page now shows, else keeps the old one. No `schemaVersion` bump: it's optional, older builds drop it when they
+rewrite the file, and it's found again from the capture ([which posting](mcp-tools.md#forms)).
+
 ### `form-log.jsonl`
-One JSON object per line, each with `ts`. Written only for form activity on this posting's application tab:
-its tenant (a Workday tenant, an Oracle career site, a Greenhouse board…) and, when both URLs name one, its job (requisition); or when
-either has no tenant:
+One JSON object per line, each with `ts`. Written only for form activity on a tab that may be this posting's
+application ([which posting](mcp-tools.md#forms): its job, the tab's binding, its tenant or its title, or nothing
+saying otherwise):
 - `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
   `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`,
   `computed:sponsorship_now`, `row:work[1].title`, `item:languages[0].level`, `link:links[1].url`) mark a fill by
@@ -168,9 +197,12 @@ either has no tenant:
 - `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 
-Any event can also carry `tabActivated: true` (the companion switched to the application tab before the call)
-and `tabHidden: true` (the page was still hidden, so the browser throttled it), so a slow step can be matched to
-a hidden tab afterwards. They're left out when false.
+Any event can also carry `tabActivated: true` (the companion switched to the application tab before the call),
+`windowFocused: true` (the extension brought the browser window to the front: `forms.focusBrowser`),
+`tabHidden: true` (the page was still hidden, so the browser throttled it) and `windowInBackground: true` (the
+page was on screen but without focus: the window was behind another app), so a slow step, or a field that wasn't
+taken, can be matched to a hidden tab or a window behind afterwards. They're left out when false. Every event carries `matchedBy`: what tied the tab to this
+posting (`job`, `binding`, `page-reqid`, `tenant`, `title`, or `unconfirmed` for the call that bound it).
 
 ## Profile (`companion/src/profile/schema.ts`)
 
@@ -210,11 +242,22 @@ Free text.
 ## Templates
 
 ### `templates/<kind>/template.json`
-`{ schemaVersion: 1, main: "<file>.tex", origin?: default | imported | custom, contentFiles?: ["sections/x.tex", …], example?: "example/<file>", importedFrom?, importedAt? }`
+`{ schemaVersion: 1, main: "<file>.tex", origin?: default | imported | custom, contentFiles?: ["sections/x.tex", …], example?: "example/<file>", importedFrom?, importedAt?, sourceHash? }`
 
 `contentFiles`: the `.tex` files the main file pulls in with `\input`, `\include` or `\subfile`, relative to
 the main file's folder; tailored copies need them beside the copied main file. Recorded by `template_import`
 and `template_set_main`.
+
+`sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and
+contents, line endings normalised; build output skipped), as of the last time the template was current with
+that folder. Written by `template_import`, and by `workspace_change_mark` when the user decides a change there
+needs no re-import. A template imported before the field existed gets it on the first check that finds the
+folder unchanged.
+
+### `templates/.synced/resume/`
+The resume template's main file and content files as they were when the profile was last brought in line with
+them (`state.json` `synced.resume`): the workspace check diffs the template against it. Managed by the
+companion, replaced on every `done`, and outside the TeX search path.
 
 ### `templates/cover/format.md`
 Written by Claude from an example letter: the structure every letter follows (paragraphs and their roles,

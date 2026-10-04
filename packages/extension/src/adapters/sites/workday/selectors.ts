@@ -25,6 +25,8 @@ export const SEL = {
   backButton: any("bottom-navigation-previous-button", "pageFooterBackButton", "wd-CommandButton_back"),
   errors: `${any("errorMessage", "errorBanner", "inputAlert")},[role="alert"]`,
   postingHeader: any(WORKDAY_POSTING.header),
+  /** The job title over every application step (seen live on a My Experience step). */
+  jobTitle: any("jobTitleHeading"),
   applyButton: any("adventureButton", "applyButton"),
   applyManually: any("applyManually"),
   autofillWithResume: any("autofillWithResume"),
@@ -56,8 +58,11 @@ export const SEL = {
   /** A confirmation some tenants show before removing an attachment. */
   dialog: '[role="dialog"],[role="alertdialog"]',
   addButton: `${any("Add", "add-button", "addButton")},button[aria-label^="Add"]`,
-  /** Deletes one repeatable row (a work-history entry). Unverified on a live tenant. */
-  rowDelete: `${any("panel-set-delete-button", "deleteButton")},button[aria-label^="Delete" i]`,
+  /**
+   * Deletes one repeatable row (a work-history entry). Live it's a plain button, "Delete"
+   * beside the row's heading with a trash icon, and no automation id or aria-label; the others are guesses.
+   */
+  rowDelete: `button:has(.wd-icon-trash),${any("panel-set-delete-button", "deleteButton")},button[aria-label^="Delete" i]`,
   helpText: `${any("helpText", "formFieldHelpText")},[id$="-helpText"]`,
   confirmation: any("applicationSubmittedMessage", "confirmationMessage", "thankYouMessage"),
 } as const;

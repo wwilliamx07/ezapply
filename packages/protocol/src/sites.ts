@@ -5,7 +5,7 @@
  * come from this list. No zod: the adapters import it (`@ezapply/protocol/sites`).
  */
 import { ashbyCanonicalPath, ashbyJob, ashbyTenant, isAshbyUrl } from "./ashby.js";
-import { greenhouseJob, greenhouseTenant, isGreenhouseUrl } from "./greenhouse.js";
+import { greenhouseHostPageJob, greenhouseJob, greenhouseTenant, isGreenhouseUrl } from "./greenhouse.js";
 import { isLeverUrl, leverCanonicalPath, leverJob, leverTenant } from "./lever.js";
 import { isOracleUrl, ORACLE_OPTIONAL_HOST_PERMISSIONS, oracleJob, oracleJobPath, oracleTenant } from "./oracle.js";
 import { STANDARD_WAITS, type Timing } from "./timing.js";
@@ -30,6 +30,11 @@ export interface SiteInfo {
   tenant(url: string): string | undefined;
   /** The job a URL is for, lowercased: a Workday requisition, an Oracle job id. */
   job(url: string): string | undefined;
+  /**
+   * The job of this site's that a page on another host names in its URL: a company's careers page embedding the
+   * site's board (Greenhouse's `?gh_jid=`). Lets a posting captured there be tied to its application.
+   */
+  hostPageJob?(url: string): string | undefined;
   /** A posting's identifying path, when the site varies it for the same job (a locale segment). */
   canonicalPath?(pathname: string): string;
   access: SiteAccess;
@@ -67,6 +72,7 @@ export const SITES: readonly SiteInfo[] = [
     isUrl: isGreenhouseUrl,
     tenant: greenhouseTenant,
     job: greenhouseJob,
+    hostPageJob: greenhouseHostPageJob,
     access: { kind: "per-origin" },
     waits: { ...STANDARD_WAITS },
   },

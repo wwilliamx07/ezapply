@@ -7,6 +7,7 @@ import {
   type PlannedFill,
   planStep,
   rowsToAdd,
+  slotOf,
   strictMatch,
 } from "../src/forms/autofill.js";
 import { chunkBySection } from "../src/forms/service.js";
@@ -248,7 +249,7 @@ describe("planStep", () => {
   });
 });
 
-describe("planStep, from the first live run (Hooli, 2026-10-01)", () => {
+describe("planStep, from a live run", () => {
   it("uses an answer whose source says where it came from (user), not a profile path", () => {
     const p = plan({
       Questions: [
@@ -293,9 +294,7 @@ const full = Profile.parse({
     { company: "Acme", title: "Developer", start: "2024-12", end: null, highlights: ["Built a thing", "Shipped it"] },
     { company: "Globex", title: "Intern", start: "2022-05", end: "2022-08" },
   ],
-  education: [
-    { school: "Example University", degree: "Bachelor of Science", field: "Physics (Co-op)", gpa: "3.9" },
-  ],
+  education: [{ school: "Example University", degree: "Bachelor of Science", field: "Physics (Co-op)", gpa: "3.5" }],
   languages: [
     { language: "English", proficiency: "native" },
     { language: "French", proficiency: "fluent" },
@@ -303,7 +302,7 @@ const full = Profile.parse({
   ],
 });
 
-/** The live Hooli "My Experience" step (2026-10-02, from its debug record): ids, labels, kinds and hints, emptied. */
+/** A live Workday "My Experience" step (from its debug record): ids, labels, kinds and hints, emptied. */
 function myExperience(rows: { work: number; education: number; languages: number; websites: number }): FormSchema {
   const sections: FormSchema["sections"] = [];
   const f = (section: string, key: string, label: string, kind: Field["kind"], extra: Partial<Field> = {}): Field => ({
@@ -401,11 +400,11 @@ function myExperience(rows: { work: number; education: number; languages: number
   };
 }
 
-/** The live level list (Workday, Hooli): ranked, so "Fluent" names "5 - Fluent". */
+/** A live level list (Workday): ranked, so "Fluent" names "5 - Fluent". */
 const LIVE_LEVELS = ["1 - Beginner", "2 - Classroom Study", "3 - Intermediate", "4 - Advanced", "5 - Fluent"];
 const LIVE_DEGREES = ["None", "High School Diploma/GED", "Associate's Degree/College Diploma", "Bachelor's Degree"];
 
-describe("rows (the live Hooli My Experience step)", () => {
+describe("rows (a live My Experience step)", () => {
   it("adds the rows the profile needs, the website rows without LinkedIn (the page has its own field)", () => {
     expect(rowsToAdd(myExperience({ work: 0, education: 0, languages: 0, websites: 0 }), full)).toEqual([
       { addButtonId: "add.work-experience", list: "work", count: 2 },
@@ -460,6 +459,15 @@ describe("rows (the live Hooli My Experience step)", () => {
     expect(p.kept).toContainEqual({ fieldId: "languages-3.native", rule: "row:languages[2].native" });
     expect(p.left.get("skills.skills")).toBe("multi-select");
     expect(p.needOptions.size).toBe(0);
+  });
+
+  it("takes a language's levels by their labels, bare verbs included", () => {
+    const level = (label: string) =>
+      slotOf({ id: `languages-1.${label}`, label, kind: "dropdown", currentValue: null } as Field, "languages");
+    for (const label of ["Reading", "Overall", "Read", "Speak", "Write", "Written comprehension"]) {
+      expect(level(label)).toBe("level");
+    }
+    expect(level("Language")).toBe("language");
   });
 
   it("takes education years by their labels, as a year", () => {

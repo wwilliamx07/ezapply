@@ -5,6 +5,7 @@ import { z } from "zod";
 import { detectTexProgram, readTexProgram, withTexProgram } from "../documents/tex/engines.js";
 import type { Logger } from "../logger.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
+import { hashFiles } from "../util/hash.js";
 import type { Workspace } from "../workspace/workspace.js";
 
 export type TemplateKind = "resume" | "cover";
@@ -25,6 +26,12 @@ export const TemplateMeta = z.object({
   example: z.string().optional(),
   importedFrom: z.string().optional(),
   importedAt: z.string().optional(),
+  /**
+   * Hash of the files in `importedFrom` (what an import would copy) when the template was last current with
+   * it: written by template_import, or by workspace_change_mark when the user decides a change there
+   * doesn't need a re-import. The workspace check compares it with the folder as it is now.
+   */
+  sourceHash: z.string().optional(),
 });
 export type TemplateMeta = z.infer<typeof TemplateMeta>;
 
@@ -123,6 +130,7 @@ export class TemplateService {
       ...(contentFiles.length ? { contentFiles } : {}),
       importedFrom: src,
       importedAt: new Date().toISOString(),
+      sourceHash: await hashFiles(src, files),
     };
     await writeJsonAtomic(join(dest, "template.json"), meta);
     this.log.info({ kind: input.kind, files: files.length, contentFiles: contentFiles.length }, "template imported");
@@ -188,6 +196,64 @@ export class TemplateService {
       });
     this.log.info({ format }, "cover example imported");
     return { path: join(dir, name), format, ...(previous ? { previous } : {}) };
+  }
+
+  /**
+   * The folder an imported template came from, as it is now: its hash next to the one recorded, and for a
+   * template imported before `sourceHash` existed, whether the folder still matches the workspace copy. Null
+   * for a template that wasn't imported; `unreadable` when the folder is gone or can't be listed.
+   */
+  async sourceState(
+    kind: TemplateKind,
+  ): Promise<
+    | null
+    | { from: string; unreadable: string }
+    | { from: string; hash: string; recorded: string | null; matchesCopy?: boolean }
+  > {
+    const meta = await this.templateMeta(kind);
+    if (!meta?.importedFrom) return null;
+    const from = meta.importedFrom;
+    let files: string[];
+    try {
+      if (!(await stat(from)).isDirectory()) return { from, unreadable: "not a folder any more" };
+      files = await listImportable(from);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      return { from, unreadable: code === "ENOENT" ? "folder not found" : (err as Error).message };
+    }
+    const hash = await hashFiles(from, files);
+    if (meta.sourceHash) return { from, hash, recorded: meta.sourceHash };
+    return { from, hash, recorded: null, matchesCopy: await this.copyMatches(kind, meta.main, from, files) };
+  }
+
+  /** Record that templates/<kind>/ is current with its source folder as it hashes now. */
+  async setSourceHash(kind: TemplateKind, sourceHash: string): Promise<void> {
+    const meta = await this.templateMeta(kind);
+    if (!meta) throw new EzError(ErrorCode.NotFound, `templates/${kind} has no template.json.`);
+    await writeJsonAtomic(this.ws.path("templates", kind, "template.json"), { ...meta, sourceHash });
+  }
+
+  /**
+   * Whether every file in the source folder is in templates/<kind>/ unchanged. The `% !TEX program` line an
+   * import may add to the main file is left out of the comparison.
+   */
+  private async copyMatches(kind: TemplateKind, main: string, from: string, files: string[]): Promise<boolean> {
+    const norm = (b: Buffer) => b.toString("utf8").replace(/\r\n/g, "\n");
+    for (const f of files) {
+      const [src, copy] = await Promise.all([
+        readFile(join(from, f)).catch(() => null),
+        readFile(this.ws.path("templates", kind, f)).catch(() => null),
+      ]);
+      if (src === null || copy === null) return false;
+      let a = norm(src);
+      let b = norm(copy);
+      if (f === main && !readTexProgram(a) && readTexProgram(b)) {
+        a = a.replace(/^﻿/, "");
+        b = b.replace(/^﻿/, "").replace(/^% !TEX program = \S+\n/, "");
+      }
+      if (a !== b) return false;
+    }
+    return true;
   }
 
   async templateMeta(kind: TemplateKind): Promise<TemplateMeta | null> {

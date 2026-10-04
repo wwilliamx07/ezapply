@@ -33,7 +33,28 @@ export const CaptureResult = z.object({
 });
 export type CaptureResult = z.infer<typeof CaptureResult>;
 
-/** Stored as postings/<id>/meta.json. Bump schemaVersion and add a migration on change. */
+/**
+ * The application a posting is tied to: a form site's page for its job. `from` says how it was found: the
+ * posting's own URL is on the site (`posting-url`), its captured page links to the application (`apply-link`),
+ * its URL names an embedded board's job (`host-page-job`), the first form call that changed a page bound the
+ * tab to the posting (`bound`), or the user said which tab it is (`user`). See companion/src/postings/application.ts.
+ */
+export const PostingApplication = z.object({
+  url: z.string(),
+  site: z.string(),
+  /** Absent for `host-page-job`: the careers page names the job, not the employer's space on the site. */
+  tenant: z.string().optional(),
+  job: z.string().optional(),
+  from: z.enum(["posting-url", "apply-link", "host-page-job", "bound", "user"]),
+  at: z.string(),
+});
+export type PostingApplication = z.infer<typeof PostingApplication>;
+
+/**
+ * Stored as postings/<id>/meta.json. Bump schemaVersion and add a migration on a change that older readers
+ * would get wrong. An added optional field (`application`) needs neither: older builds drop it when they rewrite
+ * the file, and it's found again from the capture.
+ */
 export const PostingMeta = z.object({
   schemaVersion: z.literal(1),
   id: z.string(),
@@ -52,6 +73,7 @@ export const PostingMeta = z.object({
   bundleRequired: z.boolean().optional(),
   status: PostingStatus,
   tabId: z.number().int().optional(),
+  application: PostingApplication.optional(),
   capturedAt: z.string(),
   updatedAt: z.string(),
 });

@@ -8,6 +8,7 @@ import {
   singlePageMessages,
   singleStep,
   standardWaits,
+  titledJob,
   visibleTexts,
 } from "../../engine/standard.js";
 import type { FieldSpot, SiteDefinition, WidgetDriver } from "../../engine/types.js";
@@ -21,15 +22,15 @@ import { checkboxDriver, checkboxGroupDriver, radioDriver, textDriver } from "..
  * Application tab (`…/application`), one React page with Submit at the end. Each question is an element with a
  * `data-field-path` (its id) and a `label[for]`; text inputs and textareas, Yes/No
  * toggle buttons, radio and checkbox groups, a location field that suggests places as you type, and file inputs.
- * Built from a live application page (2026-10-03) and checked on one live (filling, never submitting). Uploads send
+ * Built from a live application page and checked on one live (filling, never submitting). Uploads send
  * the file to Ashby at once, so they weren't tried live. See references/components/sites.md.
  */
 
 const SEL = {
   form: "#form, .ashby-application-form-container",
   // Every question carries its path. Most are also `.ashby-application-form-field-entry`, but a radio or checkbox
-  // group is a plain `div[data-field-path]` around a fieldset that has its own class (seen live on Wayne's form,
-  // 2026-10-04: going by the class alone missed all seven).
+  // group is a plain `div[data-field-path]` around a fieldset that has its own class (seen live,
+  // where going by the class alone missed all seven).
   entry: "[data-field-path]",
   title: ".ashby-application-form-question-title, label",
   consent: ".ashby-application-form-texting-consent-description",
@@ -146,6 +147,7 @@ export const ashby: SiteDefinition = {
   page: {
     kind: (doc, _url, count) => singlePageKind(doc, count, applyButton(doc)),
     step: (doc) => (doc.querySelector(SEL.entry) ? singleStep(norm(text(doc.querySelector("h1")))) : undefined),
+    job: (doc) => titledJob(text(doc.querySelector("h1"))),
     stepKey: (_doc, url) => url,
     errors: (doc) => visibleTexts(doc, SEL.errors),
     messages: () => [],

@@ -11,7 +11,7 @@ skills treat them all alike.
 | `engine/types.ts` | `SiteDefinition` and its parts (`PageRules`, `RepeatRules`, `FillRules`, `SiteWaits`, `Messages`), `FieldSpot`, `RowSpot`, `AddButtonSpot`, `WidgetDriver` |
 | `engine/extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
 | `engine/api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
-| `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules, standard waits and messages |
+| `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
 | `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `parseDate`, React props, `win(node)` |
 | `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming` |
 | `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
@@ -48,7 +48,7 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 | `fields(doc)` | Every field in page order, as `FieldSpot`s: container, driver (optional), key, prompt (`label`), section title, required, and optionally automation id, help, error, profile hint |
 | `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save) |
 | `rows(doc, sections)` | Rows the page can delete (a section with its own delete button), and saved items (a section of its own with no fields: Oracle's tiles) |
-| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, back, button labels, and `isSubmit` |
+| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the one-page sites' own title. A site whose pages show no title leaves it out |
 | `repeat` | What a deletable thing is called, what an add makes more of and a removal fewer of, the delete button (revealed first where the site hides it), confirming a removal, and an inline form's errors |
 | `fill` | `order` (`given`, or `page` for dependent lists), `waitForStaleErrors`, `scrollBeforeUpload`, `newErrorsOnly` (a page that keeps old errors on screen) |
 | `waits` | `afterField`, `afterRow`, `afterStep(doc, moved)`, `afterAction` ([waits](#waits-owned-by-the-site)) |
@@ -129,7 +129,7 @@ options without opening anything; `fill` calls `onChange` with the matching opti
 an async select is searched through `onInputChange`, then its options are read once they change; `remove` calls
 `onChange` without the values.
 
-**Why not clicks.** Seen live on Greenhouse (2026-10-03): a synthetic mousedown never opens the menu unless the
+**Why not clicks.** Seen live on Greenhouse: a synthetic mousedown never opens the menu unless the
 page has focus, and the user's browser window usually hasn't while they type in their terminal. Choosing
 through `onChange` needs no menu and no focus. **Why the alternate fiber.** React keeps two copies of each fiber;
 the one stored on the node can be the old one. After a choice the page showed, reading from the stored copy gave
@@ -183,7 +183,7 @@ site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-au
   definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
 
 ## Checking a site live
-The Greenhouse, Lever and Ashby definitions were checked against live public forms (2026-10-03) with a script, not
+The Greenhouse, Lever and Ashby definitions were checked against live public forms with a script, not
 in the repo, that starts headless Edge, opens the page over the DevTools protocol, injects the site's built bundle
 into the page's main world as the extension does, and calls the adapter's methods. Rules it kept:
 - **Never submits.** Nothing calls Submit; the guard is in place; `next` was checked to refuse.

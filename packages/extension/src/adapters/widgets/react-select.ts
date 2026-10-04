@@ -5,7 +5,7 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.j
 
 /**
  * react-select (used by Greenhouse's job boards and many React forms), driven through the component itself: its
- * props hold the options and the `onChange` that chooses one. Seen live (Greenhouse, 2026-10-03): a synthetic
+ * props hold the options and the `onChange` that chooses one. Seen live (Greenhouse): a synthetic
  * mousedown never opens its menu unless the page has focus, and the user's browser window usually hasn't while they
  * type in their terminal; a trusted click opened it. Choosing through `onChange` needs no menu and no focus, and
  * reading `options` needs no menu either, so `list_options` costs nothing.

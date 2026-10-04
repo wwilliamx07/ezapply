@@ -85,6 +85,15 @@ export function stepInfo(doc: Document): FormSchema["step"] {
   };
 }
 
+/**
+ * The job title, from the flow's hidden heading ("Firmware Engineering Co-op application, step 1 of 4",
+ * seen live). Nothing when the heading is worded otherwise (another language): never a guess.
+ */
+export function jobInfo(doc: Document): FormSchema["job"] {
+  const m = /^(.+?)\s+application,\s*step \d+ of \d+$/i.exec(text(doc.querySelector(SEL.flowHeading)));
+  return m?.[1] ? { title: m[1].trim() } : undefined;
+}
+
 /** A section's title: its own heading (single-page flow), else the titles of its blocks. */
 function sectionTitle(section: HTMLElement): string {
   const own = text(section.querySelector(SEL.sectionTitle));

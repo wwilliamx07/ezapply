@@ -104,8 +104,20 @@ export class RepoService {
     return this.syncs.run(fullName.toLowerCase(), () => this.doSync(fullName, source));
   }
 
-  private async doSync(fullName: string, source: RepoSource): Promise<SyncResult> {
-    const dir = this.cachePath(fullName);
+  /**
+   * The commit the remote's default branch points at, without fetching anything (`git ls-remote`), so the
+   * cache stays as it is until the user agrees to re-index. Null for an empty repo.
+   */
+  async remoteHead(fullName: string, source: RepoSource, timeoutMs = 10_000): Promise<string | null> {
+    assertRepoName(fullName);
+    const { remote, safe, authEnv } = await this.access(fullName, source);
+    const out = await this.git(safe, ["ls-remote", "--", remote, "HEAD"], authEnv, timeoutMs);
+    const sha = out.split(/\s/)[0]?.trim();
+    return sha && /^[0-9a-f]{40,64}$/.test(sha) ? sha : null;
+  }
+
+  /** The remote, the hardening flags every git command against it gets, and the token's environment. */
+  private async access(fullName: string, source: RepoSource) {
     const auth = source === "app" ? await this.github.gitAuthHeader() : null;
     const remote = this.cloneUrl(fullName);
     // Real remotes are HTTPS only: no file://, ssh, ext:: or submodule transports.
@@ -118,6 +130,12 @@ export class RepoService {
     const authEnv: Record<string, string> = auth
       ? { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: auth }
       : {};
+    return { remote, safe, authEnv };
+  }
+
+  private async doSync(fullName: string, source: RepoSource): Promise<SyncResult> {
+    const dir = this.cachePath(fullName);
+    const { remote, safe, authEnv } = await this.access(fullName, source);
     const exists = await stat(join(dir, ".git")).then(
       () => true,
       () => false,
@@ -387,18 +405,56 @@ export class RepoService {
     return `${count} claims from knowledge/*/claims.yaml\n\n${blocks.join("\n\n")}`;
   }
 
+  /** Every repo with a knowledge folder, whether or not it's still selected (`claims_list` reads them all). */
+  async indexedRepos(): Promise<string[]> {
+    const keys = await readdir(this.ws.path("knowledge")).catch(() => [] as string[]);
+    return keys.filter((k) => k.includes("__")).map((k) => k.replace("__", "/"));
+  }
+
+  /** Delete a repo's knowledge folder and its cache (a repo no longer selected). */
+  async forget(fullName: string): Promise<{ removed: string[] }> {
+    assertRepoName(fullName);
+    const removed: string[] = [];
+    const cache = this.cachePath(fullName);
+    if (await stat(cache).catch(() => null)) {
+      await this.syncs.run(fullName.toLowerCase(), async () => {
+        await setReadOnly(cache, false);
+        await rm(cache, { recursive: true, force: true });
+      });
+      removed.push(`repo-cache/${RepoService.key(fullName)}`);
+    }
+    const knowledge = this.knowledgePath(fullName);
+    if (await stat(knowledge).catch(() => null)) {
+      await rm(knowledge, { recursive: true, force: true });
+      removed.push(`knowledge/${RepoService.key(fullName)}`);
+    }
+    this.log.info({ repo: fullName, removed }, "repo forgotten");
+    return { removed };
+  }
+
   async cachedRepos(): Promise<string[]> {
     const entries = await readdir(this.ws.path("repo-cache")).catch(() => [] as string[]);
     return entries.filter((e) => e.includes("__")).map((e) => e.replace("__", "/"));
   }
 
-  private async git(pre: string[], args: string[], env: Record<string, string> = {}): Promise<string> {
+  private async git(
+    pre: string[],
+    args: string[],
+    env: Record<string, string> = {},
+    timeoutMs = 10 * 60_000,
+  ): Promise<string> {
     requireGit();
     const r = await run("git", [...pre, ...args], {
-      timeoutMs: 10 * 60_000,
+      timeoutMs,
       maxOutputBytes: 32 * 1024 * 1024,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", GCM_INTERACTIVE: "never", ...env },
     });
+    if (r.timedOut) {
+      throw new EzError(
+        ErrorCode.Internal,
+        `git ${args.find((a) => !a.startsWith("-")) ?? ""} timed out after ${Math.round(timeoutMs / 1000)} s.`,
+      );
+    }
     if (r.exitCode !== 0) {
       const msg = r.stderr.replace(/Authorization: Basic \S+/g, "Authorization: [redacted]").trim();
       throw new EzError(

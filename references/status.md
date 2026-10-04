@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-03.
+As of 2026-10-04.
 
 ## Done
 | Area | State |
@@ -13,28 +13,32 @@ As of 2026-10-03.
 | Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
 | Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
-| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot, submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
+| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot (refused by Chrome live, see [the first Workday run on the engine](#the-first-workday-run-on-the-engine)), submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
 | Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
 | Adapters: one engine, a definition per site | A site registry in the protocol (detection, tenant, job, canonical paths, access, waits), from which the extension's bundles, manifest permissions, site access and the companion's tab choice derive; one adapter engine (API, extraction, ids, rows, fill loop, next and back, guard) with a definition per site; shared widget drivers (native controls, react-select through its props, toggle buttons, a search combobox, file fields); waits owned by each site, with per-site sections in `autofill-timing.yaml`; schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) instead of site names in the companion. Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal ([adapters](components/adapters.md)) |
-| Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted (2026-10-03; [sites](components/sites.md)) |
-| Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; the rest replayed on that run's records |
-| Audit and status | `form-log.jsonl`, automatic status credited only to the posting on the tab's tenant, tab choice by that tenant, duplicate lookup by company, resume after interruption |
+| Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted ([sites](components/sites.md)) |
+| Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; all of it in two Workday runs |
+| Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
-| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions on 2026-09-30) |
+| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
+| Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
 - **Workday and Oracle on the engine** (2026-10-03). Their fillers and readers moved unchanged, the golden
   schemas of every fixture state and live snapshot are equal, and every behaviour test and the companion's e2e
-  tests pass. Not yet run live. This is an adapter change made before the autofill live runs, against the plan
+  tests pass. This is an adapter change made before the autofill live runs, against the plan
   ("One adapter change per live run" in [development](development.md)): the next Workday and Oracle runs test
   `strict` and the move together. If one is slower or fails where the last ones didn't, compare its debug
-  records with the 2026-09-30 runs, and suspect the engine's fill loop (its waits after each field are the
-  same calls as before) before `strict`.
+  records with the runs before the move, and suspect the engine's fill loop (its waits after each field are the
+  same calls as before) before `strict`. **Workday ran live twice** (debug mode on;
+  [the first run](#the-first-workday-run-on-the-engine)). It wasn't slower: autofill's 20-field My Experience fill
+  took 13.4 s in the page. `strict` refused what it should have (a field of study and a language, below). Oracle
+  hasn't run on it.
 - **Greenhouse, Lever and Ashby with the extension** (2026-10-03). Checked live through their built bundles in
-  headless Edge. One real application so far, on Ashby (Wayne, 2026-10-04): capture, text fields, the location,
+  headless Edge. One real application so far, on Ashby: capture, text fields, the location,
   Yes/No buttons and the resume upload worked; every radio and checkbox group was missed, because the definition
   found questions by a class those groups don't have. Fixed (they're found by `data-field-path`), checked on the
   live page and covered by a saved copy of it, not yet used in a real application
@@ -42,40 +46,52 @@ As of 2026-10-03.
   application on Greenhouse or Lever.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
-- **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Not yet seen: whether
-  Workday's application URL keeps the job path (`…/Title_R123/apply/…`) through sign-in and every step. If it
-  drops it, the check falls back to the tenant, as before.
+- **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Workday's application URL
+  kept the job path (`…/Title_Req100010/apply/applyManually`) on every step of both Workday runs on the engine;
+  the sign-in page itself wasn't seen (the user was signed in). If a step drops it, the check falls
+  back to the tenant. Those runs never compared anything, though: both postings were captured on the
+  employer's own careers site, with no tenant, so any application tab would have been credited to the active one.
+  Most of the workspace's postings were captured off the form sites like that.
+- **Tying postings to their applications** (2026-10-04): tested on URLs, saved-page link
+  shapes, the matching table and over MCP. Run over the user's postings, it ties about two in five: two by their
+  careers page's Apply link, one by an embedded Greenhouse board's `gh_jid`, and the rest by their own URL. The
+  others (a school's job board, employers' own career sites, iCIMS, SuccessFactors) are bound to their tab on the
+  first fill. Not yet seen live: the first-fill
+  binding and its `postingBound` notice, title matching against real postings' roles (the title is read on every
+  site's saved pages, including Workday's sign-in page), and whether the binding lost at a restart matters.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
-  Workday fixture and with a timed-out call, then used on one live run (Hooli, 2026-10-01), whose records
+  Workday fixture and with a timed-out call, then used on live runs; the first one's records
   checked autofill's plan and ruled out the waits in the slowdown below.
-- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): one live run of its first
-  phase (Hooli, 2026-10-01). It filled My Information correctly, including the strict read-backs on the phone
+- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): run live in full once,
+  on Workday ([the first run on the engine](#the-first-workday-run-on-the-engine)): rows added and filled,
+  `strict` refusals right, the language levels missed (fixed). Before that, one live run of its first phase. It
+  filled My Information correctly, including the strict read-backs on the phone
   type and the province, and nothing on the question steps; both causes were fixed afterwards. The rest was
-  built on 2026-10-02: work, education, language and website rows (adding the rows), link fields, Oracle's item
+  built after it: work, education, language and website rows (adding the rows), link fields, Oracle's item
   forms, computed answers, options listed for values with several wordings, fills in chunks, and `strict` fills
   in both adapters. Replayed on that run's recorded pages, it adds the rows the agent added and fills 34 of the
   37 row fields with the agent's own values (the other three: a reworded role description and two language
-  levels the agent judged lower) and 8 question fields as chosen in the run. Not yet run live. `strict` is
+  levels the agent judged lower) and 8 question fields as chosen in the run. Not yet run live on Oracle. `strict` is
   an adapter change ("One adapter change per live run" in [development](development.md)): a slower next run
   points at it first. Oracle's work and education forms have never been seen, so their fields are matched by
   hint and label on trust.
-- **Fills twice as slow per field in the 2026-10-01 Hooli run, cause unknown.** Dropdowns took about 3.5–4 s
-  each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in the 2026-09-30
-  Hooli run. Ruled out:
+- **Fills twice as slow per field in debug mode's first live run, cause unknown.** Dropdowns took about 3.5–4 s
+  each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in an earlier run on the
+  same tenant. Ruled out:
   - **The waits:** the debug records show every call received the same values as before (the six dropdown
     waits at 200 ms). Commented-out lines take the defaults, which are now those values.
-  - **The fill code:** unchanged since b5ba545, used by both runs.
+  - **The fill code:** unchanged since d739492, used by both runs.
   - **The tab:** never hidden.
   - **Debug mode:** its first part records only in the companion.
   - **The page in general:** `list_options` opened the same tenant's dropdowns as fast as before (2.6 s for 3).
 
-  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, item 6)
+  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, "Autofill debug mode")
   would show which wait grew. One guess: the settle after each field (`afterFieldMaxMs`, 1.5 s) running to its
   maximum on a page that never goes quiet.
-- **Parts of filling a signed-in Workday application.** The first real application (2026-09-27, Soylent)
+- **Parts of filling a signed-in Workday application.** The first real application
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
   reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;
-  cause unknown, not yet re-run live). The second (2026-09-28, Monarch) reached the review page too and found
+  cause unknown, not yet re-run live). The second reached the review page too and found
   more adapter bugs. The fixes the next two live runs (same posting) showed working were kept: split dates
   typed digit by digit (four `MM/YYYY` and two `YYYY` dates taken, the step advanced), typeahead entries
   matched one by one with bare names (12 of 15 skills under Workday's own names, the misses not stopping the
@@ -84,12 +100,12 @@ As of 2026-10-03.
   change (dismissing a listbox left open after a miss, `ok: false` while a field shows an error, `decline`
   matching, education dates with a day, the student seed questions, documents written before the form) were
   reverted: they were unverified, and fills had become several times slower (see Known issues). Not
-  exercised yet: the remove controls for skill pills and attached
-  files (`DELETE_charm`, `delete-file`), and repeatable rows (`panel-set-delete-button`), which come from
-  knowledge of Workday's markup, not a live page. On the first real application: a saved
-  snapshot of a step with a removable pill, file and row, turned into a live fixture. The Back button worked
-  live in the two Oscorp runs (2026-09-29).
-- **Parts of filling an Oracle application.** The first live application (2026-09-29, Umbrella, single page,
+  exercised yet: the remove controls for skill pills and attached files (`DELETE_charm`, `delete-file`; both
+  hooks are on the saved My Experience step, but neither was pressed live). Repeatable rows' Delete was a guess
+  that matched nothing live; it's now found from a saved step (`test/fixtures/live/my-experience.html`,
+  employer details and the user's values replaced), but not yet pressed live. The Back button worked
+  live in two runs on one tenant whose steps are all titled "Application".
+- **Parts of filling an Oracle application.** The first live application (an employer's own domain, single page,
   in Chrome, with site access granted at Set posting) was filled to Submit: text, pills, radios, dates, lists,
   uploads, and education and work entries through the inline form and Save worked. Its failures (list
   read-backs, a re-rendered city input, the postal-code search, a reformatted phone number, stale errors,
@@ -102,7 +118,18 @@ As of 2026-10-03.
   background, the page reporting visible within the 500 ms the extension polls, a minimized window reported
   hidden, and a step after a review page taking about as long as the steps before it. Check it in one run with
   no other change, opening a review page in the middle of the application.
-- **Guidance from the 2026-09-30 sessions** (`.tex` edited with the Edit tool only, the answer bank read
+- **Bringing the browser window to the front** (`forms.focusBrowser`, 2026-10-04): tested against a fake
+  `ext.windows` and through the companion with a fake extension. Not yet seen live: whether Windows lets the
+  extension bring the window in front of the terminal or only flashes its taskbar button (`windowFocused`
+  true with `focused` false in the debug records), a minimized window restored, and whether focus is the cause of
+  Workday's untaken dates. For that, two runs with debug mode on: one with the option off and the terminal in
+  front, one with it on, comparing the dates and `shown.focused` in the records.
+- **Keeping the workspace current** (2026-10-04): tested with real git against a local remote, on temporary
+  templates and profiles, and over MCP. Not yet seen: `ls-remote` against GitHub with the app's token, the
+  agent calling `workspace_changes` at a session's start and following the skill (asking first, updating the
+  profile from a diff without dropping what the resume never held), and how often a push that changes nothing
+  indexed comes up.
+- **Guidance from five live sessions** (`.tex` edited with the Edit tool only, the answer bank read
   before asking, resolved answers saved into the existing entry with `sensitive: false`): not yet seen in a
   session.
 - **Capturing from embedded job boards** in a real browser: whether `allFrames` quietly skips frames the
@@ -135,12 +162,67 @@ As of 2026-10-03.
   which fails safe), the terminal state after ending Claude in Windows Terminal, PowerShell and macOS
   Terminal, and an npm-installed `claude.cmd` launched through the shell.
 
+## The first Workday run on the engine
+Workday, five steps, debug mode on, reached the review page. The first live run of autofill's
+rows and of the engine. The user stepped in twice. Calls: 42, 171 s in calls, 73 s of that with the tab hidden
+(step 1's `autofill_step`, 72 s, ran while the review page was in front).
+- **Autofill:** My Information 8 filled; My Experience added 8 rows and filled 20 fields. Refused by `strict`,
+  correctly: the field of study (the page picked a longer name for it) and a language the list holds only as two
+  regional variants (the agent asked the user). Missed: the nine language levels,
+  labelled "Read", "Speak", "Write", which the label test didn't know (fixed:
+  [autofill](components/autofill.md)), and the stored "how did you hear" answer, "School job board", which
+  isn't an option. Application Questions: nothing, since no answer-bank wording matched. The agent filled them
+  by meaning.
+- **Multi-part dates failed again**: four `MM/YYYY` work dates and an `MM/DD/YYYY` graduation date read back
+  right while Workday said they were required, and the user retyped them all. Cause unknown
+  ([dates](components/workday-adapter.md#dates-typed-into-workdays-split-widget)). The fill result said
+  `ok: true` with "Filled, but the page reports", so the agent retried twice, though the skill says not to
+  retry a date.
+- **No row could be removed.** Following the skill, the agent added a Certifications row for the profile's
+  certificate, found the list (professional licences) didn't have it, and `remove_repeatable` said "No
+  removable row". The empty row's required Certification blocked My Experience until the user deleted it.
+  It isn't the new row alone: no row on the step was marked removable (two work, one education, three
+  language, two website rows), so the row delete hooks (`rowDelete`: `panel-set-delete-button`,
+  `deleteButton`, a button labelled "Delete…"), which come from knowledge, not a live page, match nothing
+  on this tenant. Fixed from a saved copy of the step: the live button is a plain "Delete" with a trash icon
+  ([removable rows](components/workday-adapter.md)). Not yet pressed live.
+- **`screenshot` fails in Chrome**: "Either the '<all_urls>' or 'activeTab' permission is required." The
+  extension's per-site host permissions aren't enough for `tabs.captureVisibleTab`.
+- **"How Did You Hear About Us?" is a nested list.** `list_options` returned nothing and `search_options` took
+  6.5 s and returned the ten top-level categories whatever the query. Filling a path (`Job Boards > …`) listed
+  the second level in the failure. The agent then picked the employer's own careers site as its own judgment, a factual
+  answer about the user it couldn't know, and flagged it at the hand-off.
+- **`go_next` on a step the user had already advanced.** The user pressed Save and Continue themselves, and the
+  agent's `go_next` pressed it again on the fresh Application Questions step, which showed every field there as
+  required.
+
+## The second Workday run on the engine
+Another posting at the same employer, the same evening, debug mode on, the browser kept in front (`focused: true` on all
+19 calls). It reached the Terms and Conditions box on step 4 with no help from the user: every date was taken
+the first time, and each step advanced on the first Save and Continue. 102 s in calls.
+- **Autofill:** My Information 8 of 9 (the stored "how did you hear" isn't an option). My Experience added 8
+  rows and filled 29 of 31 fields, now including all nine language levels; the two left were the same `strict`
+  refusals (the field of study and the language). It took 36.4 s: 3.3 s adding rows, 3.7 s listing the degree and
+  level options, 19.5 s for 25 fields and 9.7 s for the last 6. The 6-field chunk was slow because the language
+  missed: about 0.8 s a field otherwise, near the first run's 0.67 s. Application Questions: nothing, as before.
+  The agent filled all five from the profile and answer bank and every one was taken; no stored wording matched
+  the form's, and the agent didn't offer to save the form's wordings, so the employer's next form asks again.
+- **The agent's own fills:** "how did you hear" cost five calls and 16 s ("Job Boards" missed, two
+  `search_options` of 6.5 s each returning the top level whatever the query, then "Job Boards > Other" on its
+  own judgment). One `fill_fields` of 26.7 s held 14 skills (10 found, 3 more on a second try), the first role
+  description rewritten for the posting, and the language: it picked one of the regional variants itself (the
+  user had chosen it in the first run; it wasn't saved).
+- **Its saved My Experience step** gave the live row Delete button and date markup (above). On it that language
+  row's three levels read "Select One", although `get_form` read "Intermediate" for each just before Save and
+  Continue. Unexplained: when the page was saved, and whether changing the language cleared its levels, aren't
+  known.
+
 ## Known issues
 - The TeX tests, including the default cover letter compiling to one page, pass with MiKTeX (latexmk) on
   Windows. Once, the default cover test failed while the other TeX tests passed. It didn't reproduce in
   four later runs, and the error wasn't captured. Possibly a MiKTeX first-use package download. If it
   recurs, capture the compile result's `hint` and diagnostics.
-- **Slow fills on a live tenant.** In the third and fourth live runs (2026-09-28) a step with many
+- **Slow fills on a live tenant.** In the third and fourth live runs a step with many
   dropdowns and a long skills list ran past the companion's 120 s `form.fill` timeout, and nine dropdowns
   took over 110 s. Suspected causes, none measured yet: the adapter's fixed waits per field (settling after
   each field, dropdown open and close waits, the typeahead's waits for its own results), the Workday tab
@@ -149,56 +231,60 @@ As of 2026-10-03.
   waits were kept because its fix worked. The fifth run (after the revert) reached the review page with
   fills of about 2.5–3 s per dropdown; every wait is now tunable in `autofill-timing.yaml`
   ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). The user's own file, with six dropdown
-  waits at 200 ms, ran four live applications on 2026-09-30 with no dropdown failing to open; those values are
-  the defaults since 2026-10-01. Next: per-field timings in fill results
+  waits at 200 ms, ran four live applications in one day with no dropdown failing to open; those values are
+  now the defaults. Next: per-field timings in fill results
   (debug mode in `todo.md`).
 - **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
   extra calls. A listbox closed without a choice is now closed with a press on its own button when Escape
-  doesn't do it, which covers 6 of the 9. The two Oscorp runs (2026-09-29, with that press) still failed 12
+  doesn't do it, which covers 6 of the 9. Two runs on one tenant (with that press) still failed 12
   fields, each a dropdown whose own list had been read without a choice (`list_options` or a miss), and the
   agent's next call filled every one. The adapter now tries such an open a second time itself; why the first
   fails isn't known ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)). The first live
-  run with the retry (Tyrell, 2026-09-30, four steps) had no dropdown fail to open, and listed none before
+  run with the retry (four steps) had no dropdown fail to open, and listed none before
   filling; nothing records whether the retry ran.
-- **Reading a step before it rendered.** In the Oscorp runs `get_form` straight after `go_next` read an empty
+- **Reading a step before it rendered.** In those two runs `get_form` straight after `go_next` read an empty
   step four times. `go_next` and `go_back` now wait for the new step's fields (`stepFieldsMs`), and `go_back`
   sees a move when every step is titled "Application" (it waited out 12 s and said `moved: false` on all five
-  Backs). In the Tyrell run both `go_next`s returned in 1–3 s and the `get_form` right after read the new step
+  Backs). In the run with the retry both `go_next`s returned in 1–3 s and the `get_form` right after read the new step
   each time. `go_back` not yet tried live.
-- **Fill speed in the Tyrell run** (Workday, 2026-09-30, the first live run of the changes in b5ba545): 9
+- **Fill speed in the run with the retry** (Workday, the first live run of the changes in d739492): 9
   fields in 3 s; a step of two work rows, an education row, two websites and a nine-entry skills list (about
   20 fields) in 22 s; 4 questions in 3 s. No call timed out.
-- **The cover letter left out.** Both Oscorp runs uploaded only the resume into Workday's single Resume/CV
+- **The cover letter left out.** Both of those two runs uploaded only the resume into Workday's single Resume/CV
   field (`multiple: true`), and the user had to ask for the cover letter. `upload_file`, `go_next` and
   `get_form` now report approved documents not attached (`notAttached`), and the apply skill says both go
-  into that field. Seen working live on 2026-09-30: on Tyrell's Workday form the agent uploaded the cover
-  letter into Resume/CV after the hint. Two flaws seen on Oracle (Umbrella, twice): the agent sent both uploads
+  into that field. Seen working live: on a later Workday form the agent uploaded the cover
+  letter into Resume/CV after the hint. Two flaws seen on Oracle (twice): the agent sent both uploads
   in parallel, so the resume's result listed the cover letter, whose upload was queued right behind it; and
   the hint names Workday's Resume/CV on an Oracle form.
-- **A Workday field of study that searches nothing.** On Tyrell's form, `search_options` on the multi-select
+- **A Workday field of study that searches nothing.** On one tenant's form, `search_options` on the multi-select
   "Field of Study" returned only its two top-level entries ("Partial List (First 500 Entries)", "All") for
-  "Physics" and for "Comp", and "Physics" failed with "No option matches" in the step's
+  the stored field and for its first four letters, and the field failed with "No option matches" in the step's
   fill but was taken when filled alone a few seconds later. Not explained.
-- **Language rows emptied.** In the first Oscorp run the French and German language rows, filled with
+- **Language rows emptied.** In the first of those two runs two language rows, filled with
   `ok: true` before Save and Continue, were empty when the agent came back to the step. Not explained; the
   skill already re-checks steps when coming forward.
-- **Review answers nobody waited for** (Initrode, 2026-10-01). The first `review_wait` ran past 120 s, Claude
+- **Review answers nobody waited for.** The first `review_wait` ran past 120 s, Claude
   Code moved it to the background, and the answer came back as a task notification. After that the agent
   called `review_open` three times without `review_wait`, and once told the user to reload the open page to
   see a rebuild (the page serves the bytes read at `review_open`). The user's change requests waited in the
   companion until they asked why they'd been dropped; `review_wait` then returned at once. Nothing tells the
-  agent that an answer arrived with no wait attached. Since 2026-10-01 one tool, `review_documents`, opens
+  agent that an answer arrived with no wait attached. Now one tool, `review_documents`, opens
   the page and waits ([why](components/documents.md#review-before-attaching)); not yet seen live.
 
 ## Deferred
 **More of the most common providers.** iCIMS, SmartRecruiters, SuccessFactors, Taleo and BrassRing couldn't be
 built from public pages: their applications sit behind candidate accounts, block headless browsers, or show
 a bot challenge, which ezapply doesn't work around. Each needs pages saved from a real application
-([sites](components/sites.md#why-these-three), `todo.md` item 7).
+([sites](components/sites.md#why-these-three)). None is planned yet.
 
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:
 moving `~/.ezapply/daemon.json` to `config.json` (and `init` deleting `daemon-state.json`), and `ezapply chat`
 shutting down an earlier build's daemon found on its port. Both can go once no such install is left.
+
+**Posting extraction's own Workday code.** `extractWorkday` in `postings/extract.ts`, with the
+`WORKDAY_POSTING` hooks, predates the site registry. Moving it behind a registry hook would make posting
+extraction modular as the form adapters are. Small, and nothing needs it yet.
 
 **DecisionProvider (e.g. Jev).** Config has `decisions.provider: "none"`, and no decision tools are
 registered. The design, kept from the original plan:
@@ -243,6 +329,30 @@ interface DecisionProvider {
 1. **Resume page size:** Letter or A4 (sets the default for bundle normalization). *Assumed: Letter.*
 2. **Contributions to other people's public repos:** *assumed yes*, added by URL, with claims limited to the
    user's own commits.
+
+To answer from the next live runs:
+
+3. **Binding an `unconfirmed` tab trusts the first tab that changes.** The safeguard is the one-time
+   `postingBound` notice with the page's title ([which posting](mcp-tools.md#forms)). Is a notice enough, or
+   should the first change on an unconfirmed tab be refused until `posting_activate { tabId }`? *Built: the
+   notice.*
+4. **Bindings live in memory,** so a restart of `ezapply chat` loses them. The stored `application` still matches
+   tabs on its tenant and job, and a tenant-only one by tenant. Enough?
+5. **Title matching on real roles.** Compare the roles the agent records with the titles the pages show (every
+   debug record of a read holds `FormSchema.job`), and tune `compareTitles` if real pairs come out `unsure` or,
+   worse, `other`.
+6. **Autofill's wrong fills are silent.** The safeguards are the section-fit check, `filled` in the result, and the
+   automatic fills listed at the hand-off. Is a glance at `filled` on each step enough?
+7. **How compact `filled` must be.** The model needs the label to notice a wrong value, but every label costs
+   tokens. Measure on the next live run.
+8. **Country and province names.** The profile may hold "ON" where the list says "Ontario". A strict miss goes
+   to the model, and the debug report's loose-match section shows which aliases come up.
+9. **Role descriptions** are filled from the profile's highlights as stored, not tailored as the resume is; in
+   the replay the agent reworded one. Keep as stored?
+10. **Language levels** are one level per language for every skill (reading, writing, speaking). The agent rated
+    one language's reading and writing a step lower. Keep one level, or add per-skill levels to the profile?
+11. **Postings captured from one job-board results URL** (several from a single search page) can't be told
+    apart by URL. That's a capture problem, outside the matching.
 
 ## Where the build departs from the original plan
 The original design plan (`plan.md`) was removed on 2026-09-27 and is in git history. This table keeps

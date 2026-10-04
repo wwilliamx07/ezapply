@@ -24,6 +24,8 @@ too ([call shapes](components/workspace.md#call-shapes)), so renaming a paramete
 | Tool | Input | Does |
 |---|---|---|
 | `workspace_check` | — | The onboarding checklist `{ ready, nextStep?, items[] }` ([details](components/companion.md#readiness-checklist-workspace_check)) |
+| `workspace_changes` | `refresh?` | What in the workspace is behind its source: `{ changes[] { id, kind, summary, detail, diff?, affects[] }, notChecked?[] { what, reason, hint? }, pending? }`, `{ changes: [] }` when all is current. Kinds: `repo-pushed`, `repo-deselected`, `template-source`, `resume-edited` (with the template's `diff`), `profile-identity`. The repos are checked once per chat in the background; this waits up to 15 s for that check, then answers with `pending: true`. `refresh` checks the repos again. `EZAPPLY.md` has Claude call it at the start of every session ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
+| `workspace_change_mark` | `id`, `as` (`done` \| `later`) | `later` hides the change until the chat ends. `done` records the derived part as current: a template's source hash, the resume template the profile now matches, the profile the cover fields now match; for `repo-deselected` it deletes the repo's knowledge folder and cache (`removed`). Refused for `repo-pushed` (re-indexing ends it) and for an id that isn't current (`not_found`) |
 | `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code. Firefox's steps mention Grant site access, and that Oracle career sites and Greenhouse, Lever and Ashby boards are granted one site at a time by Set posting |
 | `extension_pair_wait` | `timeoutSeconds` (5–900, default 180) | Waits for the extension to connect; `{ connected, extension? , hint? }` |
 | `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site (a registry site: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`; else `generic`); when not, a hint |
@@ -34,8 +36,8 @@ too ([call shapes](components/workspace.md#call-shapes)), so renaming a paramete
 |---|---|---|
 | `posting_active` | — | Also `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). Within 40 s of `ezapply chat` starting, first waits for the paired extension to reconnect, and for any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. When the paired extension hasn't connected since the start (the wait ran out), adds `extensionReconnecting` (a note: a capture made while ezapply wasn't running may still arrive). None → `no_active_posting` (with the same note in the hint, if it applies) |
 | `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active. Settles like `posting_active`; with the extension still reconnecting the result is `{ postings, extensionReconnecting }` |
-| `posting_activate` | `id` (a plain folder name; anything with separators or `..` is `bad_request`) | Make it active; returns its details |
-| `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status |
+| `posting_activate` | `id` (a plain folder name; anything with separators or `..` is `bad_request`), `tabId?` | Make it active; returns its details. With `tabId` (only when the user says that tab is this posting's application, usually from a `postingMismatch` hint), also binds that tab to it and stores the tab's site, tenant and job as the posting's `application` (`from: "user"`); the result adds `boundTab { tabId, url }`. A tab that isn't on a form site is `bad_request` ([which posting](#forms)) |
+| `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status. `reqId` is trimmed, and one of more than three words is refused as a title (`bad_request`, hint: put it in `role`), since it would be compared with application URLs' job ids. Setting it lets the posting's capture be searched again for its application |
 
 ## Documents
 TeX source under `postings/` or `templates/`; PDFs read from `postings/`, `templates/`, `library/`; output
@@ -51,7 +53,7 @@ under `postings/` or `library/`. Details: [documents.md](components/documents.md
 | `pdf_merge` | `inputs[] { path, pages?, label? }`, `output`, `bookmarks` (true), `normalize` (`auto`/`none`/`letter`/`a4`), `title?`, `author?` | One PDF with bookmarks and consistent page sizes; returns sections with page ranges |
 | `pdf_from_images` | `images[]`, `output`, `pageSize` (`letter`/`a4`) | Images → PDF, one per page |
 | `pdf_compress` | `path`, `output?` (default overwrite), `targetBytes?` (default config, 5 MB) | Lossless, then Ghostscript if installed; before/after, method, target met |
-| `review_documents` | `files[]` (1–6 PDFs under one `postings/<id>/`) or `reviewId`; `timeoutSeconds` (5–900, default 600) | With `files`: opens a review page in the user's browser showing those PDFs, each with a box for changes, and waits for the answer: `{ reviewId, url, postingId, files, openedIn, done: true, approved[], changes[] { file, request } }` (`openedIn`: the browser it opened in, or `default`), or on timeout `{ …, done: false, url, hint }`. When no browser opened it returns at once with `openedBrowser: false`, `tell` (the URL to give the user) and a hint to wait with `reviewId`. With `reviewId`: waits again for that review (`{ reviewId, done, … }`; a replaced one gives `supersededBy`). A newer review of the same posting replaces an open one. *Why one tool:* with a separate wait call the agent opened three reviews without waiting (2026-10-01), and the user's answers sat unread ([details](components/documents.md#review-before-attaching)) |
+| `review_documents` | `files[]` (1–6 PDFs under one `postings/<id>/`) or `reviewId`; `timeoutSeconds` (5–900, default 600) | With `files`: opens a review page in the user's browser showing those PDFs, each with a box for changes, and waits for the answer: `{ reviewId, url, postingId, files, openedIn, done: true, approved[], changes[] { file, request } }` (`openedIn`: the browser it opened in, or `default`), or on timeout `{ …, done: false, url, hint }`. When no browser opened it returns at once with `openedBrowser: false`, `tell` (the URL to give the user) and a hint to wait with `reviewId`. With `reviewId`: waits again for that review (`{ reviewId, done, … }`; a replaced one gives `supersededBy`). A newer review of the same posting replaces an open one. *Why one tool:* with a separate wait call the agent opened three reviews without waiting, and the user's answers sat unread ([details](components/documents.md#review-before-attaching)) |
 | `attach_mode_set` | `mode` (`after-approval` / `immediately`) | Saves `documents.attach` in `ezapply.config.json`, keeping everything else as written |
 | `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens a PDF or image in the user's browser (the extension's), anything else in its default app, without waiting. `{ opened, openedIn }` (a browser name, or `default`) |
 
@@ -102,21 +104,44 @@ site differs (Oracle's inline forms, one-page applications), the tool descriptio
   tenant whose job is the posting's (see below), then any on its tenant (the one the user is looking at, else
   the most recently used), otherwise any application tab the same way. The tenant is `siteTenant`: the Workday tenant, the Oracle career site (`host/site`), the Greenhouse board, the Lever company or the Ashby organization. The companion picks
   it from `browser.status` and always passes it explicitly.
-- **Which posting:** fills, removals, uploads, steps and the confirmation page are appended to the active
-  posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab is that
-  posting's. That means the tab is on its tenant, and for the same job when both URLs name one: `siteJob`
-  reads Workday's requisition from the job's path segment (`…/Engineer_JR1000001-1/apply` → `jr1000001-1`)
-  Oracle's job id (`…/job/42/apply/…`), and the Greenhouse, Lever or Ashby job in the URL. The posting's job comes from its URL, else its `reqId`, and
-  `sameJob` takes Workday's `-1` posting suffix as the same job. If either side has no tenant (a posting
-  captured on a job board) or no job to compare, the tenant decides. Otherwise reads (`get_form`,
-  `list_options`, `search_options`, `screenshot`) run and carry
-  `postingMismatch { activePosting { id, company?, role?, tenant, job? }, formTenant, formJob?, hint }`. Every
-  call that changes the page (`fill_fields`, `upload_file`, `remove_items`, `add_repeatable`,
-  `remove_repeatable`, `go_next`, `go_back`, `page_action`) is refused with `posting_mismatch` and the same
-  hint, and `autofill_step` fills nothing. *Why:* without the check, two open applications or an old
-  confirmation page on screen would credit the wrong posting, up to marking it `submitted`. Before
-  2026-10-01 a mismatch only skipped the logging, and the fill itself still ran, so with two applications at
-  one company open the agent could fill the wrong one and nothing would record it.
+- **Which posting** (`forms/match.ts`): fills, removals, uploads, steps and the confirmation page are appended
+  to the active posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab may
+  be that posting's. What a URL says (site, tenant, job) comes only from the site registry, and what a page says
+  from its site's definition (`FormSchema.job`), so every registry site is matched the same way.
+  - **The posting's side:** its `application` (`meta.json`): its own URL when that's a form site's page, else
+    found in its capture (`postings/application.ts`: the page's link to the application, or an embedded board's
+    job in its URL), else bound later. Its job is the application's, else its URL's, else a `reqId` without
+    spaces. `sameJob` takes Workday's `-1` posting suffix as the same job.
+  - **The evidence, strongest first:** `site` (the application is on another site than the tab), `job` (both
+    URLs name one: `siteJob` reads Workday's requisition from the job's path segment, `…/Engineer_JR1000001-1/apply`
+    → `jr1000001-1`, Oracle's job id, and the Greenhouse, Lever or Ashby job), `binding` (an earlier call bound
+    the tab to a posting; it holds while the tab stays on that tenant), `page-reqid` (a requisition the page
+    shows), `tenant`, then `title` (the page's job title against `role`, only where no job id is known on
+    either side: all of one's significant words in the other is the same job, none shared is another, anything
+    between decides nothing). With none of it the tab is `unconfirmed` and credited. Where only the title could
+    decide and the posting has a role, the companion reads the page first.
+  - **Tab choice** (no `tabId`): the tab matching by job or binding, then by tenant, then one nothing ties to
+    another posting, then any application tab; among equals the one the user is looking at, else the most
+    recently used.
+  - **Binding:** the first call that changes a page binds the tab to the active posting (in memory; a restart
+    loses it) and, when the posting had no `application`, stores the tab's site, tenant and job as one
+    (`from: "bound"`). A tab bound to one posting is `other` for the next even with nothing else to compare: two
+    applications at one employer captured from a job board can't take each other's fills. When the bound tab was
+    `unconfirmed`, that result carries `postingBound { id, company?, role?, formTitle?, hint }` once, and the agent
+    tells the user which posting this application is credited to. `posting_activate { id, tabId }` rebinds.
+  - **Results:** `get_form` and `autofill_step` carry `postingMatch { by, from? }` (`by`: the evidence, or
+    `["unconfirmed"]`; `from`: how the application was found), and other results carry it when it changed since
+    the tab's last call. Every `form-log.jsonl` event gets `matchedBy`. A tab that's another posting's is read
+    with `postingMismatch { activePosting { id, company?, role?, tenant?, job? }, formTenant?, formJob?,
+    formTitle?, boundTo?, by, hint }`; every call that changes the page (`fill_fields`, `upload_file`,
+    `remove_items`, `add_repeatable`, `remove_repeatable`, `go_next`, `go_back`, `page_action`) is refused with
+    `posting_mismatch` and the same hint (activate the right posting, or switch tabs, or, if the user says this
+    tab is the posting's, `posting_activate { id, tabId }`), and `autofill_step` fills nothing.
+  - *Why:* without the check, two open applications or an old confirmation page on screen would credit the wrong
+    posting, up to marking it `submitted`. At first a mismatch only skipped the logging. Later
+    only tenants and URL jobs were compared, and most of the user's postings were captured off the form
+    sites (a school's job board, employers' careers pages) with neither, so nothing was checked for them: the two
+    applications at one employer filled one evening could each have taken the other's fills.
 - **The hand-off checklist** (`forms/checklist.ts`): the list the `ezapply-apply` skill gives at the hand-off,
   kept by the companion instead of the model's memory. Live runs missed parts of it: the cover letter twice
   (now `notAttached`), and sections that start empty are easy to miss.
@@ -138,11 +163,11 @@ site differs (Oracle's inline forms, one-page applications), the tool descriptio
   - Only for a posting the tab is credited to. A checklist that can't be built is skipped (logged), never
     failing the call.
 - **The tab in front:** inside the tab's queue, right before each call reaches the adapter, the companion
-  sends `tab.show` so the application tab is the active tab of its window (the window itself isn't focused,
-  see [extension](components/extension.md#serving-form-requests-formsts)). Why: browsers run a hidden tab's
+  sends `tab.show` so the application tab is the active tab of its window
+  ([extension](components/extension.md#serving-form-requests-formsts)). Why: browsers run a hidden tab's
   timers at most about once a second (Chrome also only once a minute for chained timers after five hidden
   minutes) and stop `requestAnimationFrame`. Every adapter wait is a timer, and Workday's widgets render on
-  timers and animation frames, so a hidden tab fills many times slower: in the Monarch run (2026-09-28) 16
+  timers and animation frames, so a hidden tab fills many times slower: in one live run 16
   fields took 6.7 s, then `review_open` opened the review page in front of the form and 4 dates took 28 s. A
   slow fill runs past the companion's timeout and keeps going in the page unlogged, which looks like a broken
   adapter. The tab gets hidden in ordinary use: the review page opens as a new tab in front of the form, the
@@ -154,8 +179,25 @@ site differs (Oracle's inline forms, one-page applications), the tool descriptio
     `add_repeatable`, `remove_repeatable`, `go_next`, `go_back`, `page_action`; not the option lists), and
     the logged event gets `tabHidden: true`. A switch adds `tabActivated: true` to the logged event. The
     `ezapply-apply` skill passes the hint to the user once and keeps filling.
+  - **The browser window too**, with `forms.focusBrowser` on (the default; read for every call): calls that
+    change the page (everything but `get_form`, `list_options`, `search_options` and `screenshot`) send
+    `focusWindow: true`, and the extension brings the browser window to the front, restoring it if minimized.
+    Why: Chrome sends no focus events to a window behind another app, and widgets that track focus may depend on
+    them. On Workday, all five multi-part dates read back right but were called empty in a run whose window may
+    have been behind, and every date was taken the first time in a run with the window in front throughout
+    ([workday adapter](components/workday-adapter.md)). Reads don't need it, so they leave the terminal in front.
+    The cost of on: the browser comes in front of the terminal, with keyboard focus, on each such call, and the
+    user clicks back. Never while a review page waits. A raise adds `windowFocused: true` to the logged event.
+  - When the page is on screen but still without focus on a call that changes it (the option is off, or the OS
+    kept the window behind), results that are objects carry `browserBehind: { hint }` (the tools that
+    carry `tabHidden` except `get_form`, and `autofill_step`) and the logged event gets `windowInBackground: true`. The hint
+    asks the user to bring the browser to the front, or to turn the option on (when it's off), or to click the
+    browser window (when the raise didn't take). Not while a review page waits, nor when `tabHidden` is said.
+    The skill passes it on when a field (a date) isn't taken.
   - An extension built before `tab.show` answers "Unknown method": the call goes ahead as before, and the
-    companion logs that once. Any other `tab.show` failure is logged and ignored too.
+    companion logs that once. Any other `tab.show` failure is logged and ignored too. An extension built before
+    `focusWindow` ignores it: only the tab is switched to, and `browserBehind` still says when the window is
+    behind.
 
 | Tool | Input | Does |
 |---|---|---|

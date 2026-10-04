@@ -139,7 +139,7 @@ function indexLine(r: CallRecord) {
   const fills = r.bridge.filter((b) => b.method === "form.fill").flatMap((b) => (b.result as FillLike[]) ?? []);
   const failed = fills.filter((f) => f && f.ok === false).map((f) => f.fieldId);
   const autofill = r.result as { filled?: unknown[]; failed?: unknown[]; kept?: number; sections?: unknown[] };
-  const shown = r.shown as { hidden?: boolean } | undefined;
+  const shown = r.shown as { hidden?: boolean; focused?: boolean } | undefined;
   return {
     seq: r.seq,
     ts: r.startedAt,
@@ -149,6 +149,7 @@ function indexLine(r: CallRecord) {
     queuedMs: r.queuedMs,
     ...(failed.length ? { failedFields: failed } : {}),
     ...(shown?.hidden ? { tabHidden: true } : {}),
+    ...(shown?.focused === false ? { windowInBackground: true } : {}),
     ...(r.tool === "autofill_step" && autofill?.filled
       ? { autofill: { filled: autofill.filled.length, failed: autofill.failed?.length ?? 0, kept: autofill.kept } }
       : {}),

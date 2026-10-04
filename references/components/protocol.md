@@ -8,7 +8,7 @@ so a change here is a change to the contract between them.
 | `bridge.ts` | `PROTOCOL_VERSION`, close codes, handshake and envelope messages, `CompanionApi` / `ExtensionApi` method maps, `parseBridgeMessage` |
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
-| `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingMetaPatch`, `PostingStatus`, `SiteId` |
+| `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingApplication` (the application a posting is tied to: [data-formats](../data-formats.md#postingsidmetajson-protocolsrcpostingsts)), `PostingMetaPatch`, `PostingStatus`, `SiteId` |
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site, else `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `SiteAccess`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `fixedHostPermissions()`, `optionalHostPermissions()`; no zod (`@ezapply/protocol/sites`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
@@ -34,11 +34,13 @@ list of sites derives from it, so a new site's only protocol change is its entry
 | `isUrl(url)` | A posting or application page of the site |
 | `tenant(url)`, `job(url)` | The employer's space and the job, lowercased |
 | `canonicalPath?(pathname)` | The posting's identifying path, when the site varies it for the same job (a locale segment, an application page) |
+| `hostPageJob?(url)` | The site's job that a page on another host names in its URL: a company's careers page embedding the site's board (Greenhouse: `?gh_jid=`). Ties a posting captured there to its application |
 | `access` | `{ kind: "fixed", hosts }` (in the manifest, granted at install: Workday) or `{ kind: "per-origin" }` (each origin granted on its own, at Set posting or from the options page: the rest) |
 | `waits` | The site's own waits ([waits owned by the site](adapters.md#waits-owned-by-the-site)); all start from `STANDARD_WAITS` |
 
 Derived from it: `detectSite`, `FORM_SITES`, `siteTenant`, `siteJob`, the companion's canonical posting URLs
-(`siteOfUrl(url)?.canonicalPath`), the extension's bundles and manifest permissions (`build.mjs`), site access in
+(`siteOfUrl(url)?.canonicalPath`), which application a posting is tied to and which posting a tab belongs to
+(`tenant`, `job`, `hostPageJob`: [which posting](../mcp-tools.md#forms)), the extension's bundles and manifest permissions (`build.mjs`), site access in
 the background, Set posting and the options page, and `loadTiming`'s per-site sections. `sites.test.ts` checks
 that the registry and `SiteId` name the same sites.
 
@@ -109,7 +111,7 @@ keys are ignored and an older extension strips the field, so it came without a v
 | `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
-| `tab.show` | `{ tabId?, activate }` → `{ tabId, activated, hidden }`: switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`. Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump; an older extension answers "Unknown method" |
+| `tab.show` | `{ tabId?, activate, focusWindow? }` → `{ tabId, activated, windowFocused?, hidden, focused? }`: with `focusWindow` (and `activate`), bring the browser window to the front first, restoring it if minimized (`windowFocused`: it was raised; the OS may still keep it behind); switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (false while the browser window is behind another app; absent when the page can't be read). Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump, and `focused`, then `focusWindow` and `windowFocused`, later the same way (an older extension ignores `focusWindow`); an extension older than `tab.show` answers "Unknown method" |
 
 ## Form schema
 
@@ -121,8 +123,9 @@ section?, kind? }` (`section`: the heading the button sits under; `kind`: `row` 
 opens an inline form, `save` is an open inline form's Save, `save.<block>` on Oracle), `actions[]` (page
 actions available), `errors[]`, `messages?` (notices such as "resume.pdf successfully uploaded", which live
 Workday shows in the same alert region as errors), `nextLabel?`, `lastPage?` (a step whose only way on is
-Submit: Oracle's last or only page, every one-page site), `backLabel?`. The companion reads `kind`, `saved` and
-`lastPage` instead of the site's name, so a new site needs no companion change.
+Submit: Oracle's last or only page, every one-page site), `backLabel?`, `job? { title?, reqId? }` (the job the page
+says it's the application for, from the site definition's `page.job`: [adapters](adapters.md)). The companion
+reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new site needs no companion change.
 
 - `PageKind`: `posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown` (Oracle has no
   `review`: its last page is a `step` whose `nextLabel` is Submit).
@@ -167,7 +170,8 @@ Submit: Oracle's last or only page, every one-page site), `backLabel?`. The comp
   `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict`, and
-  `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`.
+  `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`; then `tab.show`'s `focused`, and
+  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused`.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.

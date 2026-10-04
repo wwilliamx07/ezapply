@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { BrowserInfo } from "@ezapply/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadAppConfig, updateAppConfig } from "../src/config/app.js";
+import { WorkspaceConfig } from "../src/config/workspace.js";
 import { rotateLog } from "../src/logger.js";
 import { type FindBrowserDeps, findBrowser, parseRegistryDefault } from "../src/util/browser.js";
 import { KeyedQueue } from "../src/util/keyed-queue.js";
@@ -249,5 +250,14 @@ describe("updateAppConfig", () => {
     expect(config).not.toHaveProperty("idleTimeoutMinutes");
     expect((await readdir(dir)).sort()).toEqual(["config.json"]);
     expect(await loadAppConfig(join(dir, "missing", "config.json"))).toBeNull();
+  });
+});
+
+describe("WorkspaceConfig", () => {
+  it("brings the browser to the front by default, and falls back to that on a bad value", () => {
+    expect(WorkspaceConfig.parse({ schemaVersion: 1 }).forms).toEqual({ autofill: "on", focusBrowser: "on" });
+    expect(WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: "off" } }).forms.focusBrowser).toBe("off");
+    const bad = WorkspaceConfig.parse({ schemaVersion: 1, forms: { autofill: "off", focusBrowser: true } });
+    expect(bad.forms).toEqual({ autofill: "off", focusBrowser: "on" });
   });
 });

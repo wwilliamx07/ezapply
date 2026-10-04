@@ -18,9 +18,9 @@ content scripts can't reach.
 The engine (`adapters/engine/`) does the rest, the same for every site: the API, ids and sections, the fill
 loop, next and back, the submit guard, the waits, and the DOM helpers (`dom.ts`: visibility, which in jsdom means
 `hidden`, `aria-hidden` or an inline `display: none` up the tree; pointer and keyboard sequences; `typeChar`;
-`settle`; `waitFor`; `matchOption`; `parseDate`) ([adapters](adapters.md)). When the adapter moved onto it
-(2026-10-03), its fillers and readers moved unchanged and the golden schemas stayed equal. It hasn't run live
-since.
+`settle`; `waitFor`; `matchOption`; `parseDate`) ([adapters](adapters.md)). When the adapter moved onto it,
+its fillers and readers moved unchanged and the golden schemas stayed equal. It has run live twice since
+([status](../status.md#the-first-workday-run-on-the-engine)).
 
 ## API (`window.__ezapply_workday`)
 The engine's ([adapters](adapters.md#the-api-apits)): `getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
@@ -43,6 +43,9 @@ Posting, start-choice and sign-in detection are verified against live snapshots
 (`test/fixtures/live/`); later steps against a behavioural fixture.
 
 ## Extraction
+- **The job** (`FormSchema.job`): the title in `jobTitleHeading`, over every application step and the sign-in
+  page (seen live on a My Experience step and a sign-in page). It's how the companion
+  tells two applications apart where the URL doesn't ([which posting](../mcp-tools.md#forms)).
 - **Fields:** each visible `[data-automation-id^="formField-"]` container that isn't nested in another.
   Kind, from the widgets inside: `file` (drop zone or file input), `date` (Month/Year inputs), `typeahead`
   (multi-select container), `dropdown` (listbox button), `radio`, `checkbox-group` (2+ boxes), `checkbox`,
@@ -72,8 +75,11 @@ Posting, start-choice and sign-in detection are verified against live snapshots
   the same alert region; as an error it showed up in `go_next` and as the file field's error, and ended
   `next()`'s wait before the page had moved.
 - **Removable rows:** a section is `removable` when its first field sits in a row that has its own delete
-  button (`rowDelete`: `panel-set-delete-button`, `deleteButton`, or a button labelled "Delete…") outside any
-  field, in an ancestor holding no other section's fields. The first condition keeps a file's delete button
+  button (`rowDelete`) outside any field, in an ancestor holding no other section's fields. Live
+  that button is a plain `<button>` reading "Delete" with a trash icon (`.wd-icon-trash`), beside
+  the row's heading in a `role="group"` labelled by it, with no automation id or aria-label, so it's found by
+  the icon (`button:has(.wd-icon-trash)`). The other hooks (`panel-set-delete-button`, `deleteButton`, a button
+  labelled "Delete…") were guesses that matched nothing there and are kept as fallbacks. The first condition keeps a file's delete button
   from counting; the second keeps a page-wide button from making every section removable.
 
 ## Filling
@@ -143,7 +149,7 @@ dropdown's press only closed it. The press covers the first two patterns; the ot
 explained, and the fix is unverified on a live tenant. (An earlier, broader fix that also clicked the page
 body and pressed again when opening was reverted: unverified, and fills had become much slower.)
 
-**Why the second attempt.** The two Oscorp runs (2026-09-29, with the press above) failed 12 dropdowns with
+**Why the second attempt.** Two runs on one tenant (with the press above) failed 12 dropdowns with
 "Could not open the dropdown". Every one was a dropdown whose own list had been read without a choice
 earlier (by `list_options`, or by a value that matched nothing), and every such dropdown failed its next
 open; no other dropdown failed. The agent's next call filled all 12 at the first try, at a turn each. Why the
@@ -154,7 +160,7 @@ The fixture models the live behaviour: the portal lingers 150 ms, and Degree Lev
 `aria-controls`. With `liveDropdowns`, buttons have no `aria-expanded`, Escape closes nothing, and a press
 outside an open list (its own button included) only closes it. Its tests (the next dropdown after a miss,
 after `list_options`, and no reopening after a choice) fail on the old logic, the first two with "Could not
-open the dropdown". `dismissedIgnoresNextPress` adds the Oscorp symptom: a dropdown whose list was closed
+open the dropdown". `dismissedIgnoresNextPress` adds those runs' symptom: a dropdown whose list was closed
 without a choice ignores the next press on its button. Filling it after `list_options` or after a miss fails
 without the second attempt.
 
@@ -182,14 +188,34 @@ changed. Only if the part still doesn't hold the value is it set directly, as be
 (`datePartValue`) is read from the display element next to its input (`[data-automation-id$="-display"]`)
 when there is one, else `aria-valuenow`, else the input's value, so a value the widget didn't take reads as
 empty in both the fill result and `get_form`. When the field still shows an error after the parts are
-entered, they're entered once more (the first live run saw a date accepted on the second entry). A date the
-page still doesn't take fails with the value for the user to type.
+entered, they're entered once more (the first live run saw a date accepted on the second entry). A date whose
+parts don't read back the value fails with the value for the user to type. One whose parts read back right
+while the field still shows an error stays `ok: true`, with "Filled, but the page reports: …".
 
 Typing worked on a live tenant: in the third and fourth runs four `MM/YYYY` dates and two `YYYY` dates were
-taken and the step advanced. Which read-back hook the live widget answers to (display element,
-`aria-valuenow` or value) isn't known. The fixture's `dateWidget: "keys"` models parts that take digits only in keydown (typing
+taken and the step advanced. The read-back hook is the display element: on the saved My Experience step each part
+is a `dateSectionMonth-input` / `dateSectionYear-input` with a `…-display` beside it showing the padded value
+("06") while the input holds "6". The fixture's `dateWidget: "keys"` models parts that take digits only in keydown (typing
 works; the old setter didn't), and `"stuck"` parts that ignore synthetic keys (the fill fails honestly and
 `get_form` shows the date empty).
+
+**Failing again, cause unknown** (the first Workday run on the engine). All five multi-part dates (four `MM/YYYY` work
+dates, one `MM/DD/YYYY` graduation date) read back the digits while Workday called them required, however often
+they were filled, and the user retyped them. Two `YYYY` dates were taken. The date code is the one that worked in
+the third and fourth runs. The browser was in front, by the user's account. A change was tried and dropped the
+same day: date parts sent focus events by hand when the page has no focus (Chrome holds them back while the
+window is behind another app). With the browser in front it would have done nothing. `tab.show` now reports
+`focused` and debug mode records it, so focus can be ruled in or out from the records rather than from
+memory. What the records can't show is which path each part took (typed, or set directly as a last resort).
+That needs the adapter trace (`todo.md`, "Autofill debug mode").
+
+The next run (another posting at the same employer, the same day) kept the browser in front, and every call recorded
+`focused: true`. Every date was taken the first time: four `MM/YYYY`, two `YYYY` and the `MM/DD/YYYY`
+graduation date, and each step advanced on the first Save and Continue. So focus is the leading suspect after
+all: the first run has no `focused` record to compare, and the user's account of it was "pretty sure".
+So calls that change the page now bring the browser window to the front (`forms.focusBrowser`, on by
+default; [the tab in front](../mcp-tools.md#forms)). Not yet proven: a run with the option off and the terminal in
+front, compared with one with it on ([status](../status.md)).
 
 `addRepeatable` presses the add button and waits for more field containers. `pageAction` presses Apply,
 Apply Manually, Autofill with Resume or Use My Last Application.
@@ -203,7 +229,7 @@ move. Notices go to `messages`, not `errors`. Returns
 
 **Waiting for the new step's fields** (the definition's `afterStep` wait, after `next()` and `back()` see a move): up to
 `stepFieldsMs` (3 s) for the step to show at least one field, checked every 150 ms, then the usual quiet
-wait. Workday moves the progress bar before it renders the step: in the Oscorp runs a `get_form` straight after
+wait. Workday moves the progress bar before it renders the step: in two runs on one tenant a `get_form` straight after
 `go_next` read an empty step (no sections) four times, and one or two seconds later the questions were there.
 A re-check with `onlyEmpty` in that moment looks like a step with nothing left to fill, which the agent took
 as "my answers were kept" three times. The wait ends as soon as a field shows, so it costs its full length
@@ -216,11 +242,11 @@ only on a step without fields. The review page has none, so it isn't waited for.
 the step title to change. It's allowed from any step with a Back button, including review (to correct an
 answer before the user submits), refused on the first step and on the confirmation page, and never presses
 a submit control. A move is seen as in `next()` (index, title or page kind), then it waits for the step's
-fields. It used to wait for the title alone: on the Oscorp tenant, whose steps are all "Application", each of
+fields. It used to wait for the title alone: on a tenant whose steps are all "Application", each of
 five Backs waited out the 12 s and said `moved: false` although the step had changed. Returns
 `{ moved, pageKind, step?, errors, refusedReason? }`. What Workday keeps of
 unsaved entries on the step being left isn't verified; the skill re-checks steps when coming forward. Back
-worked on a live tenant in the Oscorp runs (five presses, from the review page and between steps; which hook
+worked on a live tenant in those two runs (five presses, from the review page and between steps; which hook
 matched wasn't recorded). From the review page it went to step 5 once and to step 1 once, unexplained. The
 fixture's review page has a Back that returns to the step with its entries.
 
@@ -230,8 +256,8 @@ The method re-extracts, presses the row's delete button, confirms a delete/remov
 (the same `confirmRemoval` as attachments), and succeeds once the page has fewer field containers (a row
 element may be re-rendered, so its disappearance alone proves nothing). Returns
 `{ sectionId, ok, removed?, error? }`; an id that isn't a removable section fails with "call get_form".
-Workday renumbers the rows after it, so their field ids change. The row and delete-button hooks are best
-knowledge of Workday's markup, unverified on a live tenant.
+Workday renumbers the rows after it, so their field ids change. The delete button is found as on the live page
+(above); whether pressing it asks for confirmation live isn't known, and a dialog is confirmed if one appears.
 
 **Attached files** (`attachedFiles` in `page.ts`) are listed once each: the `file-upload-item-name` elements
 with their row (`file-upload-item` / `file-upload-successful`), or the rows themselves when a tenant has no
@@ -256,10 +282,10 @@ Most waits end as soon as their condition holds, but some cost their full length
 page never goes quiet or a check never matches (the settle after each field, a dropdown's closed and selected
 checks). Which ones isn't measured yet; the file lets the user shorten them and see what breaks.
 
-**Defaults from the user's file (2026-10-01).** The user set six dropdown waits to 200 ms
+**Defaults from the user's file.** The user set six dropdown waits to 200 ms
 (`dropdownOthersClosedMs`, `dropdownOpenMs`, `dropdownOpenRetryMs`, `dropdownSelectMs`,
-`dropdownSelectRetryMs`, `dropdownClosedMs`; they were 1000–2000) on 2026-09-29, and four live applications
-ran with them on 2026-09-30 (Tyrell and Hooli on Workday, two Umbrella on Oracle): 128 fills, no "Could not open
+`dropdownSelectRetryMs`, `dropdownClosedMs`; they were 1000–2000), and four live applications
+ran with them in one day (two on Workday, two on Oracle): 128 fills, no "Could not open
 the dropdown", the only failures "No option matches". Those values are now the defaults.
 
 ## Removing values and attachments (`remove`)
@@ -296,7 +322,7 @@ renumbers the rest.
 Change `selectors.ts` (keep every Workday string of the adapter there; what every site shares is in
 `adapters/engine/` and `adapters/widgets/`; posting-page hooks and hosts shared
 with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` (saved
-from the browser, or once it exists exported from autofill debug mode: `todo.md`, item 6), and extend the tests. The behavioural fixture
+from the browser, or once it exists exported from autofill debug mode: `todo.md`, "Autofill debug mode"), and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom
 environment, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new
 adapter method needs one fixture behaviour, not two fakes.

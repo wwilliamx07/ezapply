@@ -24,6 +24,8 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
    location, deadline, `bundleRequired`, status) win over fresh extraction. The tenant is read from the URL
    and Claude never sets it, so a fresh reading replaces an older one (that's how postings saved while
    myworkdaysite tenants were misread as `wd5` get fixed).
+   **The application** (below) is looked for in the page; a re-capture keeps one the user set, else takes what
+   the page now shows, else keeps the old one.
 6. `state.json` → `activePostingId` = this posting. The extension shows "Active: company: role".
 
 ## Extraction (`extract.ts`)
@@ -45,13 +47,37 @@ reaches `posting.md`.
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
 - **Tenant:** a Workday posting's tenant, or for any other registry site its own reading of the content's URL
-  (`siteTenant`): an Oracle career site (host and site number, `jobs.umbrella.example/cx_1`), a Greenhouse board, a
+  (`siteTenant`): an Oracle career site (host and site number, `jobs.example.com/cx_1`), a Greenhouse board, a
   Lever company, an Ashby organization.
 - Body: on Workday, the job description container; elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
 
 Extraction is a starting point: Claude corrects metadata with `posting_update_meta` after reading.
+
+## The application (`application.ts`)
+Which application a posting is tied to, so the form tools can tell its tab from another posting's
+([which posting](../mcp-tools.md#forms)). Everything a URL says comes from the site registry (`isUrl`,
+`tenant`, `job`, `hostPageJob`), so a new site is covered by its registry entry.
+- **The posting's own URL** (or the frame it came from) on a form site is its application
+  (`applicationFromUrl`, `from: "posting-url"`); nothing is stored.
+- **Otherwise the captured page** (`findApplication` over the body's `href`s, resolved against the page):
+  links whose site reads a job from them. One distinct site, tenant and job → it (`apply-link`). Several → the one
+  matching `reqId`, else none: a careers page often lists other jobs. Links without a job (Workday's `…/login`)
+  never count.
+- **Else a job the page's URL names for an embedded board** (`hostPageJob`: Greenhouse's `gh_jid` on a
+  company's careers page), `host-page-job`, with no tenant.
+- **Postings captured earlier** get it from `capture/raw.html` the first time they're active in a form call
+  (`application(id)`), and it's saved; one with nothing found isn't searched again until the companion restarts
+  or its `reqId` changes.
+- **Later:** the first form call that changes a page stores the tab's (`bound`), and `posting_activate
+  { id, tabId }` the tab the user names (`user`); `setApplication`.
+
+On the user's postings it tied two postings captured on one employer's careers site to their Workday
+requisitions by the page's Apply link, and another employer's to its Greenhouse job by `gh_jid`. Pages from a
+school's job board (Symplicity), employers' own career sites, iCIMS and SAP SuccessFactors link to nothing in the
+registry: those are
+bound on first use.
 
 ## Other operations
 - `list()`: every posting with a valid `meta.json`, newest update first (invalid ones are logged and
@@ -63,7 +89,9 @@ Extraction is a starting point: Claude corrects metadata with `posting_update_me
 - **Ids** come from Claude (`posting_activate`, `posting_update_meta`), so `folder(id)` accepts only plain
   folder names (`[\w.-]+`, not `.` or `..`) and refuses anything else with `bad_request`: an id like `../x`
   would otherwise resolve outside `postings/`. `list()` skips folders with other names.
-- `updateMeta(id, patch)`: validated, serialized, bumps `updatedAt`.
+- `updateMeta(id, patch)`: validated, serialized, bumps `updatedAt`. A `reqId` is trimmed, and one of more than
+  three words is refused as a title (`checkReqId`): seen, "Evergreen - Software Engineer, Intern, 2027, CAN",
+  which compares with no application's job id.
 
 ## Folder layout
 See [data-formats.md](../data-formats.md#postings) for every file. Besides the capture files, a posting

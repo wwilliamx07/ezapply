@@ -6,15 +6,15 @@ and hands the model only the rest. The planner is `companion/src/forms/autofill.
 strict option matching in `protocol/src/match.ts` (shared with the adapters). The tool is `autofill_step` in
 `mcp/tools/forms.ts`, run by `FormsService.autofillStep`.
 
-**Why.** In the four applications of 2026-09-30 and 2026-10-01, 87 of 128 fills copied a profile value
+**Why.** In four live applications, 87 of 128 fills copied a profile value
 (`source: profile` in `form-log.jsonl`), 7 came from the answer bank, and 34 needed the user, judgment or a
 computation. The model read each step's whole schema and wrote every value back out, and every turn re-sends
 the conversation. Filling the settled fields in the companion saves those tokens and turns, and gives the same
 answer every time. The model stays the reviewer: it sees every value that went in.
 
-It was built in three phases (`todo.md` had the plan): profile hints and literal answers (2026-10-01, run live
+It was built in three phases (`todo.md` had the plan): profile hints and literal answers (run live
 once), then rows, strict matching in the adapters and computed answers, then link fields, language rows,
-education years and Oracle's item forms (2026-10-02, not yet run live).
+education years and Oracle's item forms (run live on Workday, not yet on Oracle).
 
 ## The call
 `autofill_step { tabId? }` replaces the first `get_form` of a step (the `ezapply-apply` skill starts every
@@ -40,7 +40,7 @@ step with it):
    skips the rest of its list. A Save the page refuses stops there: the form stays open, its fields are in the
    result, and the Save is in `failed` with the page's error.
 5. Return `get_form`'s view of the page (including the status moves and `notAttached` at review, `posting`,
-   `postingMismatch`, `tabHidden`, `timingIssues` and `checklist`), with:
+   `postingMismatch`, `tabHidden`, `browserBehind`, `timingIssues` and `checklist`), with:
    - `sections`: only the fields left, each with `reason`. A dropdown left as `no-strict-match` carries the
      `options` autofill listed for it. Rows marked `removable` stay even when they have no fields left;
    - `filled`: `{ fieldId, label, value, rule, was? }`, where `was` is a value it replaced (left from a previous
@@ -122,7 +122,9 @@ the form. The model decides with `remove_repeatable`, and the checklist warns ab
 `education[].school`), else its label. The hint tables map `startDate` and `endDate` to `work[].start` and
 `work[].end` whatever the section, so in another list's row those hints mean that row's own dates. Labels decide what hints can't: Workday's education years ("From",
 "To (Actual or Expected)") have no hint, and its language levels are keyed by hashed ids, so only their labels
-(Comprehension, Overall, Reading, Speaking, Writing) say what they are.
+say what they are: one tenant's were Comprehension, Overall, Reading, Speaking and Writing, another's
+the bare verbs Read, Speak and Write, which the label test missed until it matched word starts (`read`, `writ`,
+`speak`).
 
 | List | Part | Value |
 |------|------|-------|
@@ -220,7 +222,7 @@ the whole step with a note, so a run can be compared with and without autofill.
 ## Tests
 - `companion/test/autofill.test.ts`, the planner: hints, kept and replaced values, the phone country, section
   checks, wording equality, reversed wordings, `byCompany`, sensitive and null answers, strict options, EEO,
-  files, passwords and lists, skipping handled fields, `checkReadBack`, `chunkBySection`. Rows on the live Hooli
+  files, passwords and lists, skipping handled fields, `checkReadBack`, `chunkBySection`. Rows on a live Workday
   "My Experience" step's schema (its ids, labels, kinds and hints, emptied, with a made-up profile): the rows to
   add, every part of every row, options listed only where wordings differ, education years by label, rows matched
   by company before order, extra rows, a level kept without listing. Oracle's link fields and items (a saved
@@ -234,19 +236,22 @@ the whole step with a note, so a run can be compared with and without autofill.
   `matchOption`'s strict mode.
 
 ## The live runs
-**The first (Hooli, 2026-10-01, debug mode on), phase 1 only:**
+**The first (Workday, debug mode on), phase 1 only:**
 - **My Information:** 10 fields filled and 2 kept in 4.1 s, with no failures and no loose matches.
 - **My Experience:** LinkedIn only. Rows weren't built yet, so the agent filled the step's 38 fields itself.
 - **The two question steps:** nothing filled, for two reasons, both fixed the same day:
   - every answer the agent had saved with `source: user` was treated as computed;
   - two labels differed from their saved wording only by a parenthetical.
-- **Turns:** 30 with form calls, against 34 in the 2026-09-30 Hooli run. Output tokens: 7.4k, against 9.2k.
+- **Turns:** 30 with form calls, against 34 in an earlier run on the same tenant. Output tokens: 7.4k, against 9.2k.
 
-**Replayed on that run's recorded pages** (2026-10-02, the planner as built now, with the user's profile and
+**Replayed on that run's recorded pages** (the planner as built then, with the user's profile and
 answer bank): on My Experience, the same seven rows the agent added, and the same 37 row fields the agent
 filled, 34 with the same value. The three that differ: one role description the agent reworded for the posting,
-and the German reading and writing levels, which the agent judged a step below speaking. The field of study
-matches the agent's final value, "Physics", but in that run Workday's search for exactly that found
-nothing until the agent searched "Computer", so it may still fail live. On the two question steps, 8 fields,
-each with the value chosen in the run. Not yet run live: everything after phase 1, including `strict` in the
-adapters.
+and one language's reading and writing levels, which the agent judged a step below speaking. The field of study
+matches the agent's final value, but in that run Workday's search for exactly that found
+nothing until the agent searched its first word, so it may still fail live. On the two question steps, 8 fields,
+each with the value chosen in the run.
+
+**All of it, twice on Workday** (debug mode on): rows added and filled, `strict` refusing what it should, the
+language levels missed on their labels the first time (fixed) and filled the second. What those runs found is in
+[status](../status.md#the-first-workday-run-on-the-engine). Not yet run live on Oracle.

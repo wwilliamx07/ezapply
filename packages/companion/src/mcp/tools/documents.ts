@@ -182,7 +182,7 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
   );
 
   // One tool opens the page and waits for the answer. With a separate wait call the agent opened reviews three
-  // times without waiting (2026-10-01), and the user's answers sat unread until they asked.
+  // times without waiting, and the user's answers sat unread until they asked.
   server.registerTool(
     "review_documents",
     {

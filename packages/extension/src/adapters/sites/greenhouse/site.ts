@@ -11,6 +11,7 @@ import {
   singleStep,
   standardWaits,
   textOfIds,
+  titledJob,
   visibleTexts,
 } from "../../engine/standard.js";
 import type { FieldSpot, SiteDefinition, WidgetDriver } from "../../engine/types.js";
@@ -22,7 +23,7 @@ import { reactSelectDriver } from "../../widgets/react-select.js";
  * Greenhouse job boards (`job-boards.greenhouse.io`, the older `boards.greenhouse.io`, and the embed companies load
  * in a frame): the posting and a one-page application, Submit at the end. Text fields sit in `.text-input-wrapper`s,
  * lists in `.select__container`s (react-select), files in `.file-upload`s (hidden inputs behind "Attach"), choices in
- * fieldsets; prompts are labels tied by `for`. Built from the live pages of four boards (2026-10-03) and checked on
+ * fieldsets; prompts are labels tied by `for`. Built from the live pages of four boards and checked on
  * one live (filling, never submitting). See references/components/sites.md.
  */
 
@@ -147,6 +148,7 @@ export const greenhouse: SiteDefinition = {
     kind: (doc, _url, count) => singlePageKind(doc, count, applyButton(doc)),
     step: (doc) =>
       doc.querySelector(SEL.form) ? singleStep(norm(text(doc.querySelector(".job__title h1")))) : undefined,
+    job: (doc) => titledJob(text(doc.querySelector(".job__title h1"))),
     stepKey: (_doc, url) => url,
     errors: (doc) => visibleTexts(doc, SEL.errors),
     messages: () => [],

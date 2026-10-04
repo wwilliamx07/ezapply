@@ -161,33 +161,65 @@ export const formHandlers: FormHandlers = {
     const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     return { tabId: tab.id, pngBase64: dataUrl.replace(/^data:image\/png;base64,/, "") };
   },
-  "tab.show": async ({ tabId, activate }) => {
+  "tab.show": async ({ tabId, activate, focusWindow }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
-    // Switching the tab within its window is enough. windows.update({ focused: true }) would also pull the
-    // browser in front of the terminal the user is typing in, and take keyboard focus, on every form call.
+    // The window only with focusWindow (forms.focusBrowser): it pulls the browser in front of the terminal the
+    // user may be typing in, and takes keyboard focus. Switching the tab within its window is done either way.
+    const windowFocused = activate && focusWindow === true && (await raiseWindow(tab.windowId));
     const activated = activate && !tab.active;
     if (activated) await ext.tabs.update(tab.id, { active: true });
-    return { tabId: tab.id, activated, hidden: await pageHidden(tab.id, activated, tab.active ?? false) };
+    return {
+      tabId: tab.id,
+      activated,
+      ...(windowFocused ? { windowFocused } : {}),
+      ...(await pageState(tab.id, { activated, windowFocused, wasActive: tab.active ?? false })),
+    };
   },
 };
 
 /**
- * Whether the page reports itself hidden. A minimized window, or on Windows one fully covered by others (Chrome
- * tracks occlusion), keeps its tabs hidden even when active: that's reported, not forced. The page learns of a
- * switch asynchronously, so after one it's asked a few times. Polled from here, not from the page: the
- * background's timers aren't throttled. Without access to the page (it's never an application tab then), the
- * tab's active state stands in.
+ * Bring the tab's window to the front, restoring it when minimized (to its normal size: a window minimized from
+ * maximized comes back unmaximized). False when it's already the focused window, or the browser refused. On
+ * Windows the OS may still keep it behind and flash its taskbar button: the page's `focused` tells.
  */
-async function pageHidden(tabId: number, activated: boolean, wasActive: boolean): Promise<boolean> {
-  const tries = activated ? 10 : 1;
+async function raiseWindow(windowId: number): Promise<boolean> {
+  try {
+    const win = await ext.windows.get(windowId);
+    if (win.focused && win.state !== "minimized") return false;
+    await ext.windows.update(windowId, { focused: true, ...(win.state === "minimized" ? { state: "normal" } : {}) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the page reports itself hidden, and whether it has focus. A minimized window, or on Windows one fully
+ * covered by others (Chrome tracks occlusion), keeps its tabs hidden even when active: that's reported, not
+ * forced. The page learns of a switch, or of its window coming to the front, asynchronously, so after one it's
+ * asked a few times (until it's visible, and focused when the window was raised). Polled from here, not from the
+ * page: the background's timers aren't throttled. Without access to the page (it's never an application tab
+ * then), the tab's active state stands in, and focus isn't known.
+ */
+async function pageState(
+  tabId: number,
+  changed: { activated: boolean; windowFocused: boolean; wasActive: boolean },
+): Promise<{ hidden: boolean; focused?: boolean }> {
+  const tries = changed.activated || changed.windowFocused ? 10 : 1;
+  let state = { hidden: true, focused: false };
   for (let i = 0; i < tries; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 50));
     const [res] = await ext.scripting
-      .executeScript({ target: { tabId }, func: () => document.visibilityState === "hidden" })
+      .executeScript({
+        target: { tabId },
+        func: () => ({ hidden: document.visibilityState === "hidden", focused: document.hasFocus() }),
+      })
       .catch(() => [undefined]);
-    if (typeof res?.result !== "boolean") return !(activated || wasActive);
-    if (!res.result) return false;
+    const r = res?.result as { hidden?: unknown; focused?: unknown } | undefined;
+    if (typeof r?.hidden !== "boolean") return { hidden: !(changed.activated || changed.wasActive) };
+    state = { hidden: r.hidden, focused: r.focused === true };
+    if (!r.hidden && (state.focused || !changed.windowFocused)) break;
   }
-  return true;
+  return state;
 }

@@ -20,7 +20,7 @@ be built from real markup and checked live without an account. The others couldn
 | SmartRecruiters | Bot protection (DataDome) on its application pages. Not worked around, on purpose |
 | SuccessFactors, Taleo, BrassRing | The application is behind a candidate account on each employer's site |
 
-Each needs pages the user saves from a real application in their own browser (`todo.md`, item 7).
+Each needs pages the user saves from a real application in their own browser. None is planned yet.
 
 ## What they share
 - **Registry entries** (`protocol/src/sites.ts`, URL rules in `greenhouse.ts`, `lever.ts`, `ashby.ts`): https
@@ -31,6 +31,13 @@ Each needs pages the user saves from a real application in their own browser (`t
   `confirmation`, one with an Apply button is the `posting` (its `apply` action presses it); else `unknown`.
 - **Submit** is `isSubmitByText`: a `type=submit` control, or one reading "Submit (application)" or "Send". It's
   the page's `next`, so `nextLabel` shows it, and the guard blocks any synthetic press of it.
+- **The job title** is the page's own title, which is also the step's (`titledJob`): Greenhouse's
+  `.job__title h1`, Lever's `.posting-header h2` (the application page; `.posting-headline h2` on the posting's),
+  Ashby's `h1`. Read on each live snapshot. At first Lever looked only for `.posting-headline`, which
+  the application page doesn't have, so its step was titled "Application".
+- **Embedded boards:** a company's careers page that names a Greenhouse job in its URL (`?gh_jid=`,
+  `hostPageJob`) ties the posting captured there to that job, so its application is told apart from others
+  ([which posting](../mcp-tools.md#forms)).
 - **Messages** (`singlePageMessages`): `go_next` says the whole application is on this page and the user reviews it
   and presses Submit.
 - **Hints** for the fields every board asks: name, email, phone, links. Lever's and Ashby's name is one field;
@@ -43,7 +50,7 @@ Each needs pages the user saves from a real application in their own browser (`t
 (`job-boards.eu.greenhouse.io`), and the embed a company's careers page loads in a frame
 (`…/embed/job_app?for=<board>&token=<id>`). The posting and the form share one page. An embed is recognised as
 Greenhouse when it's the tab's own URL; inside another site's page the form tools can't reach it yet (`todo.md`,
-item 2).
+"Embedded application forms").
 
 **Fields**, in the form (`form#application-form`), in page order:
 - `.text-input-wrapper`: a text input or textarea;
@@ -96,10 +103,10 @@ inputs carry no `required`), or a trailing `*`.
 
 **Why the path, not the class.** Most questions are `.ashby-application-form-field-entry`, but a radio or
 checkbox group is a plain `div[data-field-path]` around a fieldset with classes of its own. The definition first
-went by the class, built from one page (Stark's) that had no such groups, and in the first real application
-(Wayne, 2026-10-04) it missed all seven: "Degree Type", "How many prior internships", the work, cohort and
+went by the class, built from one page that had no such groups, and in the first real application
+(another employer's form) it missed all seven: "Degree Type", "How many prior internships", the work, cohort and
 location choices, sponsorship and the office question. The agent then filled two of them by ids it guessed from a
-screenshot, which failed as unknown fields. `ashby-groups.html` (that page) now keeps it covered.
+screenshot, which failed as unknown fields. `ashby-groups.html` (that page, employer details replaced) now keeps it covered.
 
 **Ids.** Ashby's own fields by their path without the prefix (`_systemfield_email` → `application.email`); a board's
 questions by the prompt's slug. Everything is in one section, "Application".
@@ -113,22 +120,22 @@ The entry is the phone field (text comes before radio in the order); the consent
 ## What was verified, and how
 Each definition was built from a live application page rendered by headless Edge (saved, without scripts and
 styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`, and later
-`ashby-groups.html`; `sites-live.test.ts` reads them), then checked on live public forms with fake values, never submitting
-([how](adapters.md#checking-a-site-live)), on 2026-10-03:
-- **Greenhouse** (Vandelay's board): text fields, the phone's country list ("Canada" → "Canada +1"), the
+`ashby-groups.html`, employer details replaced; `sites-live.test.ts` reads them), then checked on live public forms with fake values, never submitting
+([how](adapters.md#checking-a-site-live)):
+- **Greenhouse** (one company's board): text fields, the phone's country list ("Canada" → "Canada +1"), the
   sponsorship and EEO lists, a dummy file attached and removed (Greenhouse keeps it in the page until Submit),
   `go_next` refusing Submit. Two fixes came from it: react-select chosen through `onChange` (synthetic clicks
   don't open it without page focus) and read from the current fiber.
-- **Lever** (Wonka): every kind on the page, after the location field's key fix; the consent checkbox's
+- **Lever** (one company's posting): every kind on the page, after the location field's key fix; the consent checkbox's
   prompt and the survey questions' ids came from this run.
-- **Ashby** (Stark): text, the Yes/No buttons, a textarea, and the location by its full name; "Toronto" alone
-  matched several places and came back with their suggestions, as intended. The consent field's selector came
+- **Ashby** (one company's posting): text, the Yes/No buttons, a textarea, and the location by its full name; a city's
+  name alone matched several places and came back with their suggestions, as intended. The consent field's selector came
   from this run.
-- **Ashby, a real application** (Wayne, 2026-10-04, through the extension): text fields, the location (after the
+- **Ashby, a real application** (through the extension): text fields, the location (after the
   city alone matched several places and the agent searched), the Yes/No buttons, the resume upload. Every radio
   and checkbox group was missing ([above](#ashby-sitesashby)); after the fix, filling a radio group and two
   checkbox groups on the live page (fake values, never submitted) took and read back. The graduation date is a
-  date picker read as text: the agent typed "April 2030" and the page showed 04/01/2030.
+  date picker read as text: the agent typed a month and year and the page showed the first of that month.
 
 **Not yet tried:** uploads on Lever, the confirmation page of any of them, and a real application on
 Greenhouse or Lever.

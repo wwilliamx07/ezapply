@@ -11,16 +11,18 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | Path | Role |
 |---|---|
 | `main.ts` | `startCompanion(options)`: builds every service, the bridge and the HTTP server; returns `{ port, services, chat, onServerError, close }` |
-| `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `forms`, `bridge`, `opener`, `extensionDir?` |
+| `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `freshness`, `forms`, `bridge`, `opener`, `extensionDir?` |
 | `http.ts` | The HTTP server: routes, guards, stateless MCP transport, tool calls counted per chat session |
 | `chat.ts` | `ChatSessions` (tool calls per Claude session) and `ChatHost`, what `ezapply chat` reads to decide on a restart ([below](#chat-sessions-chatts)) |
 | `mcp/server.ts` | Creates the `McpServer` and registers the tool groups |
 | `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `templates.ts`, `github.ts`, `forms.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
 | `mcp/result.ts` | `tool()` / `rawTool()`: turn results into compact JSON text and errors into `{ error }` results |
-| `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site), one call per tab at a time, `tab.show` before each call (the tab brought to the front, `tabHidden` when it stays hidden: [the tab in front](../mcp-tools.md#forms)), crediting form activity to the posting on the tab's tenant (`siteTenant`), `autofillStep` (rows added, options listed, fills in chunks, Oracle's item forms: [autofill](autofill.md#the-call)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (autofill debug mode: a record per form call when `debug.autofill` is on), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/autofill.ts`: the autofill planner (`planStep`, `rowsToAdd`, `missingItems`, `checkReadBack`; [autofill](autofill.md)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, shared by the checklist and the planner; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
+| `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site), one call per tab at a time, `tab.show` before each call (the tab brought to the front, and the browser window before a call that changes the page when `forms.focusBrowser` is on; `tabHidden` when the tab stays hidden, `browserBehind` when the window stays behind another app: [the tab in front](../mcp-tools.md#forms)), crediting form activity to the posting the tab may belong to and binding the tab to it on the first change (`decide`, `claim`, `bindTab`: [which posting](../mcp-tools.md#forms)), `autofillStep` (rows added, options listed, fills in chunks, Oracle's item forms: [autofill](autofill.md#the-call)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (autofill debug mode: a record per form call when `debug.autofill` is on), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/autofill.ts`: the autofill planner (`planStep`, `rowsToAdd`, `missingItems`, `checkReadBack`; [autofill](autofill.md)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, shared by the checklist and the planner; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
+| `forms/match.ts` | Which posting an application tab belongs to: `postingFacts`, `matchPosting` (evidence: site, job, binding, the page's requisition, tenant, title), `compareTitles` ([which posting](../mcp-tools.md#forms)) |
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
-| `postings/` | Capture ingest and extraction → [postings.md](postings.md) |
+| `freshness/service.ts` | `FreshnessService`: what in the workspace is behind its source, behind `workspace_changes` and `workspace_change_mark` ([below](#keeping-the-workspace-current-workspace_changes)) |
+| `postings/` | Capture ingest and extraction, the application a posting is tied to (`application.ts`) → [postings.md](postings.md) |
 | `documents/` | `service.ts`, `review.ts` (the review page, approvals, the attach mode), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
 | `profile/` | `service.ts` (profile, answers, repo selection, preferences, library), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
 | `templates/service.ts` | `TemplateService`: template import, example letters, the main file and its content files, the engine a template needs → [profile-and-templates.md](profile-and-templates.md#templates-templatesresume-templatescover) |
@@ -31,6 +33,8 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `logger.ts` | pino logger to the log file only, with redaction and size-based rotation (`rotateLog`) |
 | `util/fs.ts` | `exists`, `readJson`, `writeFileAtomic` (text or bytes; a locked target gets a "close it" hint), `writeJsonAtomic` |
 | `util/keyed-queue.ts` | `KeyedQueue`: one task at a time per key |
+| `util/hash.ts` | `hashFiles` (12 hex of SHA-256 over files' paths and contents, line endings normalised) and `hashValue` (over a value's JSON) |
+| `util/line-diff.ts` | `unifiedDiff`: a line diff with context, for the resume template's changes |
 | `util/open.ts` | `Opener` and `createDesktopOpener`: the companion's pages and PDFs in the user's browser, other files in their default app ([below](#opening-pages-and-files-utilopents)) |
 | `util/browser.ts` | `findBrowser`: the program that opens a URL in a given browser on this machine |
 | `util/wait.ts` | `waitFor(probe, timeout)`: polling, also used by the CLI |
@@ -47,6 +51,8 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 4. Build `FormsService` over postings and the bridge, `ChatSessions`, and the HTTP server; listen on
    `config.host:config.port` (port 0 picks a free one, for tests). A taken port rejects with `EADDRINUSE`,
    which `ezapply chat` turns into a message.
+5. Start the workspace check's repo check in the background (`FreshnessService.start`): it never delays
+   `/health`, the extension's handshake or the first tool call ([below](#keeping-the-workspace-current-workspace_changes)).
 
 **Persisting pairing** changes only the pairing fields of `config.json` as it is on disk at that moment
 (`updateAppConfig`), not the copy read at start. Otherwise an `ezapply init --port` made while a chat ran
@@ -184,3 +190,52 @@ Items in onboarding order, each `{ step, done, detail, required }`:
 | `library` (optional) | always | file count |
 
 Returns `{ ready, nextStep?, items }`, where `nextStep` is the first required item not done.
+
+## Keeping the workspace current (`workspace_changes`)
+`workspace_check` says whether things exist; `FreshnessService` (`freshness/service.ts`) says whether what's
+derived is still current with what it came from. Most of what the agent works from is derived from something
+the user keeps changing elsewhere, and before this nothing noticed when the source moved: a re-index or
+re-import happened only when the user remembered to ask.
+
+| Kind | Derived part | Out of date when | Ended by |
+|---|---|---|---|
+| `repo-pushed` | `knowledge/<repo>/` | `git ls-remote <url> HEAD` (`RepoService.remoteHead`) differs from `meta.json` `indexedSha`, for a selected, indexed repo | `knowledge_mark_indexed` after `ezapply-index-repo`; `done` is refused |
+| `repo-deselected` | `knowledge/<repo>/`, still read by `claims_list` | its repo isn't in `repos.yaml` (only checked while `repos.yaml` is valid) | `done`, which deletes the knowledge folder and the repo's cache (`RepoService.forget`), or selecting the repo again |
+| `template-source` | `templates/<kind>/` | the hash of the importable files in `importedFrom` differs from `template.json` `sourceHash` | `template_import` (records the new hash), or `done` when it doesn't matter |
+| `resume-edited` | `profile.yaml` | the hash of the resume template's main file and `contentFiles` differs from `state.json` `synced.resume`; carries `diff` against `templates/.synced/resume/` (at most 200 lines) | `done` after the profile is updated from the diff |
+| `profile-identity` | the cover template's `\myname`, `\mycontact` | the hash of the profile's `identity`, `contact` and `links` differs from `synced.profileIdentity` (only while a cover template exists and the profile is valid) | `done` after the fields are updated |
+
+Each change is `{ id, kind, summary, detail, diff?, affects[] }`. The `id` names the exact state
+(`repo-pushed:owner/name@<sha7>`, `template-source:resume@<hash>`, `resume-edited@<hash>`), so a change that was
+put off and then changed again comes back under a new id, and `done` on an id that's no longer current is
+refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the agent whether the request in
+hand needs it first.
+
+- **The repos are checked once per chat**, in the background from startup, and kept for the chat: `ezapply
+  chat` restarts Claude for every captured posting, and the network check would repeat for nothing.
+  `workspace_changes { refresh: true }` runs it again. `ls-remote` only, never a fetch, so nothing in
+  `repo-cache/` changes before the user agrees (re-indexing fetches anyway). Four repos at a time, 10 s each,
+  through the same hardened git invocation as `repo_sync` (HTTPS only, the token in git's environment). A repo
+  that can't be reached, or a logged-out user, goes into `notChecked` with the error's hint, never into an
+  error. `workspace_changes` waits up to 15 s for a check still running, then answers with `pending: true`.
+- **The local checks run on every call:** they cost milliseconds and catch an edit made mid-chat.
+- **Hashes** cover what an import copies (build output skipped, as `template_import` skips it), so compiling
+  in the user's own folder isn't a change, and line endings are normalised. The `% !TEX program` line an
+  import may add exists only in the workspace copy, so it isn't one either.
+- **First sight is the baseline.** With no `synced.resume` or `synced.profileIdentity` yet, the check records
+  the current state and reports nothing: it can't tell what changed before. A template imported before
+  `sourceHash` existed is compared with its workspace copy file by file (without the added `% !TEX program`
+  line): equal, the hash is recorded silently; different, it's reported as differing from the copy.
+- **`later`** is kept in the companion's memory, so the sessions after a capture don't ask again, and a new chat
+  does. Putting a stale profile or claim set off for longer isn't offered.
+- **A source folder that's gone** (moved, an unplugged drive) goes into `notChecked`; nothing nags about it.
+- **Not checked:** repositories the app can see that were created after the selection (it would need
+  `github_list_repos` and a memory of repos the user turned down), and how much a push changed (GitHub's compare
+  API is rate-limited for public repos; `ezapply-index-repo` finds a push that changes nothing indexed
+  cheaply). Managed files from an older build aren't this check's: `ezapply init` refreshes them.
+
+What the agent does with the list is in `ezapply-onboard`'s "Keeping the workspace current" ([workspace](workspace.md#skills-claudeskills)).
+*Why an explicit call at the start of each session* rather than carrying the changes on `posting_active` or
+a Claude Code `SessionStart` hook: the first hides the upkeep inside an unrelated tool, the second adds a managed
+hook and a process to every session start. One small call (`{ changes: [] }` when current) is the simplest
+thing that makes the agent look.

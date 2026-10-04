@@ -59,6 +59,12 @@ export interface PageRules {
   label(button: HTMLElement): string;
   /** A control that submits the application: never pressed, and blocked by the submit guard. */
   isSubmit(el: Element | null): boolean;
+  /**
+   * The job the page says it's the application for: the title in its header, a requisition shown on it
+   * (`FormSchema.job`). The companion uses it to tell which posting a tab belongs to when its URL can't say. Left
+   * out by a site whose application pages don't show the job.
+   */
+  job?(doc: Document): FormSchema["job"];
 }
 
 export interface RepeatRules {

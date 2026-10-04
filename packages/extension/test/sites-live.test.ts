@@ -30,6 +30,7 @@ describe("live Greenhouse application (job-boards.greenhouse.io)", () => {
       lastPage: true,
       nextLabel: "Submit application",
       errors: [],
+      job: { title: "Account Executive" },
     });
     expect(s.backLabel).toBeUndefined();
   });
@@ -65,7 +66,14 @@ describe("live Lever application (jobs.lever.co/…/apply)", () => {
   const f = fieldsOf(s);
 
   it("reads the one-page application, sectioned by its cards", () => {
-    expect(s).toMatchObject({ adapter: "lever", tenant: "wonka", pageKind: "step", lastPage: true });
+    expect(s).toMatchObject({
+      adapter: "lever",
+      tenant: "wonka",
+      pageKind: "step",
+      lastPage: true,
+      step: { title: "Mobile Engineer" },
+      job: { title: "Mobile Engineer" },
+    });
     expect(s.sections.map((x) => x.title)).toEqual(
       expect.arrayContaining(["Submit your application", "Links", "Demographic Survey"]),
     );
@@ -102,6 +110,7 @@ describe("live Ashby application (jobs.ashbyhq.com/…/application)", () => {
   it("reads the application tab: Submit Application the only way on", () => {
     expect(s).toMatchObject({ adapter: "ashby", tenant: "stark", pageKind: "step", lastPage: true });
     expect(s.nextLabel).toBe("Submit Application");
+    expect(s.job).toEqual({ title: "Security Engineer" });
   });
 
   it("reads Ashby's own fields by path, Yes/No buttons as a choice, and the phone's texting consent apart", () => {
@@ -128,7 +137,7 @@ describe("live Ashby application with radio and checkbox groups (jobs.ashbyhq.co
   const f = fieldsOf(s);
 
   // A radio or checkbox group is a plain div[data-field-path] around its fieldset, without the field-entry class
-  // the other questions have: going by that class missed all seven groups in a live run (2026-10-04).
+  // the other questions have: going by that class missed all seven groups in a live run.
   it("reads every question, groups included, with their options and required marks", () => {
     expect(Object.keys(f)).toHaveLength(22);
     expect(f["application.degree-type"]).toMatchObject({

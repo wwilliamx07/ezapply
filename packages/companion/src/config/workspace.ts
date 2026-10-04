@@ -45,8 +45,16 @@ export const WorkspaceConfig = z.object({
        * off: it fills nothing and returns the whole step, so a run can be compared with and without it.
        */
       autofill: z.enum(["on", "off"]).default("on"),
+      /**
+       * on: a form call that changes the page brings the browser window to the front first (tab.show's
+       * focusWindow). Widgets that track focus need it: Chrome sends no focus events to a window behind another
+       * app, and Workday's split dates weren't taken there. The cost: the browser comes in front of the
+       * terminal, and takes keyboard focus, on each such call. off: only the tab is switched to, within its
+       * window. A bad value falls back to on rather than failing every form call.
+       */
+      focusBrowser: z.enum(["on", "off"]).default("on").catch("on"),
     })
-    .default({ autofill: "on" }),
+    .default({ autofill: "on", focusBrowser: "on" }),
   debug: z
     .object({
       /** Autofill debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */

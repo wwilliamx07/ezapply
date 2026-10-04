@@ -101,6 +101,7 @@ export function extract(site: SiteDefinition, doc: Document, url: string): Extra
   const step = site.page.step(doc);
   const messages = site.page.messages(doc);
   const tenant = site.info.tenant(url);
+  const job = site.page.job?.(doc);
   const schema: PageSchema = {
     adapter: site.info.id,
     url,
@@ -115,6 +116,7 @@ export function extract(site: SiteDefinition, doc: Document, url: string): Extra
     ...(next ? { nextLabel: site.page.label(next) } : {}),
     ...(pageKind === "step" && next && site.page.isSubmit(next) ? { lastPage: true } : {}),
     ...(back ? { backLabel: site.page.label(back) } : {}),
+    ...(job?.title || job?.reqId ? { job } : {}),
   };
   return { schema, fields, addButtons, rows };
 }

@@ -2,6 +2,7 @@ import type { ExtensionBridge } from "./bridge/server.js";
 import type { ReviewService } from "./documents/review.js";
 import type { DocumentsService } from "./documents/service.js";
 import type { FormsService } from "./forms/service.js";
+import type { FreshnessService } from "./freshness/service.js";
 import type { GitHubService } from "./github/service.js";
 import type { Logger } from "./logger.js";
 import type { PostingsService } from "./postings/service.js";
@@ -24,6 +25,8 @@ export interface Services {
   templates: TemplateService;
   github: GitHubService;
   repos: RepoService;
+  /** What in the workspace is behind its source (`workspace_changes`). */
+  freshness: FreshnessService;
   forms: FormsService;
   bridge: ExtensionBridge;
   /** Opens files and the companion's own pages for the user (a stub in tests). */

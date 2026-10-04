@@ -122,6 +122,14 @@ anonymously.
 - Auth failures come back with a hint to check the app installation (`github_status.manageUrl`) or that the
   URL is public.
 
+## New commits and forgotten repos
+- **`remoteHead`**: `git ls-remote -- <url> HEAD` with the same hardening and token handling as a sync, and a
+  10 s timeout. It fetches nothing, so the cache stays as it was. The workspace check compares it with each
+  indexed repo's `indexedSha` once per chat ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
+- **`forget`**: deletes a repo's `repo-cache/` mirror (made writable first, queued behind any sync of it) and
+  its `knowledge/` folder. Only `workspace_change_mark` calls it, for a repo no longer selected, after the
+  user agrees.
+
 ## Contributions (`repo_contributions`)
 From commit history only (no file contents): total commits, the user's commits (matched by GitHub noreply
 email, login or display name), share, first and last commit dates, the top 25 areas (first two path

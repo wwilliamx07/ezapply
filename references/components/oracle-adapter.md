@@ -25,12 +25,12 @@ since.
 
 Oracle career sites live on the employer's Oracle Cloud host
 (`<pod>.fa.<dc>.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/123`) or, as often, on the
-employer's own domain (`jobs.umbrella.example/en/sites/CX_1/job/123`). The host says nothing, so `isOracleUrl`
+employer's own domain (`jobs.example.com/en/sites/CX_1/job/123`). The host says nothing, so `isOracleUrl`
 (`protocol/src/oracle.ts`) goes by the path: https, an optional `hcmUI/CandidateExperience`, a language
 (`en`, `fr-CA`), `sites/<site number>`, then one of the Candidate Experience's routes (`job`, `jobs`,
 `requisitions`, `my-profile`). "Sites" pages on other websites don't have that shape (tested).
 
-The **tenant** is host plus site number, lowercased (`jobs.umbrella.example/cx_1`): an employer's postings and its
+The **tenant** is host plus site number, lowercased (`jobs.example.com/cx_1`): an employer's postings and its
 applications share it, which is what the companion compares ([tab choice](../mcp-tools.md#forms)).
 
 ## Site access
@@ -69,12 +69,16 @@ and on single-page sites it is the only one.
 The flow is sections (`.apply-flow-section`: "Personal Info", "Job Application Questions"…), each of blocks
 (`apply-flow-block`: "Contact Information", "Address", "Application Questions"…), each of rows. A site
 shows either:
-- **every section on one page** (the Umbrella site the adapter was built from), with Submit as the only
+- **every section on one page** (the employer site the adapter was built from), with Submit as the only
   button: `step.title` joins the section titles, with no index; `nextLabel` is "Submit" and `go_next`
   refuses. Claude fills everything, then hands over;
 - **one section per page**, with Next (`data-qa="applyFlowPaginationNextButton"`) and Previous, and Submit
   on the last: `step` has the section's title and "step 2 of 4" from the flow's hidden heading. From the
   page's own templates, not yet seen live.
+
+**The job** (`FormSchema.job`, `jobInfo`): the title from the same hidden heading, "DSP Firmware Engineering
+Co-op/Intern application, step 1 of 4" on the live page, the part before "application, step". Worded otherwise
+(another language), nothing: never a guess.
 
 The "Import your profile" pre-section (LinkedIn and Indeed import) holds no fields of ours and is left out.
 
@@ -166,7 +170,7 @@ first), after which the page removes it a second later. Done once there are fewe
 `autofill_step` runs this flow by itself for each work, education and language entry of the profile that no
 saved item names ([autofill](autofill.md#oracles-item-forms)).
 
-Adding one education and two work entries through the inline form and Save **worked live** (2026-09-29).
+Adding one education and two work entries through the inline form and Save **worked live**.
 Languages and licenses (tiles) and the deletes are still unverified live. An empty block shows no fields,
 only its add button, so the `ezapply-apply` skill has Claude match every add button's section to the
 profile (the live run skipped the user's languages and certification).
@@ -195,17 +199,17 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 `pageAction*`, `afterField*`.
 
 ## What was verified, and how
-- **Live, headless** (a Playwright recon script used while building the adapter and since removed, 2026-09-28,
-  jobs.umbrella.example): the job page (`posting`, Apply,
+- **Live, headless** (a Playwright recon script used while building the adapter and since removed, on an
+  employer's own domain): the job page (`posting`, Apply,
   tenant), Apply → the email step (`auth`, fields email and terms, honeypot left out). Snapshots in
-  `test/fixtures/live/oracle-posting.html` and `oracle-email.html`.
-- **A saved application** (the user's browser, the Umbrella single-page flow, before filling):
-  `oracle-apply.html`, all 46 fields with kinds, ids, hints and options, Submit as the only button.
+  `test/fixtures/live/oracle-posting.html` and `oracle-email.html`, employer details replaced.
+- **A saved application** (the user's browser, that employer's single-page flow, before filling):
+  `oracle-apply.html` (employer details and personal data replaced), all 46 fields with kinds, ids, hints and options, Submit as the only button.
 - **Behaviour** against `test/oracle-fixture.ts`, a model of the widgets built from that page and the
   bundle's templates: every filler, dependent lists, the Escape trap, uploads and removals, inline forms and
   Save, tiles and timeline deletes, the multi-page flow, the guard. The companion's e2e tests run the real
   adapter on it too.
-- **The first live application** (2026-09-29, the same Umbrella job, filled to Submit): text fields, pills,
+- **The first live application** (the same job, filled to Submit): text fields, pills,
   native radios, dates, lists (Degree matched "Bachelor" to "Bachelor’s degree"), the resume and additional
   document uploads, and education and work entries with Save all worked. What failed, all fixed and now
   reproduced by the fixture (each test fails on the old logic): City and Postal Code reported "Selection did
@@ -226,4 +230,4 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 
 ## Updating for Oracle changes
 Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or, once it
-exists, one exported from autofill debug mode: `todo.md`, item 6), and extend `oracle-live.test.ts` and the fixture.
+exists, one exported from autofill debug mode: `todo.md`, "Autofill debug mode"), and extend `oracle-live.test.ts` and the fixture.

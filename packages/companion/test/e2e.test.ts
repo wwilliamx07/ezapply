@@ -116,6 +116,10 @@ interface FakeTab {
   active?: boolean;
   /** In a minimized window: the page stays hidden even as the active tab. */
   minimized?: boolean;
+  /** In a window behind another app: the page has no focus, until `tab.show`'s `focusWindow` raises it. */
+  windowInBackground?: boolean;
+  /** The system keeps the window behind even when the extension raises it (Windows' focus-stealing rules). */
+  keptBehind?: boolean;
 }
 
 /**
@@ -139,11 +143,19 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
   const page = (tabId?: number) => pages.find((p) => p.tabId === tabId) ?? (pages[0] as (typeof pages)[number]);
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status"> = {
-    "tab.show": async ({ tabId, activate }) => {
+    "tab.show": async ({ tabId, activate, focusWindow }) => {
       const p = page(tabId);
+      const windowFocused = Boolean(activate && focusWindow && (p.windowInBackground || p.minimized));
+      if (windowFocused && !p.keptBehind) Object.assign(p, { windowInBackground: false, minimized: false });
       const activated = activate && !p.active;
       if (activated) for (const other of pages) other.active = other === p;
-      return { tabId: p.tabId, activated, hidden: Boolean(p.minimized) || !p.active };
+      return {
+        tabId: p.tabId,
+        activated,
+        ...(windowFocused ? { windowFocused } : {}),
+        hidden: Boolean(p.minimized) || !p.active,
+        focused: !p.windowInBackground,
+      };
     },
     "form.get": async ({ tabId }) => ({ ...page(tabId).api.getForm(), tabId: page(tabId).tabId }),
     "form.listOptions": async ({ tabId, fieldId }) => page(tabId).api.listOptions(fieldId),
@@ -181,7 +193,7 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
       site: detectSite(p.url),
     })),
   });
-  return { handlers: recorded, status, calls };
+  return { handlers: recorded, status, calls, page };
 }
 
 /** A stand-in for the browser extension speaking the real bridge protocol. */
@@ -232,7 +244,7 @@ function fakeExtension(
       ws.on("error", (err) => resolve({ welcomed: false, error: err.message }));
     },
   );
-  return { ws, peer, outcome, calls: browser.calls };
+  return { ws, peer, outcome, calls: browser.calls, page: browser.page };
 }
 
 async function mcpClient(): Promise<Client> {
@@ -335,6 +347,18 @@ describe("extension bridge", () => {
     await closed;
     await new Promise((r) => setTimeout(r, 50));
     expect(handle.services.bridge.status()).toMatchObject({ connected: false, browser: { name: "edge" } });
+    await client.close();
+  });
+});
+
+describe("workspace changes", () => {
+  it("lists what's out of date over MCP and refuses to mark an id that isn't current", async () => {
+    const client = await mcpClient();
+    const res = await callJson(client, "workspace_changes");
+    expect(res.isError).toBe(false);
+    expect(res.data).toEqual({ changes: [] });
+    const mark = await callJson(client, "workspace_change_mark", { id: "resume-edited@000000000000", as: "done" });
+    expect(mark).toMatchObject({ isError: true, data: { error: { code: "not_found" } } });
     await client.close();
   });
 });
@@ -835,7 +859,7 @@ describe("form tools over MCP", () => {
   });
 
   it("in debug mode, records every form call under debug/ and keeps it out of the results", async () => {
-    const ext = fakeExtension();
+    const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL, windowInBackground: true }] });
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
     await writeFile(
@@ -844,7 +868,7 @@ describe("form tools over MCP", () => {
     );
     await writeFile(
       join(dir, "ws", "ezapply.config.json"),
-      JSON.stringify({ schemaVersion: 1, debug: { autofill: true } }),
+      JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "off" }, debug: { autofill: true } }),
     );
     const client = await mcpClient();
     const auto = (await callJson(client, "autofill_step")).data;
@@ -866,7 +890,13 @@ describe("form tools over MCP", () => {
       return lines.length === 3 ? lines.map((l) => JSON.parse(l)) : undefined;
     });
     expect(index.map((l: { tool: string }) => l.tool)).toEqual(["autofill_step", "fill_fields", "get_form"]);
-    expect(index[0]).toMatchObject({ seq: 1, ok: true, autofill: { filled: 2, failed: 0 }, debug: true });
+    expect(index[0]).toMatchObject({
+      seq: 1,
+      ok: true,
+      autofill: { filled: 2, failed: 0 },
+      windowInBackground: true,
+      debug: true,
+    });
     const record = JSON.parse(await readFile(join(session, "0001-autofill_step.json"), "utf8"));
     expect(record.bridge.map((b: { method: string }) => b.method)).toEqual(["form.get", "form.fill", "form.get"]);
     expect(record.notes.autofill[0]).toMatchObject({
@@ -878,6 +908,7 @@ describe("form tools over MCP", () => {
     const { debugReport } = await import("../src/forms/debug-report.js");
     const report = await debugReport(session);
     expect(report).toMatch(/3 form calls/);
+    expect(report).toMatch(/browser window behind another app: 3 of 3 \(#1, #2, #3\)/);
     expect(report).toMatch(/hint:identity\.firstName: 1 filled/);
     expect(report).toMatch(
       /my-information\.legalName--firstName: hint:identity\.firstName put "Jane", #2 \(user\) set "Janet"/,
@@ -1120,6 +1151,121 @@ describe("form tools over MCP", () => {
       filled: [],
       note: expect.stringMatching(/another posting/),
     });
+    await client.close();
+  });
+
+  /** A posting captured on a page that isn't a form site (an employer's careers page, a school's job board). */
+  const captureOffSite = (ext: ReturnType<typeof fakeExtension>, url: string, role: string, links = "") => {
+    const html = `<h1>${role}</h1><div><p>${LONG}</p></div>${links}`;
+    return ext.peer.request("posting.capture", {
+      url,
+      pageTitle: role,
+      html,
+      visibleHtml: html,
+      visibleText: LONG,
+      capturedAt: "2026-10-04T12:00:00.000Z",
+      tabId: 3,
+    });
+  };
+
+  it("ties a posting captured on a careers page to its application by the page's link", async () => {
+    const apply = (req: string) =>
+      `https://cyberdyne.wd5.myworkdayjobs.com/en-US/CyberdyneCareers/job/Store/Intern_${req}/apply/applyManually`;
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: apply("Req100010"), active: true },
+        { tabId: 8, url: apply("Req100012"), active: false },
+      ],
+    });
+    await ext.outcome;
+    const posting = await captureOffSite(
+      ext,
+      "https://careers.cyberdyne.example/job-view/software-developer-intern-100067",
+      "Software Developer Intern",
+      `<a href="${apply("Req100012").replace("/applyManually", "")}?source=Other">Apply</a>`,
+    );
+    const client = await mcpClient();
+    const active = (await callJson(client, "posting_active")).data;
+    expect(active.application).toMatchObject({
+      site: "workday",
+      tenant: "cyberdyne",
+      job: "req100012",
+      from: "apply-link",
+    });
+
+    // Its own application tab is chosen, though the other one is in front, and the result says why.
+    expect((await callJson(client, "get_form")).data).toMatchObject({
+      tabId: 8,
+      posting: posting.postingId,
+      postingMatch: { by: ["job"], from: "apply-link" },
+    });
+    // The other application at the same employer is refused.
+    const other = await callJson(client, "get_form", { tabId: 7 });
+    expect(other.data.postingMismatch).toMatchObject({
+      by: "job",
+      formJob: "req100010",
+      activePosting: { job: "req100012" },
+    });
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+      tabId: 7,
+    });
+    expect(fill.data.error.code).toBe("posting_mismatch");
+    await client.close();
+  });
+
+  it("binds a tab nothing ties to the posting, says so once, and keeps it from another posting", async () => {
+    const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL }] });
+    await ext.outcome;
+    const board = "https://example-csm.symplicity.com/students/app/jobs/detail";
+    const first = await captureOffSite(ext, `${board}/aaa`, "Backend Engineer");
+    const client = await mcpClient();
+    // The agent sets the role after reading the posting: the page's title is then read (this one shows none).
+    await callJson(client, "posting_update_meta", { role: "Backend Engineer" });
+    const name = { fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" };
+
+    const fill = (await callJson(client, "fill_fields", { fills: [name] })).data;
+    expect(fill.postingBound).toMatchObject({
+      id: first.postingId,
+      role: "Backend Engineer",
+      hint: expect.stringMatching(/tell the user/),
+    });
+    expect(fill.postingMatch).toEqual({ by: ["unconfirmed"], from: "bound" });
+    const again = (await callJson(client, "fill_fields", { fills: [name] })).data;
+    expect(again.postingBound).toBeUndefined();
+    expect(again.postingMatch).toEqual({ by: ["binding"], from: "bound" });
+    const meta = JSON.parse(await readFile(join(dir, "ws", "postings", first.postingId, "meta.json"), "utf8"));
+    expect(meta.application).toMatchObject({ site: "workday", tenant: "acme", from: "bound" });
+    const log = await readFile(join(dir, "ws", "postings", first.postingId, "form-log.jsonl"), "utf8");
+    expect(log).toMatch(/"matchedBy":"unconfirmed"[\s\S]*"matchedBy":"binding"/);
+
+    // Another posting with nothing to compare can't take the bound tab…
+    const second = await captureOffSite(ext, `${board}/bbb`, "Data Engineer");
+    const refused = (await callJson(client, "fill_fields", { fills: [name] })).data;
+    expect(refused.error).toMatchObject({
+      code: "posting_mismatch",
+      hint: expect.stringMatching(/posting_activate \{ id/),
+    });
+    expect((await callJson(client, "get_form")).data.postingMismatch).toMatchObject({
+      by: "binding",
+      boundTo: first.postingId,
+    });
+
+    // …until the user says this tab is its application.
+    const activated = (await callJson(client, "posting_activate", { id: second.postingId, tabId: 7 })).data;
+    expect(activated).toMatchObject({ id: second.postingId, boundTab: { tabId: 7 }, application: { from: "user" } });
+    expect((await callJson(client, "fill_fields", { fills: [name] })).data.postingMismatch).toBeUndefined();
+    await client.close();
+  });
+
+  it("refuses a title given as a requisition", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await mcpClient();
+    const r = await callJson(client, "posting_update_meta", { reqId: "Evergreen - Software Engineer, Intern, 2027" });
+    expect(r.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/role/) });
+    expect((await callJson(client, "posting_update_meta", { reqId: " R-123 " })).data.reqId).toBe("R-123");
     await client.close();
   });
 
@@ -1378,7 +1524,7 @@ describe("form tools over MCP", () => {
     const fill = await callJson(client, "fill_fields", { fills: [firstName] });
     expect(fill.data.tabHidden).toBeUndefined();
     expect(ext.calls.map((c) => c.method)).toEqual(["tab.show", "form.fill"]);
-    expect(ext.calls[0]?.params).toMatchObject({ tabId: 7, activate: true });
+    expect(ext.calls[0]?.params).toMatchObject({ tabId: 7, activate: true, focusWindow: true });
     // Already in front: nothing to switch, and nothing extra in the log.
     await callJson(client, "fill_fields", { fills: [firstName] });
     const log = (await readFile(join(folder, "form-log.jsonl"), "utf8"))
@@ -1395,9 +1541,72 @@ describe("form tools over MCP", () => {
     ext.calls.length = 0;
     await callJson(client, "get_form");
     expect(ext.calls.map((c) => c.method)).toEqual(["tab.show", "form.get"]);
-    expect(ext.calls[0]?.params).toMatchObject({ activate: false });
+    expect(ext.calls[0]?.params).toMatchObject({ activate: false, focusWindow: false });
+    ext.calls.length = 0;
+    await callJson(client, "fill_fields", { fills: [firstName] });
+    expect(ext.calls[0]?.params).toMatchObject({ activate: false, focusWindow: false });
     await answerReview(review.url, { t: review.token, c0: "" });
     await review.result;
+    await client.close();
+  });
+
+  it("brings the browser window to the front for calls that change the page, as forms.focusBrowser says", async () => {
+    const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL, active: true, windowInBackground: true }] });
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    const config = join(dir, "ws", "ezapply.config.json");
+    const client = await mcpClient();
+    const firstName = { fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" };
+    const shown = () => ext.calls.filter((c) => c.method === "tab.show").map((c) => c.params.focusWindow);
+
+    // A read leaves the terminal in front; the window behind is only noted (no hint on a read).
+    const form = (await callJson(client, "get_form")).data;
+    expect(form.browserBehind).toBeUndefined();
+    // On by default: a fill raises the window first, and the log says so.
+    const fill = await callJson(client, "fill_fields", { fills: [firstName] });
+    expect(fill.data.browserBehind).toBeUndefined();
+    expect(shown()).toEqual([false, true]);
+    const log = async () =>
+      (await readFile(join(folder, "form-log.jsonl"), "utf8"))
+        .trim()
+        .split(/\r?\n/)
+        .map((l) => JSON.parse(l));
+    expect((await log())[0]).toMatchObject({ event: "fill", windowFocused: true });
+    expect((await log())[0]).not.toHaveProperty("windowInBackground");
+
+    // Off: the window stays behind, and a call that changes the page says how to fix a field that isn't taken.
+    await writeFile(config, JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "off" } }));
+    ext.calls.length = 0;
+    const page = ext.page(7);
+    page.windowInBackground = true;
+    const behind = await callJson(client, "fill_fields", { fills: [firstName] });
+    expect(shown()).toEqual([false]);
+    expect(behind.data.browserBehind).toEqual({ hint: expect.stringMatching(/focusBrowser/) });
+    expect(behind.data.tabHidden).toBeUndefined();
+    expect((await log())[1]).toMatchObject({ event: "fill", windowInBackground: true });
+    expect((await log())[1]).not.toHaveProperty("windowFocused");
+
+    // A bad value falls back to on.
+    await writeFile(config, JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "sometimes" } }));
+    ext.calls.length = 0;
+    await callJson(client, "add_repeatable", { addButtonId: "add.work-experience" });
+    expect(shown()).toEqual([true]);
+    await client.close();
+  });
+
+  it("says when the system kept the browser window behind", async () => {
+    const ext = fakeExtension({
+      tabs: [{ tabId: 7, url: APPLY_URL, active: true, windowInBackground: true, keptBehind: true }],
+    });
+    await ext.outcome;
+    await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await mcpClient();
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+    });
+    expect(fill.data.results).toEqual([{ fieldId: "my-information.legalName--firstName", ok: true }]);
+    expect(fill.data.browserBehind).toEqual({ hint: expect.stringMatching(/click the browser window/) });
     await client.close();
   });
 
@@ -1405,6 +1614,11 @@ describe("form tools over MCP", () => {
     const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL, active: true, minimized: true }] });
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    // With forms.focusBrowser on, the minimized window would be restored first.
+    await writeFile(
+      join(dir, "ws", "ezapply.config.json"),
+      JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "off" } }),
+    );
     const client = await mcpClient();
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],

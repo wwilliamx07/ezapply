@@ -43,6 +43,14 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 
 Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry).
 
+**At the start of every session** (after onboarding too), Claude calls `workspace_changes` with
+`posting_active`. The companion has checked in the background since the chat started: repos pushed since
+indexing, knowledge from repos no longer selected, a template's source folder edited since import, the resume
+template edited since the profile was updated from it, the profile's contact changed under the cover's fields.
+Nothing listed, Claude says nothing. Otherwise it lists them, and with the user's agreement re-imports,
+updates the profile from the diff, updates the cover fields and re-indexes, marking each done, or marks them
+`later` for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
+
 ## 2. Pairing the extension
 1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
    the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
@@ -117,13 +125,18 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 ## 7. Autofill ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
 ([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md)):
-1. `posting_active`; read the profile and answer bank. The form tools act on the application tab (Workday or
-   Oracle) of this posting's tenant and credit everything to it; a tab of another posting (another company's tenant, or another requisition at the same one) is
-   read with `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude
-   stops to sort it out with the user. Before each form call the companion
-   brings that tab to the front of its window (not while a review page waits for the user); if it's still
+1. `posting_active`; read the profile and answer bank. The form tools act on this posting's application tab
+   (by its job, the tab it was bound to, its tenant, or its title: [which posting](mcp-tools.md#forms)) and
+   credit everything to it. A posting captured off the form sites is tied to its application by the captured
+   page's link, or else the first fill binds the tab to it and Claude tells the user once (`postingBound`). A tab
+   of another posting (another employer, another requisition, a tab bound to another posting) is read with
+   `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude stops to
+   sort it out with the user (`posting_activate { id, tabId }` when the user says the tab is right). Before each form call the companion
+   brings that tab to the front of its window, and before a call that changes the page the browser window too
+   (`forms.focusBrowser`, on by default); neither while a review page waits for the user. If the tab is still
    hidden (a minimized window), results carry `tabHidden` and Claude tells the user once to keep it visible,
-   since the browser slows hidden tabs.
+   since the browser slows hidden tabs. If the window stayed behind another app, results of calls that change
+   the page carry `browserBehind`, which Claude passes on when a field (a date) isn't taken.
 2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;

@@ -103,6 +103,12 @@ export function singleStep(title: string): FormSchema["step"] {
   return { title: title || "Application" };
 }
 
+/** `FormSchema.job` from the job title a page shows; nothing when it shows none. */
+export function titledJob(title: string): FormSchema["job"] {
+  const t = title.replace(/\s+/g, " ").trim();
+  return t ? { title: t } : undefined;
+}
+
 /** The standard waits, for a site whose own aren't different: settle after each thing, for as long as its waits say. */
 export const standardWaits: SiteWaits = {
   afterField: (doc) => settle(doc, T.afterFieldQuietMs, T.afterFieldMaxMs),

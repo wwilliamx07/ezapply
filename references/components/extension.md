@@ -124,15 +124,30 @@ and a capture of the top frame alone holds only the company's page around it.
    through a second `executeScript`. Results and thrown errors
    come back as `{ __ok }` / `{ __error }`.
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
-   switch to it).
-6. `tab.show` (sent by the companion before every form call): with `activate` and the tab not active,
-   `tabs.update(tabId, { active: true })`. Then it reads `document.visibilityState` with one `executeScript`
-   in the isolated world (the site's host permission is already required). The page learns of a switch
-   asynchronously, so after one it's read up to 10 times, 50 ms apart, from the background, whose timers
-   aren't throttled. Without access to the page it falls back to the tab's active state.
-   - **No window focus.** `windows.update({ focused: true })` would pull the browser in front of the terminal
-     the user is typing in, and take keyboard focus, on every form call. Switching the tab inside its window
-     is enough for the usual cases (the review page or another page opened over the form).
+   switch to it). Live in Chrome it was refused: `captureVisibleTab` wants `<all_urls>` or
+   `activeTab`, and the extension holds neither, only its sites' host permissions. Not fixed: `<all_urls>`
+   would grant every site, and `activeTab` needs a user gesture on the extension.
+6. `tab.show` (sent by the companion before every form call): with `activate` and `focusWindow`, and the
+   tab's window not the focused one (or minimized), `windows.update(windowId, { focused: true })`, with
+   `state: "normal"` when it's minimized, and `windowFocused: true` in the result. Then, with `activate` and the
+   tab not active, `tabs.update(tabId, { active: true })`. Then it reads `document.visibilityState` and
+   `document.hasFocus()` with one `executeScript` in the isolated world (the site's host permission is already
+   required). The page learns of a switch, or of its window coming to the front, asynchronously, so after one
+   it's read up to 10 times, 50 ms apart (until it's visible, and focused when the window was raised), from the
+   background, whose timers aren't throttled. Without access to the page it falls back to the tab's active
+   state, and `focused` is left out. `focused` says whether a raise worked, and debug mode records it: a page in
+   a window behind another app gets no focus events from Chrome, which widgets that track focus depend on
+   (Workday's split dates weren't taken there; [workday adapter](workday-adapter.md)).
+   - **Window focus only when asked.** Raising the window pulls the browser in front of the terminal the user
+     may be typing in, and takes keyboard focus. The companion asks for it (`focusWindow`) only on calls that
+     change the page, only when `forms.focusBrowser` is on, and never while a review page waits. A failed
+     `windows.update` is swallowed: the tab is still switched to.
+   - **Restoring a minimized window** sets `state: "normal"`, so a window minimized from maximized comes back
+     at its normal size. Asking for it outright means not depending on how each browser treats `focused: true`
+     on a minimized window.
+   - **Windows' focus-stealing rules** may keep the window behind and flash its taskbar button instead. Then
+     `windowFocused` is true and `focused` false, and the companion's `browserBehind` hint asks the user to
+     click the browser.
    - **Hidden stays hidden.** A minimized window, or on Windows one fully covered by others (Chrome tracks
      occlusion), keeps its pages hidden even when the tab is active. That's reported as `hidden: true`, not
      forced.

@@ -99,6 +99,11 @@ export const FormSchema = z.object({
   lastPage: z.boolean().optional(),
   /** Label of the button back to the previous step, when there is one. */
   backLabel: z.string().optional(),
+  /**
+   * The job the page says it's the application for, as its site's definition reads it: the title in the page's
+   * header, a requisition shown on it. Tells which posting a tab belongs to when its URL can't.
+   */
+  job: z.object({ title: z.string().optional(), reqId: z.string().optional() }).optional(),
 });
 export type FormSchema = z.infer<typeof FormSchema>;
 
@@ -235,10 +240,20 @@ export const FormMethods = {
    * timers to about once a second, and every adapter wait is a timer). `activate: false` only reports.
    * `activated`: the extension switched to the tab. `hidden`: the page still reports
    * `document.visibilityState === "hidden"` (a minimized or fully covered window), which the extension doesn't
-   * try to force.
+   * try to force. `focused`: `document.hasFocus()`, false while the browser window is behind another app (the
+   * terminal), where Chrome holds back focus events; absent when the page can't be read.
+   * `focusWindow` (with `activate`): also bring the browser window to the front, restoring it if minimized
+   * (`forms.focusBrowser`); `windowFocused`: the extension asked the window to come to the front, which the
+   * OS may still refuse (`focused` says whether it worked). An older extension ignores `focusWindow`.
    */
   "tab.show": {
-    params: TabParam.extend({ activate: z.boolean() }),
-    result: z.object({ tabId: z.number().int(), activated: z.boolean(), hidden: z.boolean() }),
+    params: TabParam.extend({ activate: z.boolean(), focusWindow: z.boolean().optional() }),
+    result: z.object({
+      tabId: z.number().int(),
+      activated: z.boolean(),
+      windowFocused: z.boolean().optional(),
+      hidden: z.boolean(),
+      focused: z.boolean().optional(),
+    }),
   },
 };

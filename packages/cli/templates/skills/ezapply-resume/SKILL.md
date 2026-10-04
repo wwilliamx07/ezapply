@@ -7,7 +7,8 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 
 ## Setup
 1. `posting_active`, then read `posting.md`. If the capture-time company or role is wrong, fix it with
-   `posting_update_meta`. If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
+   `posting_update_meta`; a requisition or job id the posting shows goes in `reqId` (never in the company or
+   role). If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
    and follow it: a required format, page limit or single PDF changes what you produce.
 2. Read `profile/profile.yaml`, `profile/preferences.md`, every claim (`claims_list`, if not already
    called in this session), and

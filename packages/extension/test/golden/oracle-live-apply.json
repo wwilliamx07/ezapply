@@ -277,7 +277,7 @@
           ]
         },
         {
-          "id": "application-questions.have-you-previously-worked-for-umbrella-as-",
+          "id": "application-questions.have-you-previously-worked-for-umbrella-",
           "label": "Have you previously worked for Umbrella as a student (co-op, university relations, intern and/or future tech)? If so, when?",
           "required": true,
           "kind": "radio",
@@ -369,7 +369,7 @@
           ]
         },
         {
-          "id": "application-questions.i-was-previously-employed-directly-by-no",
+          "id": "application-questions.i-was-previously-employed-directly-by-um",
           "label": "I was previously employed directly by Umbrella or a subsidiary of Umbrella, not as a subcontractor.",
           "required": true,
           "kind": "radio",
@@ -571,5 +571,8 @@
   "actions": [],
   "errors": [],
   "nextLabel": "Submit",
-  "lastPage": true
+  "lastPage": true,
+  "job": {
+    "title": "Firmware Engineering Co-op"
+  }
 }

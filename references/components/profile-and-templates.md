@@ -11,7 +11,9 @@ Everything forms ask that isn't a screening question: identity, contact (email, 
 work authorization, job preferences, work history (`YYYY-MM`, `end: null` for current), education,
 skills, languages, certifications, and optional EEO self-identification.
 
-- Written by Claude during onboarding from the user's resume, then completed in chat.
+- Written by Claude during onboarding from the user's resume, then completed in chat. When the resume template
+  changes later, `workspace_changes` reports it with the diff (`resume-edited`), and the profile is updated
+  from that diff alone.
 - `profile_check` validates it and lists commonly needed fields still missing: phone, region, postal code,
   work-authorization countries, sponsorship now and in future, some work or education, LinkedIn.
 - EEO values are only ever filled verbatim from here; `"decline"` means choose the form's decline option;
@@ -39,11 +41,11 @@ Stored answers to screening questions.
   answer the user tells it to save gets `sensitive: false` unless they want to keep being asked. Edits go
   through the Edit tool, then `answers_check`.
 
-  *Why:* `how_heard` ("School job board") matched nothing on both Oscorp forms (2026-09-29: "College/University")
-  and on Tyrell's (2026-09-30: a list of schools), and each time nothing was saved, so it missed again. On
-  2026-09-30 the user told the agent to save three Umbrella answers; it appended new entries with a shell
-  `cat >>`, marked `sensitive: true` (which means "always ask"), and added `umbrella_how_heard` beside the
-  existing `how_heard`. The next Umbrella application asked the same questions again, and the user had to point
+  *Why:* `how_heard` ("School job board") matched nothing on two forms at one employer ("College/University")
+  and on another's (a list of schools), and each time nothing was saved, so it missed again. Once
+  the user told the agent to save three answers from an employer's form; it appended new entries with a shell
+  `cat >>`, marked `sensitive: true` (which means "always ask"), and added an employer-named `how_heard` entry
+  beside the existing `how_heard`. That employer's next application asked the same questions again, and the user had to point
   out they'd already saved them.
 
 ## Preferences (`profile/preferences.md`)
@@ -80,7 +82,9 @@ file structure, so a diff against the template stays readable.)
   candidates and Claude asks.
 - An existing template is moved to `templates/.old/<kind>-<timestamp>/`, never overwritten. Replacing one
   the user has needs `replace: true` (Claude confirms first); replacing ezapply's untouched default doesn't.
-- Records `origin: "imported"` and where it came from.
+- Records `origin: "imported"`, where it came from, and `sourceHash`, a hash of the files it copied, so the
+  workspace check can tell when the user edits their own copy afterwards
+  ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
 - **Engine:** if the imported main file has no `% !TEX program` comment but uses pdfTeX-only commands
   (`\pdfgentounicode`, `\pdfglyphtounicode`, `\input{glyphtounicode}`) and no `fontspec`/`\setmainfont`,
   `% !TEX program = pdflatex` is added as its first line in the workspace copy (the user's original is

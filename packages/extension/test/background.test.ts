@@ -37,7 +37,11 @@ const chromeStub = {
     get: vi.fn(async (_id: number): Promise<unknown> => undefined),
     update: vi.fn(async (_id: number, _props: unknown) => ({})),
   },
-  windows: { getLastFocused: vi.fn(async () => ({ id: 1 })), update: vi.fn(async () => ({})) },
+  windows: {
+    getLastFocused: vi.fn(async () => ({ id: 1 })),
+    get: vi.fn(async (_id: number): Promise<unknown> => ({ id: 1, focused: true, state: "normal" })),
+    update: vi.fn(async (_id: number, _props: unknown) => ({})),
+  },
   scripting: { executeScript: vi.fn(async (_injection: unknown): Promise<unknown> => []) },
   permissions: { contains: vi.fn(async () => true), request: vi.fn(async (_p: unknown) => true) },
 };
@@ -99,37 +103,140 @@ describe("Set posting", () => {
 describe("tab.show", () => {
   const APPLY = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply";
   /** The tab as tabs.get gives it, and what the page answers for each visibility read, in order. */
-  const show = async (tab: { active: boolean }, hidden: boolean[], activate = true) => {
+  const show = async (tab: { active: boolean }, hidden: boolean[], activate = true, focused = true) => {
     const { formHandlers } = await import("../src/background/forms.js");
     chromeStub.tabs.update.mockClear();
     chromeStub.windows.update.mockClear();
     chromeStub.scripting.executeScript.mockReset();
     chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, ...tab });
-    for (const h of hidden) chromeStub.scripting.executeScript.mockResolvedValueOnce([{ result: h }]);
-    chromeStub.scripting.executeScript.mockResolvedValue([{ result: hidden.at(-1) }]);
+    // The page has focus only when it's visible and the window is in front (`focused`).
+    const page = (h: boolean | undefined) => [{ result: { hidden: h, focused: !h && focused } }];
+    for (const h of hidden) chromeStub.scripting.executeScript.mockResolvedValueOnce(page(h));
+    chromeStub.scripting.executeScript.mockResolvedValue(page(hidden.at(-1)));
     return formHandlers["tab.show"]({ tabId: 5, activate });
   };
 
+  /**
+   * `focusWindow` asked for, with the window as windows.get gives it, and what the page answers for each read:
+   * `[hidden, focused]`, in order.
+   */
+  const raise = async (win: { focused: boolean; state: string }, reads: [boolean, boolean][], activate = true) => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.update.mockClear();
+    chromeStub.windows.update.mockClear();
+    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, ...win });
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, active: true });
+    const page = ([hidden, focused]: [boolean, boolean]) => [{ result: { hidden, focused } }];
+    for (const r of reads) chromeStub.scripting.executeScript.mockResolvedValueOnce(page(r));
+    chromeStub.scripting.executeScript.mockResolvedValue(page(reads.at(-1) as [boolean, boolean]));
+    return formHandlers["tab.show"]({ tabId: 5, activate, focusWindow: true });
+  };
+
+  it("brings the browser window to the front with focusWindow, and waits for the page to get focus", async () => {
+    expect(
+      await raise({ focused: false, state: "normal" }, [
+        [false, false],
+        [false, true],
+      ]),
+    ).toEqual({ tabId: 5, activated: false, windowFocused: true, hidden: false, focused: true });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(1, { focused: true });
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores a minimized window", async () => {
+    expect(await raise({ focused: false, state: "minimized" }, [[false, true]])).toMatchObject({
+      windowFocused: true,
+      focused: true,
+    });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(1, { focused: true, state: "normal" });
+  });
+
+  it("leaves a window that's already in front alone", async () => {
+    expect(await raise({ focused: true, state: "maximized" }, [[false, true]])).toEqual({
+      tabId: 5,
+      activated: false,
+      hidden: false,
+      focused: true,
+    });
+    expect(chromeStub.windows.update).not.toHaveBeenCalled();
+  });
+
+  it("reports a window the system kept behind", async () => {
+    expect(await raise({ focused: false, state: "normal" }, [[false, false]])).toEqual({
+      tabId: 5,
+      activated: false,
+      windowFocused: true,
+      hidden: false,
+      focused: false,
+    });
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(10);
+  });
+
+  it("never raises the window with activate: false (a review page waits)", async () => {
+    await raise({ focused: false, state: "normal" }, [[false, false]], false);
+    expect(chromeStub.windows.update).not.toHaveBeenCalled();
+    chromeStub.windows.get.mockReset();
+    chromeStub.windows.get.mockResolvedValue({ id: 1, focused: true, state: "normal" });
+  });
+
+  it("still switches the tab when the window can't be raised", async () => {
+    chromeStub.windows.update.mockRejectedValueOnce(new Error("No window with id: 1."));
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.update.mockClear();
+    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, focused: false, state: "normal" });
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { hidden: false, focused: false } }]);
+    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, active: false });
+    expect(await formHandlers["tab.show"]({ tabId: 5, activate: true, focusWindow: true })).toEqual({
+      tabId: 5,
+      activated: true,
+      hidden: false,
+      focused: false,
+    });
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(5, { active: true });
+  });
+
   it("switches to an application tab in the background and waits for the page to notice", async () => {
-    expect(await show({ active: false }, [true, true, false])).toEqual({ tabId: 5, activated: true, hidden: false });
+    expect(await show({ active: false }, [true, true, false])).toEqual({
+      tabId: 5,
+      activated: true,
+      hidden: false,
+      focused: true,
+    });
     expect(chromeStub.tabs.update).toHaveBeenCalledWith(5, { active: true });
     expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(3);
-    // The browser window is never focused: that would pull it in front of the user's terminal.
+    // Without focusWindow the browser window isn't focused: that would pull it in front of the user's terminal.
     expect(chromeStub.windows.update).not.toHaveBeenCalled();
   });
 
   it("leaves a tab that's already in front alone", async () => {
-    expect(await show({ active: true }, [false])).toEqual({ tabId: 5, activated: false, hidden: false });
+    expect(await show({ active: true }, [false])).toEqual({ tabId: 5, activated: false, hidden: false, focused: true });
     expect(chromeStub.tabs.update).not.toHaveBeenCalled();
   });
 
   it("only reports with activate: false", async () => {
-    expect(await show({ active: false }, [true], false)).toEqual({ tabId: 5, activated: false, hidden: true });
+    expect(await show({ active: false }, [true], false)).toEqual({
+      tabId: 5,
+      activated: false,
+      hidden: true,
+      focused: false,
+    });
     expect(chromeStub.tabs.update).not.toHaveBeenCalled();
   });
 
+  it("reports a page without focus: its window is behind another app", async () => {
+    expect(await show({ active: true }, [false], true, false)).toEqual({
+      tabId: 5,
+      activated: false,
+      hidden: false,
+      focused: false,
+    });
+    expect(chromeStub.windows.update).not.toHaveBeenCalled();
+  });
+
   it("reports a tab still hidden after switching (a minimized window), without forcing it", async () => {
-    expect(await show({ active: false }, [true])).toEqual({ tabId: 5, activated: true, hidden: true });
+    expect(await show({ active: false }, [true])).toEqual({ tabId: 5, activated: true, hidden: true, focused: false });
     expect(chromeStub.windows.update).not.toHaveBeenCalled();
   });
 });

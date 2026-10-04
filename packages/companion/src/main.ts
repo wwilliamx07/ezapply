@@ -6,6 +6,7 @@ import { type AppConfig, appDir, updateAppConfig } from "./config/app.js";
 import { ReviewService } from "./documents/review.js";
 import { DocumentsService } from "./documents/service.js";
 import { FormsService } from "./forms/service.js";
+import { FreshnessService } from "./freshness/service.js";
 import { KeyringStore, type SecretStore } from "./github/secrets.js";
 import { GitHubService } from "./github/service.js";
 import { createHttpServer } from "./http.js";
@@ -100,6 +101,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     ...(opts.reconnectGraceMs !== undefined ? { reconnectGraceMs: opts.reconnectGraceMs } : {}),
   });
 
+  const freshness = new FreshnessService(workspace, profile, templates, repos, log.child({ svc: "freshness" }));
   const forms = new FormsService(workspace, postings, bridge, reviews, profile, log.child({ svc: "forms" }));
 
   const services: Services = {
@@ -113,6 +115,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     templates,
     github,
     repos,
+    freshness,
     forms,
     bridge,
     opener,
@@ -136,6 +139,9 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   });
   port = (server.address() as AddressInfo).port;
   log.info({ port, workspace: workspace.root, version: COMPANION_VERSION }, "companion listening");
+  // What's out of date in the workspace, for `workspace_changes`: the repos need the network, so they're
+  // checked once per chat, in the background, never in the way of the first call or the extension's handshake.
+  freshness.start();
 
   return {
     port,

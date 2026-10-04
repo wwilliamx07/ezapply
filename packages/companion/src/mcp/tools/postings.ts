@@ -81,12 +81,23 @@ export function registerPostingTools(server: McpServer, s: Services): void {
     "posting_activate",
     {
       title: "Activate posting",
-      description: "Make a previously captured posting the active one, so later requests use it as context.",
-      inputSchema: { id: z.string().describe("Posting id from postings_list.") },
+      description:
+        "Make a previously captured posting the active one, so later requests use it as context. With tabId, also " +
+        "tie that application tab to it (only when the user says that tab is this posting's application).",
+      inputSchema: {
+        id: z.string().describe("Posting id from postings_list."),
+        tabId: z
+          .number()
+          .int()
+          .optional()
+          .describe("The application tab that belongs to this posting, per the user (from a postingMismatch hint)."),
+      },
     },
-    tool(s.log, "posting_activate", async ({ id }: { id: string }) => {
+    tool(s.log, "posting_activate", async ({ id, tabId }: { id: string; tabId?: number }) => {
       await s.postings.activate(id);
-      return s.postings.details(id);
+      const bound = tabId === undefined ? undefined : await s.forms.bindTab(id, tabId);
+      const details = await s.postings.details(id);
+      return bound ? { ...details, boundTab: bound } : details;
     }),
   );
 

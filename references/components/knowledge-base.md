@@ -73,6 +73,11 @@ can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
 Reading uses Claude Code's own Read, Grep and Glob. Nothing in the cache is edited, built, installed or
 run, and no git command that changes it is used.
 
+## Staying current
+Each chat checks every indexed, selected repo's remote head against `meta.json`'s `indexedSha`, and lists
+knowledge folders whose repo is no longer selected (their claims would still be in `claims_list`). The agent
+re-indexes or removes them with the user's agreement ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
+
 ## How tailoring uses it
 The `ezapply-resume` and `ezapply-cover-letter` skills build an **evidence map** from each posting requirement to claim ids
 (or profile entries), mark each changed bullet with `% src: <claim-id>`, and never present a requirement

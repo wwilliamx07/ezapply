@@ -169,5 +169,8 @@
   ],
   "actions": [],
   "errors": [],
-  "nextLabel": "Next"
+  "nextLabel": "Next",
+  "job": {
+    "title": "Firmware Engineer"
+  }
 }

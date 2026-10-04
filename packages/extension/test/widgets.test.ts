@@ -84,7 +84,7 @@ describe("native controls", () => {
   it("date inputs take the format their type wants; passwords are never filled", async () => {
     const c = field('<input type="month">');
     expect(dateInputDriver().dateParts?.(c)).toEqual(["MM", "YYYY"]);
-    expect(await dateInputDriver().fill(c, "2030-04-30", { strict: false })).toEqual({ ok: true, readBack: "2029-08" });
+    expect(await dateInputDriver().fill(c, "2030-04-30", { strict: false })).toEqual({ ok: true, readBack: "2030-04" });
     expect(await passwordDriver.fill(field('<input type="password">'), "x", { strict: false })).toMatchObject({
       ok: false,
       error: /never filled/,

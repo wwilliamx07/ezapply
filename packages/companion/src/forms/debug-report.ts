@@ -32,6 +32,14 @@ export async function debugReport(dir: string): Promise<string> {
 
   const hiddenMs = sum(records.filter(hidden).map((r) => r.ms ?? 0));
   if (hiddenMs > 0) out.push("", `Time in calls with the tab hidden: ${secs(hiddenMs)}.`);
+  // Focus events don't reach a page in a window behind another app, and some widgets need them (dates on Workday).
+  const behind = records.filter(inBackground);
+  if (behind.length) {
+    out.push(
+      "",
+      `Calls with the browser window behind another app: ${behind.length} of ${records.length} (${behind.map((r) => `#${r.seq}`).join(", ")}).`,
+    );
+  }
 
   const errors = records.filter((r) => r.error);
   if (errors.length) {
@@ -185,6 +193,7 @@ function bump(m: Map<string, { filled: number; failed: number }>, rule: string, 
 }
 
 const hidden = (r: CallRecord) => Boolean((r.shown as { hidden?: boolean } | undefined)?.hidden);
+const inBackground = (r: CallRecord) => (r.shown as { focused?: boolean } | undefined)?.focused === false;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const show = (v: unknown) => JSON.stringify(v);

@@ -10,6 +10,7 @@ import {
   singlePageMessages,
   singleStep,
   standardWaits,
+  titledJob,
   visibleTexts,
 } from "../../engine/standard.js";
 import type { FieldSpot, SiteDefinition, WidgetDriver } from "../../engine/types.js";
@@ -21,13 +22,15 @@ import { checkboxDriver, checkboxGroupDriver, radioDriver, selectDriver, textDri
  * Lever's hosted postings (`jobs.lever.co/<company>/<id>`): the posting, and its application on `…/apply`, one
  * server-rendered page with Submit at the end. Each question is an `.application-question` with an
  * `.application-label`; native inputs, selects, radio and checkbox groups; a location field that suggests places as
- * you type. Built from a live application page (2026-10-03) and checked on one live (filling, never submitting).
+ * you type. Built from a live application page and checked on one live (filling, never submitting).
  * The resume input sends the file to Lever to read at once, so it wasn't tried live. See
  * references/components/sites.md.
  */
 
 const SEL = {
   form: "form#application-form",
+  /** The job title: `.posting-header` on the application page (live), `.posting-headline` on the posting's. */
+  title: ".posting-header h2, .posting-headline h2",
   question: ".application-question",
   label: ".application-label",
   headings: "h4",
@@ -132,8 +135,8 @@ export const lever: SiteDefinition = {
   rows: () => [],
   page: {
     kind: (doc, _url, count) => singlePageKind(doc, count, applyButton(doc)),
-    step: (doc) =>
-      doc.querySelector(SEL.form) ? singleStep(norm(text(doc.querySelector(".posting-headline h2")))) : undefined,
+    step: (doc) => (doc.querySelector(SEL.form) ? singleStep(norm(text(doc.querySelector(SEL.title)))) : undefined),
+    job: (doc) => titledJob(text(doc.querySelector(SEL.title))),
     stepKey: (_doc, url) => url,
     errors: (doc) => visibleTexts(doc, SEL.errors),
     messages: () => [],

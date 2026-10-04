@@ -10,12 +10,11 @@ import {
   isFormSite,
   type OptionInfo,
   type PageAction,
+  type PostingApplication,
   type PostingMeta,
   type PostingStatus,
   SITES,
-  sameJob,
-  siteJob,
-  siteTenant,
+  siteInfo,
   type TabInfo,
   type Timing,
 } from "@ezapply/protocol";
@@ -39,6 +38,15 @@ import {
 } from "./autofill.js";
 import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
 import { type CallRecord, DebugRecorder, stripBulk } from "./debug.js";
+import {
+  type Binding,
+  matchPosting,
+  type PostingFacts,
+  type PostingMatch,
+  postingFacts,
+  type TabFacts,
+  tabSite,
+} from "./match.js";
 import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -56,24 +64,53 @@ const STATUS_ORDER: PostingStatus[] = ["captured", "drafting", "attached", "fill
 
 export type FillSource = "profile" | "answer-bank" | "computed" | "user" | "judgment";
 
-/** The active posting's tenant differs from the application tab's: nothing was logged or moved. */
+/** The application tab isn't the active posting's (see forms/match.ts): nothing changes, nothing is logged. */
 export interface PostingMismatch {
-  activePosting: { id: string; company?: string; role?: string; tenant: string; job?: string };
-  formTenant: string;
+  activePosting: { id: string; company?: string; role?: string; tenant?: string; job?: string };
+  formTenant?: string;
   /** The job the tab is for, when its URL names one (a Workday requisition, an Oracle job id). */
   formJob?: string;
+  /** The job title the page shows, when that decided it. */
+  formTitle?: string;
+  /** The posting an earlier call bound this tab to, when that decided it. */
+  boundTo?: string;
+  /** What decided it: `site`, `job`, `binding`, `page-reqid`, `tenant` or `title`. */
+  by: string;
   hint: string;
 }
 
-/** The tab chosen for a call, before it runs. */
-type TargetBase = Pick<Target, "tab" | "posting" | "mismatch"> & { extensionVersion?: string };
+/** Said once, when a call that changes the page binds a tab nothing tied to the active posting. */
+export interface PostingBound {
+  id: string;
+  company?: string;
+  role?: string;
+  formTitle?: string;
+  hint: string;
+}
+
+/** The tab chosen for a call, before it runs: the active posting and what's known of its job. */
+interface TargetBase {
+  tab: TabInfo;
+  active: PostingMeta | null;
+  application?: PostingApplication;
+  facts?: PostingFacts;
+  extensionVersion?: string;
+}
 
 /** The tab a form call acts on and the posting it's credited to. */
 interface Target {
   tab: TabInfo;
-  /** The active posting, when this tab may belong to it (same tenant, or no tenant to compare). */
+  /** The active posting, when this tab may belong to it (`match` isn't `other`). */
   posting: PostingMeta | null;
   mismatch?: PostingMismatch;
+  /** How the tab was matched to the active posting; absent with no active posting. */
+  match?: PostingMatch;
+  /** The active posting's application, as stored or found. */
+  application?: PostingApplication;
+  /** Set by `claim` when it bound an unconfirmed tab: said once in the result. */
+  bound?: PostingBound;
+  /** The match differs from the last one reported for this tab: results say it (`postingMatch`). */
+  matchChanged: boolean;
   /** The adapter's waits for this call, from autofill-timing.yaml. */
   timing?: Timing;
   /** How long to wait for one form.fill (autofill-timing.yaml's fillTimeoutSeconds). */
@@ -93,7 +130,15 @@ interface Target {
 /** The tab brought to the front (`activated`), or left hidden: see `FormsService.show`. */
 interface Shown {
   activated: boolean;
+  /** The call changes the page (not a read): only those may raise the browser window. */
+  changesPage: boolean;
+  /** The browser window was asked to come to the front too (`forms.focusBrowser`). */
+  focusWindow: boolean;
+  /** The extension raised the window (it wasn't the focused one). Absent from older extensions. */
+  windowFocused?: boolean;
   hidden: boolean;
+  /** The page had focus; false while the browser window is behind another app. Absent from older extensions. */
+  focused?: boolean;
   /** A review page was waiting for the user, so the tab wasn't switched to. */
   reviewPending: boolean;
 }
@@ -103,13 +148,22 @@ export interface TabHidden {
   hint: string;
 }
 
+/** Said in a result when the page is on screen without focus: the browser window is behind another app. */
+export interface BrowserBehind {
+  hint: string;
+}
+
+/** Form tools that only read the page: `tab.show` never raises the browser window for them. */
+const READS_PAGE = new Set(["get_form", "list_options", "search_options", "screenshot"]);
+
 /**
  * The form tools' logic: which tab to act on, which posting an action belongs to, the form-log.jsonl audit
  * trail, automatic status moves, reading files for upload, and trimming get_form for Claude's context.
  *
- * Every action is credited to the active posting only when the application tab is on that posting's
- * tenant: its Workday tenant or Oracle career site (or one of them has no tenant to compare). Otherwise, with two applications open or an
- * old confirmation page on screen, a fill or a `submitted` status would land on the wrong posting.
+ * Every action is credited to the active posting only when the application tab may be that posting's (its job,
+ * the tab's binding, its tenant or its title say so, or nothing says otherwise: forms/match.ts), and the first
+ * call that changes a page binds the tab to it. Otherwise, with two applications open or an old confirmation page
+ * on screen, a fill or a `submitted` status would land on the wrong posting.
  *
  * Calls on one tab run one at a time (`onTab`).
  */
@@ -118,6 +172,13 @@ export class FormsService {
   private readonly pages = new KeyedQueue();
   private readonly debug: DebugRecorder;
   private warnedNoTabShow = false;
+  /**
+   * Tabs bound to a posting by a call that changed their page, or by the user (`posting_activate { tabId }`). In
+   * memory: a restart loses them, and the posting's stored `application` covers its tenant and job from then on.
+   */
+  private readonly bindings = new Map<number, Binding>();
+  /** The last match reported per tab, so `postingMatch` is said again only when it changes. */
+  private readonly reported = new Map<number, string>();
 
   constructor(
     private readonly ws: Workspace,
@@ -154,8 +215,11 @@ export class FormsService {
       ...(missing ? { notAttached: missing } : {}),
       ...checks,
       ...(t.posting ? { posting: t.posting.id } : {}),
+      ...postingMatchOf(t),
       ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+      ...(t.bound ? { postingBound: t.bound } : {}),
       ...tabHiddenOf(t),
+      ...browserBehindOf(t),
       ...(t.timingIssues.length ? { timingIssues: t.timingIssues } : {}),
       // So debug mode isn't left on unnoticed: it records the user's data on every call.
       ...(t.debug ? { debug: true } : {}),
@@ -205,6 +269,7 @@ export class FormsService {
       if (!profile.exists || !profile.valid) {
         return result("Not filled: profile/profile.yaml is missing or invalid (profile_check).");
       }
+      await this.claim(t);
       const answers = await this.profile.answers();
       const input = {
         profile: profile.value,
@@ -411,9 +476,9 @@ export class FormsService {
   async fill(
     fills: { fieldId: string; value: FillValue; source: FillSource; answerId?: string }[],
     tabId?: number,
-  ): Promise<{ results: FillResult[]; postingMismatch?: PostingMismatch }> {
+  ): Promise<{ results: FillResult[]; postingBound?: PostingBound; tabHidden?: TabHidden }> {
     return this.onTab({ tool: "fill_fields", params: { fills } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const results = await t.bridge.call(
         "form.fill",
         { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId, timing: t.timing },
@@ -431,11 +496,10 @@ export class FormsService {
           ...(r?.error ? { error: r.error } : {}),
         });
       }
-      return {
-        results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)),
-        ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
-        ...tabHiddenOf(t),
-      };
+      return annotate(
+        { results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)) },
+        t,
+      );
     });
   }
 
@@ -461,7 +525,7 @@ export class FormsService {
       base64: (await readFile(abs)).toString("base64"),
     };
     return this.onTab({ tool: "upload_file", params: { fieldId, path } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const result = await t.bridge.call(
         "form.upload",
         { fieldId, file, tabId: t.tab.tabId, timing: t.timing },
@@ -483,7 +547,7 @@ export class FormsService {
 
   async remove(fieldId: string, values: string[] | undefined, reason: string | undefined, tabId?: number) {
     return this.onTab({ tool: "remove_items", params: { fieldId, values, reason } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const result = await this.bridge
         .call("form.remove", { fieldId, ...(values ? { values } : {}), tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.remove", "remove items"));
@@ -502,7 +566,7 @@ export class FormsService {
 
   async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
     return this.onTab({ tool: "remove_repeatable", params: { sectionId, reason } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const result = await this.bridge
         .call("form.removeRepeatable", { sectionId, tabId: t.tab.tabId, timing: t.timing }, 30_000)
         .catch(olderExtension("form.removeRepeatable", "remove rows"));
@@ -520,7 +584,7 @@ export class FormsService {
 
   async addRepeatable(addButtonId: string, tabId?: number) {
     return this.onTab({ tool: "add_repeatable", params: { addButtonId } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const result = await t.bridge.call(
         "form.addRepeatable",
         { addButtonId, tabId: t.tab.tabId, timing: t.timing },
@@ -532,7 +596,7 @@ export class FormsService {
 
   async next(tabId?: number) {
     return this.onTab({ tool: "go_next", params: {} }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       // The step as it's left, for the hand-off: what still looked off then (one read, only when it's logged).
       let leaving: string[] = [];
       if (t.posting) {
@@ -565,7 +629,7 @@ export class FormsService {
 
   async back(tabId?: number) {
     return this.onTab({ tool: "go_back", params: {} }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const r = await this.bridge
         .call("form.back", { tabId: t.tab.tabId, timing: t.timing }, 60_000)
         .catch(olderExtension("form.back", "go back"));
@@ -576,7 +640,7 @@ export class FormsService {
 
   async pageAction(action: PageAction, tabId?: number) {
     return this.onTab({ tool: "page_action", params: { action } }, tabId, async (t) => {
-      refuseOtherPosting(t);
+      await this.claim(t);
       const r = await t.bridge.call("form.pageAction", { action, tabId: t.tab.tabId, timing: t.timing }, 30_000);
       return annotate(r, t);
     });
@@ -609,14 +673,17 @@ export class FormsService {
       const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws, base.tab.site);
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
       // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
-      const shown = await this.show(base.tab.tabId);
+      const shown = await this.show(base.tab.tabId, !READS_PAGE.has(call.tool));
+      const bridge = record ? recorded(this.bridge, record) : this.bridge;
+      const decided = await this.decide(base, bridge, timing);
       const t: Target = {
-        ...base,
+        tab: base.tab,
+        ...decided,
         timing,
         fillTimeoutMs,
         timingIssues: issues,
         ...(shown ? { shown } : {}),
-        bridge: record ? recorded(this.bridge, record) : this.bridge,
+        bridge,
         note: record
           ? (key, value) => {
               record.notes[key] = [...(record.notes[key] ?? []), value];
@@ -627,8 +694,10 @@ export class FormsService {
       if (!record) return fn(t);
       Object.assign(record, {
         tab: base.tab,
-        ...(base.posting ? { posting: base.posting.id } : {}),
-        ...(base.mismatch ? { postingMismatch: base.mismatch } : {}),
+        ...(t.posting ? { posting: t.posting.id } : {}),
+        ...(t.match ? { postingMatch: t.match } : {}),
+        ...(t.application ? { application: t.application } : {}),
+        ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
         ...(base.extensionVersion ? { extensionVersion: base.extensionVersion } : {}),
         ...(typeof this.bridge.browser === "function" ? { browser: this.bridge.browser() } : {}),
         timing,
@@ -654,21 +723,36 @@ export class FormsService {
 
   /**
    * Bring the application tab to the front of its window. Browsers throttle a hidden tab's timers to about once
-   * a second, and every adapter wait (and much of Workday's own rendering) is a timer: in the Monarch run, 16
+   * a second, and every adapter wait (and much of Workday's own rendering) is a timer: in one live run, 16
    * fields took 6.7 s, then the review page opened in front of the form and 4 dates took 28 s. A slow fill runs
    * past its timeout and keeps going in the page unlogged, which looks like a broken adapter.
+   *
+   * With `forms.focusBrowser` on (read for every call, so a change applies to the next one), a call that changes
+   * the page also brings the browser window to the front: a window behind another app gets no focus events from
+   * Chrome, and Workday's split dates weren't taken there. Reads don't need it, so they leave the user's
+   * terminal in front.
    *
    * Not while a review page waits for the user: switching would take it away from them mid-approval. Never
    * fails the call: an extension built before `tab.show` answers "Unknown method" (logged once), and any other
    * problem leaves the tab as it was.
    */
-  private async show(tabId: number): Promise<Shown | undefined> {
+  private async show(tabId: number, changesPage: boolean): Promise<Shown | undefined> {
     const reviewPending = this.reviews.pending();
+    const focusWindow = changesPage && !reviewPending && (await this.focusBrowser());
     try {
-      const r = await this.bridge.call("tab.show", { tabId, activate: !reviewPending }, 5_000);
+      const r = await this.bridge.call("tab.show", { tabId, activate: !reviewPending, focusWindow }, 5_000);
       if (r.activated) this.log.info({ tabId }, "application tab brought to the front");
+      if (r.windowFocused) this.log.info({ tabId, focused: r.focused }, "browser window brought to the front");
       if (r.hidden) this.log.warn({ tabId, reviewPending }, "application tab is hidden; the browser throttles it");
-      return { activated: r.activated, hidden: r.hidden, reviewPending };
+      return {
+        activated: r.activated,
+        changesPage,
+        focusWindow,
+        ...(r.windowFocused !== undefined ? { windowFocused: r.windowFocused } : {}),
+        hidden: r.hidden,
+        ...(r.focused !== undefined ? { focused: r.focused } : {}),
+        reviewPending,
+      };
     } catch (err) {
       const e = EzError.from(err);
       if (!e.message.includes("Unknown method tab.show")) {
@@ -681,21 +765,26 @@ export class FormsService {
     }
   }
 
+  /** `forms.focusBrowser`: on unless the config says off (an unreadable config means the default, on). */
+  private async focusBrowser(): Promise<boolean> {
+    try {
+      return (await this.ws.readConfig()).forms.focusBrowser === "on";
+    } catch {
+      return true;
+    }
+  }
+
   /**
-   * Choose the tab: the one asked for; else an application tab (a registry site's) on the active posting's
-   * tenant (the one the user is looking at, else the most recently used); else any application tab, the same
-   * way. Then decide whether the active posting may be credited with what happens there.
+   * Choose the tab: the one asked for; else the application tab that best matches the active posting (its job or
+   * its binding, then its tenant, then one nothing ties to another posting); else any application tab. Among
+   * equals, the one the user is looking at, else the most recently used.
    */
   private async target(tabId?: number): Promise<TargetBase> {
     const { tabs, extensionVersion } = await this.bridge.call("browser.status", {}, 5_000);
     const activeId = await this.postings.activeId();
     const active = activeId ? await this.postings.get(activeId).catch(() => null) : null;
-    const postingTenant = active ? postingTenantOf(active) : undefined;
-    const postingJob = active ? postingJobOf(active) : undefined;
-    const ownJob = (t: TabInfo) => {
-      const job = siteJob(t.url);
-      return !postingJob || !job || sameJob(job, postingJob);
-    };
+    const application = active ? await this.postings.application(active.id).catch(() => undefined) : undefined;
+    const facts = active ? postingFacts(active, application) : undefined;
 
     let tab: TabInfo | undefined;
     if (tabId !== undefined) {
@@ -704,10 +793,16 @@ export class FormsService {
         throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
       }
     } else {
-      // This posting's tenant and job, then its tenant, then any application tab.
       const forms = tabs.filter((t) => isFormSite(t.site));
-      const tenant = postingTenant ? forms.filter((t) => siteTenant(t.url) === postingTenant) : [];
-      tab = pickTab(tenant.filter(ownJob)) ?? pickTab(tenant) ?? pickTab(forms);
+      const score = (t: TabInfo) => {
+        if (!facts) return 0;
+        const m = matchPosting(facts, { url: t.url }, this.bindings.get(t.tabId));
+        if (m.verdict === "other") return -1;
+        if (m.verdict === "unconfirmed") return 0;
+        return m.by[0] === "job" || m.by[0] === "binding" ? 2 : 1;
+      };
+      const best = Math.max(...forms.map(score));
+      tab = pickTab(best < 0 ? forms : forms.filter((t) => score(t) === best));
       if (!tab) {
         throw new EzError(
           ErrorCode.NotFound,
@@ -716,48 +811,153 @@ export class FormsService {
         );
       }
     }
-
-    const base = { tab, ...(extensionVersion ? { extensionVersion } : {}) };
-    const formTenant = siteTenant(tab.url);
-    if (!active || !postingTenant || !formTenant) return { ...base, posting: active };
-    const formJob = siteJob(tab.url);
-    const otherTenant = postingTenant !== formTenant;
-    if (!otherTenant && ownJob(tab)) return { ...base, posting: active };
-
-    const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
-    const why = otherTenant
-      ? `This tab is on "${formTenant}", but the active posting (${label}) is on "${postingTenant}"`
-      : `This tab is the application for job ${formJob}, but the active posting (${label}) is job ${postingJob}`;
     return {
-      ...base,
-      posting: null,
-      mismatch: {
-        activePosting: {
-          id: active.id,
-          ...(active.company ? { company: active.company } : {}),
-          ...(active.role ? { role: active.role } : {}),
-          tenant: postingTenant,
-          ...(postingJob ? { job: postingJob } : {}),
-        },
-        formTenant,
-        ...(formJob ? { formJob } : {}),
-        hint:
-          `${why}, so nothing that changes the page runs and nothing is logged. If the user is applying to ` +
-          "that job, activate its posting (postings_list with a company filter, then posting_activate) or have " +
-          "them capture it with Set posting; otherwise switch to the right tab.",
-      },
+      tab,
+      active,
+      ...(application ? { application } : {}),
+      ...(facts ? { facts } : {}),
+      ...(extensionVersion ? { extensionVersion } : {}),
     };
   }
 
   /**
-   * Append to the posting's form-log.jsonl: the audit trail for "what did we submit". `tabActivated` and
-   * `tabHidden` (only when true) let a slow step be matched to a hidden tab afterwards.
+   * Whether the active posting may be credited with what happens on the tab (forms/match.ts). Where nothing in the
+   * URLs settles it and the posting has a role, the page is read for the job title it shows. Inside the tab's
+   * queue, so that read never lands in the middle of another call.
+   */
+  private async decide(
+    base: TargetBase,
+    bridge: Pick<ExtensionBridge, "call">,
+    timing: Timing,
+  ): Promise<Pick<Target, "posting" | "mismatch" | "match" | "application" | "matchChanged">> {
+    const { tab, active, facts } = base;
+    const application = base.application ? { application: base.application } : {};
+    if (!active || !facts || !isFormSite(tab.site)) return { posting: active, ...application, matchChanged: false };
+    const binding = this.bindings.get(tab.tabId);
+    let page: TabFacts = { url: tab.url };
+    let match = matchPosting(facts, page, binding);
+    if (match.verdict === "unconfirmed" && facts.role) {
+      const read = await bridge.call("form.get", { tabId: tab.tabId, timing }, 20_000).catch(() => null);
+      if (read?.job) {
+        page = { ...page, ...read.job };
+        match = matchPosting(facts, page, binding);
+      }
+    }
+    const key = `${active.id}|${match.verdict}|${match.by.join("+")}`;
+    const matchChanged = this.reported.get(tab.tabId) !== key;
+    this.reported.set(tab.tabId, key);
+    if (match.verdict !== "other") return { posting: active, match, ...application, matchChanged };
+    return {
+      posting: null,
+      match,
+      ...application,
+      matchChanged,
+      mismatch: mismatchOf(active, facts, tab, page, match, binding),
+    };
+  }
+
+  /**
+   * Before a call that changes the page: refuse it on another posting's tab, and bind the tab to the active posting
+   * when it isn't yet. A tab nothing tied to the posting (`unconfirmed`) is said in the result once
+   * (`postingBound`), so the agent tells the user which posting the application is being filled for; and the
+   * posting keeps the tab's site, tenant and job as its application when it had none.
+   *
+   * Why: a change used to be refused only when the posting had a tenant to compare, and most postings are captured
+   * off the form sites, without one. Two applications open at once could each take the other's fills, log and
+   * `submitted` status.
+   */
+  private async claim(t: Target): Promise<void> {
+    if (t.mismatch) {
+      throw new EzError(
+        ErrorCode.PostingMismatch,
+        "This tab belongs to another posting than the active one.",
+        t.mismatch.hint,
+      );
+    }
+    if (!t.posting || !t.match) return;
+    const tabId = t.tab.tabId;
+    if (this.bindings.get(tabId)?.postingId === t.posting.id) return;
+    const here = tabSite(t.tab.url);
+    this.bindings.set(tabId, { postingId: t.posting.id, ...(here.tenant ? { tenant: here.tenant } : {}) });
+    if (!t.application && here.site) {
+      const application: PostingApplication = {
+        url: t.tab.url,
+        site: here.site,
+        ...(here.tenant ? { tenant: here.tenant } : {}),
+        ...(here.job ? { job: here.job } : {}),
+        from: "bound",
+        at: new Date().toISOString(),
+      };
+      await this.postings.setApplication(t.posting.id, application, { keep: true });
+      t.application = application;
+    }
+    this.log.info({ tabId, posting: t.posting.id, by: t.match.by }, "application tab bound to the posting");
+    if (t.match.verdict !== "unconfirmed") return;
+    const formTitle = await this.pageTitle(t);
+    t.bound = {
+      id: t.posting.id,
+      ...(t.posting.company ? { company: t.posting.company } : {}),
+      ...(t.posting.role ? { role: t.posting.role } : {}),
+      ...(formTitle ? { formTitle } : {}),
+      hint:
+        "Nothing tied this application tab to the active posting (no employer or job to compare), so it's now " +
+        "bound to it: tell the user once which posting this application is being filled for. If that's wrong, " +
+        "stop: the right posting is activated with posting_activate { id, tabId }.",
+    };
+  }
+
+  /** The job title the page shows, for `postingBound` (best effort). */
+  private async pageTitle(t: Target): Promise<string | undefined> {
+    const read = await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000).catch(() => null);
+    return read?.job?.title;
+  }
+
+  /**
+   * `posting_activate { id, tabId }`: the user says this tab is that posting's application. Binds it, replacing
+   * any binding, and keeps the tab's site, tenant and job as the posting's application (`from: "user"`).
+   */
+  async bindTab(postingId: string, tabId: number): Promise<{ tabId: number; url: string }> {
+    const { tabs } = await this.bridge.call("browser.status", {}, 5_000);
+    const tab = tabs.find((t) => t.tabId === tabId);
+    if (!tab) {
+      throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
+    }
+    const here = tabSite(tab.url);
+    if (!here.site) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `Tab ${tabId} isn't an application on a supported site.`,
+        "Pass the tabId of the application tab (browser_status lists them, with their site).",
+      );
+    }
+    this.bindings.set(tabId, { postingId, ...(here.tenant ? { tenant: here.tenant } : {}), byUser: true });
+    await this.postings.setApplication(postingId, {
+      url: tab.url,
+      site: here.site,
+      ...(here.tenant ? { tenant: here.tenant } : {}),
+      ...(here.job ? { job: here.job } : {}),
+      from: "user",
+      at: new Date().toISOString(),
+    });
+    this.reported.delete(tabId);
+    this.log.info({ tabId, posting: postingId }, "application tab bound to the posting by the user");
+    return { tabId, url: tab.url };
+  }
+
+  /**
+   * Append to the posting's form-log.jsonl: the audit trail for "what did we submit". `tabActivated`,
+   * `windowFocused`, `tabHidden` and `windowInBackground` (only when true) let a slow step, or a field that
+   * wasn't taken, be matched afterwards to a hidden tab or a browser window behind another app.
    */
   private async logEvent(t: Target, event: Record<string, unknown>): Promise<void> {
     if (!t.posting) return;
     const tab = {
       ...(t.shown?.activated ? { tabActivated: true } : {}),
+      ...(t.shown?.windowFocused ? { windowFocused: true } : {}),
       ...(t.shown?.hidden ? { tabHidden: true } : {}),
+      ...(t.shown && !t.shown.hidden && t.shown.focused === false ? { windowInBackground: true } : {}),
+      // Why this posting was credited (forms/match.ts): `job`, `binding`, `tenant`, `title`… or `unconfirmed`.
+      ...(t.match ? { matchedBy: t.match.by[0] ?? "unconfirmed" } : {}),
     };
     const line = JSON.stringify({ ts: new Date().toISOString(), ...event, ...tab });
     await appendFile(join(this.postings.folder(t.posting.id), "form-log.jsonl"), `${line}\n`, "utf8");
@@ -860,30 +1060,57 @@ export class FormsService {
   }
 }
 
-/** The job a posting is for: from its URL (Workday requisition, Oracle job id), else its recorded requisition. */
-function postingJobOf(meta: PostingMeta): string | undefined {
-  return siteJob(meta.url) ?? meta.reqId?.toLowerCase();
+/** What the agent reads when a tab is another posting's: what decided it, and what to do. */
+function mismatchOf(
+  active: PostingMeta,
+  facts: PostingFacts,
+  tab: TabInfo,
+  page: TabFacts,
+  match: PostingMatch,
+  binding: Binding | undefined,
+): PostingMismatch {
+  const here = tabSite(tab.url);
+  const by = match.by[0] ?? "tenant";
+  const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
+  const siteName = (id?: string) => (id ? (siteInfo(id)?.name ?? id) : "another site");
+  const why: Record<string, string> = {
+    site: `This tab is a ${siteName(here.site)} application, but the active posting's (${label}) is on ${siteName(facts.site)}`,
+    job: `This tab is the application for job ${here.job}, but the active posting (${label}) is job ${facts.job}`,
+    binding: `This tab was bound to another posting (${binding?.postingId}) by an earlier call, not to the active one (${label})`,
+    "page-reqid": `The page shows requisition ${page.reqId}, but the active posting (${label}) is job ${facts.job}`,
+    tenant: `This tab is on "${here.tenant}", but the active posting (${label}) is on "${facts.tenant}"`,
+    title: `The page is the application for "${page.title}", but the active posting (${label}) is "${facts.role}"`,
+  };
+  return {
+    activePosting: {
+      id: active.id,
+      ...(active.company ? { company: active.company } : {}),
+      ...(active.role ? { role: active.role } : {}),
+      ...(facts.tenant ? { tenant: facts.tenant } : {}),
+      ...(facts.job ? { job: facts.job } : {}),
+    },
+    ...(here.tenant ? { formTenant: here.tenant } : {}),
+    ...(here.job ? { formJob: here.job } : {}),
+    ...(by === "title" && page.title ? { formTitle: page.title } : {}),
+    ...(by === "binding" && binding ? { boundTo: binding.postingId } : {}),
+    by,
+    hint:
+      `${why[by]}, so nothing that changes the page runs and nothing is logged. If the user is applying to ` +
+      "that job, activate its posting (postings_list with a company filter, then posting_activate) or have " +
+      "them capture it with Set posting; otherwise switch to the right tab. If the user says this tab is the " +
+      `active posting's application after all, posting_activate { id: "${active.id}", tabId: ${tab.tabId} } ties them.`,
+  };
 }
 
-/**
- * Refuse a call that would change the page when the tab belongs to another posting. Reading (get_form, options,
- * screenshot) still works, so the agent can see where it is.
- *
- * Why: before this, a fill on another posting's tab ran and only its logging was skipped. With two applications
- * at one company open, the agent could fill the wrong one, and nothing would record it.
- */
-function refuseOtherPosting(t: Target): void {
-  if (!t.mismatch) return;
-  throw new EzError(
-    ErrorCode.PostingMismatch,
-    "This tab belongs to another posting than the active one.",
-    t.mismatch.hint,
-  );
-}
-
-/** The tenant a posting belongs to: read from its URL when it's a registry site's page, else as stored. */
-function postingTenantOf(meta: PostingMeta): string | undefined {
-  return siteTenant(meta.url) ?? meta.tenant;
+/** `postingMatch` for a result: how the tab was matched, said when it changed since the tab's last call. */
+function postingMatchOf(t: Target): { postingMatch?: { by: string[]; from?: string } } {
+  if (!t.match || !t.matchChanged || t.match.verdict === "other") return {};
+  return {
+    postingMatch: {
+      by: t.match.by.length ? t.match.by : ["unconfirmed"],
+      ...(t.application ? { from: t.application.from } : {}),
+    },
+  };
 }
 
 function pickTab(tabs: TabInfo[]): TabInfo | undefined {
@@ -1043,12 +1270,27 @@ function recorded(bridge: Pick<ExtensionBridge, "call">, record: CallRecord): Pi
   return { call: call as ExtensionBridge["call"] };
 }
 
-/** A result with what the agent must know about the tab: another posting's tenant, or a page left hidden. */
+/**
+ * A result with what the agent must know about the tab: another posting's, bound just now to the active one, how
+ * it was matched (when that changed), or a page left hidden.
+ */
 function annotate<T extends object>(
   result: T,
   t: Target,
-): T & { postingMismatch?: PostingMismatch; tabHidden?: TabHidden } {
-  return { ...result, ...(t.mismatch ? { postingMismatch: t.mismatch } : {}), ...tabHiddenOf(t) };
+): T & {
+  postingMismatch?: PostingMismatch;
+  postingBound?: PostingBound;
+  tabHidden?: TabHidden;
+  browserBehind?: BrowserBehind;
+} {
+  return {
+    ...result,
+    ...postingMatchOf(t),
+    ...(t.mismatch ? { postingMismatch: t.mismatch } : {}),
+    ...(t.bound ? { postingBound: t.bound } : {}),
+    ...tabHiddenOf(t),
+    ...browserBehindOf(t),
+  };
 }
 
 function tabHiddenOf(t: Target): { tabHidden?: TabHidden } {
@@ -1061,6 +1303,24 @@ function tabHiddenOf(t: Target): { tabHidden?: TabHidden } {
       ? " A review page is waiting for them, so ezapply doesn't switch tabs until they answer."
       : "");
   return { tabHidden: { hint } };
+}
+
+/**
+ * The page is on screen but without focus (the browser window is behind another app) on a call that changes the
+ * page, where widgets that track focus (Workday's split dates) may not take a value. Not while a review page
+ * waits (the user is on it), and not when the tab is hidden (`tabHidden` says that).
+ */
+function browserBehindOf(t: Target): { browserBehind?: BrowserBehind } {
+  const s = t.shown;
+  if (!s?.changesPage || s.hidden || s.focused !== false || s.reviewPending) return {};
+  const hint = s.focusWindow
+    ? "ezapply asked the browser to come to the front, but it stayed behind another app (the system may have " +
+      "kept it there). If a field isn't taken (a date reads back empty or is called required), ask the user to " +
+      "click the browser window, then fill it again."
+    : "The browser window is behind another app, where the page gets no focus events, and some fields (Workday's " +
+      "dates) may not be taken. If a field isn't taken, ask the user to bring the browser to the front, or to " +
+      'turn on "focusBrowser" under "forms" in ezapply.config.json, then fill it again.';
+  return { browserBehind: { hint } };
 }
 
 /** An extension built before a method existed answers "Unknown method": say what to do about it. */

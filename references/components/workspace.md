@@ -13,7 +13,7 @@ ezapply-home/
   ezapply.config.json      settings: resume page limit and size, TeX engine, PDF size limit, attach mode,
                            autofill on or off, debug mode, decisions provider
   autofill-timing.yaml     how long the form adapters wait (the user's to tune)
-  state.json               the active posting id
+  state.json               the active posting id, and what the profile and cover fields last matched
   .mcp.json                Claude Code → `node <cli>/main.js mcp`
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/ and
                            reads of debug/
@@ -22,6 +22,7 @@ ezapply-home/
   templates/resume/        the user's LaTeX resume + template.json
   templates/cover/         cover letter template + template.json (+ example/, format.md)
   templates/.old/          replaced templates and examples
+  templates/.synced/resume/  the resume template as the profile last matched it (managed; for diffs)
   library/                 transcripts, certificates, samples for bundles and uploads
   knowledge/<owner>__<name>/   project docs and claims.yaml
   postings/<id>/           one folder per captured posting
@@ -36,7 +37,9 @@ The workspace rules, about 115 lines and kept short on purpose: Claude Code load
 so every line costs context. Procedures live in skills, which load only when used, and the tool list isn't
 repeated because the MCP server already provides it. Its intro says how tool calls are written here and in
 the skills ([call shapes](#call-shapes)). Sections:
-- **Setup and errors:** run `ezapply-onboard` when steps are missing; tool errors carry a `hint` with the fix (ask
+- **Setup and errors:** run `ezapply-onboard` when steps are missing; at the start of every session call
+  `workspace_changes` with `posting_active`, and when it lists changes follow the onboarding skill's "Keeping
+  the workspace current" before the work that needs them ([why](companion.md#keeping-the-workspace-current-workspace_changes)); tool errors carry a `hint` with the fix (ask
   before installing, run it, retry); the `doctor`, `status` and `init` commands with this install's
   absolute path; the tools work only while `ezapply chat` is open.
 - **How the user works:** capture sets the active posting; every request is about it; tweaks happen in
@@ -79,16 +82,16 @@ the skills ([call shapes](#call-shapes)). Sections:
   fonts or margins); ask on EEO, salary, sensitive or unanswered questions, but only after reading
   `profile/answers.yaml` (and not on EEO answers the profile holds); never submit; repos are read-only.
 
-*Why the Edit tool for `.tex`:* every one of the five sessions on 2026-09-30 edited `.tex` files with
-`python` heredocs through Bash (Python is on that machine, from MSYS2). Four scripts failed to find their
-text: the posting copies' line endings vary (two of that day's `resume.tex` files are CRLF, the templates
+*Why the Edit tool for `.tex`:* every one of five live sessions in one day edited `.tex` files with
+`python` heredocs through Bash (Python was installed). Four scripts failed to find their
+text: the posting copies' line endings vary (two of those sessions' `resume.tex` files are CRLF, the templates
 LF), and the scripts searched with `\n`, or with whitespace that didn't match. One wrote `"\textbf"` in a
 non-raw string, which turned `\t` into a tab and left `extbf` in the resume; the agent only noticed through
 `cat -A`. (Writing this page, a scripted edit did the same to it.) Each failure cost a turn or two and some risked a corrupted document. The Edit
 tool matches the file as it is. Saying "no Python" alone wouldn't do: `sed` and PowerShell `-replace` fail the
 same ways.
 
-*Why "read the answer bank before asking":* on 2026-09-30 the agent ran `ezapply-resume` first for an "apply"
+*Why "read the answer bank before asking":* in one session the agent ran `ezapply-resume` first for an "apply"
 request, never came back to the apply skill's step 1, and asked the user two questions their answer bank
 already held. The rule is in `EZAPPLY.md` too, so it holds whichever skill is running.
 
@@ -121,7 +124,7 @@ one, a quoted value is one to pass as is). Every file that mentions a tool with 
 its shape at least once, usually where it first says to call it.
 
 *Why:* Claude Code defers MCP tools, so the agent sees the ezapply tools' names but not their parameters until
-it loads them, and it tends to guess instead. In the two Oscorp runs (2026-09-29) it guessed wrong 11 times, a
+it loads them, and it tends to guess instead. In two live runs it guessed wrong 11 times, a
 turn each: `fill_fields` with `fields`, `add_repeatable` with `buttonId` (5), `upload_file` and
 `tex_compile` with `file`, `review_open` with `paths`, `review_wait` without `reviewId` (the two review tools are now one, `review_documents`). The alternative,
 telling the skills to load the tools' schemas first, was rejected: an extra call and every form tool's schema
@@ -134,13 +137,13 @@ parameters without showing its shape fails. Renaming a parameter therefore means
 
 | Skill | When | What it does |
 |---|---|---|
-| `ezapply-onboard` | First run, "set me up", or missing checklist items | Walks `workspace_check` in order: TeX, extension, GitHub (asking first whether to connect an existing ezapply app or create a new one), repos, knowledge base, resume + profile, cover template, answer bank, preferences (first the attach mode), library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
+| `ezapply-onboard` | First run, "set me up", missing checklist items, or `workspace_changes` listing changes | First, "Keeping the workspace current": lists the changes in a line each, says which the request in hand needs (`affects`), asks whether to update now, after this posting or later (`later` marked), then in dependency order re-imports a template from its source (confirmed, carrying over onboarding fixes from the old copy), updates the profile from the resume template's diff alone (keeping what the resume never held, asking before dropping a job or degree), updates the cover's name and contact fields, re-indexes pushed repos with `ezapply-index-repo` (re-reading the claims if already read), and asks before deleting a deselected repo's knowledge; each marked done. *Why in onboarding, not a skill of its own:* onboarding already holds each of these procedures. Then onboarding: walks `workspace_check` in order: TeX, extension, GitHub (asking first whether to connect an existing ezapply app or create a new one), repos, knowledge base, resume + profile, cover template, answer bank, preferences (first the attach mode), library. Relays `template_import`'s `texProgram` note; a template that builds only under another engine gets a `% !TEX program` line instead of edits |
 | `ezapply-repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
 | `ezapply-index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does; evidence whose lines changed is re-verified and its hash deleted for restamping |
 | `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, render and ATS checks, self-check, then review (in `after-approval`) |
 | `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body, `format.md` structure if present, one-page build loop, then review (in `after-approval`) |
 | `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks; the bundle is reviewed as its own document in `after-approval` |
-| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`, every one of them (resume and cover letter both into Workday's single Resume/CV field), and goes back for any `notAttached` at review; passes a `tabHidden` hint to the user once; form text treated as untrusted; each step started with `autofill_step`, which fills hinted fields, rows (adding them), link fields, Oracle's work, education and language items, and answers by wording (glance at `filled` and `added`, fix `failed` including a refused add or Save, a `reversed-wording` reason flips yes and no, `no-strict-match` picks from the `options` it lists, `extra-row` rows removed only if the user doesn't want them), then step-by-step Workday and Oracle filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat (after reading the answer bank), resolved answers offered for saving (see [answer bank](profile-and-templates.md#answer-bank-profileanswersyaml)), hand-off at review (on Oracle, when Submit is next); Oracle's single-page flow, inline item forms saved with `save.*` (licenses, and any Save autofill reported failed), dependent address lists; every add button's section matched to the profile (work, education, languages, certifications, links); `screenshot` only as a last resort, for a page that `get_form`, `browser_status` and the user can't explain, never to read fields |
+| `ezapply-apply` | Fill, autofill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`, every one of them (resume and cover letter both into Workday's single Resume/CV field), and goes back for any `notAttached` at review; passes a `tabHidden` hint to the user once, and a `browserBehind` hint when a field (a date) isn't taken; form text treated as untrusted; each step started with `autofill_step`, which fills hinted fields, rows (adding them), link fields, Oracle's work, education and language items, and answers by wording (glance at `filled` and `added`, fix `failed` including a refused add or Save, a `reversed-wording` reason flips yes and no, `no-strict-match` picks from the `options` it lists, `extra-row` rows removed only if the user doesn't want them), then step-by-step Workday and Oracle filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat (after reading the answer bank), resolved answers offered for saving (see [answer bank](profile-and-templates.md#answer-bank-profileanswersyaml)), hand-off at review (on Oracle, when Submit is next); Oracle's single-page flow, inline item forms saved with `save.*` (licenses, and any Save autofill reported failed), dependent address lists; every add button's section matched to the profile (work, education, languages, certifications, links); `screenshot` only as a last resort, for a page that `get_form`, `browser_status` and the user can't explain, never to read fields |
 | `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants; an answer the user saves gets `sensitive: false`), Edit tool rather than a shell append, validation |
 
 ## Claude Code settings
@@ -159,4 +162,4 @@ parameters without showing its shape fails. Renaming a parameter therefore means
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |
 |---|---|
-| `EZAPPLY.md`, the `ezapply` launcher, `.claude/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json`, ezapply's entries in `.claude/settings.json` | `CLAUDE.md` (beyond the import line), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |
+| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json`, ezapply's entries in `.claude/settings.json` | `CLAUDE.md` (beyond the import line), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |

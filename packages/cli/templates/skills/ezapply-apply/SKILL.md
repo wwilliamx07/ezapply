@@ -19,11 +19,18 @@ Greenhouse, Lever and Ashby are one page: see **One-page applications**.
    The form tools pick the application tab for this posting (its employer on the site: a Workday tenant, an
    Oracle career site, a Greenhouse board…, and its job) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
    `posting_mismatch` error from a tool that changes the page, means the tab is another posting's (another
-   company, or another job at the same one): nothing ran. Stop, tell the user, and follow its hint (activate
-   the right posting, or switch tabs).
-   Each form call brings the application tab to the front of its window (not while a review page waits for
-   the user). A result with `tabHidden` means the tab is still hidden and the browser slows it down: pass
-   its hint to the user once and keep filling.
+   company, another job at the same one, or a tab already bound to another posting): nothing ran. Stop, tell
+   the user, and follow its hint (activate the right posting, or switch tabs). Only when the user says that
+   tab is this posting's application: `posting_activate { id, tabId }`.
+   `postingBound` in a result means nothing tied the tab to this posting (it was captured on a job board or a
+   careers page), so the tab is now bound to it: tell the user once which posting you're filling this
+   application for.
+   Each form call brings the application tab to the front of its window, and one that changes the page
+   brings the browser window to the front too unless the user turned that off (neither while a review page
+   waits for the user). A result with `tabHidden` means the tab is still hidden and the browser slows it
+   down: pass its hint to the user once and keep filling. `browserBehind` means the browser window is behind
+   another app, where some fields (dates) may not be taken: keep filling, and pass its hint to the user
+   when a field isn't taken.
 2. For "attach them" requests, confirm which files: normally `postings/<id>/resume.pdf` and `cover.pdf`,
    or the bundle if `bundleRequired`, as `## Application requirements` in `notes.md` asks (documents,
    single PDF, naming, format). Make sure they're compiled and current. In the `after-approval` attach mode
@@ -120,7 +127,8 @@ Greenhouse, Lever and Ashby are one page: see **One-page applications**.
      from those or leave the entry out.
    - **Dates:** give profile dates as `YYYY-MM` (or `YYYY` where the field has only a year). If a date comes
      back `ok: false` ("the page didn't take the date"), don't retry: ask the user to type it, giving the
-     value.
+     value. When that result also has `browserBehind`, pass its hint too (bring the browser to the front, or
+     turn the option on).
    - **Files:** use `upload_file { fieldId, path }` with the posting's PDFs: every document the user
      approved for it, usually `resume.pdf` **and** `cover.pdf`. Workday often has a single file field,
      Resume/CV, with `multiple: true` and no cover-letter field: both files go into it, one `upload_file`

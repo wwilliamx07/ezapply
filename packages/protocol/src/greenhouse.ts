@@ -29,3 +29,20 @@ export function greenhouseJob(url: string): string | undefined {
   const u = new URL(url);
   return (/\/jobs\/(\d+)/.exec(u.pathname)?.[1] ?? u.searchParams.get("token") ?? undefined)?.toLowerCase();
 }
+
+/**
+ * The Greenhouse job a company's own careers page names in its URL (`careers.example.com/jobs/…?gh_jid=1000039`):
+ * Greenhouse's embed script reads `gh_jid` to load that job's application, so the page is that job's whatever its
+ * host. Lowercased digits; undefined on Greenhouse's own pages, whose path names the job.
+ */
+export function greenhouseHostPageJob(url: string): string | undefined {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return undefined;
+  }
+  if (isGreenhouseUrl(url)) return undefined;
+  const id = u.searchParams.get("gh_jid")?.trim();
+  return id && /^\d+$/.test(id) ? id : undefined;
+}
