@@ -18,8 +18,8 @@ import { checkboxDriver, checkboxGroupDriver, radioDriver, textDriver } from "..
 
 /**
  * Ashby's hosted job boards (`jobs.ashbyhq.com/<organization>/<job>`): the posting, and its application under the
- * Application tab (`…/application`), one React page with Submit at the end. Each question is an
- * `.ashby-application-form-field-entry` (stable class names) with a `label[for]`; text inputs and textareas, Yes/No
+ * Application tab (`…/application`), one React page with Submit at the end. Each question is an element with a
+ * `data-field-path` (its id) and a `label[for]`; text inputs and textareas, Yes/No
  * toggle buttons, radio and checkbox groups, a location field that suggests places as you type, and file inputs.
  * Built from a live application page (2026-10-03) and checked on one live (filling, never submitting). Uploads send
  * the file to Ashby at once, so they weren't tried live. See references/components/sites.md.
@@ -27,7 +27,10 @@ import { checkboxDriver, checkboxGroupDriver, radioDriver, textDriver } from "..
 
 const SEL = {
   form: "#form, .ashby-application-form-container",
-  entry: ".ashby-application-form-field-entry",
+  // Every question carries its path. Most are also `.ashby-application-form-field-entry`, but a radio or checkbox
+  // group is a plain `div[data-field-path]` around a fieldset that has its own class (seen live on Wayne's form,
+  // 2026-10-04: going by the class alone missed all seven).
+  entry: "[data-field-path]",
   title: ".ashby-application-form-question-title, label",
   consent: ".ashby-application-form-texting-consent-description",
   apply: "a, button",
@@ -82,7 +85,7 @@ function fields(doc: Document): FieldSpot[] {
   if (!form) return [];
   const out: FieldSpot[] = [];
   for (const entry of form.querySelectorAll<HTMLElement>(SEL.entry)) {
-    if (!isVisible(entry)) continue;
+    if (!isVisible(entry) || entry.parentElement?.closest(SEL.entry)) continue;
     const consent = entry.querySelector<HTMLElement>(SEL.consent);
     // The consent's Yes and No sit beside its text, in a group of their own.
     const consentGroup = consent
@@ -102,7 +105,11 @@ function fields(doc: Document): FieldSpot[] {
       key: path.startsWith("_systemfield_") ? path.slice("_systemfield_".length) : slug(label).slice(0, 40),
       label,
       section: "Application",
-      required: Boolean(control?.hasAttribute("required")) || /\*$/.test(norm(text(entry.querySelector(SEL.title)))),
+      // A group's inputs carry no `required`; its heading label does, as a class (`_required_<hash>`).
+      required:
+        Boolean(control?.hasAttribute("required")) ||
+        Boolean(entry.querySelector("label[class*='_required_']")) ||
+        /\*$/.test(norm(text(entry.querySelector(SEL.title)))),
       ...(error ? { error } : {}),
       ...(hint ? { hint } : {}),
     });

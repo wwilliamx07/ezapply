@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createAdapter } from "../src/adapters/engine/api.js";
 import type { SiteDefinition } from "../src/adapters/engine/types.js";
 import { ashby } from "../src/adapters/sites/ashby/site.js";
 import { greenhouse } from "../src/adapters/sites/greenhouse/site.js";
@@ -118,5 +119,41 @@ describe("live Ashby application (jobs.ashbyhq.com/…/application)", () => {
         .filter((x) => x.kind === "file")
         .map((x) => x.label),
     ).toEqual(["Resume", "Cover Letter"]);
+  });
+});
+
+describe("live Ashby application with radio and checkbox groups (jobs.ashbyhq.com/wayne/…)", () => {
+  const url = "https://jobs.ashbyhq.com/wayne/9f3c6d21-0000-4000-8000-000000000003/application";
+  const s = load(ashby, "ashby-groups", url);
+  const f = fieldsOf(s);
+
+  // A radio or checkbox group is a plain div[data-field-path] around its fieldset, without the field-entry class
+  // the other questions have: going by that class missed all seven groups in a live run (2026-10-04).
+  it("reads every question, groups included, with their options and required marks", () => {
+    expect(Object.keys(f)).toHaveLength(22);
+    expect(f["application.degree-type"]).toMatchObject({
+      kind: "checkbox-group",
+      required: true,
+      options: ["Undergraduate/Bachelor's", "Master's", "PhD"],
+    });
+    expect(f["application.how-many-prior-internships-have-you-had"]).toMatchObject({
+      kind: "radio",
+      required: true,
+      options: ["0", "1", "2", "3+"],
+    });
+    expect(Object.values(f).filter((x) => x.kind === "radio" || x.kind === "checkbox-group")).toHaveLength(8);
+  });
+
+  it("fills a radio group and a checkbox group, and reads them back", async () => {
+    const adapter = createAdapter(ashby, document, () => url);
+    adapter.setTiming({ afterFieldQuietMs: 0, afterFieldMaxMs: 0 });
+    const results = await adapter.fill([
+      { fieldId: "application.degree-type", value: ["Master's"], strict: true },
+      { fieldId: "application.how-many-prior-internships-have-you-had", value: "2", strict: true },
+    ]);
+    expect(results.map((r) => [r.ok, r.readBack])).toEqual([
+      [true, ["Master's"]],
+      [true, "2"],
+    ]);
   });
 });

@@ -34,8 +34,12 @@ As of 2026-10-03.
   records with the 2026-09-30 runs, and suspect the engine's fill loop (its waits after each field are the
   same calls as before) before `strict`.
 - **Greenhouse, Lever and Ashby with the extension** (2026-10-03). Checked live through their built bundles in
-  headless Edge, never in a real application through ezapply. Not tried: uploads on Lever and Ashby (they send
-  the file to the provider on attaching), their confirmation pages, and the posting capture on their pages.
+  headless Edge. One real application so far, on Ashby (Wayne, 2026-10-04): capture, text fields, the location,
+  Yes/No buttons and the resume upload worked; every radio and checkbox group was missed, because the definition
+  found questions by a class those groups don't have. Fixed (they're found by `data-field-path`), checked on the
+  live page and covered by a saved copy of it, not yet used in a real application
+  ([sites](components/sites.md#ashby-sitesashby)). Not tried: uploads on Lever, the confirmation pages, a real
+  application on Greenhouse or Lever.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Not yet seen: whether

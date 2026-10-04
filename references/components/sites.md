@@ -88,10 +88,18 @@ Portfolio URLs.
 **Pages.** `jobs.ashbyhq.com/<organization>/<job id>`, the application under the Application tab
 (`…/application`, dropped from the canonical path). A React page with stable class names.
 
-**Fields.** Each `.ashby-application-form-field-entry`; prompt from its question title or label. Drivers, in
-order: file, the location combobox, textarea, text, Yes/No toggle buttons (`aria-pressed`; they hide a checkbox,
-so they come before checkboxes), radio group, checkbox group, checkbox. Required: the control's `required` or a
-trailing `*`.
+**Fields.** Each element with a `data-field-path` (the outermost, when one sits in another); prompt from its
+question title or label. Drivers, in order: file, the location combobox, textarea, text, Yes/No toggle buttons
+(`aria-pressed`; they hide a checkbox, so they come before checkboxes), radio group, checkbox group, checkbox.
+Required: the control's `required`, a heading label with Ashby's required class (`_required_<hash>`: a group's
+inputs carry no `required`), or a trailing `*`.
+
+**Why the path, not the class.** Most questions are `.ashby-application-form-field-entry`, but a radio or
+checkbox group is a plain `div[data-field-path]` around a fieldset with classes of its own. The definition first
+went by the class, built from one page (Stark's) that had no such groups, and in the first real application
+(Wayne, 2026-10-04) it missed all seven: "Degree Type", "How many prior internships", the work, cohort and
+location choices, sponsorship and the office question. The agent then filled two of them by ids it guessed from a
+screenshot, which failed as unknown fields. `ashby-groups.html` (that page) now keeps it covered.
 
 **Ids.** Ashby's own fields by their path without the prefix (`_systemfield_email` → `application.email`); a board's
 questions by the prompt's slug. Everything is in one section, "Application".
@@ -104,8 +112,8 @@ The entry is the phone field (text comes before radio in the order); the consent
 
 ## What was verified, and how
 Each definition was built from a live application page rendered by headless Edge (saved, without scripts and
-styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`; `sites-live.test.ts`
-reads them), then checked on live public forms with fake values, never submitting
+styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`, and later
+`ashby-groups.html`; `sites-live.test.ts` reads them), then checked on live public forms with fake values, never submitting
 ([how](adapters.md#checking-a-site-live)), on 2026-10-03:
 - **Greenhouse** (Vandelay's board): text fields, the phone's country list ("Canada" → "Canada +1"), the
   sponsorship and EEO lists, a dummy file attached and removed (Greenhouse keeps it in the page until Submit),
@@ -116,6 +124,11 @@ reads them), then checked on live public forms with fake values, never submittin
 - **Ashby** (Stark): text, the Yes/No buttons, a textarea, and the location by its full name; "Toronto" alone
   matched several places and came back with their suggestions, as intended. The consent field's selector came
   from this run.
+- **Ashby, a real application** (Wayne, 2026-10-04, through the extension): text fields, the location (after the
+  city alone matched several places and the agent searched), the Yes/No buttons, the resume upload. Every radio
+  and checkbox group was missing ([above](#ashby-sitesashby)); after the fix, filling a radio group and two
+  checkbox groups on the live page (fake values, never submitted) took and read back. The graduation date is a
+  date picker read as text: the agent typed "April 2030" and the page showed 04/01/2030.
 
-**Not yet tried:** uploads on Lever and Ashby (both send the file to the provider when it's attached), the
-confirmation page of any of them, and a real application by the user with the extension.
+**Not yet tried:** uploads on Lever, the confirmation page of any of them, and a real application on
+Greenhouse or Lever.
