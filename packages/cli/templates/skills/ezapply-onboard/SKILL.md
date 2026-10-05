@@ -18,6 +18,15 @@ user's agreement: these cost time, and the templates and profile are theirs.
      folder or file from the summary. The old copy moves to `templates/.old/`. If it held a fix made at onboarding
      (a font path, a `% !TEX program` line), carry it over and compile. If the user says the difference doesn't
      matter, mark it `done` instead.
+   - **`template-untracked`:** the template came from a copy in a scratchpad, so the user's edits go unnoticed.
+     Ask which file or folder they actually edit (a `library-template` change, or a library file its `detail`
+     names, is likely it), then `template_import { source, kind, replace: true }` from that. If they keep no file
+     of their own, mark it `done`.
+   - **`library-template`:** a LaTeX document in `library/` that no template came from. Ask whether it's their
+     resume or cover letter (usually a newer one). If so, confirm replacing the current template and
+     `template_import` with the `source` its `detail` gives; that ends this change and any `template-untracked`
+     for that kind, and a new resume then shows up as `resume-edited` for the profile. If it isn't a template,
+     mark it `done`.
    - **`resume-edited`:** update `profile/profile.yaml` from the change's `diff` alone, with the Edit tool: add
      or change only what the diff shows (a new job, a degree, skills, reworded highlights). Keep what the resume
      never held (address, work authorization, answers given in chat). A job or degree gone from the resume is

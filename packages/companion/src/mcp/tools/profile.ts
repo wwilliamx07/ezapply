@@ -24,9 +24,10 @@ export function registerProfileTools(server: McpServer, s: Services): void {
       title: "What's out of date",
       description:
         "What in the workspace is behind its source: a selected repo with commits since it was indexed, knowledge from " +
-        "a repo no longer selected, a template whose source folder changed since import, the resume template edited " +
-        "since the profile was updated from it (with the diff), the profile's identity or contact changed since the " +
-        "cover template's fields were set. Call once at the start of a session; `{ changes: [] }` means all current. " +
+        "a repo no longer selected, a template whose source folder changed since import (or that was imported from a " +
+        "scratchpad copy, so nothing is watched), a LaTeX document in library/ that no template came from, the resume " +
+        "template edited since the profile was updated from it (with the diff), the profile's identity or contact " +
+        "changed since the cover template's fields were set. Call once at the start of a session; `{ changes: [] }` means all current. " +
         "Repos are checked once per chat in the background (`pending` while that runs; `refresh` checks them again).",
       inputSchema: { refresh: z.boolean().optional().describe("Check the repos again") },
       annotations: { readOnlyHint: true },
@@ -42,7 +43,8 @@ export function registerProfileTools(server: McpServer, s: Services): void {
       title: "Mark a workspace change",
       description:
         "`later`: hide a change for the rest of this chat (the user put it off). `done`: record the derived part as " +
-        "current: a template's source (after re-importing, or when the difference doesn't matter), the profile after " +
+        "current: a template's source (after re-importing, or when the difference doesn't matter), a scratchpad import no " +
+        "longer watched, a library document that isn't a template (until it changes), the profile after " +
         "updating it from the resume diff, the cover fields after updating them from the profile. For `repo-deselected`, " +
         "`done` DELETES that repo's knowledge folder and cache: ask the user first. A repo's new commits can't be " +
         "marked done: re-index it (knowledge_mark_indexed ends them).",

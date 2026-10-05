@@ -82,8 +82,10 @@ file structure, so a diff against the template stays readable.)
   With folders outside the workspace only, a resume kept as one file next to other documents (in `library/`,
   say) could only be imported through a copy Claude made in its scratchpad, and the check then watched that
   copy, which never changes, so the user's edits went unnoticed. The tool description and onboarding skill
-  tell Claude to pass the user's own path, never a copy. Other workspace folders stay refused: they're
-  ezapply's own output.
+  tell Claude to pass the user's own path, never a copy, and a source in a Claude scratchpad (`inScratchpad`)
+  is refused. A template imported that way earlier, and a LaTeX document in `library/` that no template came
+  from, are reported by the workspace check (`template-untracked`, `library-template`). Other workspace
+  folders stay refused: they're ezapply's own output.
 - **Main file detection:** the `.tex` files that contain both `\documentclass` and `\begin{document}`; if
   several, a top-level file named like resume/cv/cover/letter/main wins; if still ambiguous, the error lists
   candidates and Claude asks.

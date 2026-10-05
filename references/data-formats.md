@@ -165,12 +165,14 @@ A call that fails or times out is still recorded. Records are written after the 
 ([security](security.md)).
 
 ### `state.json`
-`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at } } }`.
+`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } } }`.
 
 `synced` is what the workspace check ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes))
 compares against: `resume`, the hash of the resume template's main file and content files when the profile was
 last brought in line with it; `profileIdentity`, the hash of the profile's `identity`, `contact` and `links`
-when the cover template's fields were last set from them. Both are 12 hex characters of SHA-256 and written
+when the cover template's fields were last set from them; `library`, per LaTeX document in `library/` the user
+said isn't a template, the hash of it and the `.tex` files it pulls in at the time (it's reported again once
+that changes). All are 12 hex characters of SHA-256 and written
 by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`). Writes to `state.json`
 run one at a time.
 
@@ -289,7 +291,9 @@ Free text.
 the main file's folder; tailored copies need them beside the copied main file. Recorded by `template_import`
 and `template_set_main`.
 
-`importedFrom`: the absolute folder, or single `.tex` file, the template was imported from.
+`importedFrom`: the absolute folder, or single `.tex` file, the template was imported from. Never a Claude
+scratchpad now (`template_import` refuses one); an older one pointing there is reported as `template-untracked`,
+and marking that done removes `importedFrom` and `sourceHash`.
 
 `sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and
 contents, line endings normalised; build output skipped; for a single file, that file), as of the last time

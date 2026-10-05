@@ -94,6 +94,13 @@ export class TemplateService {
         "Import from the user's own folder or file, or from one they keep in library/.",
       );
     }
+    if (inScratchpad(src)) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        "source is in a Claude scratchpad: a copy the user never edits.",
+        "Import from the user's own folder or .tex file (outside the workspace, or in library/), so their edits are noticed.",
+      );
+    }
     const single = srcStat.isFile();
     if (single && !src.toLowerCase().endsWith(".tex")) {
       throw new EzError(ErrorCode.BadRequest, `Not a .tex file: ${src}`, "Pass the .tex file or its folder.");
@@ -256,24 +263,64 @@ export class TemplateService {
   }
 
   /**
+   * Stop watching a template's source: drops `importedFrom` and `sourceHash`. For a template imported from a
+   * copy nobody edits (a scratchpad) when the user keeps no file of their own.
+   */
+  async forgetSource(kind: TemplateKind): Promise<void> {
+    const meta = await this.templateMeta(kind);
+    if (!meta) throw new EzError(ErrorCode.NotFound, `templates/${kind} has no template.json.`);
+    const { importedFrom: _, sourceHash: __, ...rest } = meta;
+    await writeJsonAtomic(this.ws.path("templates", kind, "template.json"), rest);
+  }
+
+  /**
+   * The LaTeX documents in library/ (a .tex file with both \documentclass and \begin{document}): the hash of
+   * the file and the .tex files it pulls in, which template was imported from it (the file, or a folder
+   * holding it), and which template's main file has the same text. The workspace check reports the ones
+   * that are neither: a resume or cover letter the user dropped there and never imported.
+   */
+  async libraryDocuments(): Promise<LibraryDocument[]> {
+    const lib = this.ws.path("library");
+    const files = await listTex(lib).catch(() => [] as string[]);
+    if (!files.length) return [];
+    const metas = { resume: await this.templateMeta("resume"), cover: await this.templateMeta("cover") };
+    const out: LibraryDocument[] = [];
+    for (const rel of files) {
+      const abs = join(lib, rel);
+      const text = await readFile(abs, "utf8").catch(() => null);
+      if (text === null || !/\\documentclass/.test(text) || !/\\begin\{document\}/.test(text)) continue;
+      const dir = dirname(abs);
+      const pulled = await findContentFiles(dir, basename(abs));
+      const doc: LibraryDocument = {
+        path: `library/${rel}`,
+        abs,
+        hash: await hashFiles(dir, [basename(abs), ...pulled]),
+        pullsIn: pulled.length > 0,
+      };
+      for (const kind of ["resume", "cover"] as const) {
+        const meta = metas[kind];
+        if (!meta) continue;
+        if (meta.importedFrom && contains(meta.importedFrom, abs)) doc.sourceOf = kind;
+        const copy = await readFile(this.ws.path("templates", kind, meta.main), "utf8").catch(() => null);
+        if (copy !== null && sameAsCopy(text, copy)) doc.copyOf = kind;
+      }
+      out.push(doc);
+    }
+    return out;
+  }
+
+  /**
    * Whether every file in the source is in templates/<kind>/ unchanged. The `% !TEX program` line an
    * import may add to the main file is left out of the comparison.
    */
   private async copyMatches(kind: TemplateKind, main: string, from: string, files: string[]): Promise<boolean> {
-    const norm = (b: Buffer) => b.toString("utf8").replace(/\r\n/g, "\n");
     for (const f of files) {
       const [src, copy] = await Promise.all([
-        readFile(join(from, f)).catch(() => null),
-        readFile(this.ws.path("templates", kind, f)).catch(() => null),
+        readFile(join(from, f), "utf8").catch(() => null),
+        readFile(this.ws.path("templates", kind, f), "utf8").catch(() => null),
       ]);
       if (src === null || copy === null) return false;
-      let a = norm(src);
-      let b = norm(copy);
-      if (f === main && !readTexProgram(a) && readTexProgram(b)) {
-        a = a.replace(/^﻿/, "");
-        b = b.replace(/^﻿/, "").replace(/^% !TEX program = \S+\n/, "");
-      }
-      if (a !== b) return false;
+      if (f === main ? !sameAsCopy(src, copy) : normText(src) !== normText(copy)) return false;
     }
     return true;
   }
@@ -314,6 +361,60 @@ export class TemplateService {
     });
     return { main: abs, contentFiles };
   }
+}
+
+export interface LibraryDocument {
+  /** Workspace-relative, with forward slashes (`library/resume.tex`). */
+  path: string;
+  abs: string;
+  hash: string;
+  /** It \inputs .tex files beside it, so an import takes its folder. */
+  pullsIn: boolean;
+  /** The template imported from this file or from a folder holding it. */
+  sourceOf?: TemplateKind;
+  /** The template whose main file has the same text. */
+  copyOf?: TemplateKind;
+}
+
+/**
+ * A path in a Claude Code scratchpad (`…/claude/<project>/<session>/scratchpad/…` under the temp folder): a
+ * copy Claude made, which the user never edits, so watching it for their edits finds nothing.
+ */
+export function inScratchpad(path: string): boolean {
+  return /[\\/]claude(?:-[^\\/]*)?[\\/](?:[^\\/]+[\\/])*scratchpad(?:[\\/]|$)/i.test(path);
+}
+
+/** Whether `inner` is `outer` or inside it. */
+function contains(outer: string, inner: string): boolean {
+  const rel = relative(outer, inner);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+const normText = (text: string) => text.replace(/^﻿/, "").replace(/\r\n/g, "\n");
+
+/** A source main file and its workspace copy are the same, apart from the `% !TEX program` line an import adds. */
+function sameAsCopy(source: string, copy: string): boolean {
+  const a = normText(source);
+  const b = normText(copy);
+  if (a === b) return true;
+  return !readTexProgram(a) && !!readTexProgram(b) && a === b.replace(/^% !TEX program = \S+\n/, "");
+}
+
+/** .tex files under a folder, relative to it with forward slashes; hidden, build and VCS folders skipped; four levels, 200 files at most. */
+async function listTex(root: string): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (dir: string, rel: string, depth: number) => {
+    if (depth > 4) return;
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (out.length >= 200) return;
+      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(join(dir, entry.name), relPath, depth + 1);
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".tex")) out.push(relPath);
+    }
+  };
+  await walk(root, "", 0);
+  return out.sort();
 }
 
 /** What an import copies from `source`: a folder's files (build output skipped), or the one .tex file. */

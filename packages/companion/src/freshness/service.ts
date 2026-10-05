@@ -1,15 +1,22 @@
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
 import type { ProfileService } from "../profile/service.js";
 import type { RepoService } from "../repos/service.js";
-import type { TemplateKind, TemplateService } from "../templates/service.js";
+import { inScratchpad, type TemplateKind, type TemplateService } from "../templates/service.js";
 import { hashFiles, hashValue } from "../util/hash.js";
 import { unifiedDiff } from "../util/line-diff.js";
 import type { Workspace } from "../workspace/workspace.js";
 
-export type ChangeKind = "repo-pushed" | "repo-deselected" | "template-source" | "resume-edited" | "profile-identity";
+export type ChangeKind =
+  | "repo-pushed"
+  | "repo-deselected"
+  | "template-source"
+  | "template-untracked"
+  | "library-template"
+  | "resume-edited"
+  | "profile-identity";
 
 /** Something derived in the workspace that its source has moved past. */
 export interface WorkspaceChange {
@@ -51,7 +58,8 @@ interface Options {
 
 /**
  * Finds what's out of date in the workspace: knowledge behind its repo, a template behind the folder it was
- * imported from, the profile behind the resume template, the cover letter's fields behind the profile, and
+ * imported from (or imported from a scratchpad copy nobody edits), a LaTeX document in library/ no template
+ * came from, the profile behind the resume template, the cover letter's fields behind the profile, and
  * knowledge from repos no longer selected. The repo check needs the network, so it runs once per chat, in
  * the background from `start()`; the local checks are cheap and run on every call. Nothing here changes
  * the derived files: the agent does that with the user's agreement, then marks the change done.
@@ -114,7 +122,7 @@ export class FreshnessService {
       this.later.add(id);
       return { id, as };
     }
-    const [, rest = ""] = id.split(":");
+    const rest = id.slice(id.indexOf(":") + 1);
     switch (change.kind) {
       case "repo-pushed":
         throw new EzError(
@@ -129,6 +137,18 @@ export class FreshnessService {
       case "template-source": {
         const [kind, hash] = rest.split("@") as [TemplateKind, string];
         await this.templates.setSourceHash(kind, hash);
+        return { id, as };
+      }
+      case "template-untracked":
+        await this.templates.forgetSource(rest as TemplateKind);
+        return { id, as };
+      case "library-template": {
+        const at = rest.lastIndexOf("@");
+        const [path, hash] = [rest.slice(0, at), rest.slice(at + 1)];
+        const now = new Date().toISOString();
+        await this.ws.updateState((s) => ({
+          synced: { ...s.synced, library: { ...s.synced?.library, [path]: { hash, at: now } } },
+        }));
         return { id, as };
       }
       case "resume-edited":
@@ -215,7 +235,32 @@ export class FreshnessService {
     const changes: WorkspaceChange[] = [];
     const notChecked: NotChecked[] = [];
 
+    const library = await this.templates.libraryDocuments();
+    const dismissed = (await this.ws.readState()).synced?.library ?? {};
+    const untracked = library.filter((d) => !d.sourceOf && !d.copyOf && dismissed[d.path]?.hash !== d.hash);
+
     for (const kind of ["resume", "cover"] as const) {
+      const meta = await this.templates.templateMeta(kind);
+      if (meta?.importedFrom && inScratchpad(meta.importedFrom)) {
+        // Claude's own copy: it never changes, so the template-source check would watch nothing.
+        const same = library.filter((d) => d.copyOf === kind).map((d) => d.path);
+        const hint = same.length
+          ? `${same.join(", ")} has the same text, so it's likely theirs. `
+          : untracked.length
+            ? "A library document listed here may be it. "
+            : "";
+        changes.push({
+          id: `template-untracked:${kind}`,
+          kind: "template-untracked",
+          summary: `templates/${kind}/ was imported from a copy in a Claude scratchpad (${meta.importedFrom}), so the user's edits to their own file go unnoticed.`,
+          detail:
+            `${hint}Ask the user which file or folder they edit (outside the workspace, or in library/), then ` +
+            `template_import { source, kind: "${kind}", replace: true } from it. If they keep none, mark this done: ` +
+            "the copy stops being watched.",
+          affects: [kind],
+        });
+        continue;
+      }
       const src = await this.templates.sourceState(kind);
       if (!src) continue;
       if ("unreadable" in src) {
@@ -240,6 +285,20 @@ export class FreshnessService {
           "current copy moves to templates/.old/). If the difference doesn't matter (or is a fix made in the workspace " +
           "copy), mark it done.",
         affects: [kind],
+      });
+    }
+
+    for (const doc of untracked) {
+      changes.push({
+        id: `library-template:${doc.path}@${doc.hash}`,
+        kind: "library-template",
+        summary: `${doc.path} is a LaTeX document that neither template was imported from, and it differs from both.`,
+        detail:
+          "Ask the user whether it's their resume or cover letter (newer than the one in templates/). If so, " +
+          `template_import { source: ${JSON.stringify(doc.pullsIn ? dirname(doc.abs) : doc.abs)}, kind, replace: true }` +
+          `${doc.pullsIn ? " (its folder: it \\inputs files beside it)" : ""}; the check then watches it for their ` +
+          "edits. If it isn't a template, mark this done: it comes back only if the file changes.",
+        affects: ["resume", "cover"],
       });
     }
 

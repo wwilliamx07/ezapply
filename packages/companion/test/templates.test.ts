@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createLogger } from "../src/logger.js";
-import { findContentFiles, TemplateService } from "../src/templates/service.js";
+import { findContentFiles, inScratchpad, TemplateService } from "../src/templates/service.js";
 import { Workspace } from "../src/workspace/workspace.js";
 
 let root: string;
@@ -84,6 +84,19 @@ describe("template import", () => {
     await expect(svc.importTemplate({ source: join(root, "ws/postings/p1"), kind: "resume" })).rejects.toMatchObject({
       message: expect.stringMatching(/outside library/),
     });
+  });
+
+  it("refuses a copy in a Claude scratchpad", async () => {
+    const pad = join(root, "claude", "C--Users-jane-ezapply-home", "0000-session", "scratchpad", "resume-src");
+    await mkdir(pad, { recursive: true });
+    await writeFile(join(pad, "resume.tex"), "\\documentclass{article}\\begin{document}x\\end{document}");
+    await expect(svc.importTemplate({ source: pad, kind: "resume", replace: true })).rejects.toMatchObject({
+      message: expect.stringMatching(/scratchpad/),
+    });
+    expect(inScratchpad("C:\\Users\\jane\\AppData\\Local\\Temp\\claude\\proj\\abc\\scratchpad\\r.tex")).toBe(true);
+    expect(inScratchpad("/tmp/claude-1000/proj/abc/scratchpad")).toBe(true);
+    expect(inScratchpad("/home/jane/claude/resume")).toBe(false);
+    expect(inScratchpad("/home/jane/scratchpad/resume")).toBe(false);
   });
 
   it("imports a single .tex file, from library/ too, and tracks that file", async () => {

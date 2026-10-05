@@ -11,7 +11,8 @@ export function registerTemplateTools(server: McpServer, s: Services): void {
       description:
         "Copy the user's LaTeX project (resume or cover letter) from a folder on their machine, or a single .tex file, " +
         "into templates/<kind>/, skipping build artifacts, and record the main .tex. Pass the user's own folder or file " +
-        "(outside the workspace, or in library/), never a copy you made: workspace_changes watches it for their edits. " +
+        "(outside the workspace, or in library/), never a copy you made (one in your scratchpad is refused): " +
+        "workspace_changes watches it for their edits. " +
         "Replaces ezapply's default cover template without asking. " +
         "If the user already has a template there, confirm with them and pass replace: true (the old one is kept in " +
         "templates/.old/). A main file that uses pdfTeX-only commands and no fontspec gets `% !TEX program = " +

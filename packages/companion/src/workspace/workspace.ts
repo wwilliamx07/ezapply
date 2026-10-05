@@ -28,6 +28,8 @@ const WorkspaceState = z.object({
       resume: Synced.optional(),
       /** The profile's identity, contact and links the cover template's fields were last set from. */
       profileIdentity: Synced.optional(),
+      /** LaTeX documents in library/ the user said aren't a template, by workspace path, as they were then. */
+      library: z.record(z.string(), Synced).optional(),
     })
     .optional(),
 });

@@ -238,6 +238,70 @@ describe("FreshnessService: templates and profile", () => {
     expect((await ws.readState()).synced?.profileIdentity).toBeDefined();
   });
 
+  it("reports a template imported from a scratchpad copy, and a newer resume put in library/", async () => {
+    const file = ws.path("templates", "resume", "template.json");
+    const meta = JSON.parse(await readFile(file, "utf8"));
+    const pad = join(root, "claude", "C--Users-jane-ezapply-home", "0000-session", "scratchpad", "resume-src");
+    await writeFile(file, JSON.stringify({ ...meta, importedFrom: pad }));
+    const svc = service();
+    expect((await svc.changes()).changes).toEqual([
+      expect.objectContaining({ id: "template-untracked:resume", kind: "template-untracked", affects: ["resume"] }),
+    ]);
+
+    await mkdir(ws.path("library", "old"), { recursive: true });
+    await writeFile(ws.path("library", "old", "notes.tex"), "\\section{Not a document}\n");
+    await writeFile(
+      ws.path("library", "resume.tex"),
+      "\\documentclass{article}\n\\begin{document}\nEngineer at Initech\n\\end{document}\n",
+    );
+    let { changes } = await svc.changes();
+    expect(changes.map((c) => c.kind)).toEqual(["template-untracked", "library-template"]);
+    expect(changes[0]?.detail).toMatch(/library document listed here/);
+    expect(changes[1]).toMatchObject({ affects: ["resume", "cover"] });
+    expect(changes[1]?.id).toMatch(/^library-template:library\/resume\.tex@[0-9a-f]{12}$/);
+    expect(changes[1]?.detail).toContain(JSON.stringify(ws.path("library", "resume.tex")));
+
+    // Importing it ends both, and the profile then hears about the new resume.
+    await templates.importTemplate({ source: ws.path("library", "resume.tex"), kind: "resume", replace: true });
+    changes = (await svc.changes()).changes;
+    expect(changes.map((c) => c.kind)).toEqual(["resume-edited"]);
+    expect(changes[0]?.diff).toContain("+Engineer at Initech");
+    await svc.mark(changes[0]?.id ?? "", "done");
+    expect((await svc.changes()).changes).toEqual([]);
+  });
+
+  it("names the library file a scratchpad import matches, and stops watching the copy on done", async () => {
+    const file = ws.path("templates", "resume", "template.json");
+    const meta = JSON.parse(await readFile(file, "utf8"));
+    const pad = join(root, "claude", "C--Users-jane-ezapply-home", "0000-session", "scratchpad", "resume.tex");
+    await writeFile(file, JSON.stringify({ ...meta, importedFrom: pad }));
+    const svc = service();
+    const { changes } = await svc.changes();
+    expect(changes.map((c) => c.kind)).toEqual(["template-untracked"]);
+    expect(changes[0]?.detail).toMatch(/^library\/resume\.tex has the same text/);
+    await svc.mark(changes[0]?.id ?? "", "done");
+    expect((await svc.changes()).changes).toEqual([]);
+    expect(await templates.templateMeta("resume")).not.toHaveProperty("importedFrom");
+    expect(await templates.templateMeta("resume")).not.toHaveProperty("sourceHash");
+  });
+
+  it("keeps a library document that isn't a template quiet until it changes", async () => {
+    const letter = ws.path("library", "sample-letter.tex");
+    await writeFile(letter, "\\documentclass{letter}\n\\begin{document}\nDear team\n\\end{document}\n");
+    const svc = service();
+    const [change] = (await svc.changes()).changes;
+    expect(change?.kind).toBe("library-template");
+    await svc.mark(change?.id ?? "", "done");
+    expect((await svc.changes()).changes).toEqual([]);
+    expect(Object.keys((await ws.readState()).synced?.library ?? {})).toEqual(["library/sample-letter.tex"]);
+
+    await writeFile(letter, "\\documentclass{letter}\n\\begin{document}\nDear hiring team\n\\end{document}\n");
+    const again = (await svc.changes()).changes;
+    expect(again.map((c) => c.kind)).toEqual(["library-template"]);
+    expect(again[0]?.id).not.toBe(change?.id);
+    await svc.mark(again[0]?.id ?? "", "done");
+  });
+
   it("refuses an id that isn't current", async () => {
     await expect(service().mark("resume-edited@000000000000", "done")).rejects.toThrow(/No current change/);
   });

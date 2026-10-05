@@ -45,7 +45,7 @@ Any tool failure along the way comes back with a `hint`; Claude follows it (ask,
 
 **At the start of every session** (after onboarding too), Claude calls `workspace_changes` with
 `posting_active`. The companion has checked in the background since the chat started: repos pushed since
-indexing, knowledge from repos no longer selected, a template's source folder edited since import, the resume
+indexing, knowledge from repos no longer selected, a template's source folder edited since import (or a template imported from a scratchpad copy, which nothing can watch), a LaTeX document in `library/` no template came from, the resume
 template edited since the profile was updated from it, the profile's contact changed under the cover's fields.
 Nothing listed, Claude says nothing. Otherwise it lists them, and with the user's agreement re-imports,
 updates the profile from the diff, updates the cover fields and re-indexes, marking each done, or marks them

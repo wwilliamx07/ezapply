@@ -24,7 +24,7 @@ As of 2026-10-04.
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
-| Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
+| Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, a template imported from a scratchpad copy, a LaTeX document in `library/` that no template came from, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
 | Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 
 ## Not yet verified for real
@@ -157,7 +157,8 @@ As of 2026-10-04.
   front, one with it on, comparing the dates and `shown.focused` in the records.
 - **Keeping the workspace current** (2026-10-04): tested with real git against a local remote, on temporary
   templates and profiles, and over MCP. Not yet seen: `ls-remote` against GitHub with the app's token, the
-  agent calling `workspace_changes` at a session's start and following the skill (asking first, updating the
+  agent calling `workspace_changes` at a session's start and following the skill (asking first, re-importing a
+  template from a resume dropped into `library/`, updating the
   profile from a diff without dropping what the resume never held), and how often a push that changes nothing
   indexed comes up.
 - **Guidance from five live sessions** (`.tex` edited with the Edit tool only, the answer bank read

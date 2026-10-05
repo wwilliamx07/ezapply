@@ -204,11 +204,14 @@ re-import happened only when the user remembered to ask.
 | `repo-pushed` | `knowledge/<repo>/` | `git ls-remote <url> HEAD` (`RepoService.remoteHead`) differs from `meta.json` `indexedSha`, for a selected, indexed repo | `knowledge_mark_indexed` after `ezapply-index-repo`; `done` is refused |
 | `repo-deselected` | `knowledge/<repo>/`, still read by `claims_list` | its repo isn't in `repos.yaml` (only checked while `repos.yaml` is valid) | `done`, which deletes the knowledge folder and the repo's cache (`RepoService.forget`), or selecting the repo again |
 | `template-source` | `templates/<kind>/` | the hash of the importable files in `importedFrom` (a folder, or one `.tex` file) differs from `template.json` `sourceHash` | `template_import` (records the new hash), or `done` when it doesn't matter |
+| `template-untracked` | `templates/<kind>/` | `importedFrom` is in a Claude Code scratchpad (`inScratchpad`: a `claude` path segment with a `scratchpad` segment below it), a copy that never changes; replaces `template-source` for that kind. Its `detail` names a library document with the same text as the template, if any | `template_import` from the user's own file, or `done`, which drops `importedFrom` and `sourceHash` (nothing left to watch) |
+| `library-template` | `templates/` | a LaTeX document in `library/` (a `.tex` file with `\documentclass` and `\begin{document}`, four folders deep at most) that no template was imported from (the file, or a folder holding it), whose text differs from both templates' main files, and that isn't recorded in `synced.library` at its current hash. Its `detail` gives the `source` to import (its folder when it `\input`s files beside it) | `template_import` from it, or `done` when it isn't a template, which records its hash in `synced.library` until it changes |
 | `resume-edited` | `profile.yaml` | the hash of the resume template's main file and `contentFiles` differs from `state.json` `synced.resume`; carries `diff` against `templates/.synced/resume/` (at most 200 lines) | `done` after the profile is updated from the diff |
 | `profile-identity` | the cover template's `\myname`, `\mycontact` | the hash of the profile's `identity`, `contact` and `links` differs from `synced.profileIdentity` (only while a cover template exists and the profile is valid) | `done` after the fields are updated |
 
 Each change is `{ id, kind, summary, detail, diff?, affects[] }`. The `id` names the exact state
-(`repo-pushed:owner/name@<sha7>`, `template-source:resume@<hash>`, `resume-edited@<hash>`), so a change that was
+(`repo-pushed:owner/name@<sha7>`, `template-source:resume@<hash>`, `library-template:library/resume.tex@<hash>`,
+`resume-edited@<hash>`; `template-untracked:<kind>` has no state to name), so a change that was
 put off and then changed again comes back under a new id, and `done` on an id that's no longer current is
 refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the agent whether the request in
 hand needs it first.
@@ -231,6 +234,15 @@ hand needs it first.
 - **`later`** is kept in the companion's memory, so the sessions after a capture don't ask again, and a new chat
   does. Putting a stale profile or claim set off for longer isn't offered.
 - **A template source that's gone** (moved, an unplugged drive) goes into `notChecked`; nothing nags about it.
+- **A source nobody edits, and a file nobody imported.** Before `template_import` took single files and
+  `library/`, a resume kept as one file could only be imported through a copy Claude made in its scratchpad.
+  The check then watched that copy, and when the user put a newer resume in `library/`, nothing looked there:
+  the agent tailored from the old template. Imports from a scratchpad are now refused, and the two kinds above
+  catch a workspace imported that way and a template dropped into `library/` without a word. *Why only a
+  scratchpad, not the whole temp folder:* the temp folder also holds folders the user unpacked and works in,
+  and the tests' own fixtures; a scratchpad is always Claude's copy. *Why report library documents on first
+  sight,* unlike the resume baseline: a LaTeX document in `library/` that isn't the template is exactly what
+  this is for, and `done` silences one that isn't a template.
 - **Not checked:** repositories the app can see that were created after the selection (it would need
   `github_list_repos` and a memory of repos the user turned down), and how much a push changed (GitHub's compare
   API is rate-limited for public repos; `ezapply-index-repo` finds a push that changes nothing indexed
