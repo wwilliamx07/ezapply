@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { STANDARD_WAITS, type TabInfo } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
-import { pruneDebug, stripBulk } from "../src/forms/debug.js";
+import { type CallRecord, extractFiles, pruneDebug, stripBulk } from "../src/forms/debug.js";
+import { debugReport } from "../src/forms/debug-report.js";
 import { FormsService } from "../src/forms/service.js";
 import { loadTiming, TIMING_FILE, timingFileTemplate } from "../src/forms/timing.js";
 import { createLogger } from "../src/logger.js";
@@ -256,9 +257,99 @@ describe("debug mode", () => {
   });
 
   it("drops an upload's file contents from the record, keeping its size", () => {
-    expect(stripBulk({ fieldId: "f", file: { name: "a.pdf", base64: "AAAA" }, tabId: 7, timing: {} })).toEqual({
+    expect(
+      stripBulk({ fieldId: "f", file: { name: "a.pdf", base64: "AAAA" }, tabId: 7, timing: {}, debug: {} }),
+    ).toEqual({
       fieldId: "f",
       file: { name: "a.pdf", bytes: 3 },
+    });
+  });
+
+  it("asks each adapter call for its trace and the markup debug.markup says, and notes an extension without one", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
+    try {
+      await writeFile(
+        join(dir, "ezapply.config.json"),
+        JSON.stringify({ schemaVersion: 1, debug: { autofill: true, markup: "always" } }),
+      );
+      const sent: { method: string; debug?: unknown }[] = [];
+      // An extension built before the trace: it ignores `debug` and never calls back with one.
+      const bridge = {
+        call: async (method: string, params: { debug?: unknown }) => {
+          sent.push({ method, debug: params.debug });
+          if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
+          if (method === "tab.show") return { tabId: 7, activated: false, hidden: false };
+          if (method === "form.listOptions") return [{ label: "Yes" }];
+          return {
+            adapter: "workday",
+            url: tab(7).url,
+            pageKind: "step",
+            sections: [],
+            addButtons: [],
+            actions: [],
+            errors: [],
+          };
+        },
+      } as unknown as ExtensionBridge;
+      const f = forms(bridge, workspaceAt(dir));
+      await f.listOptions("gender", 7);
+      await f.debugIdle();
+      // The page before the call is saved by a tool call's first adapter call only (e2e.test.ts sees the rest).
+      expect(sent.filter((s) => s.method.startsWith("form.")).map((s) => s.debug)).toEqual([
+        { before: true, after: true, failures: true },
+      ]);
+      expect(sent.filter((s) => !s.method.startsWith("form.")).every((s) => s.debug === undefined)).toBe(true);
+      const session = join(dir, "debug", `${new Date().toISOString().slice(0, 10)}-no-posting`);
+      const record = JSON.parse(await readFile(join(session, "0001-list_options.json"), "utf8"));
+      expect(record.notes.noTrace).toEqual([expect.stringMatching(/built before it/)]);
+      expect(await debugReport(session)).toMatch(/No adapter trace in 1 calls/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("takes the markup and screenshots out of the record, into files of their own", () => {
+    const record = {
+      bridge: [
+        { method: "form.get", trace: { events: [], markup: { before: "<p>1</p>", after: "<p>2</p>" } } },
+        {
+          method: "form.fill",
+          trace: {
+            events: [],
+            markup: {
+              before: "<p>ignored: the first call's is kept</p>",
+              after: "<p>3</p>",
+              failures: [
+                { fieldId: "work-experience-1.jobTitle#2", html: "<p>a</p>" },
+                { fieldId: "work-experience-1.jobTitle#2", html: "<p>b</p>" },
+              ],
+            },
+            screenshot: Buffer.from("png").toString("base64"),
+          },
+        },
+      ],
+    } as unknown as CallRecord;
+    const files = new Map(extractFiles(record, "0004"));
+    expect([...files.keys()]).toEqual([
+      "0004-before.html",
+      "0004-after.html",
+      "0004-fail-work-experience-1.jobTitle_2.html",
+      "0004-fail-work-experience-1.jobTitle_2-2.html",
+      "0004-fail.png",
+    ]);
+    expect(files.get("0004-before.html")).toBe("<p>1</p>");
+    expect(files.get("0004-after.html")).toBe("<p>3</p>");
+    expect(files.get("0004-fail.png")).toEqual(Buffer.from("png"));
+    expect(record.bridge[1]?.trace).toMatchObject({
+      markup: {
+        before: "0004-before.html",
+        after: "0004-after.html",
+        failures: [
+          { fieldId: "work-experience-1.jobTitle#2", file: "0004-fail-work-experience-1.jobTitle_2.html" },
+          { fieldId: "work-experience-1.jobTitle#2", file: "0004-fail-work-experience-1.jobTitle_2-2.html" },
+        ],
+      },
+      screenshot: "0004-fail.png",
     });
   });
 });

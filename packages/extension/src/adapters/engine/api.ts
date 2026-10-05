@@ -1,5 +1,6 @@
 import type {
   BackResult,
+  DebugRequest,
   FillAction,
   FillResult,
   NextResult,
@@ -13,7 +14,21 @@ import type {
 import { isVisible, press, waitFor, win } from "./dom.js";
 import { type Extraction, extract, type FieldRef, type PageSchema } from "./extract.js";
 import { installSubmitGuard } from "./guard.js";
+import { failureMarkup, pageMarkup } from "./markup.js";
 import { setTiming, T, useSiteWaits } from "./timing.js";
+import {
+  addFailureMarkup,
+  type DebugTrace,
+  fieldEnded,
+  fieldStarted,
+  markupWanted,
+  outside,
+  type PageState,
+  startDebug,
+  stopDebug,
+  type TraceEvent,
+  tracing,
+} from "./trace.js";
 import type { SiteDefinition } from "./types.js";
 
 declare const __ADAPTER_VERSION__: string | undefined;
@@ -58,13 +73,68 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
     return { ...base, pageKind: kindNow(), ...(s ? { step: s } : {}), errors: errorsNow() } as unknown as R;
   };
 
+  /** The page now, for the debug trace (outside it: reading the step queries the page). */
+  const pageState = (): PageState =>
+    outside(() => {
+      let step: PageState["step"];
+      try {
+        step = site.page.step(doc);
+      } catch {
+        // a page the site can't read a step from
+      }
+      return {
+        url: getUrl(),
+        ...(step ? { step } : {}),
+        visibility: doc.visibilityState,
+        focused: doc.hasFocus(),
+      };
+    });
+  /** What the companion asked of the debugged call running now, and the page's markup taken before it. */
+  let debugging: DebugRequest | null = null;
+  let markupBefore: string | undefined;
+
+  /**
+   * A field's operation ended: in debug mode its outcome goes into the trace, and a failure's snapshot is taken
+   * while what failed may still be on screen.
+   */
+  const fieldDone = <R extends { ok: boolean; error?: string }>(
+    ev: TraceEvent | null,
+    fieldId: string,
+    res: R,
+    container?: HTMLElement,
+  ): R => {
+    if (!ev) return res;
+    fieldEnded(ev, res.ok, res.error);
+    if (!res.ok && container?.isConnected && markupWanted().failures) {
+      addFailureMarkup(fieldId, failureMarkup(container));
+    }
+    return res;
+  };
+
   const fillOne = async (f: FillAction): Promise<FillResult> => {
+    const ev = fieldStarted("fill", f.fieldId);
+    let container: HTMLElement | undefined;
     try {
       const r = ref(f.fieldId);
+      container = r.container;
       r.container.scrollIntoView?.({ block: "center" });
-      return { fieldId: f.fieldId, ...(await r.driver.fill(r.container, f.value, { strict: f.strict === true })) };
+      const out = await r.driver.fill(r.container, f.value, { strict: f.strict === true });
+      return fieldDone(ev, f.fieldId, { fieldId: f.fieldId, ...out }, container);
     } catch (err) {
-      return { fieldId: f.fieldId, ok: false, error: (err as Error).message };
+      return fieldDone(ev, f.fieldId, { fieldId: f.fieldId, ok: false, error: (err as Error).message }, container);
+    }
+  };
+
+  /** A read of a field's options, traced as a field operation: it fails by throwing. */
+  const fieldRead = async <R>(op: string, fieldId: string, read: () => Promise<R>): Promise<R> => {
+    const ev = fieldStarted(op, fieldId);
+    try {
+      const out = await read();
+      fieldDone(ev, fieldId, { ok: true });
+      return out;
+    } catch (err) {
+      fieldDone(ev, fieldId, { ok: false, error: (err as Error).message });
+      throw err;
     }
   };
 
@@ -77,20 +147,56 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
       setTiming(timing);
     },
 
+    /**
+     * Autofill debug mode for the call that follows (trace.ts): the page's markup first when asked (before the
+     * trace starts, so it isn't timed), then the trace's hooks. Null or absent: no trace, and none left running.
+     * Set after `setTiming`, in the same script (background/forms.ts, `callAdapter`).
+     */
+    setDebug(debug?: DebugRequest | null): void {
+      markupBefore = undefined;
+      debugging = debug ?? null;
+      if (!debug) {
+        if (tracing()) stopDebug(pageState());
+        return;
+      }
+      if (debug.before) markupBefore = pageMarkup(doc);
+      startDebug(doc, debug, pageState());
+    },
+
+    /** The trace of the call just made, with the markup asked for; undefined without debug. */
+    takeDebug(): DebugTrace | undefined {
+      const trace = stopDebug(pageState());
+      const asked = debugging;
+      const before = markupBefore;
+      debugging = null;
+      markupBefore = undefined;
+      if (!trace) return undefined;
+      const markup = {
+        ...(before !== undefined ? { before } : {}),
+        ...(asked?.after ? { after: pageMarkup(doc) } : {}),
+        ...trace.markup,
+      };
+      return { ...trace, ...(Object.keys(markup).length ? { markup } : {}) };
+    },
+
     getForm(): PageSchema {
       return refresh().schema;
     },
 
     async listOptions(fieldId: string): Promise<OptionInfo[]> {
-      const r = ref(fieldId);
-      if (r.driver.list) return r.driver.list(r.container);
-      return (r.field.options ?? []).map((label) => ({ label }));
+      return fieldRead("list", fieldId, async () => {
+        const r = ref(fieldId);
+        if (r.driver.list) return r.driver.list(r.container);
+        return (r.field.options ?? []).map((label) => ({ label }));
+      });
     },
 
     async searchOptions(fieldId: string, query: string): Promise<OptionInfo[]> {
-      const r = ref(fieldId);
-      if (!r.driver.search) throw new Error(site.messages.noSearch);
-      return r.driver.search(r.container, query);
+      return fieldRead("search", fieldId, async () => {
+        const r = ref(fieldId);
+        if (!r.driver.search) throw new Error(site.messages.noSearch);
+        return r.driver.search(r.container, query);
+      });
     },
 
     /**
@@ -138,30 +244,41 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
     },
 
     async upload(fieldId: string, file: UploadFile): Promise<FillResult> {
+      const ev = fieldStarted("upload", fieldId);
+      let container: HTMLElement | undefined;
       try {
         const r = ref(fieldId);
-        if (r.field.kind !== "file" || !r.driver.upload) return { fieldId, ok: false, error: "Not a file field." };
+        container = r.container;
+        if (r.field.kind !== "file" || !r.driver.upload) {
+          return fieldDone(ev, fieldId, { fieldId, ok: false, error: "Not a file field." }, container);
+        }
         if (site.fill.scrollBeforeUpload) r.container.scrollIntoView?.({ block: "center" });
         const w = win(doc);
         const bytes = Uint8Array.from(w.atob(file.base64), (ch) => ch.charCodeAt(0));
         const f = new w.File([bytes], file.name, { type: file.mimeType });
-        return { fieldId, ...(await r.driver.upload(r.container, f)) };
+        return fieldDone(ev, fieldId, { fieldId, ...(await r.driver.upload(r.container, f)) }, container);
       } catch (err) {
-        return { fieldId, ok: false, error: (err as Error).message };
+        return fieldDone(ev, fieldId, { fieldId, ok: false, error: (err as Error).message }, container);
       }
     },
 
     /** Remove selected values (multi-select) or attached files; `values` null or absent = all of them. */
     async remove(fieldId: string, values?: string[] | null): Promise<RemoveResult> {
+      const ev = fieldStarted("remove", fieldId);
+      let container: HTMLElement | undefined;
       try {
         const r = ref(fieldId);
+        container = r.container;
         r.container.scrollIntoView?.({ block: "center" });
         if (!r.driver.remove) {
-          return { fieldId, ok: false, removed: [], remaining: [], error: site.messages.cantRemove(r.field.kind) };
+          const error = site.messages.cantRemove(r.field.kind);
+          return fieldDone(ev, fieldId, { fieldId, ok: false, removed: [], remaining: [], error });
         }
-        return { fieldId, ...(await r.driver.remove(r.container, values, r.field)) };
+        const out = await r.driver.remove(r.container, values, r.field);
+        return fieldDone(ev, fieldId, { fieldId, ...out }, container);
       } catch (err) {
-        return { fieldId, ok: false, removed: [], remaining: [], error: (err as Error).message };
+        const error = (err as Error).message;
+        return fieldDone(ev, fieldId, { fieldId, ok: false, removed: [], remaining: [], error }, container);
       }
     },
 

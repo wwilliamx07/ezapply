@@ -211,8 +211,9 @@ the third and fourth runs. The browser was in front, by the user's account. A ch
 same day: date parts sent focus events by hand when the page has no focus (Chrome holds them back while the
 window is behind another app). With the browser in front it would have done nothing. `tab.show` now reports
 `focused` and debug mode records it, so focus can be ruled in or out from the records rather than from
-memory. What the records can't show is which path each part took (typed, or set directly as a last resort).
-That needs the adapter trace (`todo.md`, "Autofill debug mode").
+memory. Which path each part took (typed, or set directly as a last resort) is in the adapter trace now: a
+`date part set directly` or `date entered again` branch ([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)),
+not yet seen on a live run.
 
 The next run (another posting at the same employer, the same day) kept the browser in front, and every call recorded
 `focused: true`. Every date was taken the first time: four `MM/YYYY`, two `YYYY` and the `MM/DD/YYYY`
@@ -327,7 +328,7 @@ renumbers the rest.
 Change `selectors.ts` (keep every Workday string of the adapter there; what every site shares is in
 `adapters/engine/` and `adapters/widgets/`; posting-page hooks and hosts shared
 with the companion are in `protocol/src/workday.ts`), add a snapshot to `test/fixtures/live/` (saved
-from the browser, or once it exists exported from autofill debug mode: `todo.md`, "Autofill debug mode"), and extend the tests. The behavioural fixture
+from the browser, or exported from a debug-mode run: `ezapply debug export`), and extend the tests. The behavioural fixture
 (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests use it in a jsdom
 environment, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new
 adapter method needs one fixture behaviour, not two fakes.

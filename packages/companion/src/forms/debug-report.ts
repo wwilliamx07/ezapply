@@ -1,12 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { CallRecord } from "./debug.js";
+import type { CallRecord, Trace } from "./debug.js";
 
 /**
  * `ezapply debug report`: a summary of one debug session (a folder under debug/), for Claude working on ezapply
  * to read before opening single records. Where time went, what failed and why, and how autofill did: fills
  * by rule, fills the model or user changed afterwards (a wrong rule), profile fills no rule covered (a missing
- * hint), and loose matches the strict check refused (a missing alias).
+ * hint), and loose matches the strict check refused (a missing alias). From the adapter's trace: the slowest fields
+ * and waits, waits that ran to their maximum, the slow paths the fillers took, the page's own errors and failed
+ * requests, and what was saved at each failure.
  */
 export async function debugReport(dir: string): Promise<string> {
   const records = await loadRecords(dir);
@@ -65,6 +67,7 @@ export async function debugReport(dir: string): Promise<string> {
   }
 
   out.push(...autofillSection(records));
+  out.push(...traceSection(records));
   return `${out.join("\n")}\n`;
 }
 
@@ -134,6 +137,123 @@ function autofillSection(records: CallRecord[]): string[] {
   if (uncovered.length) out.push("", "### Profile fills no rule covered (hint candidates)", ...uncovered);
   return out;
 }
+
+interface TraceEventLike {
+  t: number;
+  k: string;
+  ms?: number;
+  [key: string]: unknown;
+}
+
+/** What the adapter's traces say: where the time went inside the page, and what went wrong there. */
+function traceSection(records: CallRecord[]): string[] {
+  const traced = records.flatMap((r) =>
+    r.bridge.filter((b) => b.trace).map((b) => ({ seq: r.seq, trace: b.trace as Trace })),
+  );
+  const out: string[] = [];
+  const untraced = records.filter((r) => r.notes.noTrace);
+  if (untraced.length) {
+    out.push("", `No adapter trace in ${untraced.length} calls: the extension was built before it (reload it).`);
+  }
+  if (traced.length === 0) return out;
+  const events = traced.flatMap(({ seq, trace }) =>
+    ((trace.events as TraceEventLike[] | undefined) ?? []).map((e) => ({ seq, e })),
+  );
+  out.push("", "## Inside the page (adapter trace)");
+
+  const slowest = (k: string) =>
+    events
+      .filter(({ e }) => e.k === k && typeof e.ms === "number")
+      .sort((a, b) => (b.e.ms ?? 0) - (a.e.ms ?? 0))
+      .slice(0, 10);
+  const fields = slowest("field");
+  if (fields.length) {
+    out.push(
+      "",
+      "### Slowest fields",
+      ...fields.map(
+        ({ seq, e }) =>
+          `- #${seq} ${e.fieldId} (${e.op}): ${secs(e.ms ?? 0)}${e.ok === false ? `, failed: ${e.error ?? ""}` : ""}`,
+      ),
+    );
+  }
+  const waits = slowest("wait");
+  if (waits.length) {
+    out.push(
+      "",
+      "### Slowest waits",
+      ...waits.map(({ seq, e }) => `- #${seq} ${e.name} (${e.kind}): ${ms(e.ms)} of ${ms(e.max)}, ended by ${e.end}`),
+    );
+  }
+
+  // A settle at its maximum: the page never went quiet. A waitFor at its maximum: what it waited for never came.
+  const atMax = new Map<string, { n: number; ms: number; seqs: Set<number> }>();
+  for (const { seq, e } of events) {
+    if (e.k !== "wait" || e.end !== "max") continue;
+    const key = `${e.name} (${e.kind})`;
+    const v = atMax.get(key) ?? { n: 0, ms: 0, seqs: new Set<number>() };
+    v.n++;
+    v.ms += e.ms ?? 0;
+    v.seqs.add(seq);
+    atMax.set(key, v);
+  }
+  if (atMax.size) {
+    out.push(
+      "",
+      "### Waits that ran to their maximum",
+      ...[...atMax]
+        .sort((a, b) => b[1].ms - a[1].ms)
+        .map(([key, v]) => `- ${key}: ${v.n}×, ${secs(v.ms)} (${calls(v.seqs)})`),
+    );
+  }
+
+  const paths = new Map<string, { n: number; seqs: Set<number> }>();
+  for (const { seq, e } of events) {
+    const key =
+      e.k === "branch"
+        ? String(e.name)
+        : e.k === "react"
+          ? `React's ${e.handler} called directly${e.missing ? " (none found)" : ""}`
+          : undefined;
+    if (!key) continue;
+    const v = paths.get(key) ?? { n: 0, seqs: new Set<number>() };
+    v.n++;
+    v.seqs.add(seq);
+    paths.set(key, v);
+  }
+  if (paths.size) {
+    out.push("", "### Slow paths taken", ...[...paths].map(([key, v]) => `- ${key}: ${v.n}× (${calls(v.seqs)})`));
+  }
+
+  const errors = traced.flatMap(({ seq, trace }) =>
+    ((trace.errors as TraceEventLike[] | undefined) ?? []).map((e) => `- #${seq} ${e.k}: ${e.message}`),
+  );
+  if (errors.length) out.push("", `### Page errors (${errors.length})`, ...errors.slice(0, 20));
+
+  const failedRequests = traced.flatMap(({ seq, trace }) =>
+    ((trace.requests as TraceEventLike[] | undefined) ?? [])
+      .filter((q) => typeof q.status === "string" || (typeof q.status === "number" && q.status >= 400))
+      .map((q) => `- #${seq} ${q.method} ${q.path}: ${q.status}`),
+  );
+  if (failedRequests.length) {
+    out.push("", `### Failed requests (${failedRequests.length})`, ...failedRequests.slice(0, 20));
+  }
+
+  const saved = traced.flatMap(({ seq, trace }) => [
+    ...((trace.markup?.failures ?? []) as { fieldId: string; file?: string }[]).map(
+      (f) => `- #${seq} ${f.fieldId}: ${f.file}`,
+    ),
+    ...(typeof trace.screenshot === "string" ? [`- #${seq} screenshot: ${trace.screenshot}`] : []),
+  ]);
+  if (saved.length) out.push("", "### Saved at failures", ...saved);
+
+  const cut = [...new Set(traced.filter(({ trace }) => trace.dropped).map(({ seq }) => seq))];
+  if (cut.length) out.push("", `Trace lists cut at their cap in ${calls(new Set(cut))}.`);
+  return out;
+}
+
+const calls = (seqs: Set<number>) => [...seqs].map((s) => `#${s}`).join(", ");
+const ms = (v: unknown) => `${Math.round(Number(v) || 0)} ms`;
 
 /** The field as the last read before `seq` showed it (label, kind, automation id, section). */
 function lastSeen(records: CallRecord[], seq: number, fieldId: string) {

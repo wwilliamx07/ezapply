@@ -37,7 +37,7 @@ import {
   type StepPlan,
 } from "./autofill.js";
 import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
-import { type CallRecord, DebugRecorder, stripBulk } from "./debug.js";
+import { type CallRecord, DebugRecorder, debugRequest, type MarkupSetting, stripBulk, type Trace } from "./debug.js";
 import {
   type Binding,
   matchPosting,
@@ -693,7 +693,7 @@ export class FormsService {
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
       // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
       const shown = await this.show(base.tab, !READS_PAGE.has(call.tool));
-      const bridge = framed(record ? recorded(this.bridge, record) : this.bridge, base.tab.frameId);
+      const bridge = framed(record ? recorded(this.bridge, record, settings.markup) : this.bridge, base.tab.frameId);
       const decided = await this.decide(base, bridge, timing);
       const t: Target = {
         tab: base.tab,
@@ -1290,28 +1290,48 @@ function leftSections(
  */
 function framed(bridge: Pick<ExtensionBridge, "call">, frameId: number | undefined): Pick<ExtensionBridge, "call"> {
   if (frameId === undefined) return bridge;
-  const call = (method: string, params: Record<string, unknown>, timeoutMs?: number) =>
-    (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(
+  const call = (method: string, params: Record<string, unknown>, timeoutMs?: number, onDebug?: OnDebug) =>
+    (bridge.call as BridgeCall)(
       method,
       method.startsWith("form.") ? { ...params, frameId } : params,
       timeoutMs,
+      onDebug,
     );
   return { call: call as ExtensionBridge["call"] };
 }
 
-/** The bridge for one debugged call: every request is added to its record with its full result and time. */
-function recorded(bridge: Pick<ExtensionBridge, "call">, record: CallRecord): Pick<ExtensionBridge, "call"> {
+type OnDebug = (debug: unknown) => void;
+type BridgeCall = (method: string, params: unknown, timeoutMs?: number, onDebug?: OnDebug) => Promise<unknown>;
+
+/**
+ * The bridge for one debugged call: every request is added to its record with its full result and time. Each adapter
+ * call (`form.*`) asks for the adapter's trace (`debug`, with the markup `debug.markup` says), which comes back
+ * beside the result and goes only into the record. An extension built before the trace answers without one, which
+ * the record notes once.
+ */
+function recorded(
+  bridge: Pick<ExtensionBridge, "call">,
+  record: CallRecord,
+  markup: MarkupSetting,
+): Pick<ExtensionBridge, "call"> {
+  let first = true;
   const call = async (method: string, params: Record<string, unknown>, timeoutMs?: number) => {
     const started = Date.now();
     const entry: CallRecord["bridge"][number] = { method, params: stripBulk(params), ms: 0 };
     record.bridge.push(entry);
+    const adapter = method.startsWith("form.");
+    const sent = adapter ? { ...params, debug: debugRequest(markup, first) } : params;
+    if (adapter) first = false;
     try {
-      const result = await (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(
-        method,
-        params,
-        timeoutMs,
-      );
+      const result = await (bridge.call as BridgeCall)(method, sent, timeoutMs, (trace) => {
+        entry.trace = trace as Trace;
+      });
       entry.result = result;
+      if (adapter && !entry.trace && !record.notes.noTrace) {
+        record.notes.noTrace = [
+          "The extension sent no adapter trace: it was built before it. Reload it after updating.",
+        ];
+      }
       return result;
     } catch (err) {
       entry.error = EzError.from(err).message;

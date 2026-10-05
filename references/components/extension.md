@@ -173,8 +173,15 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    ("not an application page of a supported site" otherwise). That picks the adapter: `<site>-main.js`, installed
    as `window.__ezapply_<site>`.
 4. Inject the adapter into the page's MAIN world (idempotent; only the frame, with `frameId`), then call its
-   `window.__ezapply_<site>[method](...args)` through a second `executeScript`. Results and thrown errors
-   come back as `{ __ok }` / `{ __error }`.
+   `window.__ezapply_<site>[method](...args)` through a second `executeScript`, with the waits set first
+   (`setTiming`) and then debug mode (`setDebug`, the call's `debug` or null). Results and thrown errors
+   come back as `{ __ok }` / `{ __error }`, with `__debug` when the call was debugged: the adapter's trace
+   ([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)). The handler returns it beside the result
+   (protocol's `WithDebug`), or sets it on the error it throws, so it reaches the companion in the response's
+   `debug` and never in the result. After a debugged call where a field failed, with `failures` asked for, a
+   screenshot of the tab joins the trace when the tab is the active one in its window: one per call, after it,
+   because the page's MAIN world can't reach the extension mid-call, and the browser allows only a couple of
+   captures a second. A capture that fails is left out; it never fails the call.
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
    switch to it). It needs `<all_urls>` or `activeTab`; the extension holds `<all_urls>` (not yet run live
    with it: [status](../status.md)).

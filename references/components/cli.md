@@ -13,7 +13,7 @@ workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), 
 | `init [--workspace <dir>] [--port <n>]` | Write `~/.ezapply/config.json` and create or refresh the workspace; print the next steps |
 | `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply chat`. Nothing else may write to stdout |
 | `status` | Whether an `ezapply chat` is running (its `/health`), and whether the extension is connected |
-| `debug on\|off\|report [dir]\|clean` | Autofill debug mode (`debug.ts`). `on` and `off` set `debug.autofill` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, and for autofill fills by rule, loose matches refused, automatic fills changed afterwards, and profile fills no rule covered. `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
+| `debug on\|off\|report [dir]\|clean\|export` | Autofill debug mode (`debug.ts`). `on` and `off` set `debug.autofill` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, for autofill fills by rule, loose matches refused, automatic fills changed afterwards, and profile fills no rule covered, and from the adapter's trace the slowest fields and waits, waits that ran to their maximum, slow paths taken (named branches, React handlers called directly), the page's errors and failed requests, what was saved at failures, and calls with no trace (an extension built before it). `export <session\|latest> <NNNN> [before\|after\|fail-<fieldId>]` writes a test fixture candidate from a saved page (`debugExport`, [below](#debug-export)). `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
 | `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
 
 `npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. A chat that's open keeps
@@ -169,6 +169,25 @@ Ghostscript its own. GitHub is read through `GitHubService.status()`, so a damag
 logged out instead of crashing, and it fails only on a port mismatch. ezapply not running is fine (doctor is
 usually run from another terminal, and ezapply runs only while a chat is open); an earlier build's daemon
 holding the port fails. The protocol line appears only while a chat runs.
+
+## `debug export`
+`ezapply debug export <session|latest> <NNNN> [before|after|fail-<fieldId>]` (`companion/src/forms/debug-export.ts`)
+turns a page debug mode saved (`NNNN-before.html` by default) into a fixture candidate for an extraction test or
+for correcting a behavioural fixture ([the loop](../development.md#debugging-a-live-run-autofill-debug-mode)). Two
+passes:
+1. **Values blanked:** text-like inputs' values, textareas, chosen `<option>`s, ticked boxes and radios,
+   `aria-checked` and `aria-pressed`, the option a listbox button shows (back to "Select One"), Workday's
+   selected-value pills and attached file names. A radio's `value` is its option, not an answer, and stays.
+2. **Strings replaced, wherever they still show** (text and attribute values, case-insensitive): every string in
+   `profile/profile.yaml` of three characters or more, longest first, except bare numbers under four digits
+   (they'd hit ids and counts); and the job title and tenant the call's record read (`form.get`'s `job.title` and
+   `tenant`). Whole values only: replacing their words too would hit the page's own labels ("Street" in "Street
+   Address"). A profile string that's also an option (a country) goes from the list as well.
+
+It writes `NNNN-<which>.fixture.html` beside the source, with a header comment in the fixtures' style (site, page
+kind, step, what was removed, the counts), and prints the counts. It never writes into the repo: the markup is the
+employer's and the scrub can miss something (a name the page shows differently, an employer detail in a link), so
+the user looks at it before it's copied to `extension/test/fixtures/live/`.
 
 ## Shipped templates (`packages/cli/templates/`)
 - `workspace/EZAPPLY.md`: the agent file → [workspace.md](workspace.md#the-agent-file-ezapplymd)

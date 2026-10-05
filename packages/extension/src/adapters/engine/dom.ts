@@ -9,6 +9,7 @@
 
 import { strictIndex } from "@ezapply/protocol/match";
 import { T } from "./timing.js";
+import { act, matched, outside, paused, resumed, waitEnded, waitStarted } from "./trace.js";
 
 /** The window a node belongs to. */
 export function win(node: Node): Window & typeof globalThis {
@@ -23,7 +24,16 @@ export function cssEscape(s: string): string {
   return css?.escape ? css.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
 }
 
-export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Wait `ms`, as a wait of the debug trace (trace.ts). */
+export function sleep(ms: number): Promise<void> {
+  const ev = waitStarted("sleep", ms);
+  return new Promise<void>((r) =>
+    setTimeout(() => {
+      waitEnded(ev, "slept");
+      r();
+    }, ms),
+  );
+}
 
 export function norm(s: string | null | undefined): string {
   return (s ?? "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
@@ -80,21 +90,29 @@ export function reactProps(el: Element): Record<string, unknown> | null {
 
 export function callReact(el: Element, handler: string, event: Record<string, unknown>): boolean {
   const fn = reactProps(el)?.[handler];
+  act("react", el, { handler, ...(typeof fn === "function" ? {} : { missing: true }) });
   if (typeof fn !== "function") return false;
-  (fn as (e: unknown) => void)({
-    preventDefault() {},
-    stopPropagation() {},
-    persist() {},
-    target: el,
-    currentTarget: el,
-    nativeEvent: {},
-    ...event,
-  });
+  outside(() =>
+    (fn as (e: unknown) => void)({
+      preventDefault() {},
+      stopPropagation() {},
+      persist() {},
+      target: el,
+      currentTarget: el,
+      nativeEvent: {},
+      ...event,
+    }),
+  );
   return true;
 }
 
 /** Set an input's value past React's instance-level value tracker, then notify. */
 export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  act("input", el, { value: value.slice(0, 80) });
+  outside(() => setValue(el, value));
+}
+
+function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   const w = win(el);
   const proto = el instanceof w.HTMLTextAreaElement ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
@@ -106,12 +124,20 @@ export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value
 
 export function blur(el: HTMLElement): void {
   const w = win(el);
-  el.dispatchEvent(new w.FocusEvent("focusout", { bubbles: true }));
-  el.dispatchEvent(new w.FocusEvent("blur"));
+  act("blur", el);
+  outside(() => {
+    el.dispatchEvent(new w.FocusEvent("focusout", { bubbles: true }));
+    el.dispatchEvent(new w.FocusEvent("blur"));
+  });
 }
 
 /** Full pointer + mouse sequence; some widgets listen to mousedown rather than click. */
 export function press(el: Element): void {
+  act("press", el);
+  outside(() => pressNow(el));
+}
+
+function pressNow(el: Element): void {
   const w = win(el);
   const opts = { bubbles: true, cancelable: true, composed: true, button: 0 };
   // jsdom has no PointerEvent.
@@ -126,24 +152,29 @@ export function press(el: Element): void {
 export function key(el: Element, k: string): void {
   const w = win(el);
   const opts = { bubbles: true, cancelable: true, key: k, code: k === "Enter" ? "Enter" : k };
-  el.dispatchEvent(new w.KeyboardEvent("keydown", opts));
-  el.dispatchEvent(new w.KeyboardEvent("keyup", opts));
+  act("key", el, { key: k });
+  outside(() => {
+    el.dispatchEvent(new w.KeyboardEvent("keydown", opts));
+    el.dispatchEvent(new w.KeyboardEvent("keyup", opts));
+  });
 }
 
 /** Resolve once the DOM has been quiet for `quietMs`, or after `maxMs`. */
 export function settle(doc: Document, quietMs = 250, maxMs = 4000): Promise<void> {
+  const ev = waitStarted("settle", maxMs, quietMs);
   return new Promise((resolve) => {
-    let timer = setTimeout(done, quietMs);
-    const hard = setTimeout(done, maxMs);
+    let timer = setTimeout(() => done("quiet"), quietMs);
+    const hard = setTimeout(() => done("max"), maxMs);
     const obs = new (win(doc).MutationObserver)(() => {
       clearTimeout(timer);
-      timer = setTimeout(done, quietMs);
+      timer = setTimeout(() => done("quiet"), quietMs);
     });
     obs.observe(doc.body, { subtree: true, childList: true, attributes: true, characterData: true });
-    function done() {
+    function done(end: "quiet" | "max") {
       clearTimeout(timer);
       clearTimeout(hard);
       obs.disconnect();
+      waitEnded(ev, end);
       resolve();
     }
   });
@@ -155,12 +186,22 @@ export async function waitFor<R>(
   maxMs = 3000,
   stepMs = T.pollMs,
 ): Promise<R | null> {
+  const ev = waitStarted("waitFor", maxMs);
   const end = Date.now() + maxMs;
   for (;;) {
+    // The condition is the adapter's code: its queries count in the trace; the page's between polls don't.
+    resumed();
     const v = fn();
-    if (v) return v;
-    if (Date.now() > end) return null;
-    await sleep(stepMs);
+    if (v) {
+      waitEnded(ev, "condition");
+      return v;
+    }
+    if (Date.now() > end) {
+      waitEnded(ev, "max");
+      return null;
+    }
+    paused();
+    await new Promise((r) => setTimeout(r, stepMs));
   }
 }
 
@@ -174,6 +215,12 @@ export async function waitFor<R>(
  * match.ts), never a prefix or substring.
  */
 export function matchOption(wanted: string, options: string[], strict = false): number {
+  const index = findOption(wanted, options, strict);
+  matched(wanted, options, strict, index);
+  return index;
+}
+
+function findOption(wanted: string, options: string[], strict: boolean): number {
   if (strict) return strictIndex(wanted, options);
   const w = norm(wanted).toLowerCase();
   const n = options.map((o) => norm(o).toLowerCase());
@@ -214,6 +261,11 @@ export function parseDate(value: string): { year: string; month?: string; day?: 
  * into a selected value does.
  */
 export function typeChar(el: HTMLInputElement, ch: string, replace: boolean): void {
+  act("type", el, { text: ch });
+  outside(() => typeNow(el, ch, replace));
+}
+
+function typeNow(el: HTMLInputElement, ch: string, replace: boolean): void {
   const w = win(el);
   const code = /\d/.test(ch) ? `Digit${ch}` : `Key${ch.toUpperCase()}`;
   const keyCode = ch.toUpperCase().charCodeAt(0);

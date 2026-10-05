@@ -199,15 +199,31 @@ export const UploadFile = z.object({
 export type UploadFile = z.infer<typeof UploadFile>;
 
 /**
+ * What a debugged form call brings back besides its result, in the bridge response's `debug`: always the adapter's
+ * trace (every query, event, wait and branch, the page's state, its DOM changes, errors and requests during the
+ * call), and the page's markup as asked: `before` the call, `after` it, and at each field that `failures`, with a
+ * screenshot of the tab after a call that had one when the tab is on screen.
+ */
+export const DebugRequest = z.object({
+  before: z.boolean().optional(),
+  after: z.boolean().optional(),
+  failures: z.boolean().optional(),
+});
+export type DebugRequest = z.infer<typeof DebugRequest>;
+
+/**
  * `timing`: the adapter's waits for this call (see timing.ts), resolved by the companion from the workspace's
  * `autofill-timing.yaml`. Absent (an older companion): the adapter's defaults.
  * `frameId`: act on that frame of the tab (an application embedded in another site's page, from
  * `TabInfo.frames`) instead of the tab's own page. `tab.screenshot` always takes the whole tab.
+ * `debug`: autofill debug mode is on for this call (see `DebugRequest`). An older extension ignores it and answers
+ * without a trace.
  */
 const TabParam = z.object({
   tabId: z.number().int().optional(),
   frameId: z.number().int().optional(),
   timing: z.record(z.string(), z.number()).optional(),
+  debug: DebugRequest.optional(),
 });
 
 /** Extension-served form methods (added to ExtensionApi). */

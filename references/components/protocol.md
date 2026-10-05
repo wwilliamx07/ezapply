@@ -6,8 +6,8 @@ so a change here is a change to the contract between them.
 | Module | Contents |
 |---|---|
 | `bridge.ts` | `PROTOCOL_VERSION`, close codes, handshake and envelope messages, `CompanionApi` / `ExtensionApi` method maps, `parseBridgeMessage` |
-| `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
-| `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
+| `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel; `WithDebug` (a result with a debug trace beside it) |
+| `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, `DebugRequest` (what a debugged form call asks for), and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingApplication` (the application a posting is tied to: [data-formats](../data-formats.md#postingsidmetajson-protocolsrcpostingsts)), `PostingMetaPatch`, `PostingStatus`, `SiteId` |
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site by its URL alone, else `generic`: what decides where no page can be read), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `siteSignatures()` (each site's `[id, signature]`, in registry order), `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions); no zod (`@ezapply/protocol/sites`) |
@@ -91,6 +91,13 @@ rethrown as `EzError` on the calling side. Unknown methods get `bad_request`. Re
 30 s; callers pass longer for slow form work) with `timeout`. `failAll` rejects everything in flight
 when the connection drops. Ids are prefixed per side (`e` for the extension) so they never collide.
 
+**A debug trace beside the result.** A handler may return `new WithDebug(result, debug)`, or throw an error with
+a `debug` property; the response then carries `debug` next to `result` or `error`. The caller gets it only through
+the `onDebug` callback it passed to `request` (the companion's `ExtensionBridge.call` takes it as its fourth
+argument), never from what `request` resolves to. That's how autofill debug mode's adapter trace and markup
+([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)) reach the companion's record without passing
+through anything that builds a tool result.
+
 ### Methods
 
 `CompanionApi` (served by the companion):
@@ -102,7 +109,10 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 `ExtensionApi` (served by the extension). Every `form.*` and `tab.*` method also takes `timing?` (name → ms):
 the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml` against the tab's
 site's waits; the keys are `STANDARD_WAITS`'s in `timing.ts` ([waits](adapters.md#waits-owned-by-the-site)). Unknown
-keys are ignored and an older extension strips the field, so it came without a version bump.
+keys are ignored and an older extension strips the field, so it came without a version bump. They also take
+`debug?` (`DebugRequest { before?, after?, failures? }`), sent only while autofill debug mode is on: the adapter
+records its trace for the call, and the page's markup before it, after it and at each failed field as the flags
+say, and the response brings it back in its `debug`. The `tab.*` methods ignore it.
 
 | Method | Params → result |
 |---|---|
@@ -184,7 +194,9 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   param of the form methods and `tab.show`, and `FormSchema.frameId`. An older extension ignores `frameId` and
   acts on the tab's own page, which isn't an application, so the call fails with "not an application page"
   rather than landing anywhere else. Then `CapturePayload.site`, and `TabInfo.site` (and `FrameInfo.site`) going by
-  the page's body before its URL, which changes what a site is, not the schema.
+  the page's body before its URL, which changes what a site is, not the schema. Then the form methods' `debug`
+  param and the response's `debug`: an older extension strips the param and answers without a trace (the companion's
+  record notes it), and an older companion strips the response's field.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.

@@ -48,6 +48,19 @@ describe("ezapply debug", () => {
     expect(await run("report")).toMatchObject({ code: 1 });
   });
 
+  it("exports a saved page of the newest session as a fixture candidate, its profile strings replaced", async () => {
+    expect(await run("export")).toMatchObject({ code: 2, out: expect.stringMatching(/debug export <session/) });
+    const session = join(root, "debug", "2026-10-02-q");
+    await mkdir(session, { recursive: true });
+    await mkdir(join(root, "profile"), { recursive: true });
+    await writeFile(join(root, "profile", "profile.yaml"), "identity: { firstName: Janelle }\n");
+    await writeFile(join(session, "0002-before.html"), "<!doctype html><html><body><p>Hi Janelle</p></body></html>");
+    const { code, out } = await run("export", "latest", "2");
+    expect(code).toBe(0);
+    expect(out).toMatch(/0002-before\.fixture\.html: 0 values blanked; replaced 1 profile strings/);
+    expect(await readFile(join(session, "0002-before.fixture.html"), "utf8")).toMatch(/<p>Hi REDACTED<\/p>/);
+  });
+
   it("denies the workspace agent reads of debug/", async () => {
     const config: AppConfig = {
       schemaVersion: 1,

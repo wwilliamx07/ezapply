@@ -60,14 +60,16 @@ dropped.
     "autofill": "on",       // or "off": autofill_step fills nothing (components/autofill.md)
     "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
   },
-  "debug": { "autofill": false, "maxMB": 500 },   // autofill debug mode: record every form call under debug/
+  "debug": { "autofill": false, "maxMB": 500, "markup": "failures" },   // autofill debug mode: record every form call under debug/
   "decisions": { "provider": "none" },
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
 ```
 Every field has a default; a missing file means all defaults. `forms.focusBrowser` is read for every form
 call, so a change applies to the next one, and a bad value falls back to `"on"` instead of failing every form
-call. On is the default because the window is usually in front during a fill anyway (the user is waiting on
+call. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
+markup debug mode saves: `"failures"` before each call and at every field that fails, `"always"` after each call
+too, `"none"` never (the adapter's trace is still recorded). On is the default because the window is usually in front during a fill anyway (the user is waiting on
 it), and Workday's split dates weren't taken with the window behind another app; off keeps the terminal in front
 and its keyboard focus mid-fill ([the tab in front](mcp-tools.md#forms)). `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
@@ -114,11 +116,48 @@ folder holds:
     `reviewPending`),
     and `queuedMs` (time behind earlier calls on the tab);
   - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
-    answer before the companion slims it), or its error;
+    answer before the companion slims it), or its error, and for each adapter call (`form.*`) its `trace`
+    (below);
   - `notes`: for `autofill_step`, `autofill` (per stage, `stage` being `pass 1`, `pass 2` or an Oracle item
     like `item:languages[0]`: the planned fills, kept fields, the reason for each field left, and the dropdown
-    options listed so far) and `readBack` (each fill's strict check);
+    options listed so far) and `readBack` (each fill's strict check), and `noTrace` when the extension sent
+    no trace (built before it);
   - `result`: what the agent got, or `error`.
+- `NNNN-before.html`, `NNNN-after.html`: the whole page, cleaned (scripts, styles, stylesheet links, SVG
+  contents and inline handlers removed; live values written into attributes, never a password's), before the
+  call's first adapter call and after its last ([markup](components/adapters.md#autofill-debug-mode-the-adapter-trace)).
+  Before with `debug.markup` `failures` or `always`; after with `always`.
+- `NNNN-fail-<fieldId>.html`: at each field that failed (unless `none`): its section, every popup or listbox
+  open on screen, and the last one the page closed during the field. `<fieldId>` has characters other than
+  letters, digits, `.`, `_` and `-` replaced by `_`; a repeat gets `-2`, `-3`.
+- `NNNN-fail.png`: a screenshot of the tab after an adapter call where a field failed, when the tab was the active
+  one in its window (`-2`… for more in one call).
+- `NNNN-<file>.fixture.html`: written by `ezapply debug export` ([cli](components/cli.md)): a saved page with
+  the values blanked and the profile's strings, the tenant and the job title replaced, behind a header comment
+  saying what was done.
+
+A bridge entry's `trace` (`extension/src/adapters/engine/trace.ts`, `DebugTrace`), times in ms from the start of
+the call in the page:
+- `ms`; `page`: `{ before, after }`, each `{ url, step?, visibility, focused }`;
+- `events`, in order, each `{ t, k, … }`. `k`: `query` (`sel`, `in` the element or `document` it was run on, `n`
+  elements found, `x` repeats in a row, so a polling wait's queries are one entry each); `press`, `key` (`key`),
+  `input` (`value`, up to 80 characters), `type` (`text`, consecutive characters joined), `blur`, `react`
+  (`handler`, `missing` when the element had none), each with `el`, a summary of the element (tag, automation id
+  or id, role, and its label or text up to 40 characters); `wait` (`kind` `waitFor`, `settle` or `sleep`, `name`
+  the wait in `T` the caller passed or its length, `max`, `quiet` and `quietMs` for a settle, `ms` taken, `end`
+  `condition`, `quiet`, `max` or `slept`); `branch` (`name`: `dropdown re-open`, `date entered again`, `date
+  part set directly`, `typeahead search again`, `upload by drop`, `search the list`, with details); `match`
+  (`wanted`, `of` options, `strict`, `chosen`, or the `options` on a miss, up to 40); `listbox` (Workday:
+  `shown`, `stale`, `read`, `options`, up to 80) and `list` (Oracle: `options`); `field` (`op` `fill`,
+  `upload`, `remove`, `list` or `search`, `fieldId`, and once it ends `ms`, `ok`, `error`) and `field-end`;
+- `mutations`: the page's DOM changes, `+` and `-` (`el`, `n` elements in it; only the topmost node of each
+  change) and `attr` (`el`, `a`, `from`, `to`; only `aria-expanded`, `aria-selected`, `aria-invalid`, `value`,
+  `disabled` and `hidden`), a run of the same change one entry with `x`;
+- `errors`: `{ k: "error" | "rejection" | "console", message, at? }`; `requests`: `{ method, path, status, ms }`
+  (`path` the origin and path only, `status` a number or `failed…`; no `status` if it hadn't ended);
+- `failedFields`; `dropped`: entries past each list's cap (events 5000, mutations 2000, errors 200, requests
+  500); `markup`: `{ before?, after?, failures?: [{ fieldId, file }] }` and `screenshot`, as the file names
+  above (the content goes into the files).
 
 A call that fails or times out is still recorded. Records are written after the call returns, off its path.
 `debug.maxMB` caps the folder: past it, the oldest sessions are deleted (never the one being written).

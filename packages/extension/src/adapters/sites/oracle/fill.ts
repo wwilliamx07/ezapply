@@ -15,6 +15,7 @@ import {
   win,
 } from "../../engine/dom.js";
 import { T } from "../../engine/timing.js";
+import { branch, note, tracing } from "../../engine/trace.js";
 import {
   attachedFiles,
   comboInput,
@@ -234,12 +235,14 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[], s
   if (candidates.some((c) => shows(input().value, c))) return { ok: true, readBack: input().value };
   if (!(await openCombo(input()))) return fail("Could not open the list.");
   let labels = comboOptions(input()).map(optionText);
+  if (tracing()) note("list", { options: labels.slice(0, 80) });
   let idx = pick(candidates, labels, strict);
   // Search by the value, then by its first part: a server-side search finds "K2K 3E9" but not the full label
   // "K2K 3E9, Kanata, Ontario" (seen live).
   const queries = [...new Set([value, value.split(",")[0]?.trim() ?? ""])].filter(Boolean);
   for (const query of queries) {
     if (idx >= 0) break;
+    branch("search the list", { query });
     await typeQuery(input(), query);
     labels = comboOptions(input()).map(optionText);
     idx = pick(candidates, labels, strict);

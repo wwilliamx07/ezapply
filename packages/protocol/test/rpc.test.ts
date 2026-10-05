@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { EzError, type RequestMessage, type ResponseMessage, RpcPeer } from "../src/index.js";
+import { EzError, type RequestMessage, type ResponseMessage, RpcPeer, WithDebug } from "../src/index.js";
 
 const A = { "a.echo": { params: z.object({ text: z.string() }), result: z.object({ text: z.string() }) } };
 const B = {
   "b.add": { params: z.object({ x: z.number(), y: z.number() }), result: z.number() },
   "b.slow": { params: z.object({}), result: z.null() },
   "b.fail": { params: z.object({}), result: z.null() },
+  "b.traced": { params: z.object({ fail: z.boolean() }), result: z.object({ x: z.number() }) },
 };
 
 type Handle = { handle(msg: RequestMessage | ResponseMessage): Promise<void> };
@@ -33,6 +34,10 @@ function pair() {
       "b.fail": async () => {
         throw new Error("boom");
       },
+      "b.traced": async ({ fail }) => {
+        if (fail) throw Object.assign(new Error("no"), { debug: { events: ["e2"] } });
+        return new WithDebug({ x: 1 }, { events: ["e1"] });
+      },
     },
   });
   peers.a = a;
@@ -50,6 +55,15 @@ describe("RpcPeer", () => {
   it("rejects invalid params on the receiving side", async () => {
     const { a } = pair();
     await expect(a.request("b.add", { x: "2", y: 3 } as never)).rejects.toMatchObject({ code: "bad_request" });
+  });
+
+  it("brings a debug trace beside the result or the error, only to the caller that asked for it", async () => {
+    const { a } = pair();
+    const seen: unknown[] = [];
+    await expect(a.request("b.traced", { fail: false }, 200, (d) => seen.push(d))).resolves.toEqual({ x: 1 });
+    await expect(a.request("b.traced", { fail: true }, 200, (d) => seen.push(d))).rejects.toThrow("no");
+    expect(seen).toEqual([{ events: ["e1"] }, { events: ["e2"] }]);
+    await expect(a.request("b.traced", { fail: false })).resolves.toEqual({ x: 1 });
   });
 
   it("propagates handler errors", async () => {

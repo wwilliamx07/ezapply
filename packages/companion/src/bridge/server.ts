@@ -210,6 +210,8 @@ export class ExtensionBridge {
     method: K,
     params: ParamsOf<typeof ExtensionApi, K>,
     timeoutMs?: number,
+    /** Gets the debug trace the extension sends beside the result (autofill debug mode), when it sends one. */
+    onDebug?: (debug: unknown) => void,
   ): Promise<ResultOf<typeof ExtensionApi, K>> {
     await this.awaitReconnect();
     if (!this.conn) {
@@ -223,7 +225,7 @@ export class ExtensionBridge {
         ),
       );
     }
-    return this.conn.peer.request(method, params, timeoutMs);
+    return this.conn.peer.request(method, params, timeoutMs, onDebug);
   }
 
   /** Attach to the HTTP server's `upgrade` event. Returns true when the request was handled. */

@@ -13,8 +13,10 @@ skills treat them all alike.
 | `engine/api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
 | `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
 | `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `parseDate`, React props, `win(node)` |
-| `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming` |
+| `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
+| `engine/trace.ts` | Autofill debug mode's trace ([below](#autofill-debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
+| `engine/markup.ts` | Debug mode's markup snapshots: `cleanMarkup`, `pageMarkup`, `failureMarkup` |
 | `widgets/` | Shared drivers ([below](#shared-drivers-widgets)) |
 | `sites/<site>/site.ts` | The site's definition; `main.ts` is its bundle entry (`install(site)`) |
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
@@ -69,9 +71,9 @@ The schema's facts (`kind`, `saved`, `lastPage`) are what the companion reads in
 ([autofill](autofill.md), [checklist](companion.md)), so a new site needs no companion change.
 
 ## The API (`api.ts`)
-`createAdapter(site, doc, getUrl)` returns `version`, `site`, `setTiming`, `getForm`, `listOptions`,
-`searchOptions`, `fill`, `upload`, `remove`, `removeRepeatable`, `addRepeatable`, `next`, `back`, `pageAction`
-and `blockedSubmitAttempts`. It keeps the field registry from the last extraction; a lookup whose element left
+`createAdapter(site, doc, getUrl)` returns `version`, `site`, `setTiming`, `setDebug`, `takeDebug`, `getForm`,
+`listOptions`, `searchOptions`, `fill`, `upload`, `remove`, `removeRepeatable`, `addRepeatable`, `next`, `back`,
+`pageAction` and `blockedSubmitAttempts`. It keeps the field registry from the last extraction; a lookup whose element left
 the page re-extracts, and an unknown id fails with "call get_form again". No call touches a field or button that
 `isSubmit` says submits.
 - **`fill`:** each field through its driver, in the order given or in page order (`fill.order`), with the site's
@@ -159,6 +161,61 @@ sends the result with every call; `setTiming` applies it before the method runs,
 site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-autofill-timingyaml) and
 `TIMING_DOCS` in `protocol/src/timing.ts`.
 
+## Autofill debug mode: the adapter trace
+With [debug mode](../development.md#debugging-a-live-run-autofill-debug-mode) on, every adapter call records what
+happens inside the page. The companion asks for it on each call (`debug` in the form call's parameters); the
+background sets it with `setDebug` right after `setTiming`, in the same script, and takes it with `takeDebug`
+after the method returns or throws ([background](extension.md#serving-form-requests-formsts)). It travels back
+beside the result, never in it, and the companion writes it into the call's record
+([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)).
+
+**What it records** (`trace.ts`, `DebugTrace`):
+- **Inside the call, in order:** every query the adapter makes (`querySelector`, `querySelectorAll`,
+  `getElementById`) with the selector, what it ran on and how many elements it found; every event it dispatches
+  and change it makes (press, key, input, typed characters, blur, a React handler called directly), with a summary
+  of the element (tag, automation id, role, label); every wait, with its name, how long it was allowed and took,
+  and whether its condition, quiet or its maximum ended it; how each value was matched against the options; each
+  field's start, end and outcome; and the branches the fillers take only sometimes, which they name themselves
+  (Workday: `dropdown re-open`, `date entered again`, `date part set directly`, `typeahead search again`,
+  `upload by drop`, and each dropdown's `listbox`: the listboxes on screen, the one read, its options; Oracle:
+  `search the list` and the list's options).
+- **Around it:** the page's state before and after (URL, step, `document.visibilityState`, `hasFocus()`); its DOM
+  changes, summarised (the topmost element of each addition and removal, with its size, and changes to
+  `aria-expanded`, `aria-selected`, `aria-invalid`, `value`, `disabled` and `hidden`), which shows a listbox opening
+  and closing or a section re-rendered with its filled rows dropped; and the page's own uncaught errors, unhandled
+  rejections, `console.error`s and `fetch` and XHR requests (method, origin and path, status, duration; never a
+  query string or a body). A step whose save request failed shows up only there.
+- **Markup** (`markup.ts`), as the companion asks: the whole page before the call (taken before the trace starts,
+  so it isn't timed), after it, and at each field that fails: its section (the nearest fieldset, section, group,
+  region or form), every popup or listbox open on screen, and the last one the page took away during that field,
+  since a dropdown's list closes before its fill returns. The page's removals are watched for that and kept as
+  elements, serialised only if the field fails. Cleaned of scripts, styles, stylesheet links, SVG contents and
+  inline handlers, with live values written into attributes (never a password's): debugging needs the values,
+  and the companion's export scrubs them. A shadow root's contents aren't copied.
+
+**Where it's recorded.** Every driver goes through the engine's helpers (`dom.ts`): `press`, `key`,
+`setNativeValue`, `typeChar`, `blur`, `callReact`, `waitFor`, `settle`, `sleep`, `matchOption`. They report to the
+trace, so the fillers didn't change for most of it; `api.ts` records the fields, and the fillers add only their
+named branches and listbox notes. Without debug every reporting function returns at once and nothing is installed:
+a call runs as it did before. Checked on the behavioural fixture: the same six-field Workday fill took the same
+time with debug on and off (within a few ms of 3.5 s over six runs each).
+
+**Naming waits without touching every call site.** A wait's length is passed as `T.someWait`. While debug is on,
+`watchWaits` turns `T`'s values into getters that note each key read, so `waitFor(fn, T.dropdownOpenMs)` reads
+`dropdownOpenMs` just before the call and the wait takes the latest name read with its length (`pollMs` aside,
+which every `waitFor` reads for its interval). After the call they're plain values again. Labelling the waits at
+their hundred-odd call sites was the alternative; it would have made the trace an edit of every filler.
+
+**Telling the adapter's queries from the page's.** The query hooks sit on the DOM prototypes, which the page uses
+too. A query counts while the adapter's own code runs: from the start of the call, from the end of each of its
+waits to the start of the next, and in a `waitFor`'s condition, but never inside an event it dispatches, where the
+page's handlers run. Page microtasks that run in between can still be counted; they're few. A polling wait's
+repeated queries are one entry with a count.
+
+**Bounded.** Lists are capped (events 5000, DOM changes 2000, errors 200, requests 500) and the overflow is
+counted. A trace left running by a call the companion gave up on is dropped by the next call's `setDebug`, and
+its hooks come off after 15 minutes regardless.
+
 ## Never submitting
 - `next` never presses a submit control and refuses where the site says; no other call touches one.
 - **Submit guard** (`installSubmitGuard(doc, site.page.isSubmit)`, once per document): capture-phase listeners for
@@ -190,6 +247,12 @@ site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-au
   application and Phenom step, and Phenom's `next` refusing step 1 without a resume.
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
   definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
+- **The debug trace** (`trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,
+  and every hook comes off when the trace is taken; a filled dropdown's trace has the press, the listbox read, the
+  match and its named waits with planned and actual times; a wait the companion shortened keeps its name; a failed
+  field is saved with its section and the list it read, and the page before and after; the date's second entry and
+  the dropdown re-open show as branches; the page's errors and requests are recorded without a query or body; a
+  trace left running is dropped by the next call.
 
 ## Checking a site live
 The Greenhouse, Lever and Ashby definitions were checked against live public forms with a script, not

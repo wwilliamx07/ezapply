@@ -225,5 +225,5 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
 - **Unsupported widgets** are shown as `typeahead` and left to the user (above).
 
 ## Updating for Oracle changes
-Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or, once it
-exists, one exported from autofill debug mode: `todo.md`, "Autofill debug mode"), and extend `oracle-live.test.ts` and the fixture.
+Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or one exported from a debug-mode run:
+`ezapply debug export`, [the loop](../development.md#debugging-a-live-run-autofill-debug-mode)), and extend `oracle-live.test.ts` and the fixture.

@@ -18,6 +18,7 @@ import {
   win,
 } from "../../engine/dom.js";
 import { T } from "../../engine/timing.js";
+import { branch, describe, note, outside, tracing } from "../../engine/trace.js";
 import {
   attachedFiles,
   datePartInput,
@@ -139,6 +140,17 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
     callReact(button, "onClick", {});
     opened = await waitFor(listFor, T.dropdownOpenRetryMs);
   }
+  if (tracing()) {
+    // Read outside the trace: these queries are the note's, not the adapter's.
+    outside(() =>
+      note("listbox", {
+        shown: visibleListboxes(doc).map((l) => describe(l, false)),
+        stale: stale.size,
+        read: opened ? describe(opened.list, false) : null,
+        options: opened ? opened.options.slice(0, 80).map(text) : [],
+      }),
+    );
+  }
   return opened;
 }
 
@@ -178,6 +190,7 @@ async function closeListbox({ button, list }: OpenListbox, chose: boolean): Prom
 async function openListboxRetrying(c: HTMLElement): Promise<OpenListbox | null> {
   const opened = await openListbox(c);
   if (opened) return opened;
+  branch("dropdown re-open");
   await settle(c.ownerDocument, T.afterFieldQuietMs, T.afterFieldMaxMs);
   return openListbox(c);
 }
@@ -289,6 +302,7 @@ async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElemen
   setNativeValue(input, query);
   key(input, "Enter");
   if (!(await waitFor(done, T.typeaheadResultsMs, 100))) {
+    branch("typeahead search again", { query });
     callReact(input, "onKeyDown", { key: "Enter", target: { value: query } });
     await waitFor(done, T.typeaheadResultsRetryMs, 100);
   }
@@ -475,6 +489,7 @@ async function enterDatePart(input: HTMLInputElement, v: string): Promise<void> 
     await sleep(T.dateDigitMs);
   }
   if (Number(datePartValue(input)) !== Number(v)) {
+    branch("date part set directly", { typed: datePartValue(input), wanted: v });
     setNativeValue(input, v);
     if (Number(input.value) !== Number(v)) callReact(input, "onChange", { target: { ...input, value: v } });
   } else if (input.value !== start) {
@@ -507,7 +522,11 @@ async function fillDate(c: HTMLElement, value: string): Promise<Result> {
   };
   await enter();
   // Seen live: a date field showing a "required" error took a second entry. One more pass when it still does.
-  if (fieldError(c)) await enter();
+  const error = fieldError(c);
+  if (error) {
+    branch("date entered again", { error });
+    await enter();
+  }
   const readBack = dateValue(c) ?? "";
   const has = (p: "Month" | "Day" | "Year") => Boolean(datePartInput(c, p));
   const want = [has("Year") && date.year, has("Month") && month, has("Day") && day].filter(Boolean).join("-");
@@ -542,6 +561,7 @@ export async function uploadFile(c: HTMLElement, file: File): Promise<Result> {
     input.dispatchEvent(new w.Event("change", { bubbles: true }));
   }
   if (!(await waitFor(done, T.uploadMs, 200))) {
+    branch("upload by drop");
     const zone = c.querySelector<HTMLElement>(SEL.fileDropZone);
     if (zone) {
       const handled = callReact(zone, "onDrop", { dataTransfer: dt });

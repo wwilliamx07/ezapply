@@ -1,4 +1,5 @@
 import {
+  type DebugRequest,
   ErrorCode,
   type ExtensionApi,
   EzError,
@@ -8,6 +9,7 @@ import {
   SITES,
   type SiteId,
   siteInfo,
+  WithDebug,
 } from "@ezapply/protocol";
 import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
@@ -120,12 +122,32 @@ async function requireAccess(url: string): Promise<void> {
 
 type Timing = Record<string, number> | undefined;
 
+/** What a form call brings besides its arguments: the waits, and autofill debug mode when it's on. */
+interface CallOptions {
+  timing?: Timing;
+  debug?: DebugRequest;
+}
+
+/** A debugged call's trace, as the adapter returns it (adapters/engine/trace.ts), and the screenshot added here. */
+type Trace = { failedFields?: string[]; screenshot?: string } & Record<string, unknown>;
+
 /**
  * Inject the site's adapter (idempotent) and call one of its methods in the page's MAIN world, with the waits the
  * companion sent (from the workspace's autofill-timing.yaml) set first; none restores the defaults. An embedded
  * form's frame gets its own adapter, and its own submit guard, as any page does: only that frame is injected.
+ *
+ * With `debug` (autofill debug mode) the adapter records its trace for this call (`setDebug`, set in the same
+ * script as the waits) and hands it back (`takeDebug`); it goes to the companion beside the result
+ * (`WithDebug`), or on the error, never in the result itself. After a call where a field failed, a screenshot of the
+ * tab joins it when the tab is on screen: the page can't reach the extension mid-call, and the browser allows only a
+ * couple of captures a second, so it's one per call, after it, not one per failure.
  */
-async function callAdapter<T>(target: FormTarget, method: string, args: unknown[], timing?: Timing): Promise<T> {
+async function callAdapter<T>(
+  target: FormTarget,
+  method: string,
+  args: unknown[],
+  { timing, debug }: CallOptions,
+): Promise<T | WithDebug<T>> {
   const { tabId, frameId, site } = target;
   const adapter = adapterOf(site);
   if (!adapter) throw new EzError(ErrorCode.BadRequest, `No form adapter for ${site} pages.`);
@@ -135,22 +157,47 @@ async function callAdapter<T>(target: FormTarget, method: string, args: unknown[
     target: where,
     world: "MAIN",
     // executeScript args must be JSON-serializable: null, not undefined.
-    args: [adapter.global, method, args, timing ?? null],
-    func: async (g: string, m: string, a: unknown[], t: Timing | null) => {
+    args: [adapter.global, method, args, timing ?? null, debug ?? null],
+    func: async (g: string, m: string, a: unknown[], t: Timing | null, d: DebugRequest | null) => {
       const api = (window as unknown as Record<string, Record<string, (...x: unknown[]) => unknown>>)[g];
       if (!api) return { __error: "adapter not loaded" };
+      const trace = () => (d ? api.takeDebug?.() : undefined);
       try {
         api.setTiming?.(t);
-        return { __ok: await api[m]?.(...a) };
+        api.setDebug?.(d);
+        const ok = await api[m]?.(...a);
+        return { __ok: ok, __debug: trace() };
       } catch (err) {
-        return { __error: (err as Error).message };
+        return { __error: (err as Error).message, __debug: trace() };
       }
     },
   });
-  const out = res?.result as { __ok?: T; __error?: string } | undefined;
+  const out = res?.result as { __ok?: T; __error?: string; __debug?: Trace } | undefined;
   if (!out) throw new EzError(ErrorCode.Internal, "The page did not respond.", "Reload the tab and try again.");
-  if (out.__error) throw new EzError(ErrorCode.BadRequest, out.__error);
-  return out.__ok as T;
+  const trace = out.__debug;
+  if (trace && debug?.failures && trace.failedFields?.length) {
+    const png = await screenshotIfShown(tabId);
+    if (png) trace.screenshot = png;
+  }
+  if (out.__error) throw Object.assign(new EzError(ErrorCode.BadRequest, out.__error), trace ? { debug: trace } : {});
+  return trace ? new WithDebug(out.__ok as T, trace) : (out.__ok as T);
+}
+
+/** The tab's visible area as a PNG (base64), when it's the active tab of its window; never fails the call. */
+async function screenshotIfShown(tabId: number): Promise<string | undefined> {
+  try {
+    const tab = await ext.tabs.get(tabId);
+    if (!tab.active) return undefined;
+    const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    return dataUrl.replace(/^data:image\/png;base64,/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+/** A call's result changed by `fn`, keeping the trace beside it. */
+function mapResult<T, R>(out: T | WithDebug<T>, fn: (r: T) => R): R | WithDebug<R> {
+  return out instanceof WithDebug ? new WithDebug(fn(out.result), out.debug) : fn(out);
 }
 
 /** The tab's own page, or the frame asked for (`frameId` 0 is the tab's own page), with access to it checked. */
@@ -160,28 +207,33 @@ const target = async ({ tabId, frameId }: { tabId?: number; frameId?: number }) 
 };
 
 export const formHandlers: FormHandlers = {
-  "form.get": async ({ timing, ...at }) => {
+  "form.get": async ({ timing, debug, ...at }) => {
     const t = await target(at);
-    const schema = await callAdapter<Record<string, unknown>>(t, "getForm", [], timing);
-    return { ...schema, tabId: t.tabId, ...(t.frameId !== undefined ? { frameId: t.frameId } : {}) } as never;
+    const out = await callAdapter<Record<string, unknown>>(t, "getForm", [], { timing, debug });
+    return mapResult(
+      out,
+      (schema) => ({ ...schema, tabId: t.tabId, ...(t.frameId !== undefined ? { frameId: t.frameId } : {}) }) as never,
+    );
   },
-  "form.listOptions": async ({ fieldId, timing, ...at }) =>
-    callAdapter(await target(at), "listOptions", [fieldId], timing),
-  "form.searchOptions": async ({ fieldId, query, timing, ...at }) =>
-    callAdapter(await target(at), "searchOptions", [fieldId, query], timing),
-  "form.fill": async ({ fills, timing, ...at }) => callAdapter(await target(at), "fill", [fills], timing),
-  "form.upload": async ({ fieldId, file, timing, ...at }) =>
-    callAdapter(await target(at), "upload", [fieldId, file], timing),
+  "form.listOptions": async ({ fieldId, timing, debug, ...at }) =>
+    callAdapter(await target(at), "listOptions", [fieldId], { timing, debug }),
+  "form.searchOptions": async ({ fieldId, query, timing, debug, ...at }) =>
+    callAdapter(await target(at), "searchOptions", [fieldId, query], { timing, debug }),
+  "form.fill": async ({ fills, timing, debug, ...at }) =>
+    callAdapter(await target(at), "fill", [fills], { timing, debug }),
+  "form.upload": async ({ fieldId, file, timing, debug, ...at }) =>
+    callAdapter(await target(at), "upload", [fieldId, file], { timing, debug }),
   // executeScript args must be JSON-serializable: send null rather than undefined for "all values".
-  "form.remove": async ({ fieldId, values, timing, ...at }) =>
-    callAdapter(await target(at), "remove", [fieldId, values ?? null], timing),
-  "form.removeRepeatable": async ({ sectionId, timing, ...at }) =>
-    callAdapter(await target(at), "removeRepeatable", [sectionId], timing),
-  "form.addRepeatable": async ({ addButtonId, timing, ...at }) =>
-    callAdapter(await target(at), "addRepeatable", [addButtonId], timing),
-  "form.next": async ({ timing, ...at }) => callAdapter(await target(at), "next", [], timing),
-  "form.back": async ({ timing, ...at }) => callAdapter(await target(at), "back", [], timing),
-  "form.pageAction": async ({ action, timing, ...at }) => callAdapter(await target(at), "pageAction", [action], timing),
+  "form.remove": async ({ fieldId, values, timing, debug, ...at }) =>
+    callAdapter(await target(at), "remove", [fieldId, values ?? null], { timing, debug }),
+  "form.removeRepeatable": async ({ sectionId, timing, debug, ...at }) =>
+    callAdapter(await target(at), "removeRepeatable", [sectionId], { timing, debug }),
+  "form.addRepeatable": async ({ addButtonId, timing, debug, ...at }) =>
+    callAdapter(await target(at), "addRepeatable", [addButtonId], { timing, debug }),
+  "form.next": async ({ timing, debug, ...at }) => callAdapter(await target(at), "next", [], { timing, debug }),
+  "form.back": async ({ timing, debug, ...at }) => callAdapter(await target(at), "back", [], { timing, debug }),
+  "form.pageAction": async ({ action, timing, debug, ...at }) =>
+    callAdapter(await target(at), "pageAction", [action], { timing, debug }),
   "tab.screenshot": async ({ tabId }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   type BridgeMessage,
   CompanionApi,
+  type DebugRequest,
   detectSite,
   ErrorCode,
   ExtensionApi,
@@ -16,6 +17,7 @@ import {
   PROTOCOL_VERSION,
   parseBridgeMessage,
   RpcPeer,
+  WithDebug,
 } from "@ezapply/protocol";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -224,7 +226,18 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
         method,
         async (params: Record<string, unknown>) => {
           calls.push({ method, params });
-          return (h as (p: Record<string, unknown>) => Promise<unknown>)(params);
+          const run = () => (h as (p: Record<string, unknown>) => Promise<unknown>)(params);
+          // Debug mode, as the extension's callAdapter does it: the trace around the call, beside its result.
+          const debug = method.startsWith("form.") ? (params.debug as DebugRequest | undefined) : undefined;
+          if (!debug) return run();
+          const adapter = api(params.tabId as number | undefined, params.frameId as number | undefined);
+          adapter.setDebug(debug);
+          try {
+            const out = await run();
+            return new WithDebug(out, adapter.takeDebug());
+          } catch (err) {
+            throw Object.assign(err as object, { debug: adapter.takeDebug() });
+          }
         },
       ]),
   ) as unknown as typeof handlers;
@@ -922,17 +935,19 @@ describe("form tools over MCP", () => {
     );
     const client = await mcpClient();
     const auto = (await callJson(client, "autofill_step")).data;
-    // The model overrides one automatic fill, and fills a profile fact no rule covered.
-    await callJson(client, "fill_fields", {
+    // The model overrides one automatic fill, fills a profile fact no rule covered, and a value no option matches.
+    const filled = await callJson(client, "fill_fields", {
       fills: [
         { fieldId: "my-information.legalName--firstName", value: "Janet", source: "user" },
         { fieldId: "application-questions.degreeLevel", value: "Bachelor's Degree", source: "profile" },
+        { fieldId: "my-information.countryDropdown", value: "Atlantis", source: "user" },
       ],
     });
     const form = (await callJson(client, "get_form")).data;
     expect(form.debug).toBe(true);
     expect(auto.debug).toBe(true);
-    expect(JSON.stringify([auto, form])).not.toMatch(/"bridge"|"notes"/);
+    // The adapter's trace and the markup go into the records only.
+    expect(JSON.stringify([auto, filled, form])).not.toMatch(/"bridge"|"notes"|"trace"|"events"|"markup"|doctype/i);
 
     const session = join(dir, "ws", "debug", `${new Date().toISOString().slice(0, 10)}-${cap.postingId}`);
     const index = await poll(async () => {
@@ -955,8 +970,42 @@ describe("form tools over MCP", () => {
     });
     expect(record).toMatchObject({ tool: "autofill_step", posting: cap.postingId, extensionVersion: "9.9.9" });
 
+    // Each adapter call's trace, and the page before the call's first one, saved beside the record.
+    const [firstRead, autofill] = record.bridge;
+    expect(firstRead.params).not.toHaveProperty("debug");
+    expect(firstRead.trace).toMatchObject({
+      page: { before: { url: APPLY_URL, step: { title: "My Information" } } },
+      markup: { before: "0001-before.html" },
+    });
+    expect(autofill.trace.markup).toBeUndefined();
+    expect(autofill.trace.events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ k: "field", op: "fill", ok: true })]),
+    );
+    const before = await readFile(join(session, "0001-before.html"), "utf8");
+    expect(before).toMatch(/^<!doctype html>/);
+    expect(before).not.toMatch(/<script/);
+
+    // A failed field: the dropdown opened, its options read and none matched, and its section saved with the list.
+    const fill = JSON.parse(await readFile(join(session, "0002-fill_fields.json"), "utf8")).bridge.find(
+      (b: { method: string }) => b.method === "form.fill",
+    );
+    // (The fixture's degrees don't include "Bachelor's Degree" either.)
+    expect(fill.trace.failedFields).toEqual(["application-questions.degreeLevel", "my-information.countryDropdown"]);
+    const events = fill.trace.events.map((e: { k: string }) => e.k);
+    expect(events).toEqual(expect.arrayContaining(["press", "listbox", "match", "wait"]));
+    expect(fill.trace.markup.failures).toEqual([
+      { fieldId: "application-questions.degreeLevel", file: "0002-fail-application-questions.degreeLevel.html" },
+      { fieldId: "my-information.countryDropdown", file: "0002-fail-my-information.countryDropdown.html" },
+    ]);
+    const failure = await readFile(join(session, "0002-fail-my-information.countryDropdown.html"), "utf8");
+    expect(failure).toMatch(/formField-countryDropdown/);
+    expect(failure).toMatch(/United Kingdom/);
+
     const { debugReport } = await import("../src/forms/debug-report.js");
     const report = await debugReport(session);
+    expect(report).toMatch(/## Inside the page \(adapter trace\)/);
+    expect(report).toMatch(/### Slowest fields\n- #\d /);
+    expect(report).toMatch(/- #2 my-information\.countryDropdown: 0002-fail-my-information\.countryDropdown\.html/);
     expect(report).toMatch(/3 form calls/);
     expect(report).toMatch(/browser window behind another app: 3 of 3 \(#1, #2, #3\)/);
     expect(report).toMatch(/hint:identity\.firstName: 1 filled/);

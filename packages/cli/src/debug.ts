@@ -1,17 +1,20 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { DEBUG_DIR, debugReport, latestDebugSession, WorkspaceConfig } from "@ezapply/companion";
+import { DEBUG_DIR, debugExport, debugReport, latestDebugSession, WorkspaceConfig } from "@ezapply/companion";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 
 const USAGE = `Usage:
   ezapply debug on|off          Record every form call under debug/ in the workspace (or stop)
   ezapply debug report [dir]    Summarise a debug session (default: the newest)
   ezapply debug clean           Delete debug/ (it holds your filled values and the pages)
+  ezapply debug export <session|latest> <NNNN> [before|after|fail-<fieldId>]
+                                A test fixture candidate from a saved page, values and profile strings
+                                replaced, written next to it (look at it before it goes into the repo)
 `;
 
 /** `ezapply debug …` against the workspace at `root`. Returns the exit code; output goes to `write`. */
 export async function runDebug(root: string, args: string[], write: (s: string) => void): Promise<number> {
-  const [sub, arg] = args;
+  const [sub, arg, ...rest] = args;
   switch (sub) {
     case "on":
     case "off":
@@ -34,6 +37,24 @@ export async function runDebug(root: string, args: string[], write: (s: string) 
         return 1;
       }
       write(await debugReport(dir));
+      return 0;
+    }
+    case "export": {
+      const [nnnn, which = "before"] = rest;
+      const dir =
+        arg === "latest" ? await latestDebugSession(join(root, DEBUG_DIR)) : arg ? resolve(root, DEBUG_DIR, arg) : null;
+      if (!dir || !nnnn || !/^\d{1,4}$/.test(nnnn)) {
+        write(USAGE);
+        return 2;
+      }
+      const profile = await readFile(join(root, "profile", "profile.yaml"), "utf8").catch(() => null);
+      const r = await debugExport(dir, nnnn, which, profile);
+      write(
+        `Wrote ${r.file}: ${r.values} values blanked; replaced ${r.replaced.profile} profile strings, ` +
+          `${r.replaced.tenant} of the tenant, ${r.replaced.job} of the job title.\n` +
+          "Look through it for anything else that identifies you or the employer before it goes into " +
+          "extension/test/fixtures/live/.\n",
+      );
       return 0;
     }
     default:

@@ -61,8 +61,14 @@ export const WorkspaceConfig = z.object({
       autofill: z.boolean().default(false),
       /** debug/ is kept under this size: the oldest sessions go first. */
       maxMB: z.number().int().min(1).max(100_000).default(500),
+      /**
+       * The page's markup in each record: "failures" saves it before each call and at every field that fails,
+       * "always" also after each call, "none" never (the trace is still recorded). A bad value falls back to
+       * "failures" rather than failing every form call.
+       */
+      markup: z.enum(["failures", "always", "none"]).default("failures").catch("failures"),
     })
-    .default({ autofill: false, maxMB: 500 }),
+    .default({ autofill: false, maxMB: 500, markup: "failures" }),
   decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
   context: z
     .object({

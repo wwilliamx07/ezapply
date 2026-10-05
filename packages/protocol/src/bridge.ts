@@ -59,9 +59,25 @@ export const RequestMessage = z.object({
 });
 export type RequestMessage = z.infer<typeof RequestMessage>;
 
+/**
+ * `debug`: a debug trace beside the result or error (autofill debug mode, rpc.ts's `WithDebug`), sent only for a
+ * request that asked for one. Optional, so either side may be older.
+ */
 export const ResponseMessage = z.union([
-  z.object({ kind: z.literal("response"), id: z.string(), ok: z.literal(true), result: z.unknown() }),
-  z.object({ kind: z.literal("response"), id: z.string(), ok: z.literal(false), error: ErrorPayload }),
+  z.object({
+    kind: z.literal("response"),
+    id: z.string(),
+    ok: z.literal(true),
+    result: z.unknown(),
+    debug: z.unknown().optional(),
+  }),
+  z.object({
+    kind: z.literal("response"),
+    id: z.string(),
+    ok: z.literal(false),
+    error: ErrorPayload,
+    debug: z.unknown().optional(),
+  }),
 ]);
 export type ResponseMessage = z.infer<typeof ResponseMessage>;
 

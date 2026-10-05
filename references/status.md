@@ -76,6 +76,14 @@ As of 2026-10-04.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
   Workday fixture and with a timed-out call, then used on live runs; the first one's records
   checked autofill's plan and ruled out the waits in the slowdown below.
+- **Autofill debug mode, the adapter trace, markup and export** (2026-10-05;
+  [adapters](components/adapters.md#autofill-debug-mode-the-adapter-trace)): tested on the Workday behavioural
+  fixture, over MCP in the companion's e2e tests, and the export on a filled fixture page. A six-field fill took the
+  same time with debug on and off on the fixture. Not yet run in a browser: the hooks on a real page (a site that
+  replaces `fetch` or `console.error` itself keeps its own, unrecorded), the size of a real step's trace and
+  markup through `executeScript` and the bridge, the failure screenshot, and the export on a real saved step. It's
+  an adapter change ("One adapter change per live run" in [development](development.md)): the next Workday run
+  goes with debug off first, and its timings must match the earlier runs' before the trace is trusted.
 - **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): run live in full once,
   on Workday ([the first run on the engine](#the-first-workday-run-on-the-engine)): rows added and filled,
   `strict` refusals right, the language levels missed (fixed). Before that, one live run of its first phase. It
@@ -99,9 +107,9 @@ As of 2026-10-04.
   - **Debug mode:** its first part records only in the companion.
   - **The page in general:** `list_options` opened the same tenant's dropdowns as fast as before (2.6 s for 3).
 
-  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace (`todo.md`, "Autofill debug mode")
-  would show which wait grew. One guess: the settle after each field (`afterFieldMaxMs`, 1.5 s) running to its
-  maximum on a page that never goes quiet.
+  So the extra time is in selecting and settling, not opening. Debug mode's adapter trace times every wait and
+  its report lists those that ran to their maximum, so the next run with debug on shows which grew. One guess:
+  the settle after each field (`afterFieldMaxMs`, 1.5 s) running to its maximum on a page that never goes quiet.
 - **Parts of filling a signed-in Workday application.** The first real application
   was filled through to the review page. It found the stale-dropdown bug (fixed, with a fixture test that
   reproduces it; the fix itself not yet re-run live) and dates that needed a second entry (now automatic;
@@ -256,8 +264,7 @@ the first time, and each step advanced on the first Save and Continue. 102 s in 
   fills of about 2.5–3 s per dropdown; every wait is now tunable in `autofill-timing.yaml`
   ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). The user's own file, with six dropdown
   waits at 200 ms, ran four live applications in one day with no dropdown failing to open; those values are
-  now the defaults. Next: per-field timings in fill results
-  (debug mode in `todo.md`).
+  now the defaults. Per-field timings are in debug mode's adapter trace now, not yet seen on a live run.
 - **"Could not open the dropdown"** cost the fifth run 9 failed fields (about 5.5 s of waiting each) and 4
   extra calls. A listbox closed without a choice is now closed with a press on its own button when Escape
   doesn't do it, which covers 6 of the 9. Two runs on one tenant (with that press) still failed 12
