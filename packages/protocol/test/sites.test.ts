@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   detectSite,
   FORM_SITE_IDS,
-  fixedHostPermissions,
-  optionalHostPermissions,
+  HOST_PERMISSIONS,
   SITES,
   SiteId,
   siteInfo,
   siteJob,
   siteOfUrl,
+  siteSignatures,
   siteTenant,
 } from "../src/index.js";
 
@@ -17,15 +17,53 @@ describe("the site registry", () => {
     expect([...FORM_SITE_IDS, "generic"].sort()).toEqual([...SiteId.options].sort());
   });
 
-  it("grants Workday's hosts at install and every other site one origin at a time", () => {
-    expect(fixedHostPermissions()).toEqual(["*://*.myworkdayjobs.com/*", "*://*.myworkdaysite.com/*"]);
-    expect(optionalHostPermissions()).toEqual(["https://*/*"]);
-    expect(SITES.filter((s) => s.access.kind === "per-origin").map((s) => s.id)).toEqual([
-      "oracle",
-      "greenhouse",
-      "lever",
-      "ashby",
-    ]);
+  it("has the extension hold every site, so it can read any page for a site's signature", () => {
+    expect(HOST_PERMISSIONS).toEqual(["<all_urls>"]);
+  });
+
+  it("gives every site a signature, checked in registry order", () => {
+    expect(siteSignatures().map(([id]) => id)).toEqual([...FORM_SITE_IDS]);
+    for (const s of SITES) expect([s.id, s.signature.trim().length > 0]).toEqual([s.id, true]);
+  });
+});
+
+describe("Phenom", () => {
+  const APPLY =
+    "https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA&step=2&stepname=workAndEducation";
+
+  it("knows an apply page by its path and jobSeqNo, on any host; not the employer's other pages", () => {
+    for (const url of [
+      APPLY,
+      "https://jobs.globex.example/ca/en/hvhapply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA",
+      "https://careers.example.com/apply?jobSeqNo=EXAMA0001R1EXTERNALENUS",
+      "https://careers.example.com/us/en-us/apply?jobSeqNo=X1",
+      // A region rather than a country before the language.
+      "https://careers.example.com/global/en/apply?jobSeqNo=EXAMA0001R1EXTERNALENGLOBAL&step=1&stepname=personalInformation",
+    ]) {
+      expect(detectSite(url)).toBe("phenom");
+    }
+    for (const url of [
+      "https://jobs.globex.example/ca/en/job/R-0000000001/Software-Developer-Intern",
+      "https://jobs.globex.example/ca/en/apply",
+      "https://jobs.globex.example/ca/en/apply?step=1",
+      "http://jobs.globex.example/ca/en/apply?jobSeqNo=X1",
+      "https://www.example.com/jobs/apply-now?jobSeqNo=X1",
+    ]) {
+      expect(detectSite(url)).toBe("generic");
+    }
+  });
+
+  it("reads the careers host as the tenant and jobSeqNo as the job, whatever the step", () => {
+    expect([siteTenant(APPLY), siteJob(APPLY)]).toEqual(["jobs.globex.example", "globa0001r0000000001externalenca"]);
+    expect(siteInfo("phenom")?.canonicalPath?.("/ca/en/hvhapply")).toBe("/ca/en/apply");
+  });
+
+  it("reads the tenant of any page of the site, and the job only where the URL names jobSeqNo", () => {
+    // A posting page the extension knows is Phenom's by its body: its own id isn't jobSeqNo.
+    const posting = "https://jobs.globex.example/ca/en/job/R-0000000001/Software-Developer-Intern";
+    const phenom = siteInfo("phenom");
+    expect([phenom?.tenant(posting), phenom?.job(posting)]).toEqual(["jobs.globex.example", undefined]);
+    expect(phenom?.tenant("http://jobs.globex.example/")).toBeUndefined();
   });
 });
 
@@ -35,19 +73,19 @@ describe("Greenhouse", () => {
       "https://job-boards.greenhouse.io/vandelay/jobs/1000000001",
       "https://boards.greenhouse.io/vandelay/jobs/1000000001",
       "https://job-boards.eu.greenhouse.io/acme/jobs/1",
-      "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000000002",
+      "https://job-boards.greenhouse.io/embed/job_app?for=initech&token=1000000002",
     ]) {
       expect(detectSite(url)).toBe("greenhouse");
     }
     expect(detectSite("https://www.greenhouse.io/careers")).toBe("generic");
-    expect(detectSite("https://careers.example.com/company/careers/open-positions/job?gh_jid=1000000002")).toBe("generic");
+    expect(detectSite("https://www.example.com/company/careers/open-positions/job?gh_jid=1000000002")).toBe("generic");
   });
 
   it("reads the board and the job, from the path or the embed's parameters", () => {
     expect(siteTenant("https://job-boards.greenhouse.io/Vandelay/jobs/1000000001")).toBe("vandelay");
     expect(siteJob("https://job-boards.greenhouse.io/vandelay/jobs/1000000001")).toBe("1000000001");
-    const embed = "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000000002";
-    expect([siteTenant(embed), siteJob(embed)]).toEqual(["acme", "1000000002"]);
+    const embed = "https://job-boards.greenhouse.io/embed/job_app?for=initech&token=1000000002";
+    expect([siteTenant(embed), siteJob(embed)]).toEqual(["initech", "1000000002"]);
   });
 
   it("reads the job a company's careers page names for its embedded board, and only there", () => {

@@ -3,7 +3,7 @@ import { z } from "zod";
 export const PostingStatus = z.enum(["captured", "drafting", "attached", "filled", "submitted", "archived"]);
 export type PostingStatus = z.infer<typeof PostingStatus>;
 
-export const SiteId = z.enum(["workday", "oracle", "greenhouse", "lever", "ashby", "generic"]);
+export const SiteId = z.enum(["workday", "oracle", "greenhouse", "lever", "ashby", "phenom", "generic"]);
 export type SiteId = z.infer<typeof SiteId>;
 
 /** What the extension sends when the user presses "Set posting". */
@@ -20,6 +20,11 @@ export const CapturePayload = z.object({
   jsonLd: z.array(z.string()).default([]),
   /** Set when the content came from an embedded frame (a job board on a career page); `url` is the tab's. */
   frameUrl: z.string().url().optional(),
+  /**
+   * The site of the page the content came from, as its body showed it (the registry's `signature`). Absent, or
+   * `generic`, the companion goes by that page's URL.
+   */
+  site: SiteId.optional(),
   capturedAt: z.string().datetime(),
   tabId: z.number().int(),
 });

@@ -65,8 +65,14 @@ export const passwordDriver: WidgetDriver = {
   fill: async () => fail("Password fields are never filled by ezapply. Ask the user to type it."),
 };
 
-/** A native `<select>`. An option with an empty value ("Select...") is the placeholder, not a choice. */
-export function selectDriver(): WidgetDriver {
+/**
+ * A native `<select>`. An option with an empty value ("Select...") is the placeholder, not a choice.
+ *
+ * `settled`: for a React-controlled list that puts the old value back at once and takes the new one a moment later
+ * (Phenom's, seen live): set it past React's tracker, then wait for the read-back, without calling React's handler
+ * directly (by then it would read the old value back and keep it).
+ */
+export function selectDriver(opts: { settled?: boolean } = {}): WidgetDriver {
   const select = (c: HTMLElement) => (c.matches("select") ? (c as HTMLSelectElement) : c.querySelector("select"));
   const choices = (s: HTMLSelectElement) => [...s.options].filter((o) => o.value !== "" && text(o) !== "");
   return {
@@ -91,12 +97,21 @@ export function selectDriver(): WidgetDriver {
         return fail(`No option matches "${asString(value)}"${strict ? " exactly" : ""}.`, { availableOptions: labels });
       }
       const w = win(s);
-      s.value = (options[idx] as HTMLOptionElement).value;
+      const chosen = (options[idx] as HTMLOptionElement).value;
+      const setter = opts.settled
+        ? Object.getOwnPropertyDescriptor(w.HTMLSelectElement.prototype, "value")?.set
+        : undefined;
+      if (setter) setter.call(s, chosen);
+      else s.value = chosen;
       s.dispatchEvent(new w.Event("input", { bubbles: true }));
       s.dispatchEvent(new w.Event("change", { bubbles: true }));
-      callReact(s, "onChange", { target: s });
-      await sleep(T.textCheckMs);
-      const readBack = s.selectedOptions[0] ? text(s.selectedOptions[0]) : "";
+      const shown = () => (s.selectedOptions[0] ? text(s.selectedOptions[0]) : "");
+      if (opts.settled) await waitFor(() => shown() === labels[idx], T.checkMs);
+      else {
+        callReact(s, "onChange", { target: s });
+        await sleep(T.textCheckMs);
+      }
+      const readBack = shown();
       return readBack === labels[idx] ? { ok: true, readBack } : fail("Selection did not stick.", { readBack });
     },
   };

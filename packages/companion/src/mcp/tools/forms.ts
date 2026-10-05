@@ -18,7 +18,7 @@ const tabId = z
   .describe("Defaults to the application tab (on any supported site) of the active posting.");
 
 /**
- * Application form tools (every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby). Logging, status moves, tab choice and the posting check live in FormsService; a result
+ * Application form tools (every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom). Logging, status moves, tab choice and the posting check live in FormsService; a result
  * carries `postingMismatch` when the tab is another posting's (other tenant or requisition; calls that change the
  * page are refused with `posting_mismatch`), and
  * `tabHidden` when the application tab is still hidden after being brought to the front (the browser throttles it).
@@ -29,7 +29,7 @@ export function registerFormTools(server: McpServer, s: Services): void {
     {
       title: "Read application page",
       description:
-        "Read the current application page (Workday, Oracle Recruiting Cloud, Greenhouse, Lever or Ashby; `adapter` " +
+        "Read the current application page (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby or Phenom; `adapter` " +
         "says which): pageKind " +
         "(posting, auth, start-choice, step, review, confirmation), step, " +
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +

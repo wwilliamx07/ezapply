@@ -54,6 +54,11 @@ export interface PageRules {
   actions(doc: Document): PageAction[];
   actionButton(doc: Document, action: PageAction): HTMLElement | null;
   next(doc: Document): HTMLElement | null;
+  /**
+   * Why Next can't go on from the page as it is, checked before pressing it: a requirement the page enforces with a
+   * native dialog (`alert`), which would stop the page, and the adapter's call with it, until the user dismissed it.
+   */
+  nextBlocked?(doc: Document): string | undefined;
   back(doc: Document): HTMLElement | null;
   /** A button's label as the schema shows it (`nextLabel`, `backLabel`). */
   label(button: HTMLElement): string;

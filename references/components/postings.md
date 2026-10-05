@@ -7,7 +7,7 @@ a time is **active**: the default context for every request.
 Captures and metadata updates are serialized (one at a time) so two quick clicks can't race.
 
 1. **Canonical URL** (`canonicalizeUrl`): lowercase host, trailing slashes dropped, only query parameters
-   that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`), and on
+   that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`, `jobseqno`: Phenom's only job id in its apply page's URL), and on
    Workday the leading locale segment (`/en-US/`) dropped: Workday links to the same job with and without
    it. On Oracle (`oracleJobPath`) the language segment is dropped and so is everything after the job id, so
    a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. Each registry site
@@ -33,6 +33,9 @@ Input is the **visible** HTML only, so hidden text (collapsed sections, prompt-i
 reaches `posting.md`.
 
 - Scripts, styles, SVG, iframes and similar are stripped.
+- **The content's site** (`meta.site`): what the extension found on the page the content came from, by its body
+  (`CapturePayload.site`, [telling a page's site](extension.md#telling-a-pages-site-framests)), else that page's
+  URL. So a Phenom job page on an employer's domain is `phenom`, though its URL names no site.
 - **Embedded boards:** when the extension captured an embedded job board frame (`frameUrl`), the content's
   own site decides how it's read (a Workday board is read as Workday, with its tenant), while the company
   still comes from the page the user was on; `posting.md` notes "Embedded from: <frameUrl>". See
@@ -47,8 +50,8 @@ reaches `posting.md`.
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
 - **Tenant:** a Workday posting's tenant, or for any other registry site its own reading of the content's URL
-  (`siteTenant`): an Oracle career site (host and site number, `jobs.example.com/cx_1`), a Greenhouse board, a
-  Lever company, an Ashby organization.
+  (the content's site's `tenant`): an Oracle career site (host and site number, `jobs.example.com/cx_1`), a
+  Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host.
 - Body: on Workday, the job description container; elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
@@ -73,7 +76,7 @@ Which application a posting is tied to, so the form tools can tell its tab from 
 - **Later:** the first form call that changes a page stores the tab's (`bound`), and `posting_activate
   { id, tabId }` the tab the user names (`user`); `setApplication`.
 
-On the user's postings it tied two postings captured on one employer's careers site to their Workday
+On real captures it tied two postings captured on one employer's careers site to their Workday
 requisitions by the page's Apply link, and another employer's to its Greenhouse job by `gh_jid`. Pages from a
 school's job board (Symplicity), employers' own career sites, iCIMS and SAP SuccessFactors link to nothing in the
 registry: those are

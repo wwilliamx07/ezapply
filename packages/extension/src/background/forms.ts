@@ -1,15 +1,17 @@
 import {
-  detectSite,
   ErrorCode,
   type ExtensionApi,
   EzError,
   type Handlers,
+  HOST_PERMISSIONS,
   isFormSite,
   SITES,
   type SiteId,
   siteInfo,
 } from "@ezapply/protocol";
 import { ext } from "../ext.js";
+import { askForAccess } from "./access.js";
+import { frameSite, frameUrl, tabSite } from "./frames.js";
 
 type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
 
@@ -20,11 +22,9 @@ const SUPPORTED = SITES.map((s) => s.name).join(", ");
 const adapterOf = (site: SiteId) =>
   siteInfo(site) ? { file: `${site}-main.js`, global: `__ezapply_${site}` } : undefined;
 
-const siteOf = (tab: chrome.tabs.Tab) => (tab.url ? detectSite(tab.url) : "generic");
-
 /**
- * Pick the tab to act on: explicit id, else the focused window's active application tab (of a registry site),
- * else the most recent one. The companion normally passes an explicit id (it prefers the active posting's
+ * Pick the tab to act on: explicit id, else the focused window's active application tab (of a registry site, by its
+ * page), else the most recent one. The companion normally passes an explicit id (it prefers the active posting's
  * tenant); the fallback serves callers that don't.
  */
 async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
@@ -35,11 +35,11 @@ async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
     return tab;
   }
   const [active] = await ext.tabs.query({ active: true, lastFocusedWindow: true });
-  if (active && isFormSite(siteOf(active))) return active;
-  const forms = (await ext.tabs.query({}))
-    .filter((t) => isFormSite(siteOf(t)))
-    .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
-  if (forms[0]) return forms[0];
+  if (active && isFormSite(await tabSite(active))) return active;
+  const tabs = (await ext.tabs.query({})).sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+  const sites = await Promise.all(tabs.map(tabSite));
+  const found = tabs.find((_, i) => isFormSite(sites[i] as SiteId));
+  if (found) return found;
   throw new EzError(
     ErrorCode.NotFound,
     `No application tab is open on a supported site (${SUPPORTED}).`,
@@ -47,39 +47,74 @@ async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {
   );
 }
 
-function requireFormSite(tab: chrome.tabs.Tab): { tabId: number; site: SiteId } {
-  const site = siteOf(tab);
-  if (!tab.id || !isFormSite(site)) {
+/** Where a form call acts: a tab's own page, or one frame of it (`frameId`, an embedded application). */
+interface FormTarget {
+  tabId: number;
+  frameId?: number;
+  site: SiteId;
+  /** The form's page: the tab's, or the frame's. */
+  url: string;
+}
+
+/** The tab's own page, when it's a form site's: by its body, read once the extension has access to it. */
+async function requireFormSite(tab: chrome.tabs.Tab): Promise<FormTarget> {
+  if (tab.id && tab.url) await requireAccess(tab.url);
+  const site = await tabSite(tab);
+  if (!tab.id || !tab.url || !isFormSite(site)) {
     throw new EzError(
       ErrorCode.BadRequest,
       `Tab ${tab.id} is not an application page of a supported site (${tab.url ?? "unknown"}).`,
       `The form tools support ${SUPPORTED}.`,
     );
   }
-  return { tabId: tab.id, site };
+  return { tabId: tab.id, site, url: tab.url };
 }
 
 /**
- * The extension must hold the tab's origin. A site with fixed hosts (Workday) gets them with the install (Firefox
- * lets the user withhold or revoke them); a site granted per origin (Oracle) gets one origin at a time, by Set
- * posting on it or the options page.
+ * A frame of the tab on a form site. Its id is the one `browser.status` listed: a frame that reloads, or a page that
+ * moves on, gives its frames new ids, so a gone frame fails the call as a closed tab does, and the companion finds
+ * the form again on the next call.
  */
-async function requireSiteAccess(tabId: number, site: SiteId): Promise<void> {
-  const { url } = await ext.tabs.get(tabId);
-  if (!url || (await ext.permissions.contains({ origins: [`${new URL(url).origin}/*`] }))) return;
-  const info = siteInfo(site);
-  if (info?.access.kind === "per-origin") {
+async function requireFormFrame(tab: chrome.tabs.Tab, frameId: number): Promise<FormTarget> {
+  const tabId = tab.id as number;
+  const url = await frameUrl(tabId, frameId);
+  if (!url) {
     throw new EzError(
-      ErrorCode.BadRequest,
-      `The extension has no access to ${new URL(url).host} yet.`,
-      "Ask the user to click the ezapply button (Set posting) on that tab and allow access to the site, or click " +
-        "Grant access next to it in the extension's options page.",
+      ErrorCode.NotFound,
+      `The application's frame in tab ${tabId} is gone (the page reloaded or moved on).`,
+      "Call get_form again: it finds the form where it is now.",
     );
   }
+  await requireAccess(url);
+  const site = await frameSite(tabId, frameId, url);
+  if (!isFormSite(site)) {
+    throw new EzError(
+      ErrorCode.BadRequest,
+      `Frame ${frameId} of tab ${tabId} is not an application of a supported site (${url}).`,
+      `The form tools support ${SUPPORTED}.`,
+    );
+  }
+  return { tabId, frameId, site, url };
+}
+
+/**
+ * The extension must hold the form page's origin (the frame's, for an embedded form) before it can read which site
+ * the page is, let alone fill it. It's granted every site at install (`HOST_PERMISSIONS`), but Firefox lets the
+ * user withhold or revoke that, and Chrome lets them limit it to some sites. Missing, the call asks for every site
+ * again: a small window with an Allow access button (`askForAccess`), which the call waits on for a while before
+ * failing with a hint to call again once the user has allowed it. A page that isn't on the web is never readable,
+ * and its URL decides.
+ */
+async function requireAccess(url: string): Promise<void> {
+  if (!/^https?:/i.test(url)) return;
+  const { host, origin } = new URL(url);
+  if (await ext.permissions.contains({ origins: [`${origin}/*`] })) return;
+  if (await askForAccess([...HOST_PERMISSIONS], { host })) return;
   throw new EzError(
     ErrorCode.BadRequest,
-    `The extension does not have access to ${info?.name ?? site} sites.`,
-    "Ask the user to open the ezapply extension options and click Grant site access.",
+    `The extension has no access to ${host} yet.`,
+    `A small ezapply window is asking the user to allow access to websites: ask them to click Allow access there ` +
+      "and confirm in the browser's prompt, then call again.",
   );
 }
 
@@ -87,21 +122,17 @@ type Timing = Record<string, number> | undefined;
 
 /**
  * Inject the site's adapter (idempotent) and call one of its methods in the page's MAIN world, with the waits the
- * companion sent (from the workspace's autofill-timing.yaml) set first; none restores the defaults.
+ * companion sent (from the workspace's autofill-timing.yaml) set first; none restores the defaults. An embedded
+ * form's frame gets its own adapter, and its own submit guard, as any page does: only that frame is injected.
  */
-async function callAdapter<T>(
-  target: { tabId: number; site: SiteId },
-  method: string,
-  args: unknown[],
-  timing?: Timing,
-): Promise<T> {
-  const { tabId, site } = target;
+async function callAdapter<T>(target: FormTarget, method: string, args: unknown[], timing?: Timing): Promise<T> {
+  const { tabId, frameId, site } = target;
   const adapter = adapterOf(site);
   if (!adapter) throw new EzError(ErrorCode.BadRequest, `No form adapter for ${site} pages.`);
-  await requireSiteAccess(tabId, site);
-  await ext.scripting.executeScript({ target: { tabId }, files: [adapter.file], world: "MAIN" });
+  const where = frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] };
+  await ext.scripting.executeScript({ target: where, files: [adapter.file], world: "MAIN" });
   const [res] = await ext.scripting.executeScript({
-    target: { tabId },
+    target: where,
     world: "MAIN",
     // executeScript args must be JSON-serializable: null, not undefined.
     args: [adapter.global, method, args, timing ?? null],
@@ -122,32 +153,35 @@ async function callAdapter<T>(
   return out.__ok as T;
 }
 
-const target = async (tabId?: number) => requireFormSite(await resolveTab(tabId));
+/** The tab's own page, or the frame asked for (`frameId` 0 is the tab's own page), with access to it checked. */
+const target = async ({ tabId, frameId }: { tabId?: number; frameId?: number }) => {
+  const tab = await resolveTab(tabId);
+  return frameId ? requireFormFrame(tab, frameId) : requireFormSite(tab);
+};
 
 export const formHandlers: FormHandlers = {
-  "form.get": async ({ tabId, timing }) => {
-    const t = await target(tabId);
+  "form.get": async ({ timing, ...at }) => {
+    const t = await target(at);
     const schema = await callAdapter<Record<string, unknown>>(t, "getForm", [], timing);
-    return { ...schema, tabId: t.tabId } as never;
+    return { ...schema, tabId: t.tabId, ...(t.frameId !== undefined ? { frameId: t.frameId } : {}) } as never;
   },
-  "form.listOptions": async ({ tabId, fieldId, timing }) =>
-    callAdapter(await target(tabId), "listOptions", [fieldId], timing),
-  "form.searchOptions": async ({ tabId, fieldId, query, timing }) =>
-    callAdapter(await target(tabId), "searchOptions", [fieldId, query], timing),
-  "form.fill": async ({ tabId, fills, timing }) => callAdapter(await target(tabId), "fill", [fills], timing),
-  "form.upload": async ({ tabId, fieldId, file, timing }) =>
-    callAdapter(await target(tabId), "upload", [fieldId, file], timing),
+  "form.listOptions": async ({ fieldId, timing, ...at }) =>
+    callAdapter(await target(at), "listOptions", [fieldId], timing),
+  "form.searchOptions": async ({ fieldId, query, timing, ...at }) =>
+    callAdapter(await target(at), "searchOptions", [fieldId, query], timing),
+  "form.fill": async ({ fills, timing, ...at }) => callAdapter(await target(at), "fill", [fills], timing),
+  "form.upload": async ({ fieldId, file, timing, ...at }) =>
+    callAdapter(await target(at), "upload", [fieldId, file], timing),
   // executeScript args must be JSON-serializable: send null rather than undefined for "all values".
-  "form.remove": async ({ tabId, fieldId, values, timing }) =>
-    callAdapter(await target(tabId), "remove", [fieldId, values ?? null], timing),
-  "form.removeRepeatable": async ({ tabId, sectionId, timing }) =>
-    callAdapter(await target(tabId), "removeRepeatable", [sectionId], timing),
-  "form.addRepeatable": async ({ tabId, addButtonId, timing }) =>
-    callAdapter(await target(tabId), "addRepeatable", [addButtonId], timing),
-  "form.next": async ({ tabId, timing }) => callAdapter(await target(tabId), "next", [], timing),
-  "form.back": async ({ tabId, timing }) => callAdapter(await target(tabId), "back", [], timing),
-  "form.pageAction": async ({ tabId, action, timing }) =>
-    callAdapter(await target(tabId), "pageAction", [action], timing),
+  "form.remove": async ({ fieldId, values, timing, ...at }) =>
+    callAdapter(await target(at), "remove", [fieldId, values ?? null], timing),
+  "form.removeRepeatable": async ({ sectionId, timing, ...at }) =>
+    callAdapter(await target(at), "removeRepeatable", [sectionId], timing),
+  "form.addRepeatable": async ({ addButtonId, timing, ...at }) =>
+    callAdapter(await target(at), "addRepeatable", [addButtonId], timing),
+  "form.next": async ({ timing, ...at }) => callAdapter(await target(at), "next", [], timing),
+  "form.back": async ({ timing, ...at }) => callAdapter(await target(at), "back", [], timing),
+  "form.pageAction": async ({ action, timing, ...at }) => callAdapter(await target(at), "pageAction", [action], timing),
   "tab.screenshot": async ({ tabId }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
@@ -161,7 +195,7 @@ export const formHandlers: FormHandlers = {
     const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     return { tabId: tab.id, pngBase64: dataUrl.replace(/^data:image\/png;base64,/, "") };
   },
-  "tab.show": async ({ tabId, activate, focusWindow }) => {
+  "tab.show": async ({ tabId, frameId, activate, focusWindow }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
     // The window only with focusWindow (forms.focusBrowser): it pulls the browser in front of the terminal the
@@ -173,7 +207,10 @@ export const formHandlers: FormHandlers = {
       tabId: tab.id,
       activated,
       ...(windowFocused ? { windowFocused } : {}),
-      ...(await pageState(tab.id, { activated, windowFocused, wasActive: tab.active ?? false })),
+      ...(await pageState(
+        { tabId: tab.id, windowId: tab.windowId, ...(frameId ? { frameId } : {}) },
+        { activated, windowFocused, wasActive: tab.active ?? false },
+      )),
     };
   },
 };
@@ -201,24 +238,29 @@ async function raiseWindow(windowId: number): Promise<boolean> {
  * asked a few times (until it's visible, and focused when the window was raised). Polled from here, not from the
  * page: the background's timers aren't throttled. Without access to the page (it's never an application tab
  * then), the tab's active state stands in, and focus isn't known.
+ *
+ * An embedded form is read in its frame (the page around it is usually out of reach), and its `focused` is the
+ * browser window's: a frame's `document.hasFocus()` is false whenever focus is in the page around it.
  */
 async function pageState(
-  tabId: number,
+  at: { tabId: number; windowId: number; frameId?: number },
   changed: { activated: boolean; windowFocused: boolean; wasActive: boolean },
 ): Promise<{ hidden: boolean; focused?: boolean }> {
+  const { tabId, frameId } = at;
+  const windowFocused = async () => (await ext.windows.get(at.windowId).catch(() => null))?.focused === true;
   const tries = changed.activated || changed.windowFocused ? 10 : 1;
   let state = { hidden: true, focused: false };
   for (let i = 0; i < tries; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 50));
     const [res] = await ext.scripting
       .executeScript({
-        target: { tabId },
+        target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] },
         func: () => ({ hidden: document.visibilityState === "hidden", focused: document.hasFocus() }),
       })
       .catch(() => [undefined]);
     const r = res?.result as { hidden?: unknown; focused?: unknown } | undefined;
     if (typeof r?.hidden !== "boolean") return { hidden: !(changed.activated || changed.wasActive) };
-    state = { hidden: r.hidden, focused: r.focused === true };
+    state = { hidden: r.hidden, focused: frameId === undefined ? r.focused === true : await windowFocused() };
     if (!r.hidden && (state.focused || !changed.windowFocused)) break;
   }
   return state;

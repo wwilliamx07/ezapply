@@ -12,9 +12,6 @@
  */
 export const WORKDAY_HOST = /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/i;
 
-/** Host permission patterns for the same hosts (the extension manifest must list exactly these). */
-export const WORKDAY_HOST_PERMISSIONS = ["*://*.myworkdayjobs.com/*", "*://*.myworkdaysite.com/*"] as const;
-
 /** A leading locale segment such as `/en-US/`, which Workday adds or leaves out for the same page. */
 export const WORKDAY_LOCALE_SEGMENT = /^\/[a-z]{2}-[A-Z]{2}(?=\/|$)/;
 

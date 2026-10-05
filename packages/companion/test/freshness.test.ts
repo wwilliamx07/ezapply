@@ -144,7 +144,7 @@ describe("FreshnessService: templates and profile", () => {
       "\\documentclass{article}\n\\pdfgentounicode=1\n\\begin{document}\n\\input{sections/work}\n\\end{document}\n",
     );
     await writeFile(join(src, "sections", "work.tex"), "\\item Engineer at Acme, 2024--\n");
-    await templates.importTemplate({ sourceDir: src, kind: "resume" });
+    await templates.importTemplate({ source: src, kind: "resume" });
   });
 
   it("records the source's hash at import and reports nothing for a fresh import", async () => {
@@ -171,7 +171,7 @@ describe("FreshnessService: templates and profile", () => {
   });
 
   it("after a re-import, reports the resume edit for the profile with its diff", async () => {
-    await templates.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    await templates.importTemplate({ source: src, kind: "resume", replace: true });
     const svc = service();
     const { changes } = await svc.changes();
     expect(changes).toHaveLength(1);
@@ -207,7 +207,7 @@ describe("FreshnessService: templates and profile", () => {
     await writeFile(file, JSON.stringify({ ...meta, importedFrom: join(root, "moved") }));
     const r = await service().changes();
     expect(r.changes).toEqual([]);
-    expect(r.notChecked).toEqual([{ what: "templates/resume", reason: expect.stringMatching(/folder not found/) }]);
+    expect(r.notChecked).toEqual([{ what: "templates/resume", reason: expect.stringMatching(/: not found/) }]);
     await writeFile(file, JSON.stringify(meta));
   });
 

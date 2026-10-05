@@ -20,12 +20,13 @@ skills treat them all alike.
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
 
 Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (their own drivers, `page.ts`, `fill.ts`,
-`selectors.ts` and `widgets.ts` beside `site.ts`), and [Greenhouse, Lever and Ashby](sites.md) (a `site.ts` each,
-on shared drivers).
+`selectors.ts` and `widgets.ts` beside `site.ts`), and [Greenhouse, Lever, Ashby and Phenom](sites.md) (a `site.ts`
+each, on shared drivers).
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
 other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
-differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 150 to 165 lines each.
+differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 150 to 165 lines each; Phenom,
+with steps and rows, about 330.
 
 **Why TypeScript, not data.** A definition is code: typed, able to hold a small function where a selector isn't
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
@@ -48,7 +49,7 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 | `fields(doc)` | Every field in page order, as `FieldSpot`s: container, driver (optional), key, prompt (`label`), section title, required, and optionally automation id, help, error, profile hint |
 | `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save) |
 | `rows(doc, sections)` | Rows the page can delete (a section with its own delete button), and saved items (a section of its own with no fields: Oracle's tiles) |
-| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the one-page sites' own title. A site whose pages show no title leaves it out |
+| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, `nextBlocked?` (why Next can't go on from the page as it is, checked before pressing: a requirement the page would enforce with a native dialog), back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the one-page sites' own title. A site whose pages show no title leaves it out |
 | `repeat` | What a deletable thing is called, what an add makes more of and a removal fewer of, the delete button (revealed first where the site hides it), confirming a removal, and an inline form's errors |
 | `fill` | `order` (`given`, or `page` for dependent lists), `waitForStaleErrors`, `scrollBeforeUpload`, `newErrorsOnly` (a page that keeps old errors on screen) |
 | `waits` | `afterField`, `afterRow`, `afterStep(doc, moved)`, `afterAction` ([waits](#waits-owned-by-the-site)) |
@@ -86,8 +87,9 @@ the page re-extracts, and an unknown id fails with "call get_form again". No cal
   errors.
 - **`removeRepeatable`:** presses the row's delete button (`repeat.deleteButton`), confirms a dialog if the count
   hasn't dropped, and succeeds once `repeat.removed` is lower.
-- **`next`:** refuses where `messages.refuseNext` says (review, confirmation; Oracle's sign-in), with no next
-  button, and when the forward button submits. Otherwise presses it and waits (`stepMs`) for the step key to
+- **`next`:** refuses where `messages.refuseNext` says (review, confirmation; Oracle's sign-in), where the
+  site's `page.nextBlocked` says (a requirement the page would enforce with a native dialog that stops it: Phenom's
+  resume on step 1), with no next button, and when the forward button submits. Otherwise presses it and waits (`stepMs`) for the step key to
   change or errors to show (only new ones, with `newErrorsOnly`); then the site's `afterStep`. `advanced` = step
   key or page kind changed. Notices go to `messages`, not `errors`.
 - **`back`:** refused after submitting; presses the back button and waits for the step key to change.
@@ -109,9 +111,10 @@ the options seen.
 |---|---|
 | `textDriver(kind, selector?)` (`native.ts`) | Text, email, tel, url, number inputs and textareas: native setter past React's value tracker, blur, React's own handlers as a fallback. A phone number the page reformats counts when the digits match; a read-only input is refused |
 | `passwordDriver` | Recognised so it's never taken for text; never filled |
-| `selectDriver()` | A native `<select>`; an option with an empty value ("Select...") is the placeholder, not a choice |
+| `selectDriver({ settled? })` | A native `<select>`; an option with an empty value ("Select...") is the placeholder, not a choice. `settled` (Phenom): for a React list that puts the old value back at once and takes the new one a moment later, set it past React's tracker and wait for the read-back, without calling React's handler (which by then reads the old value) |
 | `radioDriver()`, `checkboxDriver()`, `checkboxGroupDriver()` | By their own labels (`choiceLabel`). A hidden input's label takes the click. The group fills exactly the options named and removes some |
 | `dateInputDriver()` | Native `date` and `month` inputs, `YYYY-MM-DD` or `YYYY-MM` |
+| `monthPickerDriver()` (`datepicker.ts`) | A react-datepicker that picks a month (`MM/YYYY`; date parts `MM`, `YYYY`), driven through its calendar because its input takes no typing: opened from the input, the year chosen from the header's list (else stepped to with its arrows), the month pressed. A year the list lacks is refused with the years on offer, a disabled month as outside the dates the page allows |
 | `reactSelectDriver()` (`react-select.ts`) | react-select, through its own props ([below](#react-select-through-its-props)) |
 | `toggleButtonsDriver(selector)` (`buttons.ts`) | A choice of `aria-pressed` buttons (Ashby's Yes / No), as a radio |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
@@ -162,7 +165,8 @@ site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-au
   click, mouse and pointer down/up, Enter and Space, and `submit` cancel any **untrusted** (script-generated) event
   aimed at a submit control, and record it (`blockedSubmitAttempts`). Real user clicks are trusted and go through.
 - Each site's `isSubmit`: Workday's and Oracle's own tests; Greenhouse, Lever and Ashby use `isSubmitByText`: a
-  `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application". On a one-page
+  `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application". Phenom goes by
+  the words alone, since its Next is a `type=submit` button too. On a one-page
   site Submit sits beside every field, so the guard's Enter case matters as much as the click.
 - The conformance test checks, for every registered site, that the guard blocks a synthetic click and Enter on
   its Submit and that `next` doesn't press it.
@@ -175,10 +179,15 @@ site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-au
   the others' saved live pages): a definition, a bundle entry and a page exist; every wait is set; every field has
   a prompt and a kind; ids are the same on two reads; the guard blocks Submit by click and by Enter, and `next`
   never presses it.
+- **Signatures** (`sites.test.ts`): every saved live page of every site matches its own site's
+  [signature](protocol.md#the-site-registry-sitests) and no other's, and a careers page that only links to
+  boards, loads their embed scripts, frames them or has a form of its own matches none. A new site adds its saved
+  pages to `SAVED` there.
 - **Drivers** (`widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
-  fiber), toggle buttons, a combobox that searches on keyup, a file field.
+  fiber), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, and a month
+  picker that ignores typing.
 - **Sites from live pages** (`sites-live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
-  application.
+  application and Phenom step, and Phenom's `next` refusing step 1 without a resume.
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
   definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
 
@@ -195,3 +204,9 @@ into the page's main world as the extension does, and calls the adapter's method
 
 The script hardcodes this machine's paths, so it stays out of the repo until the adapter-building skill
 (`todo.md`) gives it a home.
+
+**Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's
+system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the
+live page directly (not the built bundle) with placeholder values and a placeholder resume, saved each step, and
+stopped after step 3 without reaching Review. The definition was then built from the saved steps
+([sites](sites.md#phenom-sitesphenom)).

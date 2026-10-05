@@ -23,7 +23,6 @@
     "page": "options.html",
     "open_in_tab": false
   },
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "alarms"],
-  "host_permissions": ["*://*.myworkdayjobs.com/*", "*://*.myworkdaysite.com/*"],
-  "optional_host_permissions": ["https://*/*"]
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "alarms", "webNavigation"],
+  "host_permissions": ["<all_urls>"]
 }

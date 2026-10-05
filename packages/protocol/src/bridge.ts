@@ -10,7 +10,7 @@ import { CapturePayload, CaptureResult } from "./postings.js";
  * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema.
  * Both sides refuse to talk across versions and tell the user which side to update.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** WebSocket close codes used by the companion. */
 export const CloseCode = {

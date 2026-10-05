@@ -22,6 +22,11 @@ loop, next and back, the submit guard, the waits, and the DOM helpers (`dom.ts`:
 its fillers and readers moved unchanged and the golden schemas stayed equal. It has run live twice since
 ([status](../status.md#the-first-workday-run-on-the-engine)).
 
+The extension knows a Workday page by its body ([telling a page's site](extension.md#telling-a-pages-site-framests)):
+the registry's signature is Workday's UI widgets (`[data-uxi-widget-type]`) and the chrome every candidate page has
+(`data-automation-id` `utilityButtonBar`, `accessibilitySkipToMainContent`), checked on every saved Workday page.
+Its hosts (`*.myworkdayjobs.com`, `*.myworkdaysite.com`, `isWorkdayUrl`) decide where no page can be read.
+
 ## API (`window.__ezapply_workday`)
 The engine's ([adapters](adapters.md#the-api-apits)): `getForm()`, `listOptions(fieldId)`, `searchOptions(fieldId, query)`, `fill(fills)`, `upload(fieldId, file)`,
 `remove(fieldId, values?)`, `addRepeatable(addButtonId)`, `removeRepeatable(sectionId)`, `next()`, `back()`,

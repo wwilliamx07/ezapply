@@ -1,4 +1,4 @@
-import { siteOfUrl } from "@ezapply/protocol/sites";
+import { HOST_PERMISSIONS } from "@ezapply/protocol/sites";
 import { type ConnState, DEFAULT_PORT } from "../background/settings.js";
 import { ext } from "../ext.js";
 
@@ -12,53 +12,20 @@ async function load(): Promise<void> {
   $("extid").textContent = location.host;
   render(connState as ConnState | undefined);
   await renderAccess();
-  await renderOriginAccess();
 }
 
-const hostOrigins = (): string[] => ext.runtime.getManifest().host_permissions ?? [];
-
-/** Firefox lets the user withhold host permissions; Chrome grants them at install. */
+/**
+ * Access to websites (`HOST_PERMISSIONS`, every site): Chrome grants it at install, though the user may limit it to
+ * some sites; Firefox lets the user withhold it.
+ */
 async function renderAccess(): Promise<void> {
-  $("access").hidden = await ext.permissions.contains({ origins: hostOrigins() });
+  $("access").hidden = await ext.permissions.contains({ origins: [...HOST_PERMISSIONS] });
 }
 
 $("grant").addEventListener("click", async () => {
-  await ext.permissions.request({ origins: hostOrigins() });
+  await ext.permissions.request({ origins: [...HOST_PERMISSIONS] });
   await renderAccess();
 });
-
-/**
- * Sites granted one origin at a time (Oracle career sites can be on any host). Set posting asks for the one it's
- * clicked on; this lists the open tabs of such sites whose origin still isn't granted, each with its own button.
- */
-async function renderOriginAccess(): Promise<void> {
-  const box = $("origins");
-  box.replaceChildren();
-  const tabs = await ext.tabs.query({});
-  const perOrigin = new Map<string, string>();
-  for (const t of tabs) {
-    const site = t.url ? siteOfUrl(t.url) : undefined;
-    if (t.url && site?.access.kind === "per-origin") perOrigin.set(new URL(t.url).origin, site.name);
-  }
-  for (const [origin, name] of perOrigin) {
-    if (await ext.permissions.contains({ origins: [`${origin}/*`] })) continue;
-    const row = document.createElement("div");
-    row.className = "row";
-    const dot = document.createElement("span");
-    dot.className = "dot error";
-    const label = document.createElement("span");
-    label.textContent = `No access to the ${name} site ${new URL(origin).host}, so its forms can't be filled.`;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Grant access";
-    button.addEventListener("click", async () => {
-      await ext.permissions.request({ origins: [`${origin}/*`] });
-      await renderOriginAccess();
-    });
-    row.append(dot, label, button);
-    box.append(row);
-  }
-}
 
 function render(s: ConnState | undefined): void {
   const dot = $("dot");

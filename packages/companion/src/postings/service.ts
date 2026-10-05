@@ -36,7 +36,8 @@ export interface PostingDetails extends PostingMeta {
 const HIDDEN_DIRS = new Set([".history", ".build", ".previews"]);
 
 /** Job query parameters that identify a posting; everything else is dropped from the canonical URL. */
-const JOB_ID_PARAMS = new Set(["gh_jid", "jobid", "job_id", "jid", "jk", "currentjobid", "id", "reqid"]);
+// `jobseqno`: Phenom's job on an employer's careers site, the only thing naming the job in its apply page's URL.
+const JOB_ID_PARAMS = new Set(["gh_jid", "jobid", "job_id", "jid", "jk", "currentjobid", "id", "reqid", "jobseqno"]);
 
 /** Posting ids are folder names ezapply made (`2026-09-24_acme_backend-engineer`): no separators, no `..`. */
 const POSTING_ID = /^[\w.-]+$/;
@@ -228,6 +229,7 @@ export class PostingsService {
       pageTitle: p.pageTitle,
       jsonLd: p.jsonLd,
       ...(p.frameUrl ? { frameUrl: p.frameUrl } : {}),
+      ...(p.site ? { site: p.site } : {}),
     });
 
     const now = new Date().toISOString();

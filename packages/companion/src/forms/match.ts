@@ -1,9 +1,10 @@
-import { type PostingApplication, type PostingMeta, sameJob, siteOfUrl } from "@ezapply/protocol";
+import { type PostingApplication, type PostingMeta, sameJob, siteInfo, siteOfUrl } from "@ezapply/protocol";
 
 /**
  * Which posting an application tab belongs to. Everything here works on facts, never on site names: what a URL
- * says (site, tenant, job) comes from the site registry, and what a page says (`FormSchema.job`) from the
- * site's definition, so a new site is matched by its registry entry and, where its pages show it, its title.
+ * says (tenant, job) comes from the site registry, the tab's site from the extension (which knows it by the page's
+ * body, else its URL), and what a page says (`FormSchema.job`) from the site's definition, so a new site is matched
+ * by its registry entry and, where its pages show it, its title.
  *
  * The evidence, strongest first:
  * - `site`: the posting's application is on another site than the tab;
@@ -32,9 +33,10 @@ export interface PostingFacts {
   role?: string;
 }
 
-/** What's known of the tab: its URL, and what its page says when it was read. */
+/** What's known of the tab: its URL and site (as the extension found it), and what its page says when it was read. */
 export interface TabFacts {
   url: string;
+  site?: string;
   title?: string;
   reqId?: string;
 }
@@ -63,8 +65,12 @@ export function postingFacts(meta: PostingMeta, application: PostingApplication 
   };
 }
 
-export function tabSite(url: string): { site?: string; tenant?: string; job?: string } {
-  const site = siteOfUrl(url);
+/**
+ * The tab's site, tenant and job: the site the extension found on the page (`site`), else the URL's, whose registry
+ * entry reads the tenant and job from the URL.
+ */
+export function tabSite(url: string, known?: string): { site?: string; tenant?: string; job?: string } {
+  const site = (known ? siteInfo(known) : undefined) ?? siteOfUrl(url);
   if (!site) return {};
   const tenant = site.tenant(url);
   const job = site.job(url);
@@ -72,7 +78,7 @@ export function tabSite(url: string): { site?: string; tenant?: string; job?: st
 }
 
 export function matchPosting(p: PostingFacts, tab: TabFacts, binding?: Binding): PostingMatch {
-  const t = tabSite(tab.url);
+  const t = tabSite(tab.url, tab.site);
   const same = (by: Evidence): PostingMatch => ({ verdict: "same", by: [by] });
   const other = (by: Evidence): PostingMatch => ({ verdict: "other", by: [by] });
 

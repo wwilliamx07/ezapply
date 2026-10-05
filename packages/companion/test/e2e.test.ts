@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -6,9 +7,12 @@ import {
   type BridgeMessage,
   CompanionApi,
   detectSite,
+  ErrorCode,
   ExtensionApi,
+  EzError,
   type Field,
   type Handlers,
+  isFormSite,
   PROTOCOL_VERSION,
   parseBridgeMessage,
   RpcPeer,
@@ -18,7 +22,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createOracleApi, createWorkdayApi } from "../../extension/test/adapters.js";
+import { createGreenhouseApi, createOracleApi, createWorkdayApi } from "../../extension/test/adapters.js";
 import { buildOracleApplication } from "../../extension/test/oracle-fixture.js";
 import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
 import type { AppConfig } from "../src/config/app.js";
@@ -120,6 +124,37 @@ interface FakeTab {
   windowInBackground?: boolean;
   /** The system keeps the window behind even when the extension raises it (Windows' focus-stealing rules). */
   keptBehind?: boolean;
+  /** Applications embedded in the page, each its own document with its site's adapter. */
+  frames?: { frameId: number; url: string }[];
+}
+
+/** A page with its site's real adapter: Oracle's or Workday's fixture, or Greenhouse's saved application. */
+function adapterPage(url: () => string) {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: url() });
+  installDomShims(dom.window as unknown as Window);
+  const doc = dom.window.document;
+  switch (detectSite(url())) {
+    case "oracle":
+      buildOracleApplication(doc);
+      return createOracleApi(doc, url);
+    case "greenhouse": {
+      const saved = join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "extension",
+        "test",
+        "fixtures",
+        "live",
+        "greenhouse-apply.html",
+      );
+      doc.documentElement.innerHTML = readFileSync(saved, "utf8").replace(/^<!--[\s\S]*?-->\s*/, "");
+      return createGreenhouseApi(doc, url);
+    }
+    default:
+      buildWorkdayStep(doc);
+      return createWorkdayApi(doc, url);
+  }
 }
 
 /**
@@ -129,18 +164,25 @@ interface FakeTab {
  * request in order. `tabShow: false` plays an extension built before `tab.show`.
  */
 function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
-  const pages = tabs.map((t, i) => {
-    const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: t.url });
-    installDomShims(dom.window as unknown as Window);
-    const state = { ...t, active: t.active ?? i === 0 };
-    if (detectSite(t.url) === "oracle") {
-      buildOracleApplication(dom.window.document);
-      return { ...state, api: createOracleApi(dom.window.document, () => t.url) };
-    }
-    buildWorkdayStep(dom.window.document);
-    return { ...state, api: createWorkdayApi(dom.window.document, () => t.url) };
-  });
+  const pages = tabs.map((t, i) => ({
+    ...t,
+    active: t.active ?? i === 0,
+    // A page of no form site (a careers page around an embedded application) has no adapter.
+    api: isFormSite(detectSite(t.url)) ? adapterPage(() => t.url) : undefined,
+    frames: (t.frames ?? []).map((f) => ({ ...f, api: adapterPage(() => f.url) })),
+  }));
   const page = (tabId?: number) => pages.find((p) => p.tabId === tabId) ?? (pages[0] as (typeof pages)[number]);
+  /** The adapter a form call reaches: the tab's own page, or the frame it names; as the extension refuses others. */
+  const api = (tabId?: number, frameId?: number) => {
+    const p = page(tabId);
+    if (frameId) {
+      const frame = p.frames.find((f) => f.frameId === frameId);
+      if (!frame) throw new EzError(ErrorCode.NotFound, `The application's frame in tab ${p.tabId} is gone.`);
+      return frame.api;
+    }
+    if (!p.api) throw new EzError(ErrorCode.BadRequest, `Tab ${p.tabId} is not an application page.`);
+    return p.api;
+  };
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status"> = {
     "tab.show": async ({ tabId, activate, focusWindow }) => {
@@ -157,17 +199,22 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
         focused: !p.windowInBackground,
       };
     },
-    "form.get": async ({ tabId }) => ({ ...page(tabId).api.getForm(), tabId: page(tabId).tabId }),
-    "form.listOptions": async ({ tabId, fieldId }) => page(tabId).api.listOptions(fieldId),
-    "form.searchOptions": async ({ tabId, fieldId, query }) => page(tabId).api.searchOptions(fieldId, query),
-    "form.fill": async ({ tabId, fills }) => page(tabId).api.fill(fills),
-    "form.upload": async ({ tabId, fieldId, file }) => page(tabId).api.upload(fieldId, file),
-    "form.remove": async ({ tabId, fieldId, values }) => page(tabId).api.remove(fieldId, values ?? null),
-    "form.removeRepeatable": async ({ tabId, sectionId }) => page(tabId).api.removeRepeatable(sectionId),
-    "form.addRepeatable": async ({ tabId, addButtonId }) => page(tabId).api.addRepeatable(addButtonId),
-    "form.next": async ({ tabId }) => page(tabId).api.next(),
-    "form.back": async ({ tabId }) => page(tabId).api.back(),
-    "form.pageAction": async ({ tabId, action }) => page(tabId).api.pageAction(action),
+    "form.get": async ({ tabId, frameId }) => ({
+      ...api(tabId, frameId).getForm(),
+      tabId: page(tabId).tabId,
+      ...(frameId ? { frameId } : {}),
+    }),
+    "form.listOptions": async ({ tabId, frameId, fieldId }) => api(tabId, frameId).listOptions(fieldId),
+    "form.searchOptions": async ({ tabId, frameId, fieldId, query }) =>
+      api(tabId, frameId).searchOptions(fieldId, query),
+    "form.fill": async ({ tabId, frameId, fills }) => api(tabId, frameId).fill(fills),
+    "form.upload": async ({ tabId, frameId, fieldId, file }) => api(tabId, frameId).upload(fieldId, file),
+    "form.remove": async ({ tabId, frameId, fieldId, values }) => api(tabId, frameId).remove(fieldId, values ?? null),
+    "form.removeRepeatable": async ({ tabId, frameId, sectionId }) => api(tabId, frameId).removeRepeatable(sectionId),
+    "form.addRepeatable": async ({ tabId, frameId, addButtonId }) => api(tabId, frameId).addRepeatable(addButtonId),
+    "form.next": async ({ tabId, frameId }) => api(tabId, frameId).next(),
+    "form.back": async ({ tabId, frameId }) => api(tabId, frameId).back(),
+    "form.pageAction": async ({ tabId, frameId, action }) => api(tabId, frameId).pageAction(action),
     "tab.screenshot": async ({ tabId }) => ({ tabId: page(tabId).tabId, pngBase64: "iVBORw0KGgo=" }),
   };
   const recorded = Object.fromEntries(
@@ -191,6 +238,9 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
       active: p.active,
       focused: p.active,
       site: detectSite(p.url),
+      ...(p.frames.length
+        ? { frames: p.frames.map((f) => ({ frameId: f.frameId, url: f.url, site: detectSite(f.url) })) }
+        : {}),
     })),
   });
   return { handlers: recorded, status, calls, page };
@@ -1632,6 +1682,65 @@ describe("form tools over MCP", () => {
     });
     const log = await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8");
     expect(JSON.parse(log.trim())).toMatchObject({ event: "fill", ok: true, tabHidden: true });
+    await client.close();
+  });
+
+  it("fills an application embedded in a careers page, through its frame", async () => {
+    const HOST = "https://careers.example.com/jobs/1?gh_jid=1000001";
+    const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=vandelay&token=1000001";
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: HOST, active: true, frames: [{ frameId: 12, url: EMBED }] },
+        // Another employer's Workday application, open behind it.
+        { tabId: 8, url: APPLY_URL, active: false },
+      ],
+    });
+    await ext.outcome;
+    // Captured on the careers page: its gh_jid ties the posting to the embedded job.
+    const cap = await capture(ext, HOST, "Account Executive");
+    const client = await mcpClient();
+
+    const form = (await callJson(client, "get_form")).data;
+    expect(form).toMatchObject({ adapter: "greenhouse", tabId: 7, frameId: 12, url: EMBED, posting: cap.postingId });
+    expect(form.postingMismatch).toBeUndefined();
+    const fill = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "application.first_name", value: "Jane", source: "profile" }],
+    });
+    expect(fill.data.results).toEqual([{ fieldId: "application.first_name", ok: true }]);
+    // Every call named the frame; the tab itself was shown, not the frame.
+    const forms = ext.calls.filter((c) => c.method.startsWith("form."));
+    expect(forms.every((c) => c.params.tabId === 7 && c.params.frameId === 12)).toBe(true);
+    expect(ext.calls.find((c) => c.method === "tab.show")?.params).toMatchObject({ tabId: 7, frameId: 12 });
+    // The submit guard runs in the frame: go_next never presses Greenhouse's Submit.
+    expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: false });
+    const log = (await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => JSON.parse(l));
+    expect(log[0]).toMatchObject({ event: "fill", ok: true, matchedBy: "job" });
+
+    // The frame reloads with a new id: the next call finds it again, never using the old one.
+    const tab = ext.page(7);
+    (tab.frames[0] as { frameId: number }).frameId = 13;
+    expect((await callJson(client, "get_form")).data).toMatchObject({ frameId: 13, posting: cap.postingId });
+    // The Workday tab is still reported as another employer's when asked for by id.
+    expect((await callJson(client, "get_form", { tabId: 8 })).data.postingMismatch).toBeDefined();
+    await client.close();
+  });
+
+  it("binds an embedded application with posting_activate { tabId }", async () => {
+    const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=vandelay&token=1000001";
+    const ext = fakeExtension({
+      tabs: [{ tabId: 7, url: "https://careers.example.com/jobs/1", frames: [{ frameId: 12, url: EMBED }] }],
+    });
+    await ext.outcome;
+    const cap = await capture(ext, "https://www.example.com/listing/1", "Account Executive");
+    const client = await mcpClient();
+    const activated = (await callJson(client, "posting_activate", { id: cap.postingId, tabId: 7 })).data;
+    expect(activated).toMatchObject({
+      boundTab: { tabId: 7, url: EMBED },
+      application: { from: "user", site: "greenhouse" },
+    });
     await client.close();
   });
 

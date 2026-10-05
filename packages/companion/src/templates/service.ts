@@ -1,5 +1,5 @@
 import { copyFile, cp, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, posix, relative } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, posix, relative, sep } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 import { z } from "zod";
 import { detectTexProgram, readTexProgram, withTexProgram } from "../documents/tex/engines.js";
@@ -27,7 +27,7 @@ export const TemplateMeta = z.object({
   importedFrom: z.string().optional(),
   importedAt: z.string().optional(),
   /**
-   * Hash of the files in `importedFrom` (what an import would copy) when the template was last current with
+   * Hash of the files in `importedFrom` (what an import would copy: a folder's files, or the one file) when the template was last current with
    * it: written by template_import, or by workspace_change_mark when the user decides a change there
    * doesn't need a re-import. The workspace check compares it with the folder as it is now.
    */
@@ -62,11 +62,13 @@ export class TemplateService {
   ) {}
 
   /**
-   * Copy a LaTeX project into templates/<kind>/. Build artifacts and VCS folders are skipped. An
-   * existing template is moved to templates/.old/ rather than overwritten; replacing one the user has
-   * needs `replace`, replacing ezapply's shipped default does not.
+   * Copy a LaTeX project, or a single .tex file, into templates/<kind>/. Build artifacts and VCS folders
+   * are skipped. An existing template is moved to templates/.old/ rather than overwritten; replacing one
+   * the user has needs `replace`, replacing ezapply's shipped default does not. The source is recorded so
+   * the workspace check notices when the user edits it, so it must be the user's own copy: a folder or file
+   * outside the workspace, or one they keep in library/.
    */
-  async importTemplate(input: { sourceDir: string; kind: TemplateKind; main?: string; replace?: boolean }): Promise<{
+  async importTemplate(input: { source: string; kind: TemplateKind; main?: string; replace?: boolean }): Promise<{
     folder: string;
     main: string;
     files: string[];
@@ -74,25 +76,41 @@ export class TemplateService {
     previous?: string;
     texProgram?: { engine: string; added: boolean; note?: string };
   }> {
-    if (!isAbsolute(input.sourceDir)) {
+    if (!isAbsolute(input.source)) {
       throw new EzError(
         ErrorCode.BadRequest,
-        "sourceDir must be an absolute path.",
-        "Ask the user for the full folder path.",
+        "source must be an absolute path.",
+        "Ask the user for the full path of the folder or .tex file.",
       );
     }
-    const src = input.sourceDir;
+    const src = input.source;
     const srcStat = await stat(src).catch(() => null);
-    if (!srcStat?.isDirectory()) throw new EzError(ErrorCode.NotFound, `Not a folder: ${src}`);
+    if (!srcStat?.isDirectory() && !srcStat?.isFile()) throw new EzError(ErrorCode.NotFound, `Not found: ${src}`);
     const within = relative(this.ws.root, src);
-    if (!within.startsWith("..") && !isAbsolute(within)) {
-      throw new EzError(ErrorCode.BadRequest, "sourceDir is already inside the workspace.");
+    if (!within.startsWith("..") && !isAbsolute(within) && !`${within}${sep}`.startsWith(`library${sep}`)) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        "source is inside the workspace, outside library/.",
+        "Import from the user's own folder or file, or from one they keep in library/.",
+      );
+    }
+    const single = srcStat.isFile();
+    if (single && !src.toLowerCase().endsWith(".tex")) {
+      throw new EzError(ErrorCode.BadRequest, `Not a .tex file: ${src}`, "Pass the .tex file or its folder.");
     }
 
-    const files = await listImportable(src);
+    const { root, files } = await importable(src);
     const texFiles = files.filter((f) => f.toLowerCase().endsWith(".tex"));
     if (texFiles.length === 0) throw new EzError(ErrorCode.BadRequest, `No .tex files in ${src}`);
-    const main = input.main ?? (await detectMain(src, texFiles));
+    const main = single ? files[0] : (input.main ?? (await detectMain(root, texFiles)));
+    if (single && main && (await findContentFiles(root, main)).length) {
+      // Copied alone, it would lose the sections it pulls in from beside it.
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `${main} pulls in other .tex files from its folder.`,
+        "Import the folder that holds them instead.",
+      );
+    }
     if (!main || !texFiles.includes(main)) {
       throw new EzError(
         ErrorCode.BadRequest,
@@ -119,7 +137,7 @@ export class TemplateService {
     await mkdir(dest, { recursive: true });
     for (const f of files) {
       await mkdir(join(dest, f, ".."), { recursive: true });
-      await cp(join(src, f), join(dest, f));
+      await cp(join(root, f), join(dest, f));
     }
     const texProgram = await ensureTexProgram(join(dest, main));
     const contentFiles = await findContentFiles(dest, main);
@@ -130,7 +148,7 @@ export class TemplateService {
       ...(contentFiles.length ? { contentFiles } : {}),
       importedFrom: src,
       importedAt: new Date().toISOString(),
-      sourceHash: await hashFiles(src, files),
+      sourceHash: await hashFiles(root, files),
     };
     await writeJsonAtomic(join(dest, "template.json"), meta);
     this.log.info({ kind: input.kind, files: files.length, contentFiles: contentFiles.length }, "template imported");
@@ -199,9 +217,9 @@ export class TemplateService {
   }
 
   /**
-   * The folder an imported template came from, as it is now: its hash next to the one recorded, and for a
-   * template imported before `sourceHash` existed, whether the folder still matches the workspace copy. Null
-   * for a template that wasn't imported; `unreadable` when the folder is gone or can't be listed.
+   * The folder or file an imported template came from, as it is now: its hash next to the one recorded, and
+   * for a template imported before `sourceHash` existed, whether it still matches the workspace copy. Null
+   * for a template that wasn't imported; `unreadable` when the source is gone or can't be listed.
    */
   async sourceState(
     kind: TemplateKind,
@@ -213,20 +231,24 @@ export class TemplateService {
     const meta = await this.templateMeta(kind);
     if (!meta?.importedFrom) return null;
     const from = meta.importedFrom;
-    let files: string[];
+    let source: { root: string; files: string[] };
     try {
-      if (!(await stat(from)).isDirectory()) return { from, unreadable: "not a folder any more" };
-      files = await listImportable(from);
+      source = await importable(from);
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      return { from, unreadable: code === "ENOENT" ? "folder not found" : (err as Error).message };
+      return { from, unreadable: code === "ENOENT" ? "not found" : (err as Error).message };
     }
-    const hash = await hashFiles(from, files);
+    const hash = await hashFiles(source.root, source.files);
     if (meta.sourceHash) return { from, hash, recorded: meta.sourceHash };
-    return { from, hash, recorded: null, matchesCopy: await this.copyMatches(kind, meta.main, from, files) };
+    return {
+      from,
+      hash,
+      recorded: null,
+      matchesCopy: await this.copyMatches(kind, meta.main, source.root, source.files),
+    };
   }
 
-  /** Record that templates/<kind>/ is current with its source folder as it hashes now. */
+  /** Record that templates/<kind>/ is current with its source as it hashes now. */
   async setSourceHash(kind: TemplateKind, sourceHash: string): Promise<void> {
     const meta = await this.templateMeta(kind);
     if (!meta) throw new EzError(ErrorCode.NotFound, `templates/${kind} has no template.json.`);
@@ -234,7 +256,7 @@ export class TemplateService {
   }
 
   /**
-   * Whether every file in the source folder is in templates/<kind>/ unchanged. The `% !TEX program` line an
+   * Whether every file in the source is in templates/<kind>/ unchanged. The `% !TEX program` line an
    * import may add to the main file is left out of the comparison.
    */
   private async copyMatches(kind: TemplateKind, main: string, from: string, files: string[]): Promise<boolean> {
@@ -292,6 +314,12 @@ export class TemplateService {
     });
     return { main: abs, contentFiles };
   }
+}
+
+/** What an import copies from `source`: a folder's files (build output skipped), or the one .tex file. */
+async function importable(source: string): Promise<{ root: string; files: string[] }> {
+  if ((await stat(source)).isFile()) return { root: dirname(source), files: [basename(source)] };
+  return { root: source, files: await listImportable(source) };
 }
 
 async function listImportable(root: string): Promise<string[]> {

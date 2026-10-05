@@ -14,8 +14,8 @@ user's agreement: these cost time, and the templates and profile are theirs.
    behind the resume. Ask whether to update now, after this posting, or later. Mark the ones put off with
    `workspace_change_mark { id, as: "later" }`, so later sessions in this chat don't ask again.
 2. Work in this order, since each feeds the next:
-   - **`template-source`:** confirm first, then `template_import { sourceDir, kind, replace: true }` with the
-     folder from the summary. The old copy moves to `templates/.old/`. If it held a fix made at onboarding
+   - **`template-source`:** confirm first, then `template_import { source, kind, replace: true }` with the
+     folder or file from the summary. The old copy moves to `templates/.old/`. If it held a fix made at onboarding
      (a font path, a `% !TEX program` line), carry it over and compile. If the user says the difference doesn't
      matter, mark it `done` instead.
    - **`resume-edited`:** update `profile/profile.yaml` from the change's `diff` alone, with the Edit tool: add
@@ -74,8 +74,10 @@ For each selected repo not yet indexed, run the **ezapply-index-repo** skill. Wi
 them in parallel with subagents (one repo each) and summarize when all finish.
 
 ## 4. Resume template and profile
-1. Ask for the folder that holds their LaTeX resume (absolute path). Call
-   `template_import { sourceDir, kind: "resume", main?, replace? }`. If it reports ambiguity, ask which file
+1. Ask for the folder that holds their LaTeX resume, or the `.tex` file itself when it's a single file
+   (absolute path). Call `template_import { source, kind: "resume", main?, replace? }` with that path, never a
+   copy you make of it: the workspace check watches the source for the user's later edits, and a copy never
+   changes. A file in `library/` is imported from there as it is. If it reports ambiguity, ask which file
    is the main one. If the result has `texProgram.added`, tell the user its `note`: the template is now marked
    to build with pdflatex.
 2. `tex_compile { path }` the imported main file. Fix only environment problems (missing packages are
@@ -96,7 +98,7 @@ them in parallel with subagents (one repo each) and summarize when all finish.
 `templates/cover/` starts with ezapply's default: a plain one-page letter. Ask which they want:
 1. **The default.** Fill its identity fields (`\myname`, `\mycontact`) from the profile. Offer to restyle
    it to match the resume's fonts and header so the two look like a set.
-2. **Their own LaTeX template.** `template_import { sourceDir, kind: "cover" }` with the folder path. It
+2. **Their own LaTeX template.** `template_import { source, kind: "cover" }` with their folder or `.tex` file. It
    replaces the default without asking.
 3. **An example letter to copy the format from** (PDF, screenshot, or text; Word files exported to PDF).
    Follow **Build from an example** in the **ezapply-cover-letter** skill.

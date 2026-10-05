@@ -21,6 +21,14 @@ export function isBrowserName(name: string): name is BrowserName {
   return (BROWSER_NAMES as readonly string[]).includes(name);
 }
 
+/** A frame of a tab on a form site: an application embedded in another site's page (a careers page's Greenhouse). */
+export const FrameInfo = z.object({
+  frameId: z.number().int(),
+  url: z.string(),
+  site: SiteId,
+});
+export type FrameInfo = z.infer<typeof FrameInfo>;
+
 export const TabInfo = z.object({
   tabId: z.number().int(),
   windowId: z.number().int(),
@@ -33,6 +41,8 @@ export const TabInfo = z.object({
   /** When the tab was last active (epoch ms), for picking the most recent. */
   lastAccessed: z.number().optional(),
   site: SiteId,
+  /** Frames inside the page that are on a form site (never the top frame); absent when there are none. */
+  frames: z.array(FrameInfo).optional(),
 });
 export type TabInfo = z.infer<typeof TabInfo>;
 

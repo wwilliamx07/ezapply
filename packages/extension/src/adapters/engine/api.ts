@@ -236,7 +236,7 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
         const messages = site.page.messages(doc);
         return { ...summary<NextResult>({ advanced }), ...(messages.length ? { messages } : {}), ...extra };
       };
-      const refusal = site.messages.refuseNext(kind);
+      const refusal = site.messages.refuseNext(kind) ?? site.page.nextBlocked?.(doc);
       if (refusal) return result(false, { refusedReason: refusal });
       const button = site.page.next(doc);
       if (!button) return result(false, { refusedReason: site.messages.noNextButton });

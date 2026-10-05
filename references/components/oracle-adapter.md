@@ -25,31 +25,27 @@ since.
 
 Oracle career sites live on the employer's Oracle Cloud host
 (`<pod>.fa.<dc>.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/123`) or, as often, on the
-employer's own domain (`jobs.example.com/en/sites/CX_1/job/123`). The host says nothing, so `isOracleUrl`
+employer's own domain (`jobs.example.com/en/sites/CX_1/job/123`). The host says nothing, so the extension knows
+an Oracle page by its body: the registry's signature is the Candidate Experience's own components (`apply-flow`,
+`apply-flow-block`, `apply-flow-header`), its dialogs (`.app-dialog__wrapper.oj-dialog-body`) and its scripts'
+path (`/hcmUI/CandidateExperience/`), checked on every saved Oracle page ([telling a page's
+site](extension.md#telling-a-pages-site-framests)). Where no page can be read, `isOracleUrl`
 (`protocol/src/oracle.ts`) goes by the path: https, an optional `hcmUI/CandidateExperience`, a language
 (`en`, `fr-CA`), `sites/<site number>`, then one of the Candidate Experience's routes (`job`, `jobs`,
 `requisitions`, `my-profile`). "Sites" pages on other websites don't have that shape (tested).
 
 The **tenant** is host plus site number, lowercased (`jobs.example.com/cx_1`): an employer's postings and its
-applications share it, which is what the companion compares ([tab choice](../mcp-tools.md#forms)).
+applications share it, which is what the companion compares ([tab choice](../mcp-tools.md#forms)). Both it and the
+job come from that path, so a page known to be Oracle's by its body on a URL of another shape has neither, and
+its tab is matched to a posting by its binding or by what the page shows.
 
 ## Site access
 
-Workday's hosts are fixed and listed in the manifest. Oracle's can be any host, so the manifest declares
-`optional_host_permissions: ["https://*/*"]` and the extension holds only the Oracle origins the user
-granted, one at a time. Every site whose registry entry says `per-origin` works this way (Greenhouse, Lever and
-Ashby too: [sites](sites.md)):
-- **Set posting on such a page** asks for that origin. The request is made synchronously inside the click
-  handler: Firefox accepts `permissions.request` only while handling the user's action, before anything is
-  awaited. Already granted, it resolves without asking; declined, the capture still works (the click's
-  `activeTab` is enough for it). The posting and the application are on the same origin, so granting at
-  capture covers the application.
-- **The options page** lists open tabs of those sites whose origin isn't granted, each with **Grant access**.
-- A form call on an ungranted tab fails with that hint (`forms.ts`, `requireSiteAccess`).
-
-Why not `*.oraclecloud.com` in `host_permissions`: it wouldn't cover vanity domains, which need the
-per-origin grant anyway, and it would reach every Oracle Cloud customer's own staff applications on those
-hosts. One mechanism for both keeps the extension's reach to sites the user chose.
+Oracle career sites can be on any host, and the extension holds every site from the install (`<all_urls>`), so
+nothing is asked for one Oracle site at a time ([access to websites](extension.md#access-to-websites)). Asking
+for one origin at a time was rejected: a tab on a host the extension doesn't hold can't be read, so its site
+could only be guessed from the URL. A host list such as `*.oraclecloud.com` was rejected too: it doesn't cover
+employers' own domains, and it would reach every Oracle Cloud customer's own staff applications on those hosts.
 
 ## Page detection (`detectPage`), in order
 1. **confirmation:** no flow on screen, no fields, and a `/thank-you` URL or "thank you for applying" /

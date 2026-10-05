@@ -1,11 +1,12 @@
-# Greenhouse, Lever and Ashby (`packages/extension/src/adapters/sites/`)
+# Greenhouse, Lever, Ashby and Phenom (`packages/extension/src/adapters/sites/`)
 
-Three hosted job boards, each a definition on the [adapter engine](adapters.md) using shared drivers only: a
-`site.ts` of about 150 lines and a `main.ts`. Each application is **one page with Submit at the end**: there are
-no steps, rows or inline forms, `next` always refuses (Submit is the only way on), `back` has nowhere to go, and
+Four sites, each a definition on the [adapter engine](adapters.md) using shared drivers only: a `site.ts` and a
+`main.ts`. Three are hosted job boards (Greenhouse, Lever, Ashby; about 150 lines each), and each of their
+applications is **one page with Submit at the end**: there are no steps, rows or inline forms, `next` always refuses (Submit is the only way on), `back` has nowhere to go, and
 the schema says `lastPage: true`, so the agent fills the page and hands over to the user
-([the hand-off](autofill.md)). Workday and Oracle have pages of their own: [Workday](workday-adapter.md),
-[Oracle](oracle-adapter.md).
+([the hand-off](autofill.md)). The fourth, [Phenom](#phenom-sitesphenom), is an employer's careers site whose
+application has steps and rows, like Workday's. Workday and Oracle have pages of their own:
+[Workday](workday-adapter.md), [Oracle](oracle-adapter.md).
 
 ## Why these three
 Sites were chosen by how often employers use them, not by the user's own postings. Published market-share
@@ -22,11 +23,16 @@ be built from real markup and checked live without an account. The others couldn
 
 Each needs pages the user saves from a real application in their own browser. None is planned yet.
 
-## What they share
+## What the three boards share
 - **Registry entries** (`protocol/src/sites.ts`, URL rules in `greenhouse.ts`, `lever.ts`, `ashby.ts`): https
-  only; the board's company as tenant and its posting as job, both lowercased; access **per origin**, asked for
-  at Set posting on a page of the site, as Oracle's is ([site access](oracle-adapter.md#site-access)). One grant
-  covers the host's every board. Standard waits.
+  only; the board's company as tenant and its posting as job, both lowercased. Standard waits.
+- **Signatures**, what tells the board's pages by their body ([telling a page's
+  site](extension.md#telling-a-pages-site-framests)), each the board's own markup and not the embed script or
+  links a careers page around it has: Greenhouse's `.job-post-container` or
+  `form#application-form .application--questions`; Lever's `.posting-categories .posting-category`,
+  `form#application-form .application-question` or `a.postings-btn`; Ashby's `[class*='ashby-application-form']`
+  or `[class*='ashby-job-posting']`. The URL rules still decide where no page can be read, and the boards' own
+  hosts match them anyway.
 - **Page kinds** (`singlePageKind`): a page with fields is a `step`; without, a page saying thanks is the
   `confirmation`, one with an Apply button is the `posting` (its `apply` action presses it); else `unknown`.
 - **Submit** is `isSubmitByText`: a `type=submit` control, or one reading "Submit (application)" or "Send". It's
@@ -48,9 +54,10 @@ Each needs pages the user saves from a real application in their own browser. No
 ## Greenhouse (`sites/greenhouse/`)
 **Pages.** `job-boards.greenhouse.io/<board>/jobs/<id>`, the older `boards.greenhouse.io`, the EU hosts
 (`job-boards.eu.greenhouse.io`), and the embed a company's careers page loads in a frame
-(`…/embed/job_app?for=<board>&token=<id>`). The posting and the form share one page. An embed is recognised as
-Greenhouse when it's the tab's own URL; inside another site's page the form tools can't reach it yet (`todo.md`,
-"Embedded application forms").
+(`…/embed/job_app?for=<board>&token=<id>`). The posting and the form share one page. An embed is Greenhouse
+whether it's the tab's own URL or a frame inside a company's careers page; in a frame the form tools act on it
+there ([embedded applications](extension.md#embedded-applications)), with its board from `for` and its job from
+`token`.
 
 **Fields**, in the form (`form#application-form`), in page order:
 - `.text-input-wrapper`: a text input or textarea;
@@ -117,6 +124,83 @@ The entry is the phone field (text comes before radio in the order); the consent
 
 **Hints** by path: name (full name), email, location (city); by prompt: phone, LinkedIn, GitHub, website.
 
+## Phenom (`sites/phenom/`)
+**Why.** Phenom People runs many employers' careers sites on their own domains (`jobs.example.com`). Their
+application is Phenom's own multi-step form on that domain, which sends what's entered on to the employer's ATS,
+often Workday. It can look like a Workday form, but nothing on the page is a Workday URL, as a tab or a frame, so
+the form tools found no application there, and the Workday adapter couldn't have read its markup anyway.
+
+**Pages.** The posting is `…/<region>/<lang>/job/<id>/<slug>` (`/ca/en/`, `/global/en/`…), and its Apply button
+(`a[data-ph-at-id=apply-link]`) goes to `…/hvhapply?jobSeqNo=<job>`, which redirects to the flow,
+`…/apply?jobSeqNo=<job>&step=<n>&stepname=<id>`.
+
+**Telling it.** Every page of a Phenom site is known by its body ([telling a page's
+site](extension.md#telling-a-pages-site-framests)): the signature is its apply flow's containers
+(`.phenom-form-container`, `.ph-apply-box`), the `data-ph-at-id` hooks on every page of the site, and its CDN
+(`phenompeople.com` scripts and stylesheets). It's checked on every saved Phenom step, and held on live Phenom job
+and apply pages under both `/ca/en/` and `/global/en/`. So the job page is `phenom` too, and
+the adapter reports it as a `posting` with an Apply action, as on Workday. The URL rule, for where no page can be
+read (a captured page's Apply link, canonical URLs), takes an apply page by its last path segment (`apply` or
+`hvhapply`) with a `jobSeqNo`, https, any host, whatever comes before it: sites put a region (`global`) where
+others put a country, so a rule that expects a two-letter country misses them. The job page's URL shape is too
+generic to count. A posting captured on the job page is tied to its application by that Apply link
+(`postings/application.ts`), and the canonical URL keeps `jobSeqNo` and treats `hvhapply` as `apply`, so a capture
+on any step is the same posting. Tenant: the careers host, on any of its pages. Job: `jobSeqNo`, lowercased, which
+only the apply pages name (the job page's own `…/job/<id>/` is another id).
+
+**Steps.** A step bar of `li[atm-id]`, the current one `aria-current="step"`; seen live: `personalInformation`
+(My information), `workAndEducation` (My experience), `jobSpecificQuestions` (Application questions),
+`applicationQuestionnaire` (Additional application questions), `applicantAcknowledgment` (Terms & Conditions),
+`applicationReview` (Review, the `review` page kind). The step key is the step's id and the URL. Next is
+`button#next` and Previous `button#previous`. Opening a step by its URL sends the browser back to step 1, so every
+step is reached through Next. Next saves the step to the employer's system before the next one shows (5 to 15 s
+live), so Phenom's `stepMs` is 30 s.
+
+**Submit by its words.** Phenom's Next is a `type=submit` button, so `isSubmitByText` (which counts every
+`type=submit`) would have made the guard block it. Phenom's `isSubmit` goes by the control's text, `aria-label` or
+value ("Submit", "Submit application"). The page's own `submit` event, which a press of Next fires, is trusted, so
+the guard lets it through. The Review step's Submit wasn't seen.
+
+**Fields.** Each step is a react-jsonschema-form (`form.rjsf`). Every control has an id that is its path in the
+form's data (`cntryFields.firstName`, `experienceData[0].fromTo.startDate`, `jsqData.<questionnaire>.a_dot_a`) and
+a `label[for]` (a wrapping label for the language row's "native" box, `aria-label` for "I currently work here").
+A field's container is its nearest `.form-group`, except "I currently work here", which sits beside the dates. The
+driver goes by the control:
+- a react-datepicker month picker (work dates): `monthPickerDriver` ([shared drivers](adapters.md#shared-drivers-widgets)).
+  Its input takes no typing: a typed value, even from trusted keys, was put back at once live, so the calendar is
+  driven (the year from its header's list, then the month). The years on offer are only those the page allows (from
+  the start date to today), and a refusal names them;
+- the school (`role=combobox`, react-bootstrap-typeahead): the combobox driver; its suggestions are `role=option`s;
+- native selects: the select driver, `settled`. Phenom's lists put the old value back at once and take the new one a
+  moment later (seen live), so the driver waits for the read-back rather than calling React's handler, which by then
+  reads the old value;
+- a native `date` input (the questionnaire's start date), checkboxes, text;
+- the resume, above the form on every step (`.resume-section`: a hidden file input behind "Upload resume", the file's
+  name in `.has-resume a.downloadFile`), and "Additional attachments" on step 2.
+
+**Ids and sections.** A row's fields are a section of their own, named from the list's description ("Work
+experience :", else its "Add …" legend) and the row's place: `work-experience-1`, `education-1`, `languages-1`,
+so autofill and the checklist match them to the profile's lists by title, as Workday's. A row with a "−" button
+(`button.array-button-remove`) is removable, and each list's "+ Add" (`button.array-button-add`) is
+`add.<list>`. Other fields take the nearest legend that reads as a heading ("Skills :"), else the step's title (the
+others are data paths: `cntryFields`, `jsqData`). A field labelled by its instruction alone under such a heading
+gets the heading in front ("Skills: Separate each skill with a comma."). The key is the id's last part when it
+reads as a name (`firstName`, `listening`), else the prompt's slug (a questionnaire's `a`, `a_dot_a`).
+
+**Dependent fields** appear as earlier ones are answered (the region list after the country, a source's details
+after "How did you hear about us?", a follow-up after "Yes"), so fills go in page order.
+
+**Hints**, outside rows, by the id's last part: first, middle and last name, address lines, city, region, postal code,
+email, country, the phone's country code, number and device type.
+
+**Errors:** the list at the top of the form after a refused Next (`.error-msg .errorList li`), and each field's own
+(`#<id>-errorMsg`).
+
+**The resume on step 1.** Step 1 won't go on without one, and says so in a native `alert`, which stops the page (and
+any script waiting on it) until it's dismissed. So `next` refuses there while no resume is attached
+(`nextBlocked`), and says to upload it first. Attaching it sends it to the employer's system, which parses it into
+the fields: the agent checks what the parse filled.
+
 ## What was verified, and how
 Each definition was built from a live application page rendered by headless Edge (saved, without scripts and
 styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`, and later
@@ -137,5 +221,16 @@ styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashb
   checkbox groups on the live page (fake values, never submitted) took and read back. The graduation date is a
   date picker read as text: the agent typed a month and year and the page showed the first of that month.
 
+- **Phenom** (one employer's careers site): steps 1 to 3 were read and filled on the live page, with placeholder
+  values and a placeholder resume (which the page requires, and which went to the employer's system with the
+  rest of those steps), by a script driving the page directly rather than through the adapter. That's where the
+  behaviour above was seen: the selects' late read-back, the month picker refusing typing, the alert on step 1,
+  Next's wait, dependent fields. The pages were saved after each step (`phenom-step1.html`, `phenom-step2.html`,
+  `phenom-step2-errors.html` after Next with required fields empty, `phenom-step3.html`; employer details
+  replaced) and the definition was built from them. Steps 4 to 6 weren't reached. The definition itself has run
+  only on the saved pages.
+
 **Not yet tried:** uploads on Lever, the confirmation page of any of them, and a real application on
-Greenhouse or Lever.
+Greenhouse or Lever. On Phenom: the definition on a live page (through the extension), steps 4 to 6 (their
+markup, and the Review step's Submit), removing a row, adding one, and the posting page's own markup beyond its
+Apply link.

@@ -233,10 +233,10 @@ export class FreshnessService {
         kind: "template-source",
         summary:
           src.recorded === null
-            ? `The ${kind} template's source folder (${src.from}) differs from the copy in templates/${kind}/.`
-            : `The ${kind} template's source folder (${src.from}) changed since it was imported.`,
+            ? `The ${kind} template's source (${src.from}) differs from the copy in templates/${kind}/.`
+            : `The ${kind} template's source (${src.from}) changed since it was imported.`,
         detail:
-          `Re-import it with template_import { sourceDir, kind: "${kind}", replace: true } after the user agrees (the ` +
+          `Re-import it with template_import { source, kind: "${kind}", replace: true } after the user agrees (the ` +
           "current copy moves to templates/.old/). If the difference doesn't matter (or is a fix made in the workspace " +
           "copy), mark it done.",
         affects: [kind],

@@ -26,9 +26,9 @@ too ([call shapes](components/workspace.md#call-shapes)), so renaming a paramete
 | `workspace_check` | — | The onboarding checklist `{ ready, nextStep?, items[] }` ([details](components/companion.md#readiness-checklist-workspace_check)) |
 | `workspace_changes` | `refresh?` | What in the workspace is behind its source: `{ changes[] { id, kind, summary, detail, diff?, affects[] }, notChecked?[] { what, reason, hint? }, pending? }`, `{ changes: [] }` when all is current. Kinds: `repo-pushed`, `repo-deselected`, `template-source`, `resume-edited` (with the template's `diff`), `profile-identity`. The repos are checked once per chat in the background; this waits up to 15 s for that check, then answers with `pending: true`. `refresh` checks the repos again. `EZAPPLY.md` has Claude call it at the start of every session ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
 | `workspace_change_mark` | `id`, `as` (`done` \| `later`) | `later` hides the change until the chat ends. `done` records the derived part as current: a template's source hash, the resume template the profile now matches, the profile the cover fields now match; for `repo-deselected` it deletes the repo's knowledge folder and cache (`removed`). Refused for `repo-pushed` (re-indexing ends it) and for an id that isn't current (`not_found`) |
-| `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code. Firefox's steps mention Grant site access, and that Oracle career sites and Greenhouse, Lever and Ashby boards are granted one site at a time by Set posting |
+| `extension_pair` | `replace?` | Opens pairing for 15 min and returns, per browser, the page, steps and path to load (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code. Firefox's steps say Firefox may withhold the extension's access to websites, and to click Grant access on its options page (a form call that finds it missing opens a small window asking for it) |
 | `extension_pair_wait` | `timeoutSeconds` (5–900, default 180) | Waits for the extension to connect; `{ connected, extension? , hint? }` |
-| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site (a registry site: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`; else `generic`); when not, a hint |
+| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site (a registry site, as its page shows it, else its URL: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`; else `generic`; [telling a page's site](components/extension.md#telling-a-pages-site-framests)) and `frames` (applications embedded in the page: `{ frameId, url, site }`); when not, a hint |
 
 ## Postings
 
@@ -64,7 +64,7 @@ Details: [profile-and-templates.md](components/profile-and-templates.md).
 |---|---|---|
 | `profile_check` | — | Validate `profile.yaml`: errors with paths, or commonly-needed fields still missing |
 | `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions and sources; sensitive ids; `notProfileSources { ids, hint }` when an entry's `source` isn't a profile path (agents have written `source: user`) |
-| `template_import` | `sourceDir` (absolute, outside the workspace), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/`; replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram`. `contentFiles` lists the `.tex` files the main file `\input`s (tailored copies need them) |
+| `template_import` | `source` (absolute: a folder or a single `.tex` file, outside the workspace or in `library/`), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/` and watch the source for edits (`template-source`); replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram`. `contentFiles` lists the `.tex` files the main file `\input`s (tailored copies need them) |
 | `template_import_example` | `sourcePath` (absolute) | Copy a sample cover letter (PDF, PNG/JPG/WebP, TXT, MD; ≤20 MB) into `templates/cover/example/`; Word → hint to export PDF |
 | `template_set_main` | `kind`, `main` (relative to `templates/<kind>/`, must stay inside it and end in `.tex`) | Record the main file and its `contentFiles`; marks a non-imported template `custom`. Returns `{ kind, main, contentFiles }` |
 
@@ -87,10 +87,10 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; stamps a hash on evidence that has none, records the indexed commit. Returns the meta plus `stamped` |
 
 ## Forms
-Every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever and Ashby. Each call is an RPC
+Every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby and Phenom. Each call is an RPC
 to the extension, which runs the tab's site adapter, one engine with a definition per site
 ([adapters](components/adapters.md); [Workday](components/workday-adapter.md),
-[Oracle](components/oracle-adapter.md), [Greenhouse, Lever, Ashby](components/sites.md)); the logic around it lives
+[Oracle](components/oracle-adapter.md), [Greenhouse, Lever, Ashby, Phenom](components/sites.md)); the logic around it lives
 in `FormsService` (`companion/src/forms/service.ts`). Every adapter answers every method the same way; where a
 site differs (Oracle's inline forms, one-page applications), the tool descriptions say so.
 
@@ -102,8 +102,18 @@ site differs (Oracle's inline forms, one-page applications), the tool descriptio
 
 - **Which tab:** `tabId` if given; otherwise an application tab (of any registry site) on the active posting's
   tenant whose job is the posting's (see below), then any on its tenant (the one the user is looking at, else
-  the most recently used), otherwise any application tab the same way. The tenant is `siteTenant`: the Workday tenant, the Oracle career site (`host/site`), the Greenhouse board, the Lever company or the Ashby organization. The companion picks
+  the most recently used), otherwise any application tab the same way. The tenant is `siteTenant`: the Workday tenant, the Oracle career site (`host/site`), the Greenhouse board, the Lever company, the Ashby organization or the Phenom careers host. The companion picks
   it from `browser.status` and always passes it explicitly.
+- **Embedded applications:** an application in a frame of another site's page (a careers page showing its
+  Greenhouse form, `TabInfo.frames`) counts as an application tab of its own, with the frame's URL and site
+  (`formTabs`). Everything below (tab choice, which posting, binding) works on that URL, never the careers page
+  around it, so the form is matched by its own board and job; a posting captured from the frame (`frameUrl`) or
+  on a page naming the job (`?gh_jid=`) has them too. Asked for by `tabId`, a tab's own page wins when it's an
+  application, else its frame that best matches the active posting, else its first. Every call on it sends the
+  frame's `frameId` (`framed`); results carry `frameId` and the frame's `url`, and the agent keeps passing just the
+  `tabId`. The frame is resolved again on every call, never cached, since a frame that reloads gets a new id.
+  `tab.show`, `screenshot` and the one-call-at-a-time queue stay per tab. `posting_activate { id, tabId }` binds the
+  tab's own application, else the one embedded in it.
 - **Which posting** (`forms/match.ts`): fills, removals, uploads, steps and the confirmation page are appended
   to the active posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab may
   be that posting's. What a URL says (site, tenant, job) comes only from the site registry, and what a page says
@@ -112,9 +122,12 @@ site differs (Oracle's inline forms, one-page applications), the tool descriptio
     found in its capture (`postings/application.ts`: the page's link to the application, or an embedded board's
     job in its URL), else bound later. Its job is the application's, else its URL's, else a `reqId` without
     spaces. `sameJob` takes Workday's `-1` posting suffix as the same job.
+  - **The tab's side:** its site as the extension found it on the page (else its URL's), whose registry entry
+    reads the tenant and job from the tab's URL (`tabSite`): a Phenom job page, whose URL names no site, is still
+    Phenom's, with the careers host as tenant.
   - **The evidence, strongest first:** `site` (the application is on another site than the tab), `job` (both
     URLs name one: `siteJob` reads Workday's requisition from the job's path segment, `…/Engineer_JR1000001-1/apply`
-    → `jr1000001-1`, Oracle's job id, and the Greenhouse, Lever or Ashby job), `binding` (an earlier call bound
+    → `jr1000001-1`, Oracle's job id, the Greenhouse, Lever or Ashby job, and Phenom's `jobSeqNo`), `binding` (an earlier call bound
     the tab to a posting; it holds while the tab stays on that tenant), `page-reqid` (a requisition the page
     shows), `tenant`, then `title` (the page's job title against `role`, only where no job id is known on
     either side: all of one's significant words in the other is the same job, none shared is another, anything

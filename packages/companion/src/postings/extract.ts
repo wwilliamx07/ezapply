@@ -1,4 +1,4 @@
-import { detectSite, type SiteId, siteTenant, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
+import { detectSite, type SiteId, siteInfo, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
@@ -35,11 +35,13 @@ export function extractPosting(input: {
   jsonLd: string[];
   /** The embedded job board frame the HTML came from, if not the page itself. */
   frameUrl?: string;
+  /** The content's site as the extension found it on the page (its body); absent or generic, its URL decides. */
+  site?: SiteId;
 }): ExtractedPosting {
   // The content's own site decides how to read it (a Workday board embedded in a career page is Workday);
   // the company still comes from the page the user was on.
   const contentUrl = input.frameUrl ?? input.url;
-  const site = detectSite(contentUrl);
+  const site = input.site && input.site !== "generic" ? input.site : detectSite(contentUrl);
   // A silent console: by default jsdom prints the page's CSS parse errors to ours, and the terminal is Claude's.
   const dom = new JSDOM(`<!doctype html><html><head><title></title></head><body>${input.visibleHtml}</body></html>`, {
     url: contentUrl,
@@ -63,7 +65,7 @@ export function extractPosting(input: {
   const reqId = ld.reqId ?? workday.reqId;
   // The employer's space on its site (an Oracle career site's host and site number, a Greenhouse board), so the
   // application tab can be matched to this posting.
-  const tenant = workday.tenant ?? siteTenant(contentUrl);
+  const tenant = workday.tenant ?? siteInfo(site)?.tenant(contentUrl);
 
   const header = [
     `# ${role ?? input.pageTitle}`,

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ezapply: allow access</title>
+    <style>
+      :root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+      body { margin: 20px; }
+      h1 { font-size: 16px; margin: 0 0 10px; }
+      p { margin: 8px 0; line-height: 1.4; }
+      button { margin-top: 12px; padding: 8px 18px; font: inherit; font-weight: 600; }
+      .muted { opacity: 0.7; font-size: 12px; }
+      .error { color: #dc2626; }
+    </style>
+  </head>
+  <body>
+    <h1>Allow ezapply on websites?</h1>
+    <p>Claude is filling your application on <span id="host"></span>, and the extension can't read or fill it until
+      you allow access to websites. It acts on a page only when you click Set posting or Claude asks, and never
+      submits.</p>
+    <button type="button" id="allow">Allow access</button>
+    <p id="status" class="muted">Your browser asks you to confirm.</p>
+    <script src="grant.js"></script>
+  </body>
+</html>

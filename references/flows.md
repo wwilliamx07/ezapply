@@ -32,7 +32,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    `repos_selection_set`.
 6. **Knowledge base:** the `ezapply-index-repo` skill per selected repo (in parallel via subagents when there are
    more than two). See [knowledge-base](components/knowledge-base.md).
-7. **Resume and profile:** `template_import` of the user's LaTeX resume folder (a pdfTeX-only template is
+7. **Resume and profile:** `template_import` of the user's LaTeX resume folder or `.tex` file (a pdfTeX-only template is
    marked `% !TEX program = pdflatex`, and Claude tells the user), compile to check one page, then
    Claude writes `profile/profile.yaml` from it and asks for what `profile_check` lists as missing.
 8. **Cover letter template:** keep the default (Claude fills in the identity fields), import the user's own
@@ -67,15 +67,16 @@ copy (for example in another browser) can't reconnect. A code typed on the optio
 non-default ports.
 
 ## 3. Capturing a posting ("Set posting")
-1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page. On an Oracle career site the
-   browser also asks, once per site, to let ezapply read and change it: that's what lets Claude fill the
-   application there later ([site access](components/oracle-adapter.md#site-access)).
-2. The extension injects `capturePage` into the tab's frames it may read (the `activeTab` grant, so no host
-   permission is needed). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
+1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page. The extension holds every site
+   from the install; where the user withheld that (Firefox) or limited it (Chrome), the click asks for it again
+   ([access](components/extension.md#access-to-websites)).
+2. The extension injects `capturePage` into the tab's frames it may read (every frame; with access withheld,
+   the tab's own origin by the click's `activeTab` grant). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
    the live DOM with `checkVisibility`), `innerText`, JSON-LD blocks, URL, title and its visible iframes. The
    frame holding the posting is chosen: the top one, unless an embedded job board frame has the `JobPosting`
    data or more text. A large embedded board it couldn't read opens in a new tab instead, for the user to
-   capture there ([extension](components/extension.md#set-posting)).
+   capture there ([extension](components/extension.md#set-posting)). The chosen frame's site, as its body shows
+   it ([telling a page's site](components/extension.md#telling-a-pages-site-framests)), goes with the capture.
 3. If ezapply isn't connected (no `ezapply chat` is open), the capture is stored as pending (badge `…`) and
    sent on the next connection. Only the latest pending capture is kept. When the user next starts
    `ezapply chat`, `posting_active` waits for the extension to reconnect and deliver it.
@@ -124,10 +125,12 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 
 ## 7. Autofill ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
-([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md)):
+([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md),
+[Greenhouse, Lever, Ashby, Phenom](components/sites.md)):
 1. `posting_active`; read the profile and answer bank. The form tools act on this posting's application tab
    (by its job, the tab it was bound to, its tenant, or its title: [which posting](mcp-tools.md#forms)) and
-   credit everything to it. A posting captured off the form sites is tied to its application by the captured
+   credit everything to it. An application embedded in a frame of a careers page counts as a tab of its own,
+   and the tools act inside that frame. A posting captured off the form sites is tied to its application by the captured
    page's link, or else the first fill binds the tab to it and Claude tells the user once (`postingBound`). A tab
    of another posting (another employer, another requisition, a tab bound to another posting) is read with
    `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude stops to

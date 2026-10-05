@@ -16,13 +16,6 @@ const ORACLE_PATH =
 /** The language segment after the optional `hcmUI/CandidateExperience` prefix, which the same job's links vary. */
 export const ORACLE_LOCALE_SEGMENT = /^(\/hcmUI\/CandidateExperience)?\/[a-z]{2}(?:-[A-Za-z]{2,4})?(?=\/sites\/)/i;
 
-/**
- * Oracle pages may be on any https host (employers' vanity domains), so the extension can't list them in its
- * manifest: it asks for access to one origin at a time, and the manifest's optional host permissions must
- * cover these patterns.
- */
-export const ORACLE_OPTIONAL_HOST_PERMISSIONS = ["https://*/*"] as const;
-
 export function isOracleUrl(url: string): boolean {
   try {
     const u = new URL(url);

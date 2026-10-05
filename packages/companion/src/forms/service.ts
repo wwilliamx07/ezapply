@@ -89,8 +89,27 @@ export interface PostingBound {
 }
 
 /** The tab chosen for a call, before it runs: the active posting and what's known of its job. */
+/**
+ * Where an application form is: a tab whose page is a form site's, or a form site's frame inside a tab (an
+ * employer's careers page embedding Greenhouse), given as the tab with the frame's `url` and `site` and its
+ * `frameId`. Everything that tells which posting a tab belongs to works on that URL, so an embedded form is matched
+ * by its own site, tenant and job, never by the careers page around it.
+ */
+export type FormTab = Omit<TabInfo, "frames"> & {
+  frameId?: number;
+  /** For an embedded form: the URL of the page around it. */
+  hostUrl?: string;
+};
+
+/** The places in a tab where an application form may be: its own page when on a form site, then each form frame. */
+export function formTabs(tab: TabInfo): FormTab[] {
+  const { frames = [], ...own } = tab;
+  const inside = frames.map((f) => ({ ...own, url: f.url, site: f.site, frameId: f.frameId, hostUrl: tab.url }));
+  return [...(isFormSite(tab.site) ? [own] : []), ...inside];
+}
+
 interface TargetBase {
-  tab: TabInfo;
+  tab: FormTab;
   active: PostingMeta | null;
   application?: PostingApplication;
   facts?: PostingFacts;
@@ -99,7 +118,7 @@ interface TargetBase {
 
 /** The tab a form call acts on and the posting it's credited to. */
 interface Target {
-  tab: TabInfo;
+  tab: FormTab;
   /** The active posting, when this tab may belong to it (`match` isn't `other`). */
   posting: PostingMeta | null;
   mismatch?: PostingMismatch;
@@ -673,8 +692,8 @@ export class FormsService {
       const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws, base.tab.site);
       if (issues.length) this.log.warn({ issues }, "autofill-timing.yaml has problems; defaults used for those");
       // Last thing before the adapter call, inside the tab's queue, so nothing can hide the tab in between.
-      const shown = await this.show(base.tab.tabId, !READS_PAGE.has(call.tool));
-      const bridge = record ? recorded(this.bridge, record) : this.bridge;
+      const shown = await this.show(base.tab, !READS_PAGE.has(call.tool));
+      const bridge = framed(record ? recorded(this.bridge, record) : this.bridge, base.tab.frameId);
       const decided = await this.decide(base, bridge, timing);
       const t: Target = {
         tab: base.tab,
@@ -736,11 +755,16 @@ export class FormsService {
    * fails the call: an extension built before `tab.show` answers "Unknown method" (logged once), and any other
    * problem leaves the tab as it was.
    */
-  private async show(tabId: number, changesPage: boolean): Promise<Shown | undefined> {
+  private async show(tab: FormTab, changesPage: boolean): Promise<Shown | undefined> {
+    const { tabId, frameId } = tab;
     const reviewPending = this.reviews.pending();
     const focusWindow = changesPage && !reviewPending && (await this.focusBrowser());
     try {
-      const r = await this.bridge.call("tab.show", { tabId, activate: !reviewPending, focusWindow }, 5_000);
+      const r = await this.bridge.call(
+        "tab.show",
+        { tabId, ...(frameId !== undefined ? { frameId } : {}), activate: !reviewPending, focusWindow },
+        5_000,
+      );
       if (r.activated) this.log.info({ tabId }, "application tab brought to the front");
       if (r.windowFocused) this.log.info({ tabId, focused: r.focused }, "browser window brought to the front");
       if (r.hidden) this.log.warn({ tabId, reviewPending }, "application tab is hidden; the browser throttles it");
@@ -778,6 +802,11 @@ export class FormsService {
    * Choose the tab: the one asked for; else the application tab that best matches the active posting (its job or
    * its binding, then its tenant, then one nothing ties to another posting); else any application tab. Among
    * equals, the one the user is looking at, else the most recently used.
+   *
+   * An application embedded in another site's page counts as a tab of its own (`formTabs`), with the frame's URL.
+   * In the tab asked for, the form is chosen the same way: its own page when it's a form site's, else the frame
+   * that best matches the active posting, else the first. Resolved again on every call, never cached: a frame that
+   * reloads gets a new id.
    */
   private async target(tabId?: number): Promise<TargetBase> {
     const { tabs, extensionVersion } = await this.bridge.call("browser.status", {}, 5_000);
@@ -786,23 +815,30 @@ export class FormsService {
     const application = active ? await this.postings.application(active.id).catch(() => undefined) : undefined;
     const facts = active ? postingFacts(active, application) : undefined;
 
-    let tab: TabInfo | undefined;
+    const score = (t: FormTab) => {
+      if (!facts) return 0;
+      const m = matchPosting(facts, { url: t.url, site: t.site }, this.bindings.get(t.tabId));
+      if (m.verdict === "other") return -1;
+      if (m.verdict === "unconfirmed") return 0;
+      return m.by[0] === "job" || m.by[0] === "binding" ? 2 : 1;
+    };
+    const bestOf = (forms: FormTab[]) => {
+      const best = Math.max(...forms.map(score));
+      return best < 0 ? forms : forms.filter((t) => score(t) === best);
+    };
+    let tab: FormTab | undefined;
     if (tabId !== undefined) {
-      tab = tabs.find((t) => t.tabId === tabId);
-      if (!tab) {
+      const asked = tabs.find((t) => t.tabId === tabId);
+      if (!asked) {
         throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
       }
+      // Its own page when that's an application, else the embedded form that best matches. A tab with no form
+      // anywhere is still acted on, and the extension says it isn't an application.
+      const forms = formTabs(asked);
+      const { frames: _, ...own } = asked;
+      tab = (isFormSite(asked.site) ? forms[0] : bestOf(forms)[0]) ?? own;
     } else {
-      const forms = tabs.filter((t) => isFormSite(t.site));
-      const score = (t: TabInfo) => {
-        if (!facts) return 0;
-        const m = matchPosting(facts, { url: t.url }, this.bindings.get(t.tabId));
-        if (m.verdict === "other") return -1;
-        if (m.verdict === "unconfirmed") return 0;
-        return m.by[0] === "job" || m.by[0] === "binding" ? 2 : 1;
-      };
-      const best = Math.max(...forms.map(score));
-      tab = pickTab(best < 0 ? forms : forms.filter((t) => score(t) === best));
+      tab = pickTab(bestOf(tabs.flatMap(formTabs)));
       if (!tab) {
         throw new EzError(
           ErrorCode.NotFound,
@@ -834,7 +870,7 @@ export class FormsService {
     const application = base.application ? { application: base.application } : {};
     if (!active || !facts || !isFormSite(tab.site)) return { posting: active, ...application, matchChanged: false };
     const binding = this.bindings.get(tab.tabId);
-    let page: TabFacts = { url: tab.url };
+    let page: TabFacts = { url: tab.url, site: tab.site };
     let match = matchPosting(facts, page, binding);
     if (match.verdict === "unconfirmed" && facts.role) {
       const read = await bridge.call("form.get", { tabId: tab.tabId, timing }, 20_000).catch(() => null);
@@ -877,7 +913,7 @@ export class FormsService {
     if (!t.posting || !t.match) return;
     const tabId = t.tab.tabId;
     if (this.bindings.get(tabId)?.postingId === t.posting.id) return;
-    const here = tabSite(t.tab.url);
+    const here = tabSite(t.tab.url, t.tab.site);
     this.bindings.set(tabId, { postingId: t.posting.id, ...(here.tenant ? { tenant: here.tenant } : {}) });
     if (!t.application && here.site) {
       const application: PostingApplication = {
@@ -918,11 +954,13 @@ export class FormsService {
    */
   async bindTab(postingId: string, tabId: number): Promise<{ tabId: number; url: string }> {
     const { tabs } = await this.bridge.call("browser.status", {}, 5_000);
-    const tab = tabs.find((t) => t.tabId === tabId);
-    if (!tab) {
+    const asked = tabs.find((t) => t.tabId === tabId);
+    if (!asked) {
       throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
     }
-    const here = tabSite(tab.url);
+    // Its own page when that's an application, else the application embedded in it.
+    const tab = formTabs(asked)[0] ?? asked;
+    const here = tabSite(tab.url, tab.site);
     if (!here.site) {
       throw new EzError(
         ErrorCode.BadRequest,
@@ -1069,7 +1107,7 @@ function mismatchOf(
   match: PostingMatch,
   binding: Binding | undefined,
 ): PostingMismatch {
-  const here = tabSite(tab.url);
+  const here = tabSite(tab.url, tab.site);
   const by = match.by[0] ?? "tenant";
   const label = [active.company, active.role].filter(Boolean).join(": ") || active.id;
   const siteName = (id?: string) => (id ? (siteInfo(id)?.name ?? id) : "another site");
@@ -1113,7 +1151,7 @@ function postingMatchOf(t: Target): { postingMatch?: { by: string[]; from?: stri
   };
 }
 
-function pickTab(tabs: TabInfo[]): TabInfo | undefined {
+function pickTab<T extends FormTab>(tabs: T[]): T | undefined {
   const looking = tabs.find((t) => t.focused ?? t.active);
   return looking ?? [...tabs].sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
 }
@@ -1244,6 +1282,21 @@ function leftSections(
         }),
     }))
     .filter((s) => s.fields.length > 0 || s.removable);
+}
+
+/**
+ * The bridge for one call on an embedded form: every request names its frame (`frameId`), so the adapter is injected
+ * into that frame alone. `tab.show` gets it from `show`, and `browser.status` takes none.
+ */
+function framed(bridge: Pick<ExtensionBridge, "call">, frameId: number | undefined): Pick<ExtensionBridge, "call"> {
+  if (frameId === undefined) return bridge;
+  const call = (method: string, params: Record<string, unknown>, timeoutMs?: number) =>
+    (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(
+      method,
+      method.startsWith("form.") ? { ...params, frameId } : params,
+      timeoutMs,
+    );
+  return { call: call as ExtensionBridge["call"] };
 }
 
 /** The bridge for one debugged call: every request is added to its record with its full result and time. */

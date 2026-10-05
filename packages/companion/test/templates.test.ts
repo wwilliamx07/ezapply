@@ -31,13 +31,13 @@ describe("template import", () => {
     await mkdir(join(src, ".git"));
     await writeFile(join(src, ".git/HEAD"), "ref");
 
-    const r = await svc.importTemplate({ sourceDir: src, kind: "resume" });
+    const r = await svc.importTemplate({ source: src, kind: "resume" });
     expect(r.files).toEqual(["resume.tex", "sections/exp.tex"]);
     expect(r.contentFiles).toEqual(["sections/exp.tex"]);
     expect(await svc.templateMain("resume")).toBe(join(root, "ws/templates/resume/resume.tex"));
 
-    await expect(svc.importTemplate({ sourceDir: src, kind: "resume" })).rejects.toMatchObject({ code: "bad_request" });
-    const again = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    await expect(svc.importTemplate({ source: src, kind: "resume" })).rejects.toMatchObject({ code: "bad_request" });
+    const again = await svc.importTemplate({ source: src, kind: "resume", replace: true });
     expect(again.previous).toBeDefined();
     expect((await stat(again.previous as string)).isDirectory()).toBe(true);
     expect(again.texProgram).toBeUndefined();
@@ -49,7 +49,7 @@ describe("template import", () => {
     const body =
       "\\documentclass{article}\n\\input{glyphtounicode}\n\\pdfgentounicode=1\n\\begin{document}x\\end{document}\n";
     await writeFile(join(src, "resume.tex"), body);
-    const r = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    const r = await svc.importTemplate({ source: src, kind: "resume", replace: true });
     expect(r.texProgram).toMatchObject({
       engine: "pdflatex",
       added: true,
@@ -59,7 +59,7 @@ describe("template import", () => {
     expect(await readFile(join(src, "resume.tex"), "utf8")).toBe(body); // the user's original is untouched
 
     await writeFile(join(src, "resume.tex"), `% !TeX program = lualatex\n${body}`);
-    const again = await svc.importTemplate({ sourceDir: src, kind: "resume", replace: true });
+    const again = await svc.importTemplate({ source: src, kind: "resume", replace: true });
     expect(again.texProgram).toEqual({ engine: "lualatex", added: false });
     expect(await readFile(again.main, "utf8")).toBe(`% !TeX program = lualatex\n${body}`);
   });
@@ -69,17 +69,50 @@ describe("template import", () => {
     await mkdir(src, { recursive: true });
     await writeFile(join(src, "a.tex"), "\\documentclass{article}\\begin{document}A\\end{document}");
     await writeFile(join(src, "b.tex"), "\\documentclass{article}\\begin{document}B\\end{document}");
-    await expect(svc.importTemplate({ sourceDir: src, kind: "cover" })).rejects.toMatchObject({
+    await expect(svc.importTemplate({ source: src, kind: "cover" })).rejects.toMatchObject({
       message: expect.stringMatching(/candidates: a.tex, b.tex/),
     });
-    const r = await svc.importTemplate({ sourceDir: src, kind: "cover", main: "b.tex" });
+    const r = await svc.importTemplate({ source: src, kind: "cover", main: "b.tex" });
     expect(r.main.endsWith("b.tex")).toBe(true);
   });
 
   it("requires an absolute path outside the workspace", async () => {
-    await expect(svc.importTemplate({ sourceDir: "relative/dir", kind: "resume" })).rejects.toMatchObject({
+    await expect(svc.importTemplate({ source: "relative/dir", kind: "resume" })).rejects.toMatchObject({
       code: "bad_request",
     });
+    await mkdir(join(root, "ws/postings/p1"), { recursive: true });
+    await expect(svc.importTemplate({ source: join(root, "ws/postings/p1"), kind: "resume" })).rejects.toMatchObject({
+      message: expect.stringMatching(/outside library/),
+    });
+  });
+
+  it("imports a single .tex file, from library/ too, and tracks that file", async () => {
+    const lib = join(root, "ws/library");
+    await mkdir(lib, { recursive: true });
+    await writeFile(join(lib, "transcript.pdf"), "%PDF-1.4");
+    await writeFile(join(lib, "cv.tex"), "\\documentclass{article}\\begin{document}CV\\end{document}");
+    const r = await svc.importTemplate({ source: join(lib, "cv.tex"), kind: "resume", replace: true });
+    expect(r.files).toEqual(["cv.tex"]);
+    expect(await svc.templateMain("resume")).toBe(join(root, "ws/templates/resume/cv.tex"));
+    const before = await svc.sourceState("resume");
+    expect(before).toMatchObject({ from: join(lib, "cv.tex") });
+    expect(before && "hash" in before && before.hash === before.recorded).toBe(true);
+
+    await writeFile(join(lib, "transcript.pdf"), "%PDF-1.4 changed"); // not part of the template
+    expect(await svc.sourceState("resume")).toEqual(before);
+    await writeFile(join(lib, "cv.tex"), "\\documentclass{article}\\begin{document}CV 2\\end{document}");
+    const after = await svc.sourceState("resume");
+    expect(after && "hash" in after && after.hash !== after.recorded).toBe(true);
+  });
+
+  it("refuses a single file that pulls in others beside it", async () => {
+    const src = join(root, "split");
+    await mkdir(src, { recursive: true });
+    await writeFile(join(src, "main.tex"), "\\documentclass{article}\\begin{document}\\input{exp}\\end{document}");
+    await writeFile(join(src, "exp.tex"), "Experience");
+    await expect(
+      svc.importTemplate({ source: join(src, "main.tex"), kind: "resume", replace: true }),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/pulls in other \.tex files/) });
   });
 });
 
@@ -134,7 +167,7 @@ describe("cover template: default and example", () => {
     const src = join(root, "my-cover");
     await mkdir(src, { recursive: true });
     await writeFile(join(src, "letter.tex"), "\\documentclass{article}\\begin{document}Hi\\end{document}");
-    await expect(cover.importTemplate({ sourceDir: src, kind: "cover" })).rejects.toMatchObject({
+    await expect(cover.importTemplate({ source: src, kind: "cover" })).rejects.toMatchObject({
       code: "bad_request",
     });
   });
@@ -149,7 +182,7 @@ describe("cover template: default and example", () => {
     );
     await writeFile(join(fresh, "templates/cover/cover.tex"), "default");
 
-    const r = await svc2.importTemplate({ sourceDir: join(root, "my-cover"), kind: "cover" });
+    const r = await svc2.importTemplate({ source: join(root, "my-cover"), kind: "cover" });
     expect(r.previous).toBeDefined();
     expect(await svc2.templateMeta("cover")).toMatchObject({ origin: "imported", main: "letter.tex" });
   });

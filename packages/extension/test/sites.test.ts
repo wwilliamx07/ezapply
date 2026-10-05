@@ -38,6 +38,10 @@ const PAGES: Record<string, { build: (doc: Document) => void; url: string }> = {
     build: live("ashby-apply"),
     url: "https://jobs.ashbyhq.com/stark/7d2e9b14-0000-4000-8000-000000000002/application",
   },
+  phenom: {
+    build: live("phenom-step2"),
+    url: "https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA&step=2&stepname=workAndEducation",
+  },
 };
 
 describe("the registry and the definitions", () => {
@@ -55,6 +59,52 @@ describe("the registry and the definitions", () => {
       for (const [key, value] of Object.entries(s.waits))
         expect([s.id, key, Number.isFinite(value)]).toEqual([s.id, key, true]);
     }
+  });
+});
+
+/** Every saved live page, by the site it's a page of: each site's signature is checked on all of them. */
+const SAVED: Record<string, string[]> = {
+  workday: ["auth", "posting", "start-choice", "my-experience"],
+  oracle: ["oracle-apply", "oracle-email", "oracle-posting"],
+  greenhouse: ["greenhouse-apply"],
+  lever: ["lever-apply"],
+  ashby: ["ashby-apply", "ashby-groups"],
+  phenom: ["phenom-step1", "phenom-step2", "phenom-step2-errors", "phenom-step3"],
+};
+
+/** The sites whose signature the document matches, in registry order. */
+const signedBy = (doc: Document) => SITES.filter((s) => doc.querySelector(s.signature)).map((s) => s.id);
+
+describe("telling a site by its page (signatures)", () => {
+  it("has saved pages of every site", () => {
+    expect(Object.keys(SAVED).sort()).toEqual([...FORM_SITE_IDS].sort());
+  });
+
+  it("knows every saved page by its own site's signature, and by no other's", () => {
+    for (const [id, names] of Object.entries(SAVED)) {
+      for (const name of names) {
+        const doc = new JSDOM("<!doctype html><html></html>").window.document;
+        live(name)(doc);
+        expect([name, signedBy(doc)]).toEqual([name, [id]]);
+      }
+    }
+  });
+
+  it("knows no site on a careers page that only links to boards, loads their embed scripts or frames them", () => {
+    const doc = new JSDOM(
+      `<!doctype html><html><head>
+        <script src="https://boards.greenhouse.io/embed/job_board/js?for=acme"></script>
+        <script src="https://jobs.ashbyhq.com/acme/embed?version=2"></script>
+      </head><body>
+        <a href="https://job-boards.greenhouse.io/acme/jobs/1000001">Apply</a>
+        <a href="https://jobs.lever.co/acme/1">Apply</a>
+        <a href="https://acme.wd5.myworkdayjobs.com/External/job/x">Apply</a>
+        <div id="ashby_embed"></div>
+        <iframe src="https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000001"></iframe>
+        <form id="application-form"><label>Name <input name="name"></label></form>
+      </body></html>`,
+    ).window.document;
+    expect(signedBy(doc)).toEqual([]);
   });
 });
 

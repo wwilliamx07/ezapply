@@ -29,7 +29,7 @@
 | Protocol | `packages/protocol` | library | zod schemas and types shared by everything: bridge messages, RPC, forms, postings, errors |
 | Companion | `packages/companion` | library, run inside `ezapply chat` | Serves the MCP tools, talks to the extension, owns all file and network work |
 | CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), hosts the companion and runs Claude Code (`chat`), relays MCP for Claude Code (`mcp`) |
-| Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby) on the companion's behalf |
+| Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom) on the companion's behalf |
 | Workspace | created by `ezapply init` | folder of files | The user's data, the agent file `EZAPPLY.md`, skills, and Claude Code config |
 
 ## Processes and lifecycle
@@ -73,8 +73,10 @@ There is no background process. ezapply runs while the user has an `ezapply chat
   toolbar still captures postings; they're queued and delivered on the next connection.
 - **The site adapters** (`<site>-main.js`, one per registry site: one engine and a definition per site,
   [adapters](components/adapters.md)) are injected into the page's own JavaScript context (MAIN world) on
-  each form call, the one for the tab's site. Injection is idempotent: a second injection of the same version
-  is a no-op.
+  each form call, the one for the tab's site, which the extension tells by what the page shows, else by its URL
+  ([telling a page's site](components/extension.md#telling-a-pages-site-framests)). Injection is idempotent: a
+  second injection of the same version is a no-op. The extension holds every site (`<all_urls>`) so it can read
+  any page for that ([why](components/protocol.md#the-site-registry-sitests)).
 
 **Why no daemon.** Earlier builds ran the companion as a background daemon: `ezapply mcp` started it on
 demand, it stopped after 15 minutes idle, and `ezapply chat` polled it every second. Since ezapply is only

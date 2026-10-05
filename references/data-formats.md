@@ -87,7 +87,7 @@ scale: 1                  # multiplies the defaults of the waits left unset (not
 ```
 Keys: `STANDARD_WAITS` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A top-level key
 changes the wait on every site; a key under a site's id (`workday:`, `oracle:`, `greenhouse:`, `lever:`,
-`ashby:`) changes it on that site only and wins. The defaults are each site's own waits (its registry entry);
+`ashby:`, `phenom:`) changes it on that site only and wins. The defaults are each site's own waits (its registry entry);
 where they differ between sites the template lists each site's. A missing file or key means the site's own. A mistake (bad YAML, an unknown key, a value out of range) falls back
 to the default for that part, is logged, and shows in `get_form` as `timingIssues`; it never fails a call.
 
@@ -106,7 +106,8 @@ folder holds:
   another app, usually the terminal.
 - `NNNN-<tool>.json`: the whole call, with these fields:
   - `params`: an upload's file contents are replaced by its size;
-  - the `tab`, `posting`, `postingMatch` (verdict and evidence), `application` and `postingMismatch`,
+  - the `tab` (for an embedded application: the frame's `url` and `site`, its `frameId` and the page's
+    `hostUrl`), `posting`, `postingMatch` (verdict and evidence), `application` and `postingMismatch`,
     `extensionVersion`, `browser`, `timing` and
     `fillTimeoutMs`, `shown` (what `tab.show` did and saw: `activated`, `changesPage`, `focusWindow` (the
     window was asked to come to the front), `windowFocused` (the extension raised it), `hidden`, `focused`,
@@ -160,9 +161,10 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
-from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `generic`, of the content), `tenant?` (the
-employer's space on its site, read from the URL: a Workday tenant, an Oracle career site as `host/site`, a
-Greenhouse board, a Lever company, an Ashby organization), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
+from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `phenom` | `generic`, of the content: as its page
+showed it to the extension, else by its URL), `tenant?` (the employer's space on its site, read from the URL as
+that site reads it: a Workday tenant, an Oracle career site as `host/site`, a
+Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
 `application?`, `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 
@@ -248,11 +250,13 @@ Free text.
 the main file's folder; tailored copies need them beside the copied main file. Recorded by `template_import`
 and `template_set_main`.
 
+`importedFrom`: the absolute folder, or single `.tex` file, the template was imported from.
+
 `sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and
-contents, line endings normalised; build output skipped), as of the last time the template was current with
-that folder. Written by `template_import`, and by `workspace_change_mark` when the user decides a change there
+contents, line endings normalised; build output skipped; for a single file, that file), as of the last time
+the template was current with it. Written by `template_import`, and by `workspace_change_mark` when the user decides a change there
 needs no re-import. A template imported before the field existed gets it on the first check that finds the
-folder unchanged.
+source unchanged.
 
 ### `templates/.synced/resume/`
 The resume template's main file and content files as they were when the profile was last brought in line with

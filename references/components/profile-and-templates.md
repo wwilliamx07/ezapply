@@ -74,9 +74,16 @@ folder comes first on the search path, so the copies win. Recorded by `template_
 file structure, so a diff against the template stays readable.)
 
 ### Importing a LaTeX template (`template_import`)
-- Source: an absolute folder outside the workspace. Build artifacts (`.aux`, `.log`, `.synctex.gz`…) and
-  `.git`, `node_modules`, `__MACOSX` and ezapply's own `.build`/`.history`/`.previews` are skipped. Limits:
-  400 files, 60 MB.
+- Source: an absolute path to a folder, or to a single `.tex` file, outside the workspace or in `library/`.
+  From a folder, build artifacts (`.aux`, `.log`, `.synctex.gz`…) and `.git`, `node_modules`, `__MACOSX` and
+  ezapply's own `.build`/`.history`/`.previews` are skipped. Limits: 400 files, 60 MB. A single file is its
+  own main file, and is refused when it `\input`s other `.tex` files beside it (the folder is needed then).
+  *Why a single file and `library/`:* the source is what the workspace check watches for the user's edits.
+  With folders outside the workspace only, a resume kept as one file next to other documents (in `library/`,
+  say) could only be imported through a copy Claude made in its scratchpad, and the check then watched that
+  copy, which never changes, so the user's edits went unnoticed. The tool description and onboarding skill
+  tell Claude to pass the user's own path, never a copy. Other workspace folders stay refused: they're
+  ezapply's own output.
 - **Main file detection:** the `.tex` files that contain both `\documentclass` and `\begin{document}`; if
   several, a top-level file named like resume/cv/cover/letter/main wins; if still ambiguous, the error lists
   candidates and Claude asks.

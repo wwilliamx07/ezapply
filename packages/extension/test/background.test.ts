@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 /** Just enough of the WebExtensions API for the background module to load outside a browser. */
 const event = () => ({ addListener: vi.fn() });
+/** The URL of the first window the background opened (the access window). */
+const openedUrl = () => ((chromeStub.windows.create.mock.calls[0]?.[0] ?? { url: "" }) as { url: string }).url;
+/** Listeners for granted permissions (`permissions.onAdded`), so a test can play the user allowing access. */
+const grantListeners = new Set<() => void>();
 /** The toolbar button's click listener, kept outside the mock (mock calls are cleared between tests). */
 let clickListener: ((tab: unknown) => void) | undefined;
 const chromeStub = {
@@ -33,17 +37,30 @@ const chromeStub = {
     onChanged: event(),
   },
   tabs: {
-    query: vi.fn(async () => []),
+    query: vi.fn(async (_q?: unknown): Promise<unknown[]> => []),
     get: vi.fn(async (_id: number): Promise<unknown> => undefined),
     update: vi.fn(async (_id: number, _props: unknown) => ({})),
+    create: vi.fn(async (_props: unknown) => ({})),
+  },
+  webNavigation: {
+    getAllFrames: vi.fn(async (_d: { tabId: number }): Promise<unknown[] | null> => []),
+    getFrame: vi.fn(async (_d: { tabId: number; frameId: number }): Promise<unknown> => null),
   },
   windows: {
     getLastFocused: vi.fn(async () => ({ id: 1 })),
     get: vi.fn(async (_id: number): Promise<unknown> => ({ id: 1, focused: true, state: "normal" })),
     update: vi.fn(async (_id: number, _props: unknown) => ({})),
+    create: vi.fn(async (_props: unknown): Promise<unknown> => ({ id: 42 })),
   },
   scripting: { executeScript: vi.fn(async (_injection: unknown): Promise<unknown> => []) },
-  permissions: { contains: vi.fn(async () => true), request: vi.fn(async (_p: unknown) => true) },
+  permissions: {
+    contains: vi.fn(async (_p?: unknown) => true),
+    request: vi.fn(async (_p: unknown) => true),
+    onAdded: {
+      addListener: vi.fn((l: () => void) => grantListeners.add(l)),
+      removeListener: vi.fn((l: () => void) => grantListeners.delete(l)),
+    },
+  },
 };
 (globalThis as unknown as { chrome: unknown }).chrome = chromeStub;
 // Nothing may connect anywhere: a socket that never opens.
@@ -78,25 +95,337 @@ describe("Set posting", () => {
     clickListener?.({ id: 3, url, index: 0, windowId: 1 });
   };
 
-  it("asks for an Oracle career site's origin in the click itself, while it counts as the user's gesture", async () => {
+  it("asks for every site in the click itself, while it counts as the user's gesture", async () => {
     await click("https://jobs.umbrella.example/en/sites/CX_1/job/10001");
-    // Called synchronously: Firefox refuses permissions.request once the handler has awaited anything.
-    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["https://jobs.umbrella.example/*"] });
+    // Called synchronously: Firefox refuses permissions.request once the handler has awaited anything. Already
+    // granted (Chrome, from the install), it resolves without asking.
+    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
   });
 
-  it("asks for any site granted per origin the same way: a Greenhouse board", async () => {
-    await click("https://job-boards.greenhouse.io/acme/jobs/1");
-    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["https://job-boards.greenhouse.io/*"] });
+  it("asks nothing on a page that isn't on the web", async () => {
+    await click("chrome://extensions/");
+    expect(chromeStub.permissions.request).not.toHaveBeenCalled();
   });
+});
 
-  it("asks nothing on Workday (its hosts come with the install) or on pages of no form site", async () => {
-    for (const url of [
-      "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x",
-      "https://www.example.com/careers/1",
-    ]) {
-      await click(url);
-      expect(chromeStub.permissions.request).not.toHaveBeenCalled();
+describe("telling a page's site", () => {
+  const POSTING = "https://careers.example.com/global/en/job/R-0000000001/Software-Developer-Intern";
+  /** executeScript answering the site check (`pageSite`) with `sites` by frame, and anything else with `other`. */
+  const pagesShow = (sites: Record<number, string | null>, other: unknown[] = []) => {
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.scripting.executeScript.mockImplementation(async (injection: unknown) => {
+      const { func, target } = injection as { func?: { name: string }; target: { frameIds?: number[] } };
+      if (func?.name !== "pageSite") return other;
+      return Object.entries(sites)
+        .filter(([id]) => !target.frameIds || target.frameIds.includes(Number(id)))
+        .map(([id, site]) => ({ frameId: Number(id), result: { url: "", site } }));
+    });
+  };
+
+  it("matches each site's signature in the page, the first in registry order", async () => {
+    const { pageSite } = await import("../src/background/frames.js");
+    const { siteSignatures } = await import("@ezapply/protocol");
+    const { JSDOM } = await import("jsdom");
+    const { window } = new JSDOM(
+      '<body><div class="ph-apply-box"><div data-ph-at-id="apply-link"></div></div></body>',
+      { url: POSTING },
+    );
+    vi.stubGlobal("document", window.document);
+    vi.stubGlobal("location", window.location);
+    try {
+      expect(pageSite(siteSignatures())).toEqual({ url: POSTING, site: "phenom" });
+      expect(
+        pageSite([
+          ["lever", "a.postings-btn"],
+          ["phenom", "[data-ph-at-id]"],
+        ]),
+      ).toMatchObject({ site: "phenom" });
+      // A selector the browser can't parse is skipped, not fatal.
+      expect(
+        pageSite([
+          ["ashby", "::nonsense("],
+          ["phenom", ".ph-apply-box"],
+        ]),
+      ).toMatchObject({ site: "phenom" });
+      window.document.body.innerHTML = "<p>Careers</p>";
+      expect(pageSite(siteSignatures())).toEqual({ url: POSTING, site: null });
+    } finally {
+      vi.unstubAllGlobals();
     }
+  });
+
+  it("knows a tab by what its page shows, whatever its URL, and falls back on the URL", async () => {
+    const { tabSite } = await import("../src/background/frames.js");
+    pagesShow({ 0: "phenom" });
+    expect(await tabSite({ id: 5, url: POSTING } as chrome.tabs.Tab)).toBe("phenom");
+    expect(chromeStub.scripting.executeScript.mock.calls[0]?.[0]).toMatchObject({
+      target: { tabId: 5 },
+      injectImmediately: true,
+    });
+    // The page shows no site: its URL decides.
+    pagesShow({ 0: null });
+    expect(await tabSite({ id: 5, url: POSTING } as chrome.tabs.Tab)).toBe("generic");
+    expect(
+      await tabSite({ id: 5, url: "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x" } as chrome.tabs.Tab),
+    ).toBe("workday");
+    // A page that can't be read (no access, a browser page) or is discarded: its URL, without asking it.
+    chromeStub.scripting.executeScript.mockRejectedValueOnce(new Error("Cannot access contents of the page"));
+    expect(await tabSite({ id: 5, url: POSTING } as chrome.tabs.Tab)).toBe("generic");
+    chromeStub.scripting.executeScript.mockClear();
+    expect(await tabSite({ id: 5, url: POSTING, discarded: true } as chrome.tabs.Tab)).toBe("generic");
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  it("lets the URL decide when the page doesn't answer in time", async () => {
+    const { tabSite } = await import("../src/background/frames.js");
+    vi.useFakeTimers();
+    try {
+      chromeStub.scripting.executeScript.mockReset();
+      chromeStub.scripting.executeScript.mockImplementation(() => new Promise(() => {}));
+      const site = tabSite({ id: 5, url: "https://jobs.lever.co/acme/1" } as chrome.tabs.Tab);
+      await vi.advanceTimersByTimeAsync(1_500);
+      await expect(site).resolves.toBe("lever");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fills a form on a site its page shows, on a URL that names none", async () => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: POSTING, active: true });
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    pagesShow({ 0: "phenom" }, [{ result: { __ok: { adapter: "phenom", url: POSTING } } }]);
+    expect(await formHandlers["form.get"]({ tabId: 5 })).toMatchObject({ adapter: "phenom", tabId: 5 });
+    const files = chromeStub.scripting.executeScript.mock.calls.map((c) => (c[0] as { files?: string[] }).files);
+    expect(files).toContainEqual(["phenom-main.js"]);
+  });
+
+  it("refuses a tab whose page shows no form site, and whose URL is none", async () => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: POSTING, active: true });
+    pagesShow({ 0: null });
+    await expect(formHandlers["form.get"]({ tabId: 5 })).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringMatching(/not an application page of a supported site/),
+    });
+  });
+
+  it("sends the site the posting's page shows with its capture", async () => {
+    await import("../src/background/index.js");
+    chromeStub.storage.local.set.mockClear();
+    const page = {
+      url: POSTING,
+      pageTitle: "Careers",
+      html: "<p>Job</p>",
+      visibleHtml: "<p>Job</p>",
+      visibleText: "Job",
+      jsonLd: [],
+      frames: [],
+    };
+    pagesShow({ 0: "phenom" }, [{ frameId: 0, result: page }]);
+    clickListener?.({ id: 3, url: POSTING, index: 0, windowId: 1 });
+    // The companion isn't connected here: the capture waits in storage, as it's sent.
+    await vi.waitFor(() =>
+      expect(chromeStub.storage.local.set).toHaveBeenCalledWith({
+        pendingCapture: expect.objectContaining({ url: POSTING, site: "phenom" }),
+      }),
+    );
+  });
+});
+
+describe("embedded application forms", () => {
+  const HOST = "https://careers.example.com/jobs/1?gh_jid=1000001";
+  const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000001";
+  const FORM = "https://apply.example.net/forms/1";
+  const frames = [
+    { frameId: 0, parentFrameId: -1, url: HOST },
+    { frameId: 7, parentFrameId: 0, url: EMBED },
+    { frameId: 8, parentFrameId: 0, url: "https://www.youtube.com/embed/x" },
+    { frameId: 9, parentFrameId: 0, url: "about:blank" },
+    { frameId: 10, parentFrameId: 0, url: FORM },
+  ];
+
+  it("lists a tab's frames on a form site, by their pages or else their URLs, never the top frame", async () => {
+    const { tabSites } = await import("../src/background/frames.js");
+    chromeStub.webNavigation.getAllFrames.mockResolvedValueOnce(frames);
+    chromeStub.scripting.executeScript.mockReset();
+    // Frame 10's URL names no site, but its page is a Phenom form; frame 7 didn't answer.
+    chromeStub.scripting.executeScript.mockResolvedValueOnce([
+      { frameId: 0, result: { url: HOST, site: null } },
+      { frameId: 8, result: { url: "", site: null } },
+      { frameId: 10, result: { url: FORM, site: "phenom" } },
+    ]);
+    expect(await tabSites({ id: 5, url: HOST } as chrome.tabs.Tab)).toEqual({
+      site: "generic",
+      frames: [
+        { frameId: 7, url: EMBED, site: "greenhouse" },
+        { frameId: 10, url: FORM, site: "phenom" },
+      ],
+    });
+    expect(chromeStub.scripting.executeScript.mock.calls[0]?.[0]).toMatchObject({
+      target: { tabId: 5, allFrames: true },
+    });
+    // A tab that can't be listed (discarded, closed) has none.
+    chromeStub.webNavigation.getAllFrames.mockRejectedValueOnce(new Error("No tab with id: 5."));
+    expect((await tabSites({ id: 5, url: HOST } as chrome.tabs.Tab)).frames).toEqual([]);
+  });
+
+  /** A form call on frame 7 of tab 5, the frame still there, with or without access to its origin. */
+  const onFrame = async (access = true) => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: HOST, active: true });
+    chromeStub.webNavigation.getFrame.mockResolvedValue({ frameId: 7, url: EMBED });
+    chromeStub.permissions.contains.mockReset();
+    chromeStub.permissions.contains.mockResolvedValueOnce(access);
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { __ok: { adapter: "greenhouse", url: EMBED } } }]);
+    return formHandlers;
+  };
+
+  it("injects the adapter into the form's frame alone, after checking access to the frame's origin", async () => {
+    const handlers = await onFrame();
+    expect(await handlers["form.get"]({ tabId: 5, frameId: 7 })).toMatchObject({ tabId: 5, frameId: 7, url: EMBED });
+    expect(chromeStub.permissions.contains).toHaveBeenCalledWith({ origins: ["https://job-boards.greenhouse.io/*"] });
+    const targets = chromeStub.scripting.executeScript.mock.calls.map((c) => (c[0] as { target: unknown }).target);
+    // The site check, the adapter, the call.
+    expect(targets).toEqual([
+      { tabId: 5, frameIds: [7] },
+      { tabId: 5, frameIds: [7] },
+      { tabId: 5, frameIds: [7] },
+    ]);
+    expect(chromeStub.scripting.executeScript.mock.calls[1]?.[0]).toMatchObject({ files: ["greenhouse-main.js"] });
+  });
+
+  it("asks for access to websites when the frame's origin isn't granted, naming the frame's host", async () => {
+    const handlers = await onFrame(false);
+    chromeStub.windows.create.mockClear();
+    const call = handlers["form.get"]({ tabId: 5, frameId: 7 });
+    await vi.waitFor(() => expect(chromeStub.windows.create).toHaveBeenCalled());
+    const query = new URL(openedUrl()).searchParams;
+    expect([query.get("origins"), query.get("host")]).toEqual(["<all_urls>", "job-boards.greenhouse.io"]);
+    for (const l of grantListeners) l();
+    await expect(call).resolves.toMatchObject({ frameId: 7 });
+  });
+
+  it("fails a call on a frame that's gone, as on a closed tab", async () => {
+    const handlers = await onFrame();
+    chromeStub.webNavigation.getFrame.mockResolvedValue(null);
+    await expect(handlers["form.next"]({ tabId: 5, frameId: 7 })).rejects.toMatchObject({ code: "not_found" });
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  it("reads an embedded form's visibility in its frame, and focus from the browser window", async () => {
+    const handlers = await onFrame();
+    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { hidden: false, focused: false } }]);
+    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, focused: true, state: "normal" });
+    expect(await handlers["tab.show"]({ tabId: 5, frameId: 7, activate: true })).toEqual({
+      tabId: 5,
+      activated: false,
+      hidden: false,
+      focused: true,
+    });
+    expect(chromeStub.scripting.executeScript.mock.calls[0]?.[0]).toMatchObject({
+      target: { tabId: 5, frameIds: [7] },
+    });
+  });
+
+  it("opens a job board it couldn't read in its own tab (access to websites withheld)", async () => {
+    await import("../src/background/index.js");
+    chromeStub.tabs.create.mockClear();
+    chromeStub.permissions.request.mockResolvedValueOnce(false);
+    chromeStub.scripting.executeScript.mockReset();
+    // The careers page, which shows the Greenhouse frame it can't read.
+    chromeStub.scripting.executeScript.mockResolvedValue([
+      {
+        frameId: 0,
+        result: {
+          url: HOST,
+          pageTitle: "Careers",
+          html: "<p>Careers</p>",
+          visibleHtml: "<p>Careers</p>",
+          visibleText: "Careers",
+          jsonLd: [],
+          frames: [{ src: EMBED, width: 800, height: 1200 }],
+        },
+      },
+    ]);
+    clickListener?.({ id: 3, url: HOST, index: 0, windowId: 1 });
+    expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
+    await vi.waitFor(() =>
+      expect(chromeStub.tabs.create).toHaveBeenCalledWith(expect.objectContaining({ url: EMBED })),
+    );
+  });
+});
+
+describe("asking for access to websites when a form call finds it missing", () => {
+  const APPLY = "https://jobs.globex.example/ca/en/apply?jobSeqNo=X1&step=1";
+  /**
+   * A form call on a Phenom tab whose origin isn't granted; `allow` plays the user granting access. One window asks
+   * for every site, so an earlier test's may still be open: `fresh` has the user close it first.
+   */
+  const call = async (url = APPLY, fresh = true) => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    if (fresh) chromeStub.windows.get.mockRejectedValueOnce(new Error("No window with id: 42."));
+    chromeStub.tabs.get.mockResolvedValue({ id: 9, windowId: 1, url, active: true });
+    chromeStub.windows.create.mockClear();
+    chromeStub.windows.update.mockClear();
+    chromeStub.permissions.contains.mockReset();
+    chromeStub.permissions.contains.mockResolvedValue(false);
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { __ok: { adapter: "phenom", url } } }]);
+    return formHandlers["form.get"]({ tabId: 9 });
+  };
+  const allow = () => {
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    for (const l of grantListeners) l();
+  };
+
+  it("opens a window whose Allow access asks for every site, and goes on once the user allows it", async () => {
+    const pending = call();
+    await vi.waitFor(() => expect(chromeStub.windows.create).toHaveBeenCalledTimes(1));
+    const opened = chromeStub.windows.create.mock.calls[0]?.[0] as { url: string; type: string };
+    expect(opened.type).toBe("popup");
+    const query = new URL(opened.url).searchParams;
+    expect([query.get("origins"), query.get("host")]).toEqual(["<all_urls>", "jobs.globex.example"]);
+    // Nothing is read or injected until it's granted.
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+    allow();
+    await expect(pending).resolves.toMatchObject({ adapter: "phenom", tabId: 9 });
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalled();
+  });
+
+  it("says to call again once allowed when the user takes longer, and a retry brings the same window forward", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = call("https://jobs.initech.example/ca/en/apply?jobSeqNo=X2");
+      const failed = expect(first).rejects.toMatchObject({
+        message: "The extension has no access to jobs.initech.example yet.",
+        hint: expect.stringMatching(/small ezapply window.*call again/),
+      });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failed;
+      expect(chromeStub.windows.create).toHaveBeenCalledTimes(1);
+      const second = call("https://jobs.initech.example/ca/en/apply?jobSeqNo=X2", false);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(chromeStub.windows.create).not.toHaveBeenCalled();
+      expect(chromeStub.windows.update).toHaveBeenCalledWith(42, { focused: true, state: "normal" });
+      allow();
+      await expect(second).resolves.toMatchObject({ adapter: "phenom" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the window asks only for every site or host patterns from its URL", async () => {
+    const { originsFrom } = await import("../src/grant/grant.js");
+    const q = (o: string) => `?${new URLSearchParams({ origins: o })}`;
+    expect(originsFrom(q("<all_urls>"))).toEqual(["<all_urls>"]);
+    expect(originsFrom(q("https://jobs.globex.example/* *://*.myworkdayjobs.com/*"))).toEqual([
+      "https://jobs.globex.example/*",
+      "*://*.myworkdayjobs.com/*",
+    ]);
+    expect(originsFrom(q("<all_urls>x http://x.example/* https://x.example/path/* file:///*"))).toEqual([]);
   });
 });
 

@@ -1,6 +1,6 @@
 ---
 name: ezapply-apply
-description: Fill out the job application (Workday, Oracle, Greenhouse, Lever or Ashby) for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
+description: Fill out the job application (Workday, Oracle, Greenhouse, Lever, Ashby or Phenom) for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
 ---
 
 # Fill a job application
@@ -8,10 +8,11 @@ description: Fill out the job application (Workday, Oracle, Greenhouse, Lever or
 **Never submit.** `go_next` refuses on the review page and every Submit control is blocked. Don't look
 for workarounds; the user presses Submit.
 
-The form tools work on Workday (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), Oracle Recruiting Cloud
-career sites (`…/sites/<site>/job/<id>`, often on the employer's own domain), and Greenhouse, Lever and Ashby
-job boards; `get_form` says which in `adapter`. Oracle differs in a few ways: see **Oracle applications** below;
-Greenhouse, Lever and Ashby are one page: see **One-page applications**.
+The form tools work on Workday, Oracle Recruiting Cloud career sites (often on the employer's own domain),
+Greenhouse, Lever and Ashby job boards, and Phenom career sites on an employer's own domain. The extension knows
+each by what its pages show, whatever the URL: `browser_status` lists each tab's `site`, and `get_form` says which
+in `adapter`. A tab listed `generic` is a page of none of them. Oracle differs in a few ways: see **Oracle applications** below; Greenhouse, Lever and Ashby are one
+page: see **One-page applications**; Phenom: see **Phenom applications**.
 
 ## Before starting
 1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind,
@@ -25,6 +26,10 @@ Greenhouse, Lever and Ashby are one page: see **One-page applications**.
    `postingBound` in a result means nothing tied the tab to this posting (it was captured on a job board or a
    careers page), so the tab is now bound to it: tell the user once which posting you're filling this
    application for.
+   An application embedded in a company's careers page (a Greenhouse form in a frame) is filled where it is:
+   results carry its `frameId` and the form's own `url`, and you keep passing only the `tabId`. If a call says
+   the extension has no access to it yet, a small ezapply window is asking for access to websites: pass the hint
+   on (the user clicks Allow access there and confirms the browser's prompt), then call again.
    Each form call brings the application tab to the front of its window, and one that changes the page
    brings the browser window to the front too unless the user turned that off (neither while a review page
    waits for the user). A result with `tabHidden` means the tab is still hidden and the browser slows it
@@ -183,6 +188,17 @@ Greenhouse, Lever and Ashby are one page: see **One-page applications**.
 - **Attachments:** a resume or cover letter already on the candidate's profile blocks a new upload until
   `remove_items` takes it off. Additional documents take several files.
 - The email field comes from the sign-in and is read-only.
+
+## Phenom applications
+Steps like Workday's (My information, My experience, Application questions…), each with Next and Previous.
+- **The resume comes first:** step 1 won't go on without one. `upload_file` the resume to `resume` before anything
+  else: the page parses it into the fields, so then `autofill_step` (or `get_form`) and correct what the parse got
+  wrong rather than trusting it.
+- **Work dates** are months picked from a calendar: give `YYYY-MM`. A refusal names the years the page allows
+  (never before the start date, never after today).
+- **No access yet:** if the user withheld the extension's access to websites, the form call opens a small
+  ezapply window asking for it; the user clicks Allow access, and the call goes on (or, if they took longer, call
+  again).
 
 ## One-page applications (Greenhouse, Lever, Ashby)
 - **The whole application is one page** whose only button is Submit (`lastPage`, `nextLabel` Submit, `go_next`

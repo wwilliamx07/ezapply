@@ -62,6 +62,9 @@ export type PageAction = z.infer<typeof PageAction>;
 export const FormSchema = z.object({
   adapter: z.string(),
   tabId: z.number().int(),
+  /** The frame the form was read in, when it's embedded in another site's page (`TabInfo.frames`). */
+  frameId: z.number().int().optional(),
+  /** The form's own URL: the frame's, for an embedded form. */
   url: z.string(),
   tenant: z.string().optional(),
   pageKind: PageKind,
@@ -198,9 +201,12 @@ export type UploadFile = z.infer<typeof UploadFile>;
 /**
  * `timing`: the adapter's waits for this call (see timing.ts), resolved by the companion from the workspace's
  * `autofill-timing.yaml`. Absent (an older companion): the adapter's defaults.
+ * `frameId`: act on that frame of the tab (an application embedded in another site's page, from
+ * `TabInfo.frames`) instead of the tab's own page. `tab.screenshot` always takes the whole tab.
  */
 const TabParam = z.object({
   tabId: z.number().int().optional(),
+  frameId: z.number().int().optional(),
   timing: z.record(z.string(), z.number()).optional(),
 });
 
@@ -245,6 +251,8 @@ export const FormMethods = {
    * `focusWindow` (with `activate`): also bring the browser window to the front, restoring it if minimized
    * (`forms.focusBrowser`); `windowFocused`: the extension asked the window to come to the front, which the
    * OS may still refuse (`focused` says whether it worked). An older extension ignores `focusWindow`.
+   * With `frameId`, `hidden` is read in that frame, and `focused` is whether the browser window has focus (a
+   * frame's own `document.hasFocus()` is false whenever focus is on the page around it).
    */
   "tab.show": {
     params: TabParam.extend({ activate: z.boolean(), focusWindow: z.boolean().optional() }),

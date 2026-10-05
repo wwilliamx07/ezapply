@@ -9,23 +9,30 @@ export function registerTemplateTools(server: McpServer, s: Services): void {
     {
       title: "Import LaTeX template",
       description:
-        "Copy the user's LaTeX project (resume or cover letter) from a folder on their machine into templates/<kind>/, " +
-        "skipping build artifacts, and record the main .tex. Replaces ezapply's default cover template without asking. " +
+        "Copy the user's LaTeX project (resume or cover letter) from a folder on their machine, or a single .tex file, " +
+        "into templates/<kind>/, skipping build artifacts, and record the main .tex. Pass the user's own folder or file " +
+        "(outside the workspace, or in library/), never a copy you made: workspace_changes watches it for their edits. " +
+        "Replaces ezapply's default cover template without asking. " +
         "If the user already has a template there, confirm with them and pass replace: true (the old one is kept in " +
         "templates/.old/). A main file that uses pdfTeX-only commands and no fontspec gets `% !TEX program = " +
         "pdflatex` added as its first line so it builds with pdflatex; the result's texProgram says so. contentFiles lists " +
         "the .tex files the main file \\inputs (relative to it): tailored copies need them too.",
       inputSchema: {
-        sourceDir: z.string().describe("Absolute path of the folder holding the .tex sources."),
+        source: z
+          .string()
+          .describe("Absolute path of the folder holding the .tex sources, or of a single-file .tex template."),
         kind: z.enum(["resume", "cover"]),
-        main: z.string().optional().describe("Main .tex relative to sourceDir, when auto-detection is ambiguous."),
+        main: z
+          .string()
+          .optional()
+          .describe("Main .tex relative to the source folder, when auto-detection is ambiguous."),
         replace: z.boolean().optional(),
       },
     },
     tool(
       s.log,
       "template_import",
-      (args: { sourceDir: string; kind: "resume" | "cover"; main?: string; replace?: boolean }) =>
+      (args: { source: string; kind: "resume" | "cover"; main?: string; replace?: boolean }) =>
         s.templates.importTemplate(args),
     ),
   );

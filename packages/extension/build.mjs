@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fixedHostPermissions, optionalHostPermissions, SITES } from "@ezapply/protocol/sites";
+import { HOST_PERMISSIONS, SITES } from "@ezapply/protocol/sites";
 import { build } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +33,13 @@ await build({
   outfile: join(dist, "options.js"),
   format: "iife",
 });
+// The window a form call opens to ask for a site's access (its Allow access click is the gesture the request needs).
+await build({
+  ...common,
+  entryPoints: [join(root, "src/grant/grant.ts")],
+  outfile: join(dist, "grant.js"),
+  format: "iife",
+});
 // The site adapters, injected into application pages' MAIN world on demand. Keep them small and self-contained
 // (no zod). ADAPTER_VERSION is a hash of each bundle itself, so any change reaches tabs that hold an older copy
 // without anyone remembering to bump a number. The placeholder has the hash's length, keeping the source map exact.
@@ -59,11 +66,11 @@ for (const { id: site } of SITES) {
 
 const manifest = JSON.parse(await readFile(join(root, "static/manifest.json"), "utf8"));
 manifest.version = pkg.version;
-// Every site's fixed hosts at install; sites granted per origin need the optional "any https origin".
-manifest.host_permissions = fixedHostPermissions();
-manifest.optional_host_permissions = optionalHostPermissions();
+// Every site, at install: the extension tells a form site by its pages' bodies, on whatever host.
+manifest.host_permissions = [...HOST_PERMISSIONS];
 await writeFile(join(dist, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 await cp(join(root, "static/options.html"), join(dist, "options.html"));
+await cp(join(root, "static/grant.html"), join(dist, "grant.html"));
 
 // Firefox: the same bundles; MV3 there runs the background as an event page, not a service worker.
 // The gecko id keeps the moz-extension:// UUID (which the companion pins) stable across reloads.

@@ -1,6 +1,6 @@
 import type { PostingMeta } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
-import { compareTitles, matchPosting, type PostingFacts, postingFacts } from "../src/forms/match.js";
+import { compareTitles, matchPosting, type PostingFacts, postingFacts, tabSite } from "../src/forms/match.js";
 import { applicationFromUrl, checkReqId, findApplication } from "../src/postings/application.js";
 
 const AT = "2026-10-04T00:00:00.000Z";
@@ -47,6 +47,25 @@ describe("finding a posting's application from its capture", () => {
       from: "host-page-job",
       at: AT,
     });
+  });
+
+  it("ties a Phenom posting page to its apply flow by the Apply link, and the flow's steps to it by jobSeqNo", () => {
+    const posting = "https://jobs.globex.example/ca/en/job/R-0000000001/Software-Developer-Intern";
+    const link = "https://jobs.globex.example/ca/en/hvhapply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA";
+    const app = findApplication({
+      html: `<a data-ph-at-id="apply-link" href="${link}">Apply Now</a>`,
+      url: posting,
+      at: AT,
+    });
+    expect(app).toMatchObject({
+      site: "phenom",
+      tenant: "jobs.globex.example",
+      job: "globa0001r0000000001externalenca",
+    });
+    const facts = postingFacts({ id: "p", url: posting, capturedAt: AT } as PostingMeta, app);
+    const step =
+      "https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA&step=2&stepname=workAndEducation";
+    expect(matchPosting(facts, { url: step })).toEqual({ verdict: "same", by: ["job"] });
   });
 
   it("finds nothing on a page that leads to no form site (a school's job board)", () => {
@@ -99,6 +118,21 @@ describe("which posting a tab belongs to", () => {
     expect(matchPosting(p, { url: B })).toEqual({ verdict: "other", by: ["job"] });
     // A job match wins over a binding to another posting.
     expect(matchPosting(p, { url: A }, { postingId: "q", tenant: "acme" }).verdict).toBe("same");
+  });
+
+  it("goes by the site the extension found on the page when the URL names none", () => {
+    // A Phenom posting page on the employer's domain: no form site's URL, but its body is Phenom's.
+    const page = "https://careers.example.com/global/en/job/R-0000000001/Software-Developer-Intern";
+    expect(tabSite(page)).toEqual({});
+    expect(tabSite(page, "phenom")).toEqual({ site: "phenom", tenant: "careers.example.com" });
+    expect(tabSite(page, "generic")).toEqual({});
+    const p = facts({ site: "phenom", tenant: "careers.example.com" });
+    expect(matchPosting(p, { url: page, site: "phenom" })).toEqual({ verdict: "same", by: ["tenant"] });
+    expect(matchPosting(p, { url: page })).toEqual({ verdict: "unconfirmed", by: [] });
+    // The apply page names the job: jobSeqNo.
+    const apply = "https://careers.example.com/global/en/apply?jobSeqNo=EXAMA0001R1EXTERNALENGLOBAL&step=1";
+    const q = facts({ site: "phenom", tenant: "careers.example.com", job: "exama0001r1externalenglobal" });
+    expect(matchPosting(q, { url: apply, site: "phenom" })).toEqual({ verdict: "same", by: ["job"] });
   });
 
   it("refuses a tab on another site than the posting's application", () => {

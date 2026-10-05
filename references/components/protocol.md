@@ -9,14 +9,14 @@ so a change here is a change to the contract between them.
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, and the extension's form methods |
 | `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingApplication` (the application a posting is tied to: [data-formats](../data-formats.md#postingsidmetajson-protocolsrcpostingsts)), `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site, else `generic`), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
-| `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `SiteAccess`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `fixedHostPermissions()`, `optionalHostPermissions()`; no zod (`@ezapply/protocol/sites`) |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site by its URL alone, else `generic`: what decides where no page can be read), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
+| `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `siteSignatures()` (each site's `[id, signature]`, in registry order), `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions); no zod (`@ezapply/protocol/sites`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
 | `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, without a leading rank like "5 - ", or without a trailing dialling code: "Canada" for Greenhouse's "Canada +1"), `strictIndex` ([autofill](autofill.md#strict-matching)) |
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
-| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT`, `ORACLE_OPTIONAL_HOST_PERMISSIONS` ([oracle-adapter](oracle-adapter.md#which-pages)) |
-| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `WORKDAY_HOST_PERMISSIONS`, `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
-| `greenhouse.ts`, `lever.ts`, `ashby.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`) ([sites](sites.md)) |
+| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT` ([oracle-adapter](oracle-adapter.md#which-pages)) |
+| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
+| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply` ([sites](sites.md)) |
 
 The package exports `.` (everything), and `./workday`, `./oracle`, `./sites`, `./match` and `./timing` for the in-page adapters:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
@@ -29,24 +29,32 @@ list of sites derives from it, so a new site's only protocol change is its entry
 
 | Field | Meaning |
 |---|---|
-| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby` (each also in `SiteId`) |
+| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom` (each also in `SiteId`) |
 | `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
-| `isUrl(url)` | A posting or application page of the site |
-| `tenant(url)`, `job(url)` | The employer's space and the job, lowercased |
+| `signature` | What the site's own pages render, as a CSS selector list: a page (or frame) is the site's when its document matches any part. How the extension tells a site, before the URL ([telling a site](extension.md#telling-a-pages-site-framests)). Each part is the provider's own markup (its widgets' attributes, class names, script host), never a link to it or its embed script, which an employer's careers page has too |
+| `isUrl(url)` | A posting or application page of the site by its URL alone: what decides where no page can be read (a captured page's links, the companion's canonical URLs, a tab the extension can't read) |
+| `tenant(url)`, `job(url)` | The employer's space and the job, lowercased, read from a URL of the site's (by `isUrl`, or a tab whose page showed the site) |
 | `canonicalPath?(pathname)` | The posting's identifying path, when the site varies it for the same job (a locale segment, an application page) |
 | `hostPageJob?(url)` | The site's job that a page on another host names in its URL: a company's careers page embedding the site's board (Greenhouse: `?gh_jid=`). Ties a posting captured there to its application |
-| `access` | `{ kind: "fixed", hosts }` (in the manifest, granted at install: Workday) or `{ kind: "per-origin" }` (each origin granted on its own, at Set posting or from the options page: the rest) |
 | `waits` | The site's own waits ([waits owned by the site](adapters.md#waits-owned-by-the-site)); all start from `STANDARD_WAITS` |
 
 Derived from it: `detectSite`, `FORM_SITES`, `siteTenant`, `siteJob`, the companion's canonical posting URLs
 (`siteOfUrl(url)?.canonicalPath`), which application a posting is tied to and which posting a tab belongs to
-(`tenant`, `job`, `hostPageJob`: [which posting](../mcp-tools.md#forms)), the extension's bundles and manifest permissions (`build.mjs`), site access in
-the background, Set posting and the options page, and `loadTiming`'s per-site sections. `sites.test.ts` checks
-that the registry and `SiteId` name the same sites.
+(`tenant`, `job`, `hostPageJob`: [which posting](../mcp-tools.md#forms)), the extension's bundles (`build.mjs`), the
+site of every tab, frame and capture in the extension (`siteSignatures`, then `detectSite`), and `loadTiming`'s
+per-site sections. `sites.test.ts` checks that the registry and `SiteId` name the same sites and that every site
+has a signature; the extension's `sites.test.ts` checks each signature on every saved page of every site.
 
-**Why per-origin for the hosted boards.** Greenhouse, Lever and Ashby have fixed hosts and could be in the
-manifest, but every host there is a permission warning at install and on update for a site the user may never
-use. Asked for at Set posting, one grant covers that host's every board.
+**Why signatures, and access to every site.** Phenom and Oracle run on employers' own domains, where the URL
+is the employer's and its shape varies from one employer to the next: Phenom's apply pages are
+`/ca/en/apply` on one site and `/global/en/apply` on another, and a URL rule written from the first missed the
+second, so a Phenom application was listed `generic` and the form tools refused it. What every page of a
+provider's site has is the provider's own markup, so that's what tells the site. Reading a page needs access to
+its host, which for sites on any host means every host: asked for one origin at a time, a tab on an unknown
+host stayed unreadable until something already knew its site, which only the URL could say.
+`HOST_PERMISSIONS` is `<all_urls>`, which also lets `tab.screenshot` work. The cost is Chrome's broadest
+install warning ("Read and change all your data on all websites"), accepted for this; the extension still acts
+on a page only for Set posting or a call from Claude ([security](../security.md)).
 
 ## Bridge handshake
 
@@ -98,8 +106,8 @@ keys are ignored and an older extension strips the field, so it came without a v
 
 | Method | Params → result |
 |---|---|
-| `browser.status` | `{}` → `BrowserStatus { extensionVersion, tabs[] }` |
-| `form.get` | `{ tabId? }` → `FormSchema` |
+| `browser.status` | `{}` → `BrowserStatus { extensionVersion, tabs[] }` (each tab's `frames`: embedded applications) |
+| `form.get` | `{ tabId?, frameId? }` → `FormSchema` (with `frameId` when read in a frame). Every `form.*` method takes `frameId`: act on that frame of the tab, an application embedded in another site's page, instead of the tab's own page ([embedded applications](extension.md#embedded-applications)) |
 | `form.listOptions` | `{ tabId?, fieldId }` → `OptionInfo[]` |
 | `form.searchOptions` | `{ tabId?, fieldId, query }` → `OptionInfo[]` |
 | `form.fill` | `{ tabId?, fills: FillAction[] }` → `FillResult[]` |
@@ -110,8 +118,8 @@ keys are ignored and an older extension strips the field, so it came without a v
 | `form.next` | `{ tabId? }` → `NextResult` |
 | `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
-| `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` |
-| `tab.show` | `{ tabId?, activate, focusWindow? }` → `{ tabId, activated, windowFocused?, hidden, focused? }`: with `focusWindow` (and `activate`), bring the browser window to the front first, restoring it if minimized (`windowFocused`: it was raised; the OS may still keep it behind); switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (false while the browser window is behind another app; absent when the page can't be read). Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump, and `focused`, then `focusWindow` and `windowFocused`, later the same way (an older extension ignores `focusWindow`); an extension older than `tab.show` answers "Unknown method" |
+| `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` (always the whole tab) |
+| `tab.show` | `{ tabId?, frameId?, activate, focusWindow? }` → `{ tabId, activated, windowFocused?, hidden, focused? }`: with `focusWindow` (and `activate`), bring the browser window to the front first, restoring it if minimized (`windowFocused`: it was raised; the OS may still keep it behind); switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (false while the browser window is behind another app; absent when the page can't be read). Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump, and `focused`, then `focusWindow` and `windowFocused`, later the same way (an older extension ignores `focusWindow`); an extension older than `tab.show` answers "Unknown method" |
 
 ## Form schema
 
@@ -150,7 +158,8 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
 ## Postings
 
 `CapturePayload`: `url`, `pageTitle`, `html` (body verbatim), `visibleHtml`, `visibleText`, `jsonLd[]`,
-`frameUrl?` (the content came from this embedded frame; `url` and `pageTitle` are still the tab's),
+`frameUrl?` (the content came from this embedded frame; `url` and `pageTitle` are still the tab's), `site?`
+(the site the content's page showed, by its body; absent when none did, and the companion goes by the URL),
 `capturedAt`, `tabId`. `PostingMeta` and `PostingStatus` are described in
 [data-formats.md](../data-formats.md#postingsidmetajson-protocolsrcpostingsts).
 
@@ -171,10 +180,14 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict`, and
   `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`; then `tab.show`'s `focused`, and
-  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused`.
+  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused`; then `TabInfo.frames`, the `frameId`
+  param of the form methods and `tab.show`, and `FormSchema.frameId`. An older extension ignores `frameId` and
+  acts on the tab's own page, which isn't an application, so the call fails with "not an application page"
+  rather than landing anywhere else. Then `CapturePayload.site`, and `TabInfo.site` (and `FrameInfo.site`) going by
+  the page's body before its URL, which changes what a site is, not the schema.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
-  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason.
+  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason. **5:** `SiteId` gained `phenom`.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

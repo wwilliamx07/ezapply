@@ -13,10 +13,11 @@ As of 2026-10-04.
 | Profile | Profile, answer bank (33 seeded questions), repos schemas and checks; resume and cover templates (`TemplateService`), default cover letter, cover from an example; readiness checklist |
 | Document skills | `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`; application requirements recorded in `notes.md` and followed; two attach modes: review in the browser and attach only approved versions (default, enforced by `upload_file`), or attach immediately |
 | Workday read path | Page detection and extraction; posting, start-choice and sign-in verified on a live public tenant; tenants on myworkdaysite.com read from the path |
-| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot (refused by Chrome live, see [the first Workday run on the engine](#the-first-workday-run-on-the-engine)), submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
-| Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by path on Oracle Cloud hosts and employers' domains, tenant as host and site number, per-origin site access asked for at Set posting; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
-| Adapters: one engine, a definition per site | A site registry in the protocol (detection, tenant, job, canonical paths, access, waits), from which the extension's bundles, manifest permissions, site access and the companion's tab choice derive; one adapter engine (API, extraction, ids, rows, fill loop, next and back, guard) with a definition per site; shared widget drivers (native controls, react-select through its props, toggle buttons, a search combobox, file fields); waits owned by each site, with per-site sections in `autofill-timing.yaml`; schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) instead of site names in the companion. Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal ([adapters](components/adapters.md)) |
+| Workday write path | All fillers (a dropdown reads its own listbox even while the previous one is still on screen; dates typed digit by digit and read from what the widget holds; typeahead entries matched one by one once their search results are in), removing carried-over selections, attachments and rows (`remove_repeatable`), repeatables, next and back, page actions, screenshot (refused by Chrome live while the extension held only Workday's hosts, see [the first Workday run on the engine](#the-first-workday-run-on-the-engine); it holds `<all_urls>`, which `captureVisibleTab` accepts, not yet re-run), submit guard, `ezapply-apply` skill; lean `get_form` with filters; tested against a behavioural fixture, which the companion's e2e tests also drive through the real adapter |
+| Oracle Recruiting Cloud | A second adapter with the Workday API ([oracle-adapter](components/oracle-adapter.md)): detection by its pages' body on any host, else by path on Oracle Cloud hosts and employers' domains, tenant as host and site number; extraction of every widget (text, cx-select lists, pills, radios, dates, phone, attachments, agreements, saved items), fillers, uploads and removals, inline item forms with Save, deletes, single-page and multi-page flows, submit guard. Job page and email step verified live (headless, public pages); the single-page application read from a page the user saved; filling tested against a behavioural fixture built from that page and the Candidate Experience's own templates, also driven by the companion's e2e tests |
+| Adapters: one engine, a definition per site | A site registry in the protocol (signature, URL rules, tenant, job, canonical paths, waits), from which the extension's bundles, its telling of each page's site (by body, then URL) and the companion's tab choice derive; the extension holds every site (`<all_urls>`) to read them; one adapter engine (API, extraction, ids, rows, fill loop, next and back, guard) with a definition per site; shared widget drivers (native controls, react-select through its props, toggle buttons, a search combobox, file fields); waits owned by each site, with per-site sections in `autofill-timing.yaml`; schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) instead of site names in the companion. Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal ([adapters](components/adapters.md)) |
 | Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted ([sites](components/sites.md)) |
+| Phenom | Employers' careers sites run by Phenom, whose multi-step apply flow is on the employer's domain: a definition on the engine (shared drivers, a react-datepicker month picker, selects that settle late, rows, the resume required on step 1), built from steps 1 to 3 of a live flow saved with placeholder values ([sites](components/sites.md#phenom-sitesphenom)) |
 | Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; all of it in two Workday runs |
 | Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
@@ -44,6 +45,19 @@ As of 2026-10-04.
   live page and covered by a saved copy of it, not yet used in a real application
   ([sites](components/sites.md#ashby-sitesashby)). Not tried: uploads on Lever, the confirmation pages, a real
   application on Greenhouse or Lever.
+- **Telling sites by their pages, with access to every site** (2026-10-04): the signatures match every saved page
+  of their own site and no other's, and on real captured pages they told every Workday, Oracle, Ashby and Phenom
+  page and matched none of the rest (job boards, other ATSs, employers' own pages). Not yet run in
+  a browser: an extension reloaded with `<all_urls>` (Chrome may ask to accept the new permission; Firefox may
+  withhold it until granted), `browser_status` reading every open tab (how long it takes with many tabs), Set
+  posting's request for every site when already granted, the access window asking for every site, a capture
+  sending its `site`, and a Phenom apply flow under `/global/en/` filled through the form tools.
+- **Phenom** (2026-10-04): built from saved steps 1 to 3 of a live flow and tested on them in jsdom; its drivers'
+  behaviour (the month picker, the late selects) was seen live but is tested on minimal models of it. The
+  definition hasn't run on a live page. Check in one real application, with debug mode on: the job and apply
+  pages listed `phenom` in `browser_status`, the resume uploaded first and the parsed fields corrected, the month picker and the
+  school typeahead, adding and removing a row, Next taking up to 30 s, and steps 4 to 6 (additional questions,
+  terms, review), whose markup isn't known: save each of them if anything there is missed.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Workday's application URL
@@ -106,7 +120,7 @@ As of 2026-10-04.
   employer details and the user's values replaced), but not yet pressed live. The Back button worked
   live in two runs on one tenant whose steps are all titled "Application".
 - **Parts of filling an Oracle application.** The first live application (an employer's own domain, single page,
-  in Chrome, with site access granted at Set posting) was filled to Submit: text, pills, radios, dates, lists,
+  in Chrome) was filled to Submit: text, pills, radios, dates, lists,
   uploads, and education and work entries through the inline form and Save worked. Its failures (list
   read-backs, a re-rendered city input, the postal-code search, a reformatted phone number, stale errors,
   "Saved" as an error, languages and a certification never added) are fixed and reproduced in the fixture,
@@ -118,6 +132,15 @@ As of 2026-10-04.
   background, the page reporting visible within the 500 ms the extension polls, a minimized window reported
   hidden, and a step after a review page taking about as long as the steps before it. Check it in one run with
   no other change, opening a review page in the middle of the application.
+- **Embedded applications** (2026-10-04): tested against a stubbed `webNavigation` and `scripting`, and
+  through the companion with a fake extension whose careers-page tab holds a Greenhouse frame (the saved
+  Greenhouse application). Not yet seen live: Chrome and Firefox injecting into a cross-origin frame by
+  `frameIds` while the page around it is out of reach, `webNavigation`'s frame ids matching `scripting`'s, the
+  second Set posting click asking for the frame's origin (and Firefox accepting it), Greenhouse's embed filled
+  inside a careers page with its own submit guard, and how often embeds move to a new frame between steps.
+- **Asking for a site's access from a form call** (2026-10-04): tested against a stubbed WebExtensions API.
+  Not yet seen live: the window opening over the user's terminal, Chrome's and Firefox's own prompts after Allow
+  access (Firefox's within the click), the call going on once granted, and the window closing itself.
 - **Bringing the browser window to the front** (`forms.focusBrowser`, 2026-10-04): tested against a fake
   `ext.windows` and through the companion with a fake extension. Not yet seen live: whether Windows lets the
   extension bring the window in front of the terminal or only flashes its taskbar button (`windowFocused`
@@ -187,7 +210,8 @@ rows and of the engine. The user stepped in twice. Calls: 42, 171 s in calls, 73
   on this tenant. Fixed from a saved copy of the step: the live button is a plain "Delete" with a trash icon
   ([removable rows](components/workday-adapter.md)). Not yet pressed live.
 - **`screenshot` fails in Chrome**: "Either the '<all_urls>' or 'activeTab' permission is required." The
-  extension's per-site host permissions aren't enough for `tabs.captureVisibleTab`.
+  extension then held only its sites' host permissions, which aren't enough for `tabs.captureVisibleTab`. It
+  holds `<all_urls>` now; not yet re-run.
 - **"How Did You Hear About Us?" is a nested list.** `list_options` returned nothing and `search_options` took
   6.5 s and returned the ten top-level categories whatever the query. Filling a path (`Job Boards > …`) listed
   the second level in the failure. The agent then picked the employer's own careers site as its own judgment, a factual
@@ -365,7 +389,7 @@ what changed from it, and each linked page gives the reason.
 | Long-running daemon started by hand or at login | No daemon: the companion runs inside `ezapply chat` (after a stage where `ezapply mcp` started it on demand and it stopped when idle) ([architecture](architecture.md#processes-and-lifecycle)) |
 | `ezapply init` then a manual daemon start, a pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
-| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby ([adapters](components/adapters.md)) |
+| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom ([adapters](components/adapters.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
 | Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; no Playwright (the recon scripts that used it were for the first adapter builds and are gone) |

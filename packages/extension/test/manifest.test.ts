@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fixedHostPermissions, optionalHostPermissions, WORKDAY_HOST_PERMISSIONS } from "@ezapply/protocol";
+import { HOST_PERMISSIONS } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
 
 // npm test builds first, so both outputs exist.
@@ -24,17 +24,11 @@ describe("Firefox build", () => {
 });
 
 describe("host permissions", () => {
-  it("cover exactly the fixed hosts of the registry's sites (Workday's application hosts)", () => {
+  it("cover every site, at install, and nothing is left to grant one origin at a time", () => {
     for (const dir of ["dist", "dist-firefox"]) {
-      expect(manifest(dir).host_permissions).toEqual(fixedHostPermissions());
-      expect(manifest(dir).host_permissions).toEqual(expect.arrayContaining([...WORKDAY_HOST_PERMISSIONS]));
-    }
-  });
-
-  it("let sites granted per origin (Oracle career sites, on any host) be granted one origin at a time", () => {
-    for (const dir of ["dist", "dist-firefox"]) {
-      expect(manifest(dir).optional_host_permissions).toEqual(optionalHostPermissions());
-      expect(manifest(dir).optional_host_permissions).toEqual(["https://*/*"]);
+      expect(manifest(dir).host_permissions).toEqual([...HOST_PERMISSIONS]);
+      expect(manifest(dir).host_permissions).toEqual(["<all_urls>"]);
+      expect(manifest(dir).optional_host_permissions).toBeUndefined();
     }
   });
 });

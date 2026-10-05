@@ -48,6 +48,19 @@ describe("extractPosting", () => {
     expect(out.markdown).toContain("reliable distributed systems");
   });
 
+  it("takes the site the extension found on the page, and reads the tenant as that site does", () => {
+    const url = "https://careers.example.com/global/en/job/R-0000000001/Software-Developer-Intern";
+    const input = { visibleHtml: `<p>${LONG}</p>`, url, pageTitle: "Software Developer Intern", jsonLd: [] };
+    expect(extractPosting(input)).toMatchObject({ site: "generic" });
+    expect(extractPosting({ ...input, site: "phenom" })).toMatchObject({
+      site: "phenom",
+      tenant: "careers.example.com",
+    });
+    // Generic from the page says nothing: the URL decides.
+    const workday = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Austin/Backend-Engineer_R-1234";
+    expect(extractPosting({ ...input, url: workday, site: "generic" })).toMatchObject({ site: "workday" });
+  });
+
   it("strips scripts and styles", () => {
     const out = extractPosting({
       visibleHtml: `<p>${LONG}</p><script>alert(1)</script><style>.x{}</style>`,

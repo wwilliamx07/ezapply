@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { toggleButtonsDriver } from "../src/adapters/widgets/buttons.js";
 import { comboboxDriver } from "../src/adapters/widgets/combobox.js";
+import { monthPickerDriver } from "../src/adapters/widgets/datepicker.js";
 import { fileDriver } from "../src/adapters/widgets/file.js";
 import {
   checkboxDriver,
@@ -213,5 +214,91 @@ describe("toggle buttons, a search field, a file field", () => {
     const file = new File(["%PDF"], "resume.pdf", { type: "application/pdf" });
     expect(await d.upload?.(c, file)).toEqual({ ok: true, readBack: ["resume.pdf"] });
     expect(await d.remove?.(c, null, {} as never)).toMatchObject({ ok: true, removed: ["resume.pdf"], remaining: [] });
+  });
+});
+
+describe("a list that settles late, and a month picker", () => {
+  it("settled select: waits for a list that puts the old value back first and takes the new one a moment later", async () => {
+    const c = field(
+      '<select><option value="">Please Select</option><option value="A">Alberta</option><option value="O">Ontario</option></select>',
+    );
+    const s = c.querySelector("select") as HTMLSelectElement;
+    // As Phenom's React lists behave live: the change is undone at once, then applied.
+    s.addEventListener("change", () => {
+      const wanted = s.value;
+      s.value = "";
+      setTimeout(() => {
+        s.value = wanted;
+      }, 60);
+    });
+    expect(await selectDriver({ settled: true }).fill(c, "Ontario", { strict: true })).toEqual({
+      ok: true,
+      readBack: "Ontario",
+    });
+  });
+
+  /**
+   * react-datepicker as Phenom shows it: an input that opens a month calendar with a year list in its header. Its
+   * typing is ignored; choosing a year and pressing a month sets the input, as live.
+   */
+  function monthPicker(years = ["2025", "2026"], disabled: number[] = []) {
+    const c = field(
+      '<label for="d">From</label><div class="react-datepicker-wrapper"><div class="react-datepicker__input-container"><input id="d" type="text" value=""></div></div>',
+    );
+    const input = c.querySelector("input") as HTMLInputElement;
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const open = () => {
+      if (document.querySelector(".react-datepicker")) return;
+      const cal = document.createElement("div");
+      cal.className = "react-datepicker";
+      const year = years.at(-1) as string;
+      const cells = MONTHS.map(
+        (m, i) =>
+          `<div class="react-datepicker__month-text react-datepicker__month-${i}" role="option" aria-label="Choose ${m} ${year}"${disabled.includes(i) ? ' aria-disabled="true"' : ""}>${m}</div>`,
+      ).join("");
+      const options = years.map((y) => `<option value="${y}">${y}</option>`).join("");
+      cal.innerHTML = `<div class="react-datepicker__header"><select class="range-select">${options}</select></div><div class="react-datepicker__month" role="listbox" aria-label="month  ${year}-10">${cells}</div>`;
+      const list = cal.querySelector("select") as HTMLSelectElement;
+      list.value = year;
+      list.addEventListener("change", () => {
+        cal.querySelector(".react-datepicker__month")?.setAttribute("aria-label", `month  ${list.value}-01`);
+      });
+      for (const [i, cell] of cal.querySelectorAll(".react-datepicker__month-text").entries()) {
+        cell.addEventListener("click", () => {
+          input.value = `${String(i + 1).padStart(2, "0")}/${list.value}`;
+          cal.remove();
+        });
+      }
+      document.body.append(cal);
+    };
+    input.addEventListener("click", open);
+    input.addEventListener("input", () => {
+      input.value = "";
+    });
+    return { c, input };
+  }
+
+  it("month picker: opens the calendar, picks the year from its list and presses the month", async () => {
+    const { c, input } = monthPicker();
+    const d = monthPickerDriver();
+    expect(d.dateParts?.(c)).toEqual(["MM", "YYYY"]);
+    expect(await d.fill(c, "2025-08", { strict: true })).toEqual({ ok: true, readBack: "08/2025" });
+    expect(input.value).toBe("08/2025");
+    expect(document.querySelector(".react-datepicker")).toBeNull();
+    // Already showing it: nothing to do.
+    expect(await d.fill(c, "08/2025", { strict: true })).toEqual({ ok: true, readBack: "08/2025" });
+  });
+
+  it("month picker: says which years can be chosen, refuses a disabled month and a date without a month", async () => {
+    const d = monthPickerDriver();
+    expect(await d.fill(monthPicker().c, "2019-05", { strict: true })).toMatchObject({
+      ok: false,
+      error: "Only 2025–2026 can be chosen here.",
+    });
+    expect(await d.fill(monthPicker(["2026"], [11]).c, "2026-12", { strict: true })).toMatchObject({
+      ok: false,
+      error: /Dec 2026 can't be chosen/,
+    });
+    expect(await d.fill(monthPicker().c, "2025", { strict: true })).toMatchObject({ ok: false, error: /YYYY-MM/ });
   });
 });
