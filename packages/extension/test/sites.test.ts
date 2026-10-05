@@ -42,6 +42,10 @@ const PAGES: Record<string, { build: (doc: Document) => void; url: string }> = {
     build: live("phenom-step2"),
     url: "https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA&step=2&stepname=workAndEducation",
   },
+  dayforce: {
+    build: live("dayforce-candidate-info"),
+    url: "https://jobs.dayforcehcm.com/en-US/hooli/CANDIDATEPORTAL/jobs/1000/apply/manualApplication",
+  },
 };
 
 describe("the registry and the definitions", () => {
@@ -70,6 +74,7 @@ const SAVED: Record<string, string[]> = {
   lever: ["lever-apply"],
   ashby: ["ashby-apply", "ashby-groups"],
   phenom: ["phenom-step1", "phenom-step2", "phenom-step2-errors", "phenom-step3"],
+  dayforce: ["dayforce-candidate-info"],
 };
 
 /** The sites whose signature the document matches, in registry order. */

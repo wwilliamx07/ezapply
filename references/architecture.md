@@ -29,7 +29,7 @@
 | Protocol | `packages/protocol` | library | zod schemas and types shared by everything: bridge messages, RPC, forms, postings, errors |
 | Companion | `packages/companion` | library, run inside `ezapply chat` | Serves the MCP tools, talks to the extension, owns all file and network work |
 | CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), hosts the companion and runs Claude Code (`chat`), relays MCP for Claude Code (`mcp`) |
-| Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom) on the companion's behalf |
+| Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce) on the companion's behalf |
 | Workspace | created by `ezapply init` | folder of files | The user's data, the agent file `EZAPPLY.md`, skills, and Claude Code config |
 
 ## Processes and lifecycle

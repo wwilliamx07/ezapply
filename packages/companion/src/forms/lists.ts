@@ -23,11 +23,11 @@ export function listOf(title: string): ListKey | undefined {
 
 /**
  * The list an add button adds to: by its label first ("Add Experience", "Add Language" on Oracle), then the
- * section it sits under (Workday labels every add button "Add" or "Add Another"). An Oracle inline form's Save
- * (`save.*`) adds nothing by itself.
+ * section it sits under (Workday labels every add button "Add" or "Add Another"). An inline form's Save (`save`)
+ * adds nothing by itself, nor does an `edit` button, which opens a saved item's form again.
  */
 export function listOfButton(b: FormSchema["addButtons"][number]): ListKey | undefined {
-  if (b.kind === "save" || b.id.startsWith("save.")) return undefined;
+  if (b.kind === "save" || b.kind === "edit" || b.id.startsWith("save.")) return undefined;
   return listOf(b.label) ?? (b.section ? listOf(b.section) : undefined);
 }
 

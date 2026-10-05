@@ -38,6 +38,7 @@ import {
 } from "./autofill.js";
 import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
 import { type CallRecord, DebugRecorder, debugRequest, type MarkupSetting, stripBulk, type Trace } from "./debug.js";
+import { listOf } from "./lists.js";
 import {
   type Binding,
   matchPosting,
@@ -47,6 +48,7 @@ import {
   type TabFacts,
   tabSite,
 } from "./match.js";
+import { SITE_NOTES } from "./sites/index.js";
 import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -198,6 +200,8 @@ export class FormsService {
   private readonly bindings = new Map<number, Binding>();
   /** The last match reported per tab, so `postingMatch` is said again only when it changes. */
   private readonly reported = new Map<number, string>();
+  /** The sites whose notes each chat session has been given (`siteNotes`); "" for requests naming no session. */
+  private readonly notesGiven = new Map<string, Set<string>>();
 
   constructor(
     private readonly ws: Workspace,
@@ -210,7 +214,7 @@ export class FormsService {
     this.debug = new DebugRecorder(ws, log);
   }
 
-  async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string } = {}) {
+  async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string; session?: string } = {}) {
     return this.onTab({ tool: "get_form", params: opts }, opts.tabId, async (t) =>
       this.view(t, await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts),
     );
@@ -221,7 +225,7 @@ export class FormsService {
    * review page sets status `filled` (and reports approved documents never attached); a confirmation page sets
    * `submitted`.
    */
-  private async view(t: Target, form: FormSchema, opts: { onlyEmpty?: boolean; section?: string }) {
+  private async view(t: Target, form: FormSchema, opts: { onlyEmpty?: boolean; section?: string; session?: string }) {
     if (form.pageKind === "confirmation") {
       await this.setStatus(t, "submitted");
       await this.logEvent(t, { event: "confirmation-seen", url: form.url });
@@ -229,7 +233,9 @@ export class FormsService {
     if (form.pageKind === "review") await this.setStatus(t, "filled");
     const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
     const checks = await this.checks(t, form);
+    const siteNotes = this.siteNotes(opts.session, form.adapter);
     return {
+      ...(siteNotes ? { siteNotes } : {}),
       ...leanForm(form, opts),
       ...(missing ? { notAttached: missing } : {}),
       ...checks,
@@ -246,6 +252,21 @@ export class FormsService {
   }
 
   /**
+   * A site's notes (`forms/sites/`), the first time a page of that site is read in this chat session; afterwards
+   * nothing. The tool descriptions and the apply skill never name a site: this is how the agent learns what one does
+   * differently, and only for the sites it fills.
+   */
+  private siteNotes(session: string | undefined, site: string): string | undefined {
+    const notes = SITE_NOTES[site as keyof typeof SITE_NOTES];
+    if (!notes) return undefined;
+    const given = this.notesGiven.get(session ?? "") ?? new Set<string>();
+    this.notesGiven.set(session ?? "", given);
+    if (given.has(site)) return undefined;
+    given.add(site);
+    return notes;
+  }
+
+  /**
    * Fill what the profile and the answer bank decide on this step without the model (see `forms/autofill.ts`),
    * then return what was filled and only the fields left to decide. In order:
    * 1. Add the rows the page lacks for the profile's lists (Workday's work, education, language and website rows;
@@ -253,12 +274,12 @@ export class FormsService {
    * 2. Plan and fill, twice: fields that appear because of a fill (a province list after the country, an end date
    *    after "I currently work here" is unticked) are planned on a second read. A dropdown whose value depends on
    *    its options (a degree, a language level) has them listed first, once per option key.
-   * 3. On Oracle, add each work, education and language entry the page doesn't hold through its inline form:
-   *    open, fill, Save. A Save the page refuses stops there, with the form left open for the model.
+   * 3. On Oracle and Dayforce, add each work, education and language entry the page doesn't hold through its
+   *    inline form: open, fill, Save. A Save the page refuses stops there, with the form left open for the model.
    * Never fills a tab that belongs to another posting. With `forms.autofill: "off"` it fills nothing and returns
    * the whole step as left.
    */
-  async autofillStep(tabId?: number) {
+  async autofillStep(tabId?: number, session?: string) {
     return this.onTab({ tool: "autofill_step", params: {} }, tabId, async (t) => {
       const read = () => t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
       const press = (addButtonId: string) =>
@@ -267,7 +288,7 @@ export class FormsService {
       const run: AutofillRun = { filled: [], failed: [], kept: 0, added: [], left: new Map(), options: new Map() };
       // get_form's view of the page (it replaces get_form at the start of a step), narrowed to the fields left.
       const result = async (note?: string) => {
-        const view = await this.view(t, form, {});
+        const view = await this.view(t, form, { session });
         const sections = leftSections(view.sections, run.failed, note ? null : run.left, optionsLeft(form, run));
         return {
           ...view,
@@ -334,8 +355,8 @@ export class FormsService {
         form = await read();
       }
 
-      // 3. Oracle's inline item forms, one entry at a time. A form that doesn't open skips the rest of its list;
-      // a Save the page refuses stops everything, since its form stays open.
+      // 3. Inline item forms (Oracle's, Dayforce's records), one entry at a time. A form that doesn't open skips the
+      // rest of its list; a Save the page refuses stops everything, since its form stays open.
       const unopened = new Set<string>();
       for (const item of missingItems(form, input.profile)) {
         if (unopened.has(item.list)) continue;
@@ -360,7 +381,10 @@ export class FormsService {
         );
         await this.fillPlanned(t, run, plan.fills, handled);
         form = await read();
-        const save = form.addButtons.find((b) => b.id.startsWith("save."));
+        // The new entry's own Save, by its section's list, else the only one: Dayforce shows Personal Information's
+        // Update above the record's while both are open.
+        const saves = form.addButtons.filter((b) => b.id.startsWith("save."));
+        const save = saves.find((b) => b.section && listOf(b.section) === item.list) ?? saves[0];
         const saved = save ? await press(save.id) : { ok: false, error: "The form has no Save button." };
         await this.logEvent(t, {
           event: "add-item",
@@ -1079,7 +1103,7 @@ export class FormsService {
     if (files.length === 0) return undefined;
     const hint =
       when === "upload"
-        ? "Approved for this posting and not attached yet. A file field with multiple: true (Workday's Resume/CV) " +
+        ? "Approved for this posting and not attached yet. A file field with multiple: true " +
           "takes several files: upload them to it too, unless the form has a field of their own."
         : "Approved for this posting and never attached to this application. Before the hand-off, go_back to the " +
           "step with the file field and upload them (a field with multiple: true takes several files), or tell " +
@@ -1390,8 +1414,8 @@ function browserBehindOf(t: Target): { browserBehind?: BrowserBehind } {
     ? "ezapply asked the browser to come to the front, but it stayed behind another app (the system may have " +
       "kept it there). If a field isn't taken (a date reads back empty or is called required), ask the user to " +
       "click the browser window, then fill it again."
-    : "The browser window is behind another app, where the page gets no focus events, and some fields (Workday's " +
-      "dates) may not be taken. If a field isn't taken, ask the user to bring the browser to the front, or to " +
+    : "The browser window is behind another app, where the page gets no focus events, and some fields (dates on " +
+      "some sites) may not be taken. If a field isn't taken, ask the user to bring the browser to the front, or to " +
       'turn on "focusBrowser" under "forms" in ezapply.config.json, then fill it again.';
   return { browserBehind: { hint } };
 }

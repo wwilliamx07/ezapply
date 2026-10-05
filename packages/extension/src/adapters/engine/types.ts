@@ -163,11 +163,11 @@ export interface RowSpot {
 
 export interface AddButtonSpot {
   el: HTMLElement;
-  /** The id before any `#n`: `add.work-experience`, `save.languages`. */
+  /** The id before any `#n`: `add.work-experience`, `save.languages`, `edit.education-history-1`. */
   key: string;
   label: string;
   section?: string;
-  kind: "row" | "form" | "save";
+  kind: "row" | "form" | "save" | "edit";
 }
 
 export type FillOutcome = Omit<FillResult, "fieldId">;

@@ -12,7 +12,7 @@ skills treat them all alike.
 | `engine/extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
 | `engine/api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
 | `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
-| `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `parseDate`, React props, `win(node)` |
+| `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
 | `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
 | `engine/trace.ts` | Autofill debug mode's trace ([below](#autofill-debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
@@ -22,13 +22,14 @@ skills treat them all alike.
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
 
 Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (their own drivers, `page.ts`, `fill.ts`,
-`selectors.ts` and `widgets.ts` beside `site.ts`), and [Greenhouse, Lever, Ashby and Phenom](sites.md) (a `site.ts`
-each, on shared drivers).
+`selectors.ts` and `widgets.ts` beside `site.ts`), and [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
+`site.ts` each, on shared drivers).
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
 other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
 differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 150 to 165 lines each; Phenom,
-with steps and rows, about 330.
+with steps and rows, about 330; Dayforce, with steps, records, Personal Information's own form and phone numbers
+read as two fields, about 490.
 
 **Why TypeScript, not data.** A definition is code: typed, able to hold a small function where a selector isn't
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
@@ -36,7 +37,7 @@ remote code, and whatever touches a form should be reviewed and tested.
 
 **No generic definition.** There's no "plain HTML" definition that would run on any site: page kinds and the
 submit test would be guesses there, and a guess about Submit is the one this project can't make. A site gets a
-definition built from its own pages ([adding a site](../development.md#how-to)).
+definition built from its own pages ([building adapters](../building-adapters.md)).
 
 **No globals.** Event, observer, `File`, `DataTransfer` and element-prototype constructors come from the
 element's own window (`win(node)`). The engine and drivers run the same in the page, in a jsdom test
@@ -49,7 +50,7 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 | `info` | The site's [registry entry](protocol.md#the-site-registry-sitests): id, tenant, its waits |
 | `widgets` | Its drivers. A field whose spot names none gets the first that recognises its container, so the more specific go first |
 | `fields(doc)` | Every field in page order, as `FieldSpot`s: container, driver (optional), key, prompt (`label`), section title, required, and optionally automation id, help, error, profile hint |
-| `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save) |
+| `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save, or a form that's part of the step), `edit` (opens a saved item's form again) |
 | `rows(doc, sections)` | Rows the page can delete (a section with its own delete button), and saved items (a section of its own with no fields: Oracle's tiles) |
 | `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, `nextBlocked?` (why Next can't go on from the page as it is, checked before pressing: a requirement the page would enforce with a native dialog), back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the one-page sites' own title. A site whose pages show no title leaves it out |
 | `repeat` | What a deletable thing is called, what an add makes more of and a removal fewer of, the delete button (revealed first where the site hides it), confirming a removal, and an inline form's errors |
@@ -102,6 +103,10 @@ the page re-extracts, and an unknown id fails with "call get_form again". No cal
 ([builds](extension.md#builds-npm-run-build--w-ezapplyextension)); unbundled, in tests, it's `"dev"`.
 
 ## Widget drivers
+Drivers are per widget library, never per site: a new site uses the existing ones first, a library no driver
+handles gets a shared driver named after it, and only a widget of the site's own gets a driver in the site's
+folder ([building adapters](../building-adapters.md#principles)).
+
 A `WidgetDriver` is one kind of widget: `kind`, `is(container)`, `value`, and optionally `options`,
 `lazyOptions`, `dateParts`, `multiple`, `fill(container, value, { strict })`, `list`, `search`, `remove`,
 `upload`. Every fill acts, waits, reads back, and returns `{ ok, readBack, error?, availableOptions?, unmatched? }`.
@@ -118,6 +123,7 @@ the options seen.
 | `dateInputDriver()` | Native `date` and `month` inputs, `YYYY-MM-DD` or `YYYY-MM` |
 | `monthPickerDriver()` (`datepicker.ts`) | A react-datepicker that picks a month (`MM/YYYY`; date parts `MM`, `YYYY`), driven through its calendar because its input takes no typing: opened from the input, the year chosen from the header's list (else stepped to with its arrows), the month pressed. A year the list lacks is refused with the years on offer, a disabled month as outside the dates the page allows |
 | `reactSelectDriver()` (`react-select.ts`) | react-select, through its own props ([below](#react-select-through-its-props)) |
+| `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
 | `toggleButtonsDriver(selector)` (`buttons.ts`) | A choice of `aria-pressed` buttons (Ashby's Yes / No), as a radio |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
 | `fileDriver({ input?, names, removeButton?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field. Done only when the page shows a **new** file of that name; removed by its own button |
@@ -138,7 +144,25 @@ an async select is searched through `onInputChange`, then its options are read o
 page has focus, and the user's browser window usually hasn't while they type in their terminal. Choosing
 through `onChange` needs no menu and no focus. **Why the alternate fiber.** React keeps two copies of each fiber;
 the one stored on the node can be the old one. After a choice the page showed, reading from the stored copy gave
-a null value. The node's props are always current, so the walk starts from whichever copy holds them.
+a null value. The node's props are always current, so the walk starts from whichever copy holds them
+(`reactFiber` in `dom.ts`, which the Ant Design driver uses too).
+
+### Ant Design's Select, through rc-select's context
+Ant Design's Select (Dayforce, many React forms) is rc-select underneath, which renders a `SelectContext.Provider`
+above its input. The driver walks up from the input's fiber (`reactFiber`) to the first fiber whose props' `value`
+has `flattenOptions` and `onSelect`: the options as the menu would show them, the values chosen (`rawValues`, an
+array or a Set by version), and the function the menu calls when an option is pressed. `list` and `search` read the
+options (group headings and disabled options aside); `fill` matches the value against their labels and calls
+`onSelect(value, { selected: true })`, which is what pressing the option does: the select's `onChange` runs, and so
+does that of antd's `Form.Item` around it. The value read back is the chosen values' labels; without the context,
+the page's own display (`.ant-select-selection-item`). A disabled list (`ant-select-disabled`, one waiting for an
+earlier answer) is refused. A label can be a React element (Dayforce's dialling codes: a flag, `+1`, the country):
+its text is read from the element tree.
+
+**Why not clicks.** The menu opens on a mousedown, renders in a portal only while open, and a long list is virtual,
+holding only the options in view; a synthetic mousedown on react-select did nothing without page focus (above). The
+context needs no menu, no focus and no scrolling. **The risk:** the context is rc-select's internals. Its shape was
+checked in the version Dayforce bundles, but the driver hasn't run live ([status](../status.md#not-yet-verified-for-real)).
 
 ### A site's own drivers
 A widget no shared driver handles gets a driver in the site's folder: Workday's listbox dropdown, prompt
@@ -223,7 +247,8 @@ its hooks come off after 15 minutes regardless.
   aimed at a submit control, and record it (`blockedSubmitAttempts`). Real user clicks are trusted and go through.
 - Each site's `isSubmit`: Workday's and Oracle's own tests; Greenhouse, Lever and Ashby use `isSubmitByText`: a
   `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application". Phenom goes by
-  the words alone, since its Next is a `type=submit` button too. On a one-page
+  the words alone, since its Next is a `type=submit` button too; Dayforce by its Submit's hook and the words, since
+  its forms' Update buttons are `type=submit`. On a one-page
   site Submit sits beside every field, so the guard's Enter case matters as much as the click.
 - The conformance test checks, for every registered site, that the guard blocks a synthetic click and Enter on
   its Submit and that `next` doesn't press it.
@@ -241,10 +266,13 @@ its hooks come off after 15 minutes regardless.
   boards, loads their embed scripts, frames them or has a form of its own matches none. A new site adds its saved
   pages to `SAVED` there.
 - **Drivers** (`widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
-  fiber), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, and a month
+  fiber), Ant Design's Select on a model of rc-select's context (labels that are React elements, a disabled list), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, and a month
   picker that ignores typing.
 - **Sites from live pages** (`sites-live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
-  application and Phenom step, and Phenom's `next` refusing step 1 without a resume.
+  application and Phenom step, and Phenom's `next` refusing step 1 without a resume; Dayforce's Candidate Info
+  step, its Submit told by hook and words, its posting and confirmation told apart from its scripts' messages, and
+  its records (markup from the portal's scripts, inside the saved page): an open one as a section with its Update, a
+  saved one as a saved item deleted through its dialog.
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
   definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
 - **The debug trace** (`trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,

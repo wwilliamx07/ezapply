@@ -5,6 +5,7 @@
  * from this list. No zod: the adapters import it (`@ezapply/protocol/sites`).
  */
 import { ashbyCanonicalPath, ashbyJob, ashbyTenant, isAshbyUrl } from "./ashby.js";
+import { dayforceCanonicalPath, dayforceJob, dayforceTenant, isDayforceUrl } from "./dayforce.js";
 import { greenhouseHostPageJob, greenhouseJob, greenhouseTenant, isGreenhouseUrl } from "./greenhouse.js";
 import { isLeverUrl, leverCanonicalPath, leverJob, leverTenant } from "./lever.js";
 import { isOracleUrl, oracleJob, oracleJobPath, oracleTenant } from "./oracle.js";
@@ -12,7 +13,7 @@ import { isPhenomUrl, phenomCanonicalPath, phenomJob, phenomTenant } from "./phe
 import { STANDARD_WAITS, type Timing } from "./timing.js";
 import { isWorkdayUrl, workdayCanonicalPath, workdayJob, workdayTenant } from "./workday.js";
 
-export type FormSiteId = "workday" | "oracle" | "greenhouse" | "lever" | "ashby" | "phenom";
+export type FormSiteId = "workday" | "oracle" | "greenhouse" | "lever" | "ashby" | "phenom" | "dayforce";
 
 /**
  * The extension's host permissions, granted at install: every site. Phenom and Oracle run on employers' own domains,
@@ -126,6 +127,23 @@ export const SITES: readonly SiteInfo[] = [
     canonicalPath: phenomCanonicalPath,
     // Its Next saves the step to the employer's system before the next one shows: 5 to 15 s live.
     waits: { ...STANDARD_WAITS, stepMs: 30_000 },
+  },
+  // Dayforce's candidate portal: one host (jobs.dayforcehcm.com) for every employer.
+  {
+    id: "dayforce",
+    name: "Dayforce",
+    // The portal's own `test-id` hooks (not `data-testid`): on the application, its job header, step bar and Next;
+    // on every page of the portal, the header's Search Jobs link and the session-expiry dialog. And its static host.
+    signature:
+      "[test-id='job-details-header'], [test-id^='application-progress-step-'], [test-id='application-next-step'], [test-id='header-search-jobs'], [test-id='session-expiry-modal'], script[src*='static.dayforcehcm.com']",
+    isUrl: isDayforceUrl,
+    tenant: dayforceTenant,
+    job: dayforceJob,
+    canonicalPath: dayforceCanonicalPath,
+    // Not measured. Each waits on Dayforce's server: an attached resume is uploaded and parsed before the page lists
+    // it (and a drop after `uploadMs` would send it again), an Update saves the record to the candidate's profile
+    // before its form closes, and Next checks the step there.
+    waits: { ...STANDARD_WAITS, uploadMs: 30_000, addRowMs: 15_000, stepMs: 30_000 },
   },
 ];
 

@@ -106,7 +106,7 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     for (let n = toolCallCount(parsed); n > 0; n--) res.on("close", opts.chat.beginToolCall(chatId));
   }
 
-  const mcp = createMcpServer(opts.services);
+  const mcp = createMcpServer(opts.services, chatId);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on("close", () => {
     void transport.close();

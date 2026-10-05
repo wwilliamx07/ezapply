@@ -12,11 +12,11 @@ so a change here is a change to the contract between them.
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site by its URL alone, else `generic`: what decides where no page can be read), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `siteSignatures()` (each site's `[id, signature]`, in registry order), `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions); no zod (`@ezapply/protocol/sites`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
-| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, without a leading rank like "5 - ", or without a trailing dialling code: "Canada" for Greenhouse's "Canada +1"), `strictIndex` ([autofill](autofill.md#strict-matching)) |
+| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, without a leading rank like "5 - ", without a trailing dialling code, or without a leading flag and dialling code: "Canada" for Greenhouse's "Canada +1" and Dayforce's "🇨🇦 +1 Canada"), `strictIndex` ([autofill](autofill.md#strict-matching)) |
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
 | `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT` ([oracle-adapter](oracle-adapter.md#which-pages)) |
 | `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
-| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply` ([sites](sites.md)) |
+| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts`, `dayforce.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply`; Dayforce's `…/<client>/<site>/jobs/<id>` on `*.dayforcehcm.com` with or without a locale, the client as tenant, the posting id as job, a canonical path from the client to the id ([sites](sites.md#dayforce-sitesdayforce)) |
 
 The package exports `.` (everything), and `./workday`, `./oracle`, `./sites`, `./match` and `./timing` for the in-page adapters:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
@@ -29,7 +29,7 @@ list of sites derives from it, so a new site's only protocol change is its entry
 
 | Field | Meaning |
 |---|---|
-| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom` (each also in `SiteId`) |
+| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce` (each also in `SiteId`) |
 | `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
 | `signature` | What the site's own pages render, as a CSS selector list: a page (or frame) is the site's when its document matches any part. How the extension tells a site, before the URL ([telling a site](extension.md#telling-a-pages-site-framests)). Each part is the provider's own markup (its widgets' attributes, class names, script host), never a link to it or its embed script, which an employer's careers page has too |
 | `isUrl(url)` | A posting or application page of the site by its URL alone: what decides where no page can be read (a captured page's links, the companion's canonical URLs, a tab the extension can't read) |
@@ -138,7 +138,8 @@ What a site adapter reports of an application page (`FormSchema`; Claude gets a 
 `step? { index?, total?, title }`, `sections[] { id, title, fields[], removable?, saved? }` (`saved`: a saved
 item, shown as a summary with no fields: Oracle's tiles and timeline entries), `addButtons[] { id, label,
 section?, kind? }` (`section`: the heading the button sits under; `kind`: `row` adds a row of fields, `form`
-opens an inline form, `save` is an open inline form's Save, `save.<block>` on Oracle), `actions[]` (page
+opens an inline form, `save` is an open inline form's Save (`save.<block>`) or that of a form that's part of the
+step, `edit` opens a saved item's form again), `actions[]` (page
 actions available), `errors[]`, `messages?` (notices such as "resume.pdf successfully uploaded", which live
 Workday shows in the same alert region as errors), `nextLabel?`, `lastPage?` (a step whose only way on is
 Submit: Oracle's last or only page, every one-page site), `backLabel?`, `job? { title?, reqId? }` (the job the page
@@ -200,6 +201,7 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
-  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason. **5:** `SiteId` gained `phenom`.
+  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason. **5:** `SiteId` gained `phenom`. **6:** `SiteId` gained `dayforce`, and
+  `addButtons[].kind` gained `edit`, which an older companion would reject.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

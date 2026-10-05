@@ -601,6 +601,33 @@ describe("links and Oracle items", () => {
   });
 });
 
+describe("Dayforce's records", () => {
+  it("finds the entries no saved record names, through each list's Add and never a saved record's Edit", () => {
+    const summary = "Employment History: Developer Acme • Toronto";
+    const dayforce: FormSchema = {
+      adapter: "dayforce",
+      tabId: 1,
+      url: "https://jobs.dayforcehcm.com/en-US/examplecorp/CANDIDATEPORTAL/jobs/1000/apply/manualApplication",
+      pageKind: "step",
+      sections: [{ id: "employment-history.experience-1", title: summary, fields: [], removable: true, saved: true }],
+      addButtons: [
+        // An Edit before the Add: it opens the saved record again, and adds nothing.
+        { id: "edit.employment-history-1", label: "Edit Record", section: summary, kind: "edit" },
+        { id: "add.employment-history", label: "Add Employment History", section: "Employment History", kind: "form" },
+        { id: "add.education-history", label: "Add Education History", section: "Education History", kind: "form" },
+        { id: "save.personal-information", label: "Update", section: "Personal Information", kind: "save" },
+      ],
+      actions: [],
+      errors: [],
+    };
+    expect(missingItems(dayforce, full).map((m) => [m.list, m.addButtonId, m.index, m.name])).toEqual([
+      ["work", "add.employment-history", 1, "Globex"],
+      ["education", "add.education-history", 0, "Example University"],
+    ]);
+    expect(rowsToAdd(dayforce, full)).toEqual([]);
+  });
+});
+
 describe("rows and items, edge cases", () => {
   it("names a saved item only by whole words, and never puts a date into a text field", () => {
     const short = Profile.parse({ ...full, work: [{ company: "A", title: "Dev", start: "2024-01", end: null }] });
@@ -730,10 +757,13 @@ describe("checkReadBack", () => {
 });
 
 describe("matching helpers", () => {
-  it("strictMatch takes exact, bare, parenthetical and unranked, nothing looser", () => {
+  it("strictMatch takes exact, bare, parenthetical, unranked and undialled, nothing looser", () => {
     expect(strictMatch("python", "Python (Programming Language)")).toBe(true);
     expect(strictMatch("SQL", "Structured Query Language (SQL)")).toBe(true);
     expect(strictMatch("Fluent", "5 - Fluent")).toBe(true);
+    expect(strictMatch("Canada", "Canada +1")).toBe(true);
+    expect(strictMatch("Canada", "🇨🇦 +1 Canada")).toBe(true);
+    expect(strictMatch("+1", "🇨🇦 +1 Canada")).toBe(false);
     expect(strictMatch("Bachelor's Degree", "Bachelor’s degree")).toBe(true);
     expect(strictMatch("Yes", "Yes, I do")).toBe(false);
     expect(strictMatch("Fluent", "Not fluent")).toBe(false);

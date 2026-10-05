@@ -40,19 +40,22 @@ reaches `posting.md`.
   own site decides how it's read (a Workday board is read as Workday, with its tenant), while the company
   still comes from the page the user was on; `posting.md` notes "Embedded from: <frameUrl>". See
   [extension](extension.md#set-posting).
+- **A site's own reader** (`postings/readers/`, `POSTING_READERS` by site id), only for a site whose posting pages
+  the generic reading gets wrong: today Workday's (its description, role, location and requisition by the hooks
+  shared with the adapter, `WORKDAY_POSTING`; its titles are only the role). `extract.ts` names no site: a new site
+  needing one gets a reader there, never a branch ([building adapters](../building-adapters.md#5-a-posting-reader-only-if-needed-companionsrcpostingsreaders)).
 - Metadata, in order of trust: JSON-LD `JobPosting` (title, hiring organization, identifier, location) →
-  Workday page structure (role, location, requisition, tenant) → the page title split on separators
-  on ` | `, ` - `, ` – ` (non-Workday; Oracle titles read "<role> - <Company> Careers") → company from the
+  the site's reader (role, location, requisition) → the page title split on separators
+  on ` | `, ` - `, ` – ` (unless the reader says the title is only the role; Oracle titles read "<role> - <Company> Careers") → company from the
   URL: on Workday the tenant (`workdayTenant`: the subdomain on myworkdayjobs.com, the path segment after
   `recruiting` on myworkdaysite.com); on an Oracle Cloud host (`*.oraclecloud.com`) nothing, since the host
   names Oracle's pod, not the employer; on LinkedIn and
   Indeed nothing (their job paths, `/jobs/view/<id>` and `/viewjob`, don't name the company), except Indeed
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
-- **Tenant:** a Workday posting's tenant, or for any other registry site its own reading of the content's URL
-  (the content's site's `tenant`): an Oracle career site (host and site number, `jobs.example.com/cx_1`), a
-  Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host.
-- Body: on Workday, the job description container; elsewhere Mozilla Readability's main content,
+- **Tenant:** the content's site's own reading of its URL (the registry's `tenant`): a Workday tenant, an Oracle career site (host and site number, `jobs.example.com/cx_1`), a
+  Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host, a Dayforce client.
+- Body: the site's reader's description where it has one (Workday's description container); elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
 

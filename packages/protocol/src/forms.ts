@@ -83,9 +83,10 @@ export const FormSchema = z.object({
       section: z.string().optional(),
       /**
        * What pressing it does: `row` adds a row of fields (Workday's Add, Oracle's Add Another Link), `form` opens
-       * an inline form whose Save adds the item (Oracle's Add Language), `save` is such a form's Save (`save.*`).
+       * an inline form whose Save adds the item (Oracle's Add Language), `save` is such a form's Save (`save.*`),
+       * `edit` opens a saved item's form again (`edit.*`; adds nothing until that form's Save).
        */
-      kind: z.enum(["row", "form", "save"]).optional(),
+      kind: z.enum(["row", "form", "save", "edit"]).optional(),
     }),
   ),
   /** Page-level actions available (start-choice / posting pages). */

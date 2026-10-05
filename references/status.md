@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-04.
+As of 2026-10-05.
 
 ## Done
 | Area | State |
@@ -18,10 +18,11 @@ As of 2026-10-04.
 | Adapters: one engine, a definition per site | A site registry in the protocol (signature, URL rules, tenant, job, canonical paths, waits), from which the extension's bundles, its telling of each page's site (by body, then URL) and the companion's tab choice derive; the extension holds every site (`<all_urls>`) to read them; one adapter engine (API, extraction, ids, rows, fill loop, next and back, guard) with a definition per site; shared widget drivers (native controls, react-select through its props, toggle buttons, a search combobox, file fields); waits owned by each site, with per-site sections in `autofill-timing.yaml`; schema facts (`addButtons[].kind`, `Section.saved`, `lastPage`) instead of site names in the companion. Workday and Oracle moved onto it with their fillers unchanged and golden schemas equal ([adapters](components/adapters.md)) |
 | Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted ([sites](components/sites.md)) |
 | Phenom | Employers' careers sites run by Phenom, whose multi-step apply flow is on the employer's domain: a definition on the engine (shared drivers, a react-datepicker month picker, selects that settle late, rows, the resume required on step 1), built from steps 1 to 3 of a live flow saved with placeholder values ([sites](components/sites.md#phenom-sitesphenom)) |
+| Dayforce | Dayforce's candidate portal (`jobs.dayforcehcm.com`, every employer on one host): a definition on the engine with an Ant Design Select driver through rc-select's context, phone numbers read as two fields, Personal Information's own form and Update, employment and education records added, saved, edited and deleted through their forms, uploads, the Submit step as the review page. Built from one saved step and the portal's own scripts ([sites](components/sites.md#dayforce-sitesdayforce)) |
 | Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; all of it in two Workday runs |
 | Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
-| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions) |
+| Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions); the form tools' descriptions and the apply skill name no site: what a site does differently is in its notes, given once per chat session as `siteNotes` ([site notes](mcp-tools.md#site-notes)) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
 | Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, a template imported from a scratchpad copy, a LaTeX document in `library/` that no template came from, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
@@ -58,6 +59,17 @@ As of 2026-10-04.
   pages listed `phenom` in `browser_status`, the resume uploaded first and the parsed fields corrected, the month picker and the
   school typeahead, adding and removing a row, Next taking up to 30 s, and steps 4 to 6 (additional questions,
   terms, review), whose markup isn't known: save each of them if anything there is missed.
+- **Dayforce** (2026-10-05): built from one saved page (the Candidate Info step as it first shows, Personal
+  Information open and no records) and, for the rest, from the portal's own scripts saved with it; tested in jsdom
+  only. Nothing has run live. Check in one real application, with debug mode on: the posting and application
+  listed `dayforce` in `browser_status`; a list chosen through rc-select's context (the riskiest part: it's
+  rc-select's internals) and read back, the province list after the country, a dialling code by its country; the
+  resume uploaded (to Resume Upload) and the parsed fields corrected; Personal Information's Update; whether Next
+  goes on while a form is still open (if not, the definition should refuse it with a reason, as Phenom's step 1
+  does); a record added, filled (its dates `YYYY-MM-DD`), saved, edited and deleted (deleting takes it off the
+  candidate's Dayforce profile: use a record made for the test); the questionnaire's pages and their step key; the
+  Submit step read as the review page. Save the questionnaire, a record open and saved, the Submit step and the
+  posting page (`ezapply debug export`) as fixtures.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Workday's application URL
@@ -397,7 +409,7 @@ what changed from it, and each linked page gives the reason.
 | Long-running daemon started by hand or at login | No daemon: the companion runs inside `ezapply chat` (after a stage where `ezapply mcp` started it on demand and it stopped when idle) ([architecture](architecture.md#processes-and-lifecycle)) |
 | `ezapply init` then a manual daemon start, a pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
-| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom ([adapters](components/adapters.md)) |
+| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce ([adapters](components/adapters.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
 | Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; no Playwright (the recon scripts that used it were for the first adapter builds and are gone) |

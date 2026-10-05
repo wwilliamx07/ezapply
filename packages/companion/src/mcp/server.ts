@@ -21,8 +21,11 @@ function instructions(agentFile: string): string {
 - Never attempt to submit an application; the user always presses Submit.`;
 }
 
-/** Build a fresh MCP server. The HTTP layer creates one per request (stateless mode). */
-export function createMcpServer(services: Services): McpServer {
+/**
+ * Build a fresh MCP server. The HTTP layer creates one per request (stateless mode), with the chat session the
+ * request came from (the relay names it), so what is said once per session (a site's notes) is said once.
+ */
+export function createMcpServer(services: Services, session?: string): McpServer {
   const server = new McpServer(
     { name: "ezapply", version: services.version },
     { instructions: instructions(services.workspace.path("EZAPPLY.md")) },
@@ -33,6 +36,6 @@ export function createMcpServer(services: Services): McpServer {
   registerProfileTools(server, services);
   registerTemplateTools(server, services);
   registerGitHubTools(server, services);
-  registerFormTools(server, services);
+  registerFormTools(server, services, session);
   return server;
 }

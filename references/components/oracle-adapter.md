@@ -164,7 +164,7 @@ delete button; a timeline entry by the delete button it shows only while hovered
 first), after which the page removes it a second later. Done once there are fewer saved items.
 
 `autofill_step` runs this flow by itself for each work, education and language entry of the profile that no
-saved item names ([autofill](autofill.md#oracles-item-forms)).
+saved item names ([autofill](autofill.md#item-forms-oracle-dayforce)).
 
 Adding one education and two work entries through the inline form and Save **worked live**.
 Languages and licenses (tiles) and the deletes are still unverified live. An empty block shows no fields,

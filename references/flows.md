@@ -126,7 +126,7 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 ## 7. Autofill ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
 ([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md),
-[Greenhouse, Lever, Ashby, Phenom](components/sites.md)):
+[Greenhouse, Lever, Ashby, Phenom, Dayforce](components/sites.md)):
 1. `posting_active`; read the profile and answer bank. The form tools act on this posting's application tab
    (by its job, the tab it was bound to, its tenant, or its title: [which posting](mcp-tools.md#forms)) and
    credit everything to it. An application embedded in a frame of a careers page counts as a tab of its own,
@@ -140,7 +140,8 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    hidden (a minimized window), results carry `tabHidden` and Claude tells the user once to keep it visible,
    since the browser slows hidden tabs. If the window stayed behind another app, results of calls that change
    the page carry `browserBehind`, which Claude passes on when a field (a date) isn't taken.
-2. `get_form` → by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
+2. `get_form`. The first read of a site's page in the session carries that site's `siteNotes`, which Claude
+   follows for the application ([site notes](mcp-tools.md#site-notes)). Then by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
    `confirmation` → done; `unknown` → `get_form` again and `browser_status`, then the user is asked what the
@@ -148,9 +149,11 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    still fails after one retry goes to the user without one). An Oracle application is often one page with only Submit: every section is filled,
    then hand-off. Oracle's work, education, language and license items are added through an inline form and
    its `save.<block>` button: `autofill_step` adds the profile's work, education and language entries itself.
+   Dayforce's employment and education records are added the same way, and its Personal Information is saved
+   with its own Update (`save.personal-information`); its Submit step is the review page.
 3. Each step: `autofill_step` fills what the profile and answer bank settle (hinted profile fields; work,
-   education, language and website rows, adding the rows the profile needs; link fields; Oracle's items through
-   their inline forms; questions worded exactly as an answer-bank entry, with a plain or computed answer;
+   education, language and website rows, adding the rows the profile needs; link fields; Oracle's items and
+   Dayforce's records through their inline forms; questions worded exactly as an answer-bank entry, with a plain or computed answer;
    [autofill](components/autofill.md)) and returns the rest; Claude glances at what was filled, fixes what failed, and decides every field left (profile facts via hints; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    in one message per step, and a resolved miss or a new answer offered for saving to the answer bank; the

@@ -1,6 +1,7 @@
 import type { FormSiteId } from "@ezapply/protocol/sites";
 import type { SiteDefinition } from "../engine/types.js";
 import { ashby } from "./ashby/site.js";
+import { dayforce } from "./dayforce/site.js";
 import { greenhouse } from "./greenhouse/site.js";
 import { lever } from "./lever/site.js";
 import { oracle } from "./oracle/site.js";
@@ -18,4 +19,5 @@ export const SITE_DEFINITIONS: Record<FormSiteId, SiteDefinition> = {
   lever,
   ashby,
   phenom,
+  dayforce,
 };

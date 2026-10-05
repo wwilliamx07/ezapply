@@ -1,5 +1,5 @@
 import type { FillValue, OptionInfo } from "@ezapply/protocol";
-import { matchOption, norm, waitFor } from "../engine/dom.js";
+import { matchOption, norm, reactFiber, waitFor } from "../engine/dom.js";
 import { T } from "../engine/timing.js";
 import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.js";
 
@@ -40,22 +40,14 @@ const comboInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>("input[
  */
 function selectProps(c: HTMLElement): SelectProps | null {
   const input = comboInput(c);
-  if (!input) return null;
-  type Fiber = { return?: Fiber | null; alternate?: Fiber | null; memoizedProps?: unknown };
-  const own = input as unknown as Record<string, unknown>;
-  const fiberKey = Object.keys(input).find((k) => k.startsWith("__reactFiber$"));
-  const propsKey = Object.keys(input).find((k) => k.startsWith("__reactProps$"));
-  let fiber = fiberKey ? (own[fiberKey] as Fiber) : null;
-  // React keeps two copies of each fiber; the one stored on the node can be the stale one (seen live: its select's
-  // value stayed null after a choice the page showed). The node's props are always current: start from the copy
-  // that holds them, so the walk up runs through the current tree.
-  if (fiber?.alternate && propsKey && fiber.alternate.memoizedProps === own[propsKey]) fiber = fiber.alternate;
+  // From the current copy of the input's fiber (`reactFiber`: the stored one can be stale).
+  let fiber = input ? reactFiber(input) : null;
   for (let i = 0; fiber && i < 40; i++) {
     const p = fiber.memoizedProps as Record<string, unknown> | undefined;
     if (p && Array.isArray(p.options) && typeof p.onChange === "function" && "onMenuOpen" in p) {
       return p as unknown as SelectProps;
     }
-    fiber = fiber.return as typeof fiber;
+    fiber = fiber.return ?? null;
   }
   return null;
 }

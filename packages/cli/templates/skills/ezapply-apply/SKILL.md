@@ -1,6 +1,6 @@
 ---
 name: ezapply-apply
-description: Fill out the job application (Workday, Oracle, Greenhouse, Lever, Ashby or Phenom) for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
+description: Fill out the job application on a supported application site for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
 ---
 
 # Fill a job application
@@ -8,17 +8,19 @@ description: Fill out the job application (Workday, Oracle, Greenhouse, Lever, A
 **Never submit.** `go_next` refuses on the review page and every Submit control is blocked. Don't look
 for workarounds; the user presses Submit.
 
-The form tools work on Workday, Oracle Recruiting Cloud career sites (often on the employer's own domain),
-Greenhouse, Lever and Ashby job boards, and Phenom career sites on an employer's own domain. The extension knows
-each by what its pages show, whatever the URL: `browser_status` lists each tab's `site`, and `get_form` says which
-in `adapter`. A tab listed `generic` is a page of none of them. Oracle differs in a few ways: see **Oracle applications** below; Greenhouse, Lever and Ashby are one
-page: see **One-page applications**; Phenom: see **Phenom applications**.
+The form tools work the same way on every supported site. The extension knows each by what its pages show,
+whatever the URL: `browser_status` lists each tab's `site`, and `get_form` says which in `adapter`. A tab listed
+`generic` is a page of none of them.
+
+**Site notes.** The first `get_form` or `autofill_step` on a site's page in this session carries `siteNotes`: what
+that site does differently (a document it needs first, a removal that reaches the candidate's profile on the site,
+a choice that's the user's). Read them before acting and follow them for this application; where they differ from
+this skill, they win. They come once per site, so keep them in mind for the rest of the application.
 
 ## Before starting
 1. `posting_active`. Read `profile/profile.yaml` and `profile/answers.yaml` once and keep them in mind,
    even when the documents come first: no question is asked of the user before the answer bank is read.
-   The form tools pick the application tab for this posting (its employer on the site: a Workday tenant, an
-   Oracle career site, a Greenhouse board…, and its job) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
+   The form tools pick the application tab for this posting (its employer's space on the site, and its job) and credit fills, uploads and the status to it. `postingMismatch` on a read, or a
    `posting_mismatch` error from a tool that changes the page, means the tab is another posting's (another
    company, another job at the same one, or a tab already bound to another posting): nothing ran. Stop, tell
    the user, and follow its hint (activate the right posting, or switch tabs). Only when the user says that
@@ -26,7 +28,7 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
    `postingBound` in a result means nothing tied the tab to this posting (it was captured on a job board or a
    careers page), so the tab is now bound to it: tell the user once which posting you're filling this
    application for.
-   An application embedded in a company's careers page (a Greenhouse form in a frame) is filled where it is:
+   An application embedded in a company's careers page (a job board's form in a frame) is filled where it is:
    results carry its `frameId` and the form's own `url`, and you keep passing only the `tabId`. If a call says
    the extension has no access to it yet, a small ezapply window is asking for access to websites: pass the hint
    on (the user clicks Allow access there and confirms the browser's prompt), then call again.
@@ -46,11 +48,9 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
 3. `get_form`. Handle the page kind:
    - `posting`: `page_action { action: "apply" }`, then `get_form`.
    - `auth`: tell the user to sign in or create the account in their browser and tell you when done. Never
-     fill passwords or account forms. On Oracle this is the email step (email, terms, then a code sent to
-     them).
+     fill passwords or account forms.
    - `start-choice`: `page_action { action: "apply_manually" }`, unless the user prefers
-     `use_last_application`. On Oracle it's "Welcome Back": ask the user whether to `use_last_application`
-     (Use My Profile) or import from Indeed themselves.
+     `use_last_application` (their last application or profile on the site).
    - `review`: go to **Hand-off**.
    - `confirmation`: the application was submitted. Say so. The status is recorded automatically.
    - `unknown`: `get_form` once more (the page may still be loading) and check the tab's URL and title in
@@ -59,8 +59,8 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
 
 ## Each step
 1. `autofill_step`. It fills, without you, what `profile.yaml` and `answers.yaml` settle: profile fields the
-   page marks; work, education, language and website rows (it adds the rows the profile needs); link fields;
-   on Oracle, each work, education and language entry through its inline form, saved; and questions worded
+   page marks; work, education, language and website rows (it adds the rows the profile needs, or each missing
+   entry through its inline form, saved); link fields; and questions worded
    exactly as an answer-bank entry, with a plain answer or one computed from the profile (sponsorship,
    relocation, work authorization for the job's country). It returns:
    - `filled`: glance at it. A value wrong for this form goes, corrected, into your `fill_fields`. `was` is a
@@ -69,9 +69,9 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
      wants.
    - `added`: the rows and items it added. List them in the step's report.
    - `failed`: fix each from its `error` or `availableOptions`. `inexact` means the page holds a near match
-     now, so set the right option. A failed `add.*` or `save.*` is a row or Oracle item the page refused: on
-     Oracle the form is still open with its fields in the result, so fill what it wants and `add_repeatable`
-     the `save.*` button again.
+     now, so set the right option. A failed `add.*` or `save.*` is a row or item the page refused: an inline
+     form is still open with its fields in the result, so fill what it wants and `add_repeatable` its `save`
+     button again.
    - the step's sections with only the fields left, each with its `reason`. `reversed-wording`: an
      answer-bank variant phrased the other way round ("I do NOT…"), so flip its yes and no. `eeo-decline`: pick
      the form's decline option. `no-strict-match`: none of the field's options is the profile's value; the
@@ -94,6 +94,14 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
      `certifications`, links or websites → `links`. Add each profile entry the page doesn't hold yet. A
      section that starts empty shows no fields at all, only its add button, so it's easy to miss: check them
      all before the hand-off, and list in it what you added.
+   - **Add buttons by `kind`:** `row` adds a row of fields to fill; `form` opens an inline form: `get_form`,
+     `fill_fields` its new fields, then `add_repeatable` its `save` button, which adds the item (an error means
+     the page wants more: fill it and save again). A `save` button can also belong to a form that's part of the
+     step: press it once that form is filled. `edit` opens a saved item's form again. Saved items show as
+     `removable` sections with no fields; `remove_repeatable` deletes one.
+   - **Lists that depend on each other** (a country, then its provinces; a follow-up question after an answer):
+     fill them in one call; the adapter fills in page order so each loads for the choice above it. A list still
+     waiting for its earlier answer says so.
    - **Screening questions:** match the question to an `answers.yaml` entry by meaning (use its
      `canonical` and `variants`).
      - **Check polarity:** "I certify I do NOT…" and "Select if you are not…" reverse yes and no.
@@ -135,13 +143,13 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
      value. When that result also has `browserBehind`, pass its hint too (bring the browser to the front, or
      turn the option on).
    - **Files:** use `upload_file { fieldId, path }` with the posting's PDFs: every document the user
-     approved for it, usually `resume.pdf` **and** `cover.pdf`. Workday often has a single file field,
-     Resume/CV, with `multiple: true` and no cover-letter field: both files go into it, one `upload_file`
-     each. "The form has no cover-letter field" is never a reason to leave the letter out. An upload result's
+     approved for it, usually `resume.pdf` **and** `cover.pdf`. A form whose only file field takes several
+     files (`multiple: true`) gets both, one `upload_file` each. "The form has no cover-letter field" is never a
+     reason to leave the letter out. An upload result's
      `notAttached` lists the approved documents still to attach.
-   - **Carried over from a previous application.** Workday (especially "Use My Last Application") and Oracle
-     (a returning candidate's profile) pre-fill fields from the user's last application, so a field that
-     already has a value may belong to another job. `fill_fields` only adds to multi-selects and
+   - **Carried over from a previous application.** Some sites (`use_last_application`, a returning candidate's
+     profile) pre-fill fields from the user's last application, so a field that already has a value may belong
+     to another job. `fill_fields` only adds to multi-selects and
      `upload_file` only adds files, so clear first:
      - **File fields:** any attached file this application didn't upload (check `form-log.jsonl` for this
        posting's `upload` events) is stale, even when its name matches, e.g. another job's `cover.pdf`.
@@ -170,47 +178,12 @@ page: see **One-page applications**; Phenom: see **Phenom applications**.
    wrong), `go_back` until that step (`get_form` shows `backLabel` while there is one), fix it, and `go_next`
    forward again, re-checking each step with `get_form`.
 
-## Oracle applications
-- **Often one page.** Many Oracle sites put every section on one page whose only button is Submit
-  (`nextLabel: "Submit"`, `go_next` refuses). Fill every section, attach the files, then go to **Hand-off**.
-  Multi-page sites have Next and Previous (`go_next`, `go_back`), with Submit on the last section.
-- **Short option lists are buttons** and read as `radio` (one choice) or `checkbox-group` (several) with their
-  `options` listed. Longer lists are `dropdown`s that search as you type: fill them with the option text,
-  or `search_options` first for long ones (cities, schools).
-- **Address lists depend on each other** (country, then province, then city, then postal code). Fill them in
-  one call; the adapter fills in page order so each list loads for the choice above it.
-- **Work history, education, languages, licenses** are added through an inline form, one entry at a time.
-  `autofill_step` adds the profile's work, education and language entries itself (`added`). Licenses
-  (`certifications`), and an entry whose Save it reported in `failed`, are yours: `add_repeatable` its `add.*`
-  button, `get_form`, `fill_fields` the new fields, then `add_repeatable` the form's `save.<section>` button. An
-  error means the page wants more: fill it and save again. Saved items show as `removable` sections;
-  `remove_repeatable` deletes one.
-- **Attachments:** a resume or cover letter already on the candidate's profile blocks a new upload until
-  `remove_items` takes it off. Additional documents take several files.
-- The email field comes from the sign-in and is read-only.
-
-## Phenom applications
-Steps like Workday's (My information, My experience, Application questions…), each with Next and Previous.
-- **The resume comes first:** step 1 won't go on without one. `upload_file` the resume to `resume` before anything
-  else: the page parses it into the fields, so then `autofill_step` (or `get_form`) and correct what the parse got
-  wrong rather than trusting it.
-- **Work dates** are months picked from a calendar: give `YYYY-MM`. A refusal names the years the page allows
-  (never before the start date, never after today).
-- **No access yet:** if the user withheld the extension's access to websites, the form call opens a small
-  ezapply window asking for it; the user clicks Allow access, and the call goes on (or, if they took longer, call
-  again).
-
-## One-page applications (Greenhouse, Lever, Ashby)
-- **The whole application is one page** whose only button is Submit (`lastPage`, `nextLabel` Submit, `go_next`
-  refuses). Fill everything, attach the files, then go to **Hand-off**.
-- **The name is often one field** (Lever's "Full name", Ashby's "Name"): the whole name, as the profile has it.
-- **A location field searches as you type.** Fill it with the place as the site lists it (`search_options`
-  shows how); a city alone can match several, and then the result lists the suggestions: pick the user's.
-- **Questions are the employer's own**, below the standard ones, often with Yes/No buttons (read as `radio`).
+## One-page applications
+`lastPage` on `get_form`: the whole application is one page whose only way on is Submit (`go_next` refuses).
+Fill everything, attach the files, then go to **Hand-off**.
 
 ## Hand-off (review page)
-On a one-page application (Greenhouse, Lever, Ashby, and many Oracle sites), this is when every field is filled
-and Submit is the only way on. If `go_next` or `get_form`
+On a one-page application (`lastPage`), this is when every field is filled and Submit is the only way on. If `go_next` or `get_form`
 shows `notAttached`, an approved document never went in: `go_back` to the step with the file field, upload
 it, and come forward again before handing off. Stop. The page's `handoff` (on `get_form` or
 `autofill_step`) is the summary of this application from its log: build the message from it, not from memory.

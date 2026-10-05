@@ -17,6 +17,7 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 | 4 | A skill for building adapters | Medium | M | — |
 | 5 | Login manager | Medium | L | — |
 | 6 | Refresh the workspace's managed files after an update | Medium | S | — |
+| 7 | Sections say which profile list they belong to (deterministic autofill) | Medium | S–M | — |
 
 Suggested order: the live runs in `references/status.md` ("Not yet verified for real"): a Workday run with debug
 mode off whose timings match the earlier runs' (the adapter trace's no-op path), which also presses a row's Delete
@@ -166,9 +167,9 @@ through adding a site: saving the site's pages, writing its registry entry and d
 markup, its signature and saved pages, the conformance test, a first live run with debug mode on, reading its
 report, and the site's reference page.
 
-**How.** The steps are "Add a job site" in `references/development.md`. The skill links to that and adds the
-procedure around it: what to save, in what order to build, which tests to write first, and the checklist for
-the live run. It should not copy development.md's list, or the two will drift.
+**How.** The process, the rules and the checklist are `references/building-adapters.md`. The skill links to it and
+drives it step by step (what to save, in what order to build, which tests to write first, the live run); it should
+not copy the page, or the two will drift.
 - It brings the live-check script used for Greenhouse, Lever and Ashby
   (`references/components/adapters.md#checking-a-site-live`) into the repo, with this machine's paths made
   options: headless Chrome or Edge over the DevTools protocol, the site's built bundle injected into the page's
@@ -177,7 +178,7 @@ the live run. It should not copy development.md's list, or the two will drift.
 **Challenges and open questions.**
 - The hard part is getting real markup of application steps, which needs an account and an application in
   progress. The user has to drive that; debug mode's markup and `ezapply debug export` make one run enough.
-- Its worth depends on how many sites get added. With one or two more, `development.md` may be enough.
+- Its worth depends on how many sites get added. With one or two more, `building-adapters.md` may be enough.
 
 ## 5. Login manager (Medium, L)
 
@@ -217,3 +218,27 @@ needed. Tests: an old stamp refreshed, the user's `CLAUDE.md` and settings kept,
 
 **Open question.** Whether `chat` should also run the rest of `init` (config migration, new folders), or only
 print "run `ezapply init`" for those.
+
+---
+
+## Improvements to deterministic autofill
+
+### 7. Sections say which profile list they belong to (Medium, S–M)
+
+**Why.** To fill rows and records from the profile, the companion guesses which list a section belongs to from its
+title and id (`forms/lists.ts`): `rowOf` takes a section whose id ends `-<n>` and matches its title against
+`/work|employment|experience/`, `/education/`, `/language/`…; `savedItemOf` reads the kind from a saved item's id
+(`.experience-<n>`, `.education-<n>`, Oracle's shape) or the title before its colon; add buttons go by label, then
+section. So adapters shape their output to those guesses (Dayforce builds Oracle-shaped saved-item ids for it), the
+conventions live in another package, and a mismatch fails silently: a list titled "Professional Background" or
+"Schools Attended" matches nothing, and autofill adds no rows without saying why.
+
+**How.** An optional fact, `list` (`work` | `education` | `languages` | `certifications` | `links`), on
+`Section` and `addButtons[]`, set by the adapter from markup that says it outright (Dayforce's `workHistory-0`
+forms, Workday's automation ids, Oracle's blocks). `listSlots`, `listOfButton` and `missingItems` use it first
+and fall back to the title guess, so adapters move over one at a time. Optional, so no `PROTOCOL_VERSION` bump. The
+conformance test then requires it on every row, saved item and list add button, and `building-adapters.md` drops
+the id and title conventions in favour of it.
+
+**Open question.** Whether to drop the title guess once every adapter sets `list`, or keep it for a site whose
+markup doesn't say.

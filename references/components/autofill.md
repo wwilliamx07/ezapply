@@ -33,10 +33,11 @@ step with it):
    checked (`checkReadBack`) and each fill logged. Then the step is read and planned once more, skipping the
    fields already handled: that fills fields that appeared because of a fill (a province list after the country,
    an end date after "I currently work here" is unticked). There is never a third pass.
-4. **Item forms** (`missingItems`; today Oracle's): for each work, education and language entry no saved item
-   names, press its add button that opens an inline form (`kind: "form"`: Add Experience, Add Education, Add
-   Language), plan the fields that appeared as that
-   entry's row, fill them, and press the form's Save (`save.*`). Logged as `add-item`. A form that doesn't open
+4. **Item forms** (`missingItems`; Oracle's and Dayforce's): for each work, education and language entry no saved
+   item names, press its add button that opens an inline form (`kind: "form"`: Add Experience, Add Education, Add
+   Language; Add Employment History), plan the fields that appeared as that
+   entry's row, fill them, and press the form's Save (`save.*`): the one whose section names the entry's list, else
+   the only one (Dayforce shows Personal Information's Update above a new record's while both are open). Logged as `add-item`. A form that doesn't open
    skips the rest of its list. A Save the page refuses stops there: the form stays open, its fields are in the
    result, and the Save is in `failed` with the page's error.
 5. Return `get_form`'s view of the page (including the status moves and `notAttached` at review, `posting`,
@@ -149,23 +150,28 @@ so they're matched at once. A typeahead gets the first wording. *Why list first 
 dropdown costs an open, and the live level lists ("1 - Beginner" … "5 - Fluent") hold none of the first
 wordings, so trying would cost two opens a field.
 
-## Oracle's item forms
+## Item forms (Oracle, Dayforce)
 Oracle adds work, education, language and license entries through an inline form with its own Save
-([oracle-adapter](oracle-adapter.md#repeatable-items)). The planner knows these by the schema's facts, not the
+([oracle-adapter](oracle-adapter.md#repeatable-items)); Dayforce its employment and education records, each saved
+with its Update ([sites](sites.md#dayforce-sitesdayforce)). The planner knows these by the schema's facts, not the
 site's name: a saved item is a section marked `saved`, an add button that opens a form has `kind: "form"`, and a
-form's Save has `kind: "save"`, so another site with inline forms would get the same flow. `missingItems`
+form's Save has `kind: "save"`, so Dayforce got the same flow without a change to it. A button that opens a saved
+item's form again (`kind: "edit"`, Dayforce's Edit) is never taken for a list's add button (`listOfButton`). `missingItems`
 compares the saved items (sections like
-`work-and-education-history.experience-1` and `languages.item-1`, titled "Languages: French, Fluent") with the
+`work-and-education-history.experience-1` and `languages.item-1`, titled "Languages: French, Fluent"; Dayforce's
+`employment-history.experience-1`, titled by the record's summary) with the
 profile: an entry is there when a saved item's title contains its company, school or language as whole words
 (a company called "A" isn't in every title with an "a"). Each missing one
 gets the flow in step 4 above. The add button for a list is found by its label first ("Add Experience", "Add
 Education"), because both sit under one section, "Work and Education History". Fields are planned as a row of
 that entry (`item` in `PlanInput`), by hint (`employerName`, `jobTitle`, `educationalEstablishment`, …) or
-label. Licenses aren't added, and Workday's certification rows aren't filled: no mapping of their fields to
+label. Dayforce's record dates are date inputs taking a day, which a profile's `YYYY-MM` can't fill: they're left. Licenses aren't added, and Workday's certification rows aren't filled: no mapping of their fields to
 `certifications` was built, since no live run has shown them.
 
 Unverified: only the language form is modelled in the behavioural fixture, and the work and education forms'
-date fields have never been seen, so they're matched by label only.
+date fields have never been seen, so they're matched by label only. Dayforce's flow hasn't run, on a page or a
+fixture: its parts are tested apart (the adapter on records built from the portal's markup, `missingItems` on a
+Dayforce schema).
 
 ## Answers computed from the profile
 An entry with `source: profile.…` is computed when the profile settles it (`computeAnswer`):
@@ -189,7 +195,8 @@ few aliases (USA, U.S., United States of America; UK, Great Britain). Short code
 `strictMatch` (`protocol/src/match.ts`) accepts, with case, spacing, Unicode width and curly apostrophes aside:
 the option itself; the option without its trailing parenthetical, or the parenthetical alone ("Canada (+1)",
 "Structured Query Language (SQL)"); the option without a leading rank ("5 - Fluent"); and the option without a
-trailing dialling code (Greenhouse's "Canada +1"). The adapters'
+trailing dialling code (Greenhouse's "Canada +1"), or without a leading flag and dialling code (Dayforce's
+"🇨🇦 +1 Canada"). The adapters'
 `matchOption` also accepts a unique prefix or substring, so "Yes" can pick "Yes, I will require sponsorship".
 That's fine for the model, which reads the read-back, but not for a pass nobody checks field by field.
 
@@ -226,8 +233,8 @@ the whole step with a note, so a run can be compared with and without autofill.
   "My Experience" step's schema (its ids, labels, kinds and hints, emptied, with a made-up profile): the rows to
   add, every part of every row, options listed only where wordings differ, education years by label, rows matched
   by company before order, extra rows, a level kept without listing. Oracle's link fields and items (a saved
-  item named only by whole words), no date into a text field, and the computed answers with the posting's
-  location.
+  item named only by whole words), Dayforce's records (found through each list's Add, never a saved record's
+  Edit), no date into a text field, and the computed answers with the posting's location.
 - `companion/test/e2e.test.ts`, over MCP on the behavioural fixtures: the Workday step (the fills, the reasons
   left, the page's values, the log, a second call keeping everything, the switch off); a work row added and both
   rows filled `strict`; on Oracle, a link field added, both links filled, and two languages added through the

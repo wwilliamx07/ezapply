@@ -1,7 +1,8 @@
-import { detectSite, type SiteId, siteInfo, WORKDAY_POSTING, workdayTenant } from "@ezapply/protocol";
+import { detectSite, type FormSiteId, type SiteId, siteInfo, workdayTenant } from "@ezapply/protocol";
 import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
+import { POSTING_READERS } from "./readers/index.js";
 
 export interface ExtractedPosting {
   markdown: string;
@@ -52,20 +53,20 @@ export function extractPosting(input: {
   for (const el of doc.querySelectorAll(STRIP_SELECTORS)) el.remove();
 
   const ld = parseJobPostingLd(input.jsonLd);
-  const workday = site === "workday" ? extractWorkday(doc, contentUrl) : {};
-  // Workday titles are just the role; the company comes from JSON-LD or the tenant subdomain.
-  const fromTitle = site === "workday" ? {} : splitTitle(input.pageTitle);
+  // The site's own reader, where the generic reading isn't enough (readers/index.ts).
+  const own = POSTING_READERS[site as FormSiteId]?.(doc, contentUrl) ?? {};
+  // A title that is only the role (Workday's) isn't split: the company comes from JSON-LD or the URL.
+  const fromTitle = own.titleIsRole ? {} : splitTitle(input.pageTitle);
 
-  const main = site === "workday" ? workday.descriptionHtml : undefined;
-  const bodyHtml = main ?? readableHtml(doc) ?? doc.body.innerHTML;
+  const bodyHtml = own.descriptionHtml ?? readableHtml(doc) ?? doc.body.innerHTML;
 
-  const role = ld.title ?? workday.role ?? fromTitle.role;
+  const role = ld.title ?? own.role ?? fromTitle.role;
   const company = ld.company ?? fromTitle.company ?? companyFromUrl(input.url);
-  const location = ld.location ?? workday.location;
-  const reqId = ld.reqId ?? workday.reqId;
-  // The employer's space on its site (an Oracle career site's host and site number, a Greenhouse board), so the
-  // application tab can be matched to this posting.
-  const tenant = workday.tenant ?? siteInfo(site)?.tenant(contentUrl);
+  const location = ld.location ?? own.location;
+  const reqId = ld.reqId ?? own.reqId;
+  // The employer's space on its site (a Workday tenant, an Oracle career site's host and site number, a Greenhouse
+  // board), so the application tab can be matched to this posting.
+  const tenant = siteInfo(site)?.tenant(contentUrl);
 
   const header = [
     `# ${role ?? input.pageTitle}`,
@@ -123,27 +124,6 @@ function readableHtml(doc: Document): string | undefined {
   const bodyLen = (doc.body.textContent ?? "").trim().length;
   if (textLen < 400 && bodyLen > textLen * 3) return undefined;
   return article.content;
-}
-
-/** Workday posting pages, through the hooks shared with the adapter (protocol/src/workday.ts). */
-function extractWorkday(
-  doc: Document,
-  url: string,
-): { descriptionHtml?: string; role?: string; location?: string; reqId?: string; tenant?: string } {
-  const hook = (id: string) => `[data-automation-id="${id}"]`;
-  const text = (sel: string) => doc.querySelector(sel)?.textContent?.trim() || undefined;
-  const description = doc.querySelector(hook(WORKDAY_POSTING.description));
-  const tenant = workdayTenant(url);
-  const result: { descriptionHtml?: string; role?: string; location?: string; reqId?: string; tenant?: string } = {};
-  if (description) result.descriptionHtml = description.innerHTML;
-  const role = text(hook(WORKDAY_POSTING.header));
-  if (role) result.role = role;
-  const location = text(`${hook(WORKDAY_POSTING.locations)} dd`) ?? text(hook(WORKDAY_POSTING.locations));
-  if (location) result.location = location.replace(/^locations\s*/i, "");
-  const reqId = text(`${hook(WORKDAY_POSTING.requisitionId)} dd`) ?? text(hook(WORKDAY_POSTING.requisitionId));
-  if (reqId) result.reqId = reqId.replace(/^job requisition id\s*/i, "");
-  if (tenant) result.tenant = tenant;
-  return result;
 }
 
 function parseJobPostingLd(blocks: string[]): JobPostingLd {

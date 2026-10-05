@@ -17,7 +17,7 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
       description:
         "Check whether the browser extension is connected, which browser it runs in (`extension.browser`: where ezapply " +
         "opens pages and PDFs for the user), and list open tabs (with `site`: a supported job site's id, or generic; " +
-        "`frames`: applications embedded in that page, such as a careers page's Greenhouse form). " +
+        "`frames`: applications embedded in that page, such as a job board's form on a careers page). " +
         "Call this first when a browser action fails, and relay the returned hint to the user.",
       annotations: { readOnlyHint: true },
     },

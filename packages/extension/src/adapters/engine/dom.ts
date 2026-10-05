@@ -88,6 +88,28 @@ export function reactProps(el: Element): Record<string, unknown> | null {
   return null;
 }
 
+/** A React fiber, as far as the drivers read one: its props, its parent, and its other copy. */
+export interface Fiber {
+  memoizedProps?: unknown;
+  return?: Fiber | null;
+  alternate?: Fiber | null;
+}
+
+/**
+ * The fiber of a DOM node rendered by React, in the current tree. React keeps two copies of each fiber; the one
+ * stored on the node can be the stale one (seen live on Greenhouse: its select's value stayed null after a choice
+ * the page showed). The node's props are always current: the copy holding them is the current one, so a walk up
+ * from it (`.return`) runs through the current tree. Only visible from the MAIN world.
+ */
+export function reactFiber(el: Element): Fiber | null {
+  const own = el as unknown as Record<string, unknown>;
+  const fiberKey = Object.keys(el).find((k) => k.startsWith("__reactFiber$"));
+  const fiber = fiberKey ? (own[fiberKey] as Fiber) : null;
+  const props = reactProps(el);
+  if (fiber?.alternate && props && fiber.alternate.memoizedProps === props) return fiber.alternate;
+  return fiber;
+}
+
 export function callReact(el: Element, handler: string, event: Record<string, unknown>): boolean {
   const fn = reactProps(el)?.[handler];
   act("react", el, { handler, ...(typeof fn === "function" ? {} : { missing: true }) });

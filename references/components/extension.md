@@ -3,7 +3,7 @@
 A Manifest V3 extension for Chrome and Firefox 128+. It has one button, **Set posting**, and otherwise
 quietly carries out the form reads, fills and uploads the companion asks for, on the application pages of
 every site in the [registry](protocol.md#the-site-registry-sitests): Workday, Oracle Recruiting Cloud,
-Greenhouse, Lever, Ashby and Phenom, each told by what its pages show. It has no popup and no
+Greenhouse, Lever, Ashby, Phenom and Dayforce, each told by what its pages show. It has no popup and no
 review UI: that happens in Claude Code and the PDF viewer.
 
 ## Source layout
@@ -25,7 +25,7 @@ review UI: that happens in Claude Code and the PDF viewer.
 | `src/options/options.ts`, `static/options.html` | Options page: status, access to websites when it's withheld, manual pairing |
 | `src/adapters/engine/` | The adapter engine every site runs on → [adapters.md](adapters.md) |
 | `src/adapters/widgets/` | Shared widget drivers → [adapters.md](adapters.md#shared-drivers-widgets) |
-| `src/adapters/sites/<site>/` | A definition per site: [Workday](workday-adapter.md), [Oracle Recruiting Cloud](oracle-adapter.md), [Greenhouse, Lever, Ashby, Phenom](sites.md); `sites/index.ts` lists them |
+| `src/adapters/sites/<site>/` | A definition per site: [Workday](workday-adapter.md), [Oracle Recruiting Cloud](oracle-adapter.md), [Greenhouse, Lever, Ashby, Phenom, Dayforce](sites.md); `sites/index.ts` lists them |
 | `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
 | `build.mjs` | esbuild bundles (one adapter per registry site) and both output folders |
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { antSelectDriver } from "../src/adapters/widgets/antd-select.js";
 import { toggleButtonsDriver } from "../src/adapters/widgets/buttons.js";
 import { comboboxDriver } from "../src/adapters/widgets/combobox.js";
 import { monthPickerDriver } from "../src/adapters/widgets/datepicker.js";
@@ -151,6 +152,61 @@ describe("react-select, driven through its props", () => {
       ok: true,
       removed: ["Python"],
       remaining: ["Go"],
+    });
+  });
+});
+
+describe("Ant Design's Select, driven through rc-select's context", () => {
+  /**
+   * An antd Select as React leaves it: rc-select's `SelectContext.Provider` sits above the input, its value holding
+   * the options, the values chosen and `onSelect`. As on Dayforce, a label can be a React element (a flag, the
+   * dialling code, the country). After a choice the input's stored fiber stays the old copy, as on react-select.
+   */
+  function antSelect(options: { label: unknown; value: string }[], disabled = false) {
+    const c = field(
+      `<div class="ant-select ant-select-single${disabled ? " ant-select-disabled" : ""}"><div class="ant-select-selector"><span class="ant-select-selection-search"><input role="combobox" readonly id="s"></span></div></div>`,
+    );
+    const input = c.querySelector("input") as HTMLInputElement;
+    const render = (rawValues: string[]) => {
+      const ctx = {
+        flattenOptions: options.map((o) => ({ label: o.label, value: o.value, data: o })),
+        rawValues: new Set(rawValues),
+        onSelect: (v: string) => render([v]),
+      };
+      const hostProps = { id: "s", role: "combobox" };
+      const host = { memoizedProps: hostProps, return: { memoizedProps: { value: ctx }, return: null } };
+      const stored = (input as unknown as Record<string, { alternate?: unknown }>).__reactFiber$x;
+      if (stored) stored.alternate = host;
+      else (input as unknown as Record<string, unknown>).__reactFiber$x = host;
+      (input as unknown as Record<string, unknown>).__reactProps$x = hostProps;
+    };
+    render([]);
+    return c;
+  }
+  const element = (...children: unknown[]) => ({ $$typeof: "react.element", props: { children } });
+
+  it("lists every option by its text, and chooses one strictly (a country past its flag and dialling code)", async () => {
+    const c = antSelect([
+      { label: element(element("🇨🇦"), " +", 1, " ", "Canada"), value: "CA" },
+      { label: element(element("🇺🇸"), " +", 1, " ", "United States"), value: "US" },
+    ]);
+    const d = antSelectDriver();
+    expect(d.is(c)).toBe(true);
+    expect(d.value(c)).toBeNull();
+    expect(await d.list?.(c)).toEqual([{ label: "🇨🇦 +1 Canada" }, { label: "🇺🇸 +1 United States" }]);
+    expect(await d.fill(c, "Canada", { strict: true })).toEqual({ ok: true, readBack: "🇨🇦 +1 Canada" });
+    expect(d.value(c)).toBe("🇨🇦 +1 Canada");
+    expect(await d.fill(c, "Mexico", { strict: true })).toMatchObject({
+      ok: false,
+      availableOptions: ["🇨🇦 +1 Canada", "🇺🇸 +1 United States"],
+    });
+  });
+
+  it("refuses a disabled list, which waits for an earlier answer", async () => {
+    const c = antSelect([{ label: "Ontario", value: "ON" }], true);
+    expect(await antSelectDriver().fill(c, "Ontario", { strict: true })).toMatchObject({
+      ok: false,
+      error: /disabled/,
     });
   });
 });

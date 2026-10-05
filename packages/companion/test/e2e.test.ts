@@ -310,10 +310,13 @@ function fakeExtension(
   return { ws, peer, outcome, calls: browser.calls, page: browser.page };
 }
 
-async function mcpClient(): Promise<Client> {
+/** An MCP client; with `session`, its requests name that chat session, as the relay does under `ezapply chat`. */
+async function mcpClient(session?: string): Promise<Client> {
   const client = new Client({ name: "test", version: "0.0.0" });
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`), {
-    requestInit: { headers: { Authorization: `Bearer ${MCP_TOKEN}` } },
+    requestInit: {
+      headers: { Authorization: `Bearer ${MCP_TOKEN}`, ...(session ? { "x-ezapply-chat-session": session } : {}) },
+    },
   });
   await client.connect(transport);
   return client;
@@ -1172,6 +1175,19 @@ describe("form tools over MCP", () => {
     const one = (await callJson(client, "get_form", { section: "work experience" })).data;
     expect(one.sections.map((sec: { id: string }) => sec.id)).toEqual(["work-experience-1"]);
     await client.close();
+  });
+
+  it("gives a site's notes on the first read of its page in a chat session, and again in a new session", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const first = await mcpClient("session-notes-1");
+    expect((await callJson(first, "get_form")).data.siteNotes).toMatch(/^Workday:/);
+    expect((await callJson(first, "get_form")).data).not.toHaveProperty("siteNotes");
+    expect((await callJson(first, "autofill_step")).data).not.toHaveProperty("siteNotes");
+    await first.close();
+    const next = await mcpClient("session-notes-2");
+    expect((await callJson(next, "autofill_step")).data.siteNotes).toMatch(/^Workday:/);
+    await next.close();
   });
 
   it("credits a tab only to the active posting on its tenant, and prefers that tenant's tab", async () => {
