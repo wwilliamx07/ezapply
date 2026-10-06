@@ -45,7 +45,13 @@ As of 2026-10-05.
   found questions by a class those groups don't have. Fixed (they're found by `data-field-path`), checked on the
   live page and covered by a saved copy of it, not yet used in a real application
   ([sites](components/sites.md#ashby-sitesashby)). Not tried: uploads on Lever, the confirmation pages, a real
-  application on Greenhouse or Lever.
+  application on Lever.
+- **A real Greenhouse application** (2026-10-06, filled, not submitted): text fields, the static lists, the phone's
+  country and the uploads worked. Three things didn't, all fixed and covered by tests, not yet run live again: the
+  form couldn't be read at all with a multi-select on it (its id ends in `[]`, put into a selector unescaped); the
+  lists that load as you type (Location (City), School, Discipline) never searched, each fill waiting 4 s for
+  nothing ([react-select](components/adapters.md#react-select-through-its-props)); and autofill counted the phone
+  as failed because the page formats it ([autofill](components/autofill.md)).
 - **Telling sites by their pages, with access to every site** (2026-10-04): the signatures match every saved page
   of their own site and no other's, and on real captured pages they told every Workday, Oracle, Ashby and Phenom
   page and matched none of the rest (job boards, other ATSs, employers' own pages). Not yet run in

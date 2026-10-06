@@ -1,5 +1,5 @@
 import { siteInfo } from "@ezapply/protocol/sites";
-import { isVisible, norm, slug, text } from "../../engine/dom.js";
+import { cssEscape, isVisible, norm, slug, text } from "../../engine/dom.js";
 import {
   ariaError,
   headingBefore,
@@ -52,7 +52,12 @@ const WIDGETS = {
         .find((row) => text(row).includes(name))
         ?.querySelector<HTMLElement>("button[aria-label='Remove file']") ?? null,
   }),
-  select: reactSelectDriver(),
+  // Greenhouse's select holds `menuIsOpen` itself: a key-up in the control opens it, Escape closes it (as does a
+  // choice). react-select's own `onMenuOpen` changes nothing there, and its school and discipline lists load only
+  // while the menu is open.
+  select: reactSelectDriver({
+    menu: (p, open) => (p as { onKeyUp?: (e: { code: string }) => void }).onKeyUp?.({ code: open ? "KeyA" : "Escape" }),
+  }),
   textarea: textDriver("textarea"),
   text: textDriver("text"),
   checkboxes: checkboxGroupDriver(),
@@ -91,7 +96,7 @@ function spot(container: HTMLElement, control: Element, driver: WidgetDriver, fo
   const id = control.getAttribute("id") ?? "";
   const label = promptOf(control) || id;
   const help = textOfIds(doc, `${id}-description`);
-  const error = ariaError(control) || visibleTexts(doc, `#${id}-error`)[0];
+  const error = ariaError(control) || visibleTexts(doc, `#${cssEscape(`${id}-error`)}`)[0];
   const hint = HINTS_BY_ID[id] ?? HINTS_BY_PROMPT.find(([re]) => re.test(label))?.[1];
   return {
     container,

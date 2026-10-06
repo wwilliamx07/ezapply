@@ -754,6 +754,19 @@ describe("checkReadBack", () => {
       ok: true,
     });
   });
+
+  it("takes a phone number the page formatted, by its digits", () => {
+    const phone = { ...fill("647-555-0100", "text"), rule: "hint:contact.phone.number" };
+    expect(checkReadBack(phone, { fieldId: "f", ok: true, readBack: "(647) 555-0100" })).toEqual({ ok: true });
+    expect(checkReadBack(phone, { fieldId: "f", ok: true, readBack: "+1 647 555 0100" })).toEqual({ ok: true });
+    expect(checkReadBack(phone, { fieldId: "f", ok: true, readBack: "(647) 555-01" })).toMatchObject({ ok: false });
+    // Only a phone number: other text still matches as written.
+    expect(
+      checkReadBack(fill("647-555-0100", "text"), { fieldId: "f", ok: true, readBack: "6475550100" }),
+    ).toMatchObject({
+      ok: false,
+    });
+  });
 });
 
 describe("matching helpers", () => {

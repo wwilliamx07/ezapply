@@ -1,6 +1,7 @@
 import type { FillResult, FillValue, OptionInfo } from "@ezapply/protocol";
 import {
   callReact,
+  cssEscape,
   isVisible,
   key,
   matchOption,
@@ -333,7 +334,7 @@ async function fillRadio(c: HTMLElement, value: string, strict: boolean): Promis
   // Knockout's checked binding reads the input on click.
   press(radio);
   if (!(await waitFor(() => isChecked(radio), T.checkMs))) {
-    const label = radio.id ? c.querySelector<HTMLElement>(`label[for="${radio.id}"]`) : null;
+    const label = radio.id ? c.querySelector<HTMLElement>(`label[for="${cssEscape(radio.id)}"]`) : null;
     if (label) press(label);
     await waitFor(() => isChecked(radio), T.checkMs);
   }

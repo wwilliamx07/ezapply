@@ -1,5 +1,16 @@
 import type { FillValue } from "@ezapply/protocol";
-import { blur, callReact, matchOption, press, setNativeValue, sleep, text, waitFor, win } from "../engine/dom.js";
+import {
+  blur,
+  callReact,
+  cssEscape,
+  matchOption,
+  press,
+  setNativeValue,
+  sleep,
+  text,
+  waitFor,
+  win,
+} from "../engine/dom.js";
 import { choiceLabel } from "../engine/standard.js";
 import { T } from "../engine/timing.js";
 import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.js";
@@ -124,7 +135,8 @@ async function setChecked(box: HTMLInputElement, want: boolean): Promise<boolean
   press(box);
   if (await waitFor(() => checked(box) === want, T.checkMs)) return true;
   // A visually hidden input: its label takes the click.
-  const label = box.closest("label") ?? (box.id ? box.ownerDocument.querySelector(`label[for="${box.id}"]`) : null);
+  const label =
+    box.closest("label") ?? (box.id ? box.ownerDocument.querySelector(`label[for="${cssEscape(box.id)}"]`) : null);
   if (label) press(label);
   return Boolean(await waitFor(() => checked(box) === want, T.checkMs));
 }

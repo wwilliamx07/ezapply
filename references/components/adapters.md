@@ -137,8 +137,19 @@ used; each is matched against the value anyway.
 react-select (Greenhouse, many React forms) is driven through the component itself: the fiber of its input leads
 up to the component whose props hold `options`, `onChange`, `onMenuOpen` and `getOptionLabel`. `list` reads the
 options without opening anything; `fill` calls `onChange` with the matching option (an array for a multi-select);
-an async select is searched through `onInputChange`, then its options are read once they change; `remove` calls
-`onChange` without the values.
+`remove` calls `onChange` without the values.
+
+**Lists that load as you type** are searched by `search` and by `fill`: an async select (`loadOptions`), and any
+list with no options at all, which is a page fetching on `onInputChange` and passing the results in as `options`
+(Greenhouse's location). The driver opens the menu, types the query through `onInputChange`, and waits for the
+load to end (`isLoading` seen and gone, or else the options changing), so a query nothing matches ends with the
+load instead of waiting out `typeaheadResultsMs`. Afterwards it closes the menu and clears the typed text, which
+would otherwise stay in the input over the choice. **Why open the menu.** react-select-async-paginate (Greenhouse's
+school and discipline) loads on an input change only while its menu is open, and loads nothing otherwise (read
+from its code: the effect is gated on `menuIsOpen`). `reactSelectDriver({ menu })` says how to open and close it;
+the default calls `onMenuOpen` and `onMenuClose`, which change nothing on a page that holds `menuIsOpen` itself.
+After a choice in a searched list the driver waits up to `typeaheadResultsMs` for the value to change, since the
+page can confirm it with a request of its own first (Greenhouse's location asks its provider for the place).
 
 **Why not clicks.** Seen live on Greenhouse: a synthetic mousedown never opens the menu unless the
 page has focus, and the user's browser window usually hasn't while they type in their terminal. Choosing

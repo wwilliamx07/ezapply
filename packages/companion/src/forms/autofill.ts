@@ -792,6 +792,13 @@ export function checkReadBack(fill: PlannedFill, r: FillResult): { ok: true } | 
   if (back === undefined || back === null) return { ok: true };
   const wanted = Array.isArray(fill.value) ? fill.value : [String(fill.value)];
   const got = Array.isArray(back) ? back : [String(back)];
+  // A phone field formats the number as it's typed (Greenhouse's shows 647-555-0100 as (647) 555-0100), and may
+  // put the country code in front: the digits are what must match.
+  if (fill.rule === "hint:contact.phone.number") {
+    const digits = (s: string) => s.replace(/\D/g, "");
+    const want = digits(String(fill.value));
+    if (want && got.some((g) => digits(g).endsWith(want))) return { ok: true };
+  }
   const ok = wanted.every((w) => got.some((g) => strictMatch(w, g) || strictMatch(lastSegment(w), g)));
   return ok ? { ok: true } : { ok: false, selected: got.join(", ") };
 }

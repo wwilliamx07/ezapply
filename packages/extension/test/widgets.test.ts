@@ -154,6 +154,104 @@ describe("react-select, driven through its props", () => {
       remaining: ["Go"],
     });
   });
+
+  /**
+   * A list whose options come as you type, as Greenhouse builds them. `paginate`: react-select-async-paginate's
+   * school list, which loads only while the menu is open, with the menu held by the page (a key-up opens it, Escape
+   * closes it). Otherwise Greenhouse's location: no `loadOptions`, the page fetches on `onInputChange` whatever the
+   * menu, and confirms a choice with a request of its own.
+   */
+  function typeaheadSelect(catalog: string[], paginate: boolean) {
+    const c = field('<div class="select__control"><input role="combobox" id="t"></div>');
+    const input = c.querySelector("input") as HTMLInputElement;
+    const state = { open: false, text: "", loading: false, options: [] as { label: string }[], value: null as unknown };
+    const loads: string[] = [];
+    const load = (term: string) => {
+      loads.push(term);
+      state.loading = true;
+      render();
+      setTimeout(() => {
+        state.loading = false;
+        state.options = catalog.filter((l) => l.toLowerCase().includes(term.toLowerCase())).map((label) => ({ label }));
+        render();
+      }, 30);
+    };
+    const render = () => {
+      const props: Record<string, unknown> = {
+        options: state.options,
+        value: state.value,
+        menuIsOpen: state.open,
+        isLoading: state.loading,
+        ...(paginate ? { loadOptions: () => {} } : {}),
+        onMenuOpen: () => {},
+        onMenuClose: () => {},
+        onKeyUp: (e: { code: string }) => {
+          state.open = e.code !== "Escape";
+          render();
+        },
+        onInputChange: (v: string) => {
+          state.text = v;
+          render();
+          if (v && (!paginate || state.open)) load(v);
+        },
+        onChange: (v: unknown) => {
+          state.open = false;
+          render();
+          setTimeout(
+            () => {
+              state.value = v;
+              render();
+            },
+            paginate ? 0 : 50,
+          );
+        },
+      };
+      input.value = state.text;
+      const hostProps = { id: "t", role: "combobox" };
+      const host = { memoizedProps: hostProps, return: { memoizedProps: props, return: null } };
+      const stored = (input as unknown as Record<string, { alternate?: unknown }>).__reactFiber$x;
+      if (stored) stored.alternate = host;
+      else (input as unknown as Record<string, unknown>).__reactFiber$x = host;
+      (input as unknown as Record<string, unknown>).__reactProps$x = hostProps;
+    };
+    render();
+    return { c, state, loads };
+  }
+  const keyUpMenu = (p: unknown, open: boolean) =>
+    (p as { onKeyUp: (e: { code: string }) => void }).onKeyUp({ code: open ? "KeyA" : "Escape" });
+
+  it("searches a list that loads only while its menu is open: opens it, types, chooses, then closes and clears it", async () => {
+    const { c, state, loads } = typeaheadSelect(["Springfield University", "Shelbyville University"], true);
+    const d = reactSelectDriver({ menu: keyUpMenu });
+    expect(await d.search?.(c, "Springfield")).toEqual([{ label: "Springfield University" }]);
+    expect(state).toMatchObject({ open: false, text: "" });
+    expect(await d.fill(c, "Shelbyville University", { strict: true })).toEqual({
+      ok: true,
+      readBack: "Shelbyville University",
+    });
+    expect(state).toMatchObject({ open: false, text: "" });
+    expect(loads).toEqual(["Springfield", "Shelbyville University"]);
+  });
+
+  it("ends a search nothing matches when the load ends, without waiting out the maximum", async () => {
+    const { c } = typeaheadSelect(["Springfield University"], true);
+    const started = Date.now();
+    expect(await reactSelectDriver({ menu: keyUpMenu }).search?.(c, "Nowhere")).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("searches a list with no options until you type, and waits for a choice the page confirms itself", async () => {
+    const { c } = typeaheadSelect(
+      ["Springfield, Illinois, United States", "Springfield, Oregon, United States"],
+      false,
+    );
+    const d = reactSelectDriver();
+    expect(await d.search?.(c, "Springfield")).toHaveLength(2);
+    expect(await d.fill(c, "Springfield, Oregon, United States", { strict: true })).toEqual({
+      ok: true,
+      readBack: "Springfield, Oregon, United States",
+    });
+  });
 });
 
 describe("Ant Design's Select, driven through rc-select's context", () => {

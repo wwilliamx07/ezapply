@@ -212,6 +212,10 @@ single-select prompts can still select an option themselves on Enter: that comes
 code "K2K 3E9, Kanata, Ontario" (both seen live). The adapter's own match picks them, and `checkReadBack`
 compares what the field shows.
 
+**Phone numbers** (`hint:contact.phone.number`) are checked by their digits: a phone field formats the number as
+it's typed (Greenhouse's shows 647-555-0100 as "(647) 555-0100"), and may put the country code in front, so the
+read-back's digits only need to end with the profile number's.
+
 ## Logging
 Each automatic fill is a normal `fill` event in `form-log.jsonl`, with `source` (`profile`, `answer-bank` or
 `computed`), `answerId`, `auto: true`, `rule` and `was` (a value it overwrote). Rules name what chose the value:

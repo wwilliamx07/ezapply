@@ -61,6 +61,19 @@ describe("live Greenhouse application (job-boards.greenhouse.io)", () => {
   it("never reads the phone flag picker's search box as a field", () => {
     expect(Object.keys(f).some((id) => /search/.test(id))).toBe(false);
   });
+
+  it("reads a multi-select whose id ends in [], with its error", () => {
+    document.documentElement.innerHTML = `<body><form id="application-form">
+      <div class="select__container">
+        <label for="question_1000000001[]">Which offices could you work from?</label>
+        <input role="combobox" id="question_1000000001[]">
+        <p id="question_1000000001[]-error">This field is required.</p>
+      </div></form></body>`;
+    const field = Object.values(
+      fieldsOf(extractPage(greenhouse, document, "https://job-boards.greenhouse.io/vandelay/jobs/1000000001").schema),
+    )[0];
+    expect(field).toMatchObject({ label: "Which offices could you work from?", error: "This field is required." });
+  });
 });
 
 describe("live Lever application (jobs.lever.co/…/apply)", () => {

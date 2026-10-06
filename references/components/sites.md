@@ -63,13 +63,21 @@ there ([embedded applications](extension.md#embedded-applications)), with its bo
 **Fields**, in the form (`form#application-form`), in page order:
 - `.text-input-wrapper`: a text input or textarea;
 - `.select__container`: a react-select list ([driven through its props](adapters.md#react-select-through-its-props));
-  the phone's country list is one;
+  the phone's country list is one. Three load as you type: Location (City) (`candidate-location`, no `loadOptions`:
+  the page fetches from its location provider on `onInputChange` and confirms a choice with it), and the education
+  block's School and Discipline (`school--N`, `discipline--N`: react-select-async-paginate over the board's
+  education API, a 300 ms debounce). Greenhouse's select wrapper holds `menuIsOpen` itself, opened by a key-up in the
+  control and closed by Escape, a choice or blur, so the adapter gives the driver `menu`: it calls the props'
+  `onKeyUp` with `KeyA` or `Escape` (read from the board's bundle). Without the menu open, School and Discipline
+  never load;
 - `.file-upload`: resume and cover letter, file names from `.file-upload__filename`, removed by its
   "Remove file" button;
 - `fieldset`s (not the phone's): radios, a checkbox group, or a lone checkbox.
 
 Prompts are the controls' labels (`promptOf`), help text the `<id>-description` element, errors `aria-invalid` with
-its message or `#<id>-error`. Required: `aria-required`, or a required mark in the label.
+its message or `#<id>-error`. Required: `aria-required`, or a required mark in the label. Ids go through
+`cssEscape` before they're put in a selector: a multi-select's id ends in `[]` (`question_38624172002[]`), which
+is not a valid CSS identifier as written.
 
 **Ids.** Greenhouse's own fields by control id (`application.first_name`); its custom questions, keyed by long
 numbers (`question_38624172002`), by the prompt's slug, which reads better and is as stable. Section: the heading

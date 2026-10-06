@@ -10,8 +10,11 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.j
  * type in their terminal; a trusted click opened it. Choosing through `onChange` needs no menu and no focus, and
  * reading `options` needs no menu either, so `list_options` costs nothing.
  *
- * Async selects (options loaded as you type) are searched through `onInputChange`, then their options are read
- * once loaded.
+ * A list whose options come as you type is searched through `onInputChange`, then its options are read once
+ * loaded. That's an async select (`loadOptions`), or a page that fetches on `onInputChange` itself and passes the
+ * results in as `options` (Greenhouse's location), so a list with no options at all is searched too. An async select
+ * built on react-select-async-paginate (Greenhouse's school and discipline) loads only while its menu is open, so a
+ * search opens the menu first and closes it after; `menu` says how, for a page that holds `menuIsOpen` itself.
  */
 
 interface Option {
@@ -20,16 +23,29 @@ interface Option {
   options?: Option[];
 }
 
-interface SelectProps {
+export interface SelectProps {
   options?: Option[];
   value?: Option | Option[] | null;
   isMulti?: boolean;
   name?: string;
+  menuIsOpen?: boolean;
+  isLoading?: boolean;
   onChange: (value: unknown, meta: Record<string, unknown>) => void;
   onInputChange?: (value: string, meta: Record<string, unknown>) => void;
+  onMenuOpen?: () => void;
+  onMenuClose?: () => void;
   getOptionLabel?: (o: Option) => string;
   loadOptions?: unknown;
 }
+
+type Menu = (p: SelectProps, open: boolean) => void;
+
+export interface ReactSelectOptions {
+  /** Open or close the menu. Default: react-select's own `onMenuOpen` and `onMenuClose`. */
+  menu?: Menu;
+}
+
+const defaultMenu: Menu = (p, open) => (open ? p.onMenuOpen?.() : p.onMenuClose?.());
 
 /** react-select's combobox input in a field container. */
 const comboInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>("input[role='combobox']");
@@ -63,21 +79,47 @@ function selected(c: HTMLElement): string[] {
   return (Array.isArray(p.value) ? p.value : [p.value]).map((o) => labelOf(p, o)).filter(Boolean);
 }
 
-/** Search an async select: type the query through `onInputChange`, then wait for its options to change. */
-async function searched(c: HTMLElement, query: string): Promise<Option[]> {
+/** A list filled by searching: an async select, or one with no options until you type. */
+const typeahead = (p: SelectProps) => Boolean(p.loadOptions) || !flat(p.options).length;
+
+/**
+ * Search a list whose options come as you type: open its menu, type the query through `onInputChange`, then wait
+ * for the load to end (`isLoading` seen and gone), or for the options to change on a page that never says it's
+ * loading. A query nothing matches ends there too, rather than waiting out the maximum.
+ */
+async function searched(c: HTMLElement, query: string, menu: Menu): Promise<Option[]> {
   const p = selectProps(c);
   if (!p?.onInputChange) return flat(p?.options);
-  const before = JSON.stringify(flat(p.options).map((o) => labelOf(p, o)));
-  p.onInputChange(query, { action: "input-change", prevInputValue: "" });
+  const labels = (q: SelectProps) => JSON.stringify(flat(q.options).map((o) => labelOf(q, o)));
+  const before = labels(p);
+  if (!p.menuIsOpen) {
+    menu(p, true);
+    await waitFor(() => selectProps(c)?.menuIsOpen, T.dropdownSelectMs);
+  }
+  (selectProps(c) ?? p).onInputChange?.(query, { action: "input-change", prevInputValue: "" });
+  let loading = false;
   const loaded = await waitFor(() => {
     const now = selectProps(c);
-    const labels = flat(now?.options).map((o) => (now ? labelOf(now, o) : ""));
-    return labels.length && JSON.stringify(labels) !== before ? flat(now?.options) : null;
+    if (!now) return null;
+    if (now.isLoading) {
+      loading = true;
+      return null;
+    }
+    return loading || (flat(now.options).length && labels(now) !== before) ? flat(now.options) : null;
   }, T.typeaheadResultsMs);
   return loaded ?? flat(selectProps(c)?.options);
 }
 
-export function reactSelectDriver(): WidgetDriver {
+/** After a search: close the menu and clear the typed text, as react-select does when it loses focus. */
+function endSearch(c: HTMLElement, menu: Menu) {
+  const p = selectProps(c);
+  if (!p) return;
+  if (p.menuIsOpen) menu(p, false);
+  (selectProps(c) ?? p).onInputChange?.("", { action: "input-blur", prevInputValue: "" });
+}
+
+export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
+  const menu = opts.menu ?? defaultMenu;
   return {
     kind: "dropdown",
     is: (c) => Boolean(selectProps(c)),
@@ -95,36 +137,50 @@ export function reactSelectDriver(): WidgetDriver {
     search: async (c, query): Promise<OptionInfo[]> => {
       const p = selectProps(c);
       if (!p) return [];
-      const options = p.loadOptions ? await searched(c, query) : flat(p.options);
-      const q = norm(query).toLowerCase();
-      return options
-        .map((o) => ({ label: labelOf(p, o) }))
-        .filter((o) => p.loadOptions || o.label.toLowerCase().includes(q));
+      if (!typeahead(p)) {
+        const q = norm(query).toLowerCase();
+        return flat(p.options)
+          .map((o) => ({ label: labelOf(p, o) }))
+          .filter((o) => o.label.toLowerCase().includes(q));
+      }
+      const options = await searched(c, query, menu);
+      const now = selectProps(c) ?? p;
+      const found = options.map((o) => ({ label: labelOf(now, o) }));
+      endSearch(c, menu);
+      return found;
     },
     fill: async (c, value, { strict }) => {
       const first = selectProps(c);
       if (!first) return fail("The list isn't ready on the page.");
       const chosen: Option[] = first.isMulti && Array.isArray(first.value) ? [...first.value] : [];
       for (const wanted of asList(value)) {
+        const search = typeahead(selectProps(c) as SelectProps);
+        const options = search ? await searched(c, wanted, menu) : flat(selectProps(c)?.options);
         const p = selectProps(c) as SelectProps;
-        let options = flat(p.options);
-        if (!options.length && p.loadOptions) options = await searched(c, wanted);
         const labels = options.map((o) => labelOf(p, o));
         const idx = matchOption(wanted, labels, strict);
         if (idx < 0) {
+          if (search) endSearch(c, menu);
           return fail(`No option matches "${wanted}"${strict ? " exactly" : ""}.`, {
             availableOptions: labels.slice(0, 80),
             readBack: selected(c),
           });
         }
         const option = options[idx] as Option;
+        const was = JSON.stringify(selected(c));
         if (p.isMulti) {
           if (!chosen.some((o) => labelOf(p, o) === labels[idx])) chosen.push(option);
           p.onChange([...chosen], { action: "select-option", option, name: p.name });
         } else {
           p.onChange(option, { action: "select-option", option, name: p.name });
         }
-        await waitFor(() => selected(c).includes(labels[idx] as string), T.dropdownSelectMs);
+        // A searched list can confirm the choice with a request of its own first (Greenhouse's location asks its
+        // provider for the place), and show it in its own words: wait for the value to change, a while longer.
+        await waitFor(
+          () => selected(c).includes(labels[idx] as string) || (search && JSON.stringify(selected(c)) !== was),
+          search ? T.typeaheadResultsMs : T.dropdownSelectMs,
+        );
+        if (search) endSearch(c, menu);
       }
       const readBack = selected(c);
       const want = asList(value);
