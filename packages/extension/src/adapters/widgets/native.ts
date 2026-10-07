@@ -98,14 +98,14 @@ export function selectDriver(opts: { settled?: boolean } = {}): WidgetDriver {
       const s = select(c);
       return s ? choices(s).map(text) : undefined;
     },
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const s = select(c);
       if (!s) return fail("No list found in the field.");
       const options = choices(s);
       const labels = options.map(text);
-      const idx = matchOption(asString(value), labels, strict);
+      const idx = matchOption(asString(value), labels);
       if (idx < 0) {
-        return fail(`No option matches "${asString(value)}"${strict ? " exactly" : ""}.`, { availableOptions: labels });
+        return fail(`No option matches "${asString(value)}".`, { availableOptions: labels });
       }
       const w = win(s);
       const chosen = (options[idx] as HTMLOptionElement).value;
@@ -152,10 +152,10 @@ export function radioDriver(): WidgetDriver {
       return on ? choiceLabel(on) : null;
     },
     options: (c) => radios(c).map(choiceLabel),
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const all = radios(c);
       const labels = all.map(choiceLabel);
-      const idx = matchOption(asString(value), labels, strict);
+      const idx = matchOption(asString(value), labels);
       if (idx < 0) return fail(`No option matches "${asString(value)}".`, { availableOptions: labels });
       return (await setChecked(all[idx] as HTMLInputElement, true))
         ? { ok: true, readBack: labels[idx] as string }
@@ -192,12 +192,12 @@ export function checkboxGroupDriver(): WidgetDriver {
     value: (c) => boxes(c).filter(checked).map(choiceLabel),
     options: (c) => boxes(c).map(choiceLabel),
     multiple: () => true,
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const all = boxes(c);
       const labels = all.map(choiceLabel);
       const targets = new Set<number>();
       for (const w of Array.isArray(value) ? value : [asString(value)]) {
-        const idx = matchOption(w, labels, strict);
+        const idx = matchOption(w, labels);
         if (idx < 0) return fail(`No option matches "${w}".`, { availableOptions: labels });
         targets.add(idx);
       }

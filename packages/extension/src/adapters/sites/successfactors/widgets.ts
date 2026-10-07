@@ -149,7 +149,7 @@ export function picklistDriver(): WidgetDriver {
         .map((o) => ({ label: labelOf(o) }))
         .filter((o) => o.label.toLowerCase().includes(q));
     },
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const input = pickInput(c);
       if (!input) return fail("No list found in the field.");
       if (input.disabled) {
@@ -162,13 +162,13 @@ export function picklistDriver(): WidgetDriver {
       const wanted = asString(value);
       // Those containing the value first (one request), then the whole list for a wording they don't contain.
       let found = await options(list, wanted);
-      let idx = matchOption(wanted, found.map(labelOf), strict);
+      let idx = matchOption(wanted, found.map(labelOf));
       if (idx < 0) {
         found = await options(list);
-        idx = matchOption(wanted, found.map(labelOf), strict);
+        idx = matchOption(wanted, found.map(labelOf));
       }
       if (idx < 0) {
-        return fail(`No option matches "${wanted}"${strict ? " exactly" : ""}.`, {
+        return fail(`No option matches "${wanted}".`, {
           availableOptions: found.map(labelOf).slice(0, 80),
           readBack: input.value || null,
         });

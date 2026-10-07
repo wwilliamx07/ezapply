@@ -118,7 +118,7 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
       const r = ref(f.fieldId);
       container = r.container;
       r.container.scrollIntoView?.({ block: "center" });
-      const out = await r.driver.fill(r.container, f.value, { strict: f.strict === true });
+      const out = await r.driver.fill(r.container, f.value);
       return fieldDone(ev, f.fieldId, { fieldId: f.fieldId, ...out }, container);
     } catch (err) {
       return fieldDone(ev, f.fieldId, { fieldId: f.fieldId, ok: false, error: (err as Error).message }, container);
@@ -148,7 +148,7 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
     },
 
     /**
-     * Autofill debug mode for the call that follows (trace.ts): the page's markup first when asked (before the
+     * Debug mode for the call that follows (trace.ts): the page's markup first when asked (before the
      * trace starts, so it isn't timed), then the trace's hooks. Null or absent: no trace, and none left running.
      * Set after `setTiming`, in the same script (background/forms.ts, `callAdapter`).
      */

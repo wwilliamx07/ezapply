@@ -4,11 +4,9 @@ import type { CallRecord, Trace } from "./debug.js";
 
 /**
  * `ezapply debug report`: a summary of one debug session (a folder under debug/), for Claude working on ezapply
- * to read before opening single records. Where time went, what failed and why, and how autofill did: fills
- * by rule, fills the model or user changed afterwards (a wrong rule), profile fills no rule covered (a missing
- * hint), and loose matches the strict check refused (a missing alias). From the adapter's trace: the slowest fields
- * and waits, waits that ran to their maximum, the slow paths the fillers took, the page's own errors and failed
- * requests, and what was saved at each failure.
+ * to read before opening single records. Where time went and what failed and why. From the adapter's trace: the
+ * slowest fields and waits, waits that ran to their maximum, the slow paths the fillers took, the page's own errors
+ * and failed requests, and what was saved at each failure.
  */
 export async function debugReport(dir: string): Promise<string> {
   const records = await loadRecords(dir);
@@ -66,7 +64,6 @@ export async function debugReport(dir: string): Promise<string> {
     );
   }
 
-  out.push(...autofillSection(records));
   out.push(...traceSection(records));
   return `${out.join("\n")}\n`;
 }
@@ -79,63 +76,6 @@ export async function latestDebugSession(root: string): Promise<string | null> {
     .sort();
   const last = dirs.at(-1);
   return last ? join(root, last) : null;
-}
-
-function autofillSection(records: CallRecord[]): string[] {
-  const steps = records.filter((r) => r.tool === "autofill_step");
-  if (steps.length === 0) return [];
-  const out = ["", "## Autofill"];
-  const byRule = new Map<string, { filled: number; failed: number }>();
-  const auto = new Map<string, { value: unknown; seq: number; rule: string }>();
-  const left = new Map<string, string>();
-  for (const r of steps) {
-    const res = r.result as AutofillLike | undefined;
-    out.push(
-      `- #${r.seq}: filled ${res?.filled?.length ?? 0}, failed ${res?.failed?.length ?? 0}, kept ${res?.kept ?? 0}` +
-        (res?.note ? ` (${res.note})` : ""),
-    );
-    for (const f of res?.filled ?? []) {
-      bump(byRule, f.rule, "filled");
-      auto.set(f.fieldId, { value: f.value, seq: r.seq, rule: f.rule });
-    }
-    for (const f of res?.failed ?? []) bump(byRule, f.rule, "failed");
-    for (const pass of (r.notes.autofill as PassLike[] | undefined) ?? []) {
-      for (const [id, reason] of Object.entries(pass.left ?? {})) left.set(id, reason);
-    }
-  }
-  out.push(
-    "",
-    "### Fills by rule",
-    ...[...byRule].sort().map(([rule, n]) => `- ${rule}: ${n.filled} filled${n.failed ? `, ${n.failed} failed` : ""}`),
-  );
-
-  const misses = steps.flatMap((r) =>
-    ((r.notes.readBack as ReadBackLike[] | undefined) ?? [])
-      .filter((c) => !c.ok && c.selected)
-      .map((c) => `- #${r.seq} ${c.fieldId}: wanted ${show(c.wanted)}, the page picked ${show(c.selected)}`),
-  );
-  if (misses.length) out.push("", "### Loose matches refused (alias candidates)", ...misses);
-
-  const changed: string[] = [];
-  const uncovered: string[] = [];
-  for (const r of records.filter((x) => x.tool === "fill_fields")) {
-    for (const f of (r.params.fills as FillParam[] | undefined) ?? []) {
-      const a = auto.get(f.fieldId);
-      if (a && a.seq < r.seq && JSON.stringify(a.value) !== JSON.stringify(f.value)) {
-        changed.push(`- ${f.fieldId}: ${a.rule} put ${show(a.value)}, #${r.seq} (${f.source}) set ${show(f.value)}`);
-      }
-      if (f.source === "profile" && !a) {
-        const field = lastSeen(records, r.seq, f.fieldId);
-        const why = left.get(f.fieldId);
-        uncovered.push(
-          `- #${r.seq} ${f.fieldId}${field ? ` "${field.label}" (${field.kind}${field.automationId ? `, ${field.automationId}` : ""}, section "${field.section}")` : ""}: ${show(f.value)}${why ? `, left as ${why}` : ""}`,
-        );
-      }
-    }
-  }
-  if (changed.length) out.push("", "### Automatic fills changed afterwards (wrong rule?)", ...changed);
-  if (uncovered.length) out.push("", "### Profile fills no rule covered (hint candidates)", ...uncovered);
-  return out;
 }
 
 interface TraceEventLike {
@@ -255,21 +195,6 @@ function traceSection(records: CallRecord[]): string[] {
 const calls = (seqs: Set<number>) => [...seqs].map((s) => `#${s}`).join(", ");
 const ms = (v: unknown) => `${Math.round(Number(v) || 0)} ms`;
 
-/** The field as the last read before `seq` showed it (label, kind, automation id, section). */
-function lastSeen(records: CallRecord[], seq: number, fieldId: string) {
-  for (const r of [...records].reverse()) {
-    if (r.seq >= seq) continue;
-    for (const b of r.bridge.filter((x) => x.method === "form.get")) {
-      const form = b.result as FormLike | undefined;
-      for (const s of form?.sections ?? []) {
-        const f = s.fields.find((x) => x.id === fieldId);
-        if (f) return { label: f.label, kind: f.kind, automationId: f.automationId, section: s.title };
-      }
-    }
-  }
-  return undefined;
-}
-
 async function loadRecords(dir: string): Promise<CallRecord[]> {
   const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^\d{4}-.+\.json$/.test(n)).sort();
   const out: CallRecord[] = [];
@@ -304,45 +229,13 @@ function table(rows: string[][], head: string[]): string {
     .join("\n");
 }
 
-/** Counted per rule, rows together: `row:work[1].title` counts as `row:work[].title`. */
-function bump(m: Map<string, { filled: number; failed: number }>, rule: string, k: "filled" | "failed") {
-  rule = rule.replace(/\[\d+\]/g, "[]");
-  const v = m.get(rule) ?? { filled: 0, failed: 0 };
-  v[k]++;
-  m.set(rule, v);
-}
-
 const hidden = (r: CallRecord) => Boolean((r.shown as { hidden?: boolean } | undefined)?.hidden);
 const inBackground = (r: CallRecord) => (r.shown as { focused?: boolean } | undefined)?.focused === false;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
-const show = (v: unknown) => JSON.stringify(v);
 
 interface FillLike {
   fieldId: string;
   ok: boolean;
   error?: string;
-}
-interface FillParam {
-  fieldId: string;
-  value: unknown;
-  source: string;
-}
-interface AutofillLike {
-  filled?: { fieldId: string; value: unknown; rule: string }[];
-  failed?: { fieldId: string; rule: string }[];
-  kept?: number;
-  note?: string;
-}
-interface PassLike {
-  left?: Record<string, string>;
-}
-interface ReadBackLike {
-  fieldId: string;
-  wanted: unknown;
-  ok: boolean;
-  selected?: string;
-}
-interface FormLike {
-  sections?: { title: string; fields: { id: string; label: string; kind: string; automationId?: string }[] }[];
 }

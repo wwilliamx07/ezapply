@@ -1,6 +1,6 @@
 ---
 name: ezapply-apply
-description: Fill out the job application on a supported application site for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, autofill, attach documents, or continue an application.
+description: Fill out the job application on a supported application site for the active posting, step by step, and attach the tailored documents, stopping at the review page (or, on a one-page application, once Submit is the only way on) for the user to submit. Use when the user asks to fill, apply, attach documents, or continue an application.
 ---
 
 # Fill a job application
@@ -12,7 +12,7 @@ The form tools work the same way on every supported site. The extension knows ea
 whatever the URL: `browser_status` lists each tab's `site`, and `get_form` says which in `adapter`. A tab listed
 `generic` is a page of none of them.
 
-**Site notes.** The first `get_form` or `autofill_step` on a site's page in this session carries `siteNotes`: what
+**Site notes.** The first `get_form` on a site's page in this session carries `siteNotes`: what
 that site does differently (a document it needs first, a removal that reaches the candidate's profile on the site,
 a choice that's the user's). Read them before acting and follow them for this application; where they differ from
 this skill, they win. They come once per site, so keep them in mind for the rest of the application.
@@ -58,37 +58,18 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      last resort, only when neither of you can tell (see **Screenshots**).
 
 ## Each step
-1. `autofill_step`. It fills, without you, what `profile.yaml` and `answers.yaml` settle: profile fields the
-   page marks; work, education, language and website rows (it adds the rows the profile needs, or each missing
-   entry through its inline form, saved); link fields; and questions worded
-   exactly as an answer-bank entry, with a plain answer or one computed from the profile (sponsorship,
-   relocation, work authorization for the job's country). It returns:
-   - `filled`: glance at it. A value wrong for this form goes, corrected, into your `fill_fields`. `was` is a
-     value it replaced, left from a previous application: list those in the hand-off. Role descriptions are
-     the profile's highlights as stored, and language levels a fixed mapping: change them only if the user
-     wants.
-   - `added`: the rows and items it added. List them in the step's report.
-   - `failed`: fix each from its `error` or `availableOptions`. `inexact` means the page holds a near match
-     now, so set the right option. A failed `add.*` or `save.*` is a row or item the page refused: an inline
-     form is still open with its fields in the result, so fill what it wants and `add_repeatable` its `save`
-     button again.
-   - the step's sections with only the fields left, each with its `reason`. `reversed-wording`: an
-     answer-bank variant phrased the other way round ("I do NOT…"), so flip its yes and no. `eeo-decline`: pick
-     the form's decline option. `no-strict-match`: none of the field's options is the profile's value; the
-     field lists the `options` it saw, so pick from them. `extra-row`: a row beyond the profile's entries
-     (below). `row`: a list it doesn't fill (certifications). A `note` says when it filled nothing (another page
-     kind, another posting's tab, autofill off): then treat the result as `get_form`'s.
-   - `checklist` (here and on `get_form`): what looks off on this step: a list section whose rows don't
-     match the profile, a file this application didn't upload. Fix it on this step, or say why not in the
-     hand-off (the user left out an old job on purpose).
+1. `get_form` (after `go_next` advanced, its result already gives the new step). Its `checklist` is what looks
+   off on this step: a list section whose rows don't match the profile, a file this application didn't upload.
+   Fix it on this step, or say why not in the hand-off (the user left out an old job on purpose).
 
-   Then decide a value for every field left that is empty or wrong:
+   Then decide a value for every field that is empty or wrong. Read each label as it is written: a level
+   asked "1 entry - 10 expert" takes a number on that scale, not a word.
    - **Profile facts** (a `hint` is given, or the label clearly matches): use `profile.yaml`, formatted for
-     the widget. Rows `autofill_step` left (`extra-row`: more rows than the profile has entries, usually
-     carried over from a previous application) go with `remove_repeatable { sectionId, reason? }` when the
-     user doesn't want them; later rows' field ids change, so `get_form` again after each. For a list it
-     doesn't fill (certifications), `add_repeatable { addButtonId }` until the rows match the profile, then
-     `get_form` again.
+     the widget. Work, education, language and link rows: `add_repeatable { addButtonId }` until the rows
+     match the profile's entries, then `get_form` again and fill each row from its entry. Rows beyond the
+     profile's entries (usually carried over from a previous application) go with
+     `remove_repeatable { sectionId, reason? }` when the user doesn't want them; later rows' field ids change,
+     so `get_form` again after each.
    - **Every add button is a list to fill.** Go through `addButtons` and match each `section` to the
      profile: work → `work`, education → `education`, languages → `languages`, licenses or certificates →
      `certifications`, links or websites → `links`. Add each profile entry the page doesn't hold yet. A
@@ -169,8 +150,7 @@ this skill, they win. They come once per site, so keep them in mind for the rest
    re-sends the whole conversation. Re-check with `get_form` (`onlyEmpty: true`) only if something is
    unclear.
 3. `go_next`. Its `checklist` is what still looked off on the step you just left: `go_back` and fix it, or
-   note why for the hand-off. When it advanced, its result already gives the new step: go straight to
-   `autofill_step`. If it
+   note why for the hand-off. When it advanced, its result already gives the new step: fill it. If it
    didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
    again. If a widget still won't take a value after one retry, stop guessing: tell the user which field
    and what the tools returned, and ask them to set it in the browser.
@@ -185,14 +165,12 @@ Fill everything, attach the files, then go to **Hand-off**.
 ## Hand-off (review page)
 On a one-page application (`lastPage`), this is when every field is filled and Submit is the only way on. If `go_next` or `get_form`
 shows `notAttached`, an approved document never went in: `go_back` to the step with the file field, upload
-it, and come forward again before handing off. Stop. The page's `handoff` (on `get_form` or
-`autofill_step`) is the summary of this application from its log: build the message from it, not from memory.
-In one message, give:
+it, and come forward again before handing off. Stop. The page's `handoff` (on `get_form`) is the summary of
+this application from its log: build the message from it, not from memory. In one message, give:
 - the steps completed and the files attached
 - `handoff.steps`: what still looked off when each step was left, and what you did about it
-- `handoff.removed` and `handoff.replaced`: what a previous application had left, and what replaced it
+- `handoff.removed`: what a previous application had left, and what you removed
 - `handoff.answersToFlag`: every answer from the user or your judgment, flagged for a second look
-- `handoff.automatic`, briefly by section: what was filled without you
 - anything you could not fill
 
 Then ask the user to review everything in their browser and press **Submit** themselves. Afterwards, if they

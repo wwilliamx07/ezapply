@@ -7,7 +7,6 @@ export const oracle = `Oracle Recruiting Cloud:
 - Short option lists are buttons (read as \`radio\` or \`checkbox-group\`, options listed). Long lists are dropdowns
   that search as you type: fill with the option text, or search_options first (cities, schools).
 - Address lists depend on each other (country, province, city, postal code): fill them in one call.
-- Work, education, languages and licenses are inline forms (add, fill, save). autofill_step adds work, education
-  and languages; licenses are yours.
+- Work, education, languages and licenses are inline forms (add, fill, save), one entry at a time.
 - A resume or cover letter already on the candidate's profile blocks a new upload until remove_items takes it off.
 - The email comes from the sign-in and is read-only.`;

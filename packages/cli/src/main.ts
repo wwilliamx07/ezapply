@@ -40,7 +40,7 @@ Usage:
   ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
   ezapply status                                     Check whether ezapply is running
   ezapply doctor                                     Diagnose the whole setup
-  ezapply debug on|off|report|clean|export           Autofill debug mode: record every form call under debug/
+  ezapply debug on|off|report|clean|export           Debug mode: record every form call under debug/
   ezapply mcp                                        MCP server on stdio (Claude Code runs this)
 `;
 

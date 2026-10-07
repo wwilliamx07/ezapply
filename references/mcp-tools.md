@@ -100,8 +100,8 @@ the tool descriptions explain once for every site. **The tool descriptions never
 ### Site notes
 What a site does differently that no fact says (a document it needs first, a removal that reaches the candidate's
 profile on the site, a choice that's the user's) is in its notes, `SITE_NOTES` in `companion/src/forms/sites/`, one
-module per site, keyed by every registry site (a site without notes doesn't compile). `get_form` and
-`autofill_step` give them as `siteNotes`, first in the result, the first time a page of that site is read in a
+module per site, keyed by every registry site (a site without notes doesn't compile). `get_form` gives
+them as `siteNotes`, first in the result, the first time a page of that site is read in a
 Claude session, and never again in that session. The session is the one the MCP relay names in its requests
 (`x-ezapply-chat-session`, a new one each time `ezapply chat` starts Claude), passed to the form tools when the
 request's MCP server is built (`createMcpServer(services, session)`); requests naming none (a client outside
@@ -157,14 +157,14 @@ context was compacted may have lost them: the notes are short, and the generic s
     applications at one employer captured from a job board can't take each other's fills. When the bound tab was
     `unconfirmed`, that result carries `postingBound { id, company?, role?, formTitle?, hint }` once, and the agent
     tells the user which posting this application is credited to. `posting_activate { id, tabId }` rebinds.
-  - **Results:** `get_form` and `autofill_step` carry `postingMatch { by, from? }` (`by`: the evidence, or
+  - **Results:** `get_form` carries `postingMatch { by, from? }` (`by`: the evidence, or
     `["unconfirmed"]`; `from`: how the application was found), and other results carry it when it changed since
     the tab's last call. Every `form-log.jsonl` event gets `matchedBy`. A tab that's another posting's is read
     with `postingMismatch { activePosting { id, company?, role?, tenant?, job? }, formTenant?, formJob?,
     formTitle?, boundTo?, by, hint }`; every call that changes the page (`fill_fields`, `upload_file`,
     `remove_items`, `add_repeatable`, `remove_repeatable`, `go_next`, `go_back`, `page_action`) is refused with
     `posting_mismatch` and the same hint (activate the right posting, or switch tabs, or, if the user says this
-    tab is the posting's, `posting_activate { id, tabId }`), and `autofill_step` fills nothing.
+    tab is the posting's, `posting_activate { id, tabId }`).
   - *Why:* without the check, two open applications or an old confirmation page on screen would credit the wrong
     posting, up to marking it `submitted`. At first a mismatch only skipped the logging. Later
     only tenants and URL jobs were compared, and most of the user's postings were captured off the form
@@ -173,8 +173,7 @@ context was compacted may have lost them: the notes are short, and the generic s
 - **The hand-off checklist** (`forms/checklist.ts`): the list the `ezapply-apply` skill gives at the hand-off,
   kept by the companion instead of the model's memory. Live runs missed parts of it: the cover letter twice
   (now `notAttached`), and sections that start empty are easy to miss.
-  - `stepWarnings` runs on each step page (`get_form`, `autofill_step`, and `go_next` as the step is
-    left). It flags an add button's list whose rows differ from the profile's. The list comes from the
+  - `stepWarnings` runs on each step page (`get_form`, and `go_next` as the step is left). It flags an add button's list whose rows differ from the profile's. The list comes from the
     button's label, else its section (`forms/lists.ts`; by label first because Oracle's Add Experience and Add
     Education share one section): work, education, languages, certifications, and links. Links count LinkedIn
     only when the page has no LinkedIn field of its own. Rows are Workday's `<list>-N` sections, saved items (sections
@@ -185,8 +184,6 @@ context was compacted may have lost them: the notes are short, and the generic s
   - `handoff` is built from `form-log.jsonl`:
     - `steps`: the warnings from the last `step-check` of each step that still had any;
     - `answersToFlag`: the last fill of each field whose source is `user` or `judgment`;
-    - `automatic`: `autofill_step`'s fills, by section;
-    - `replaced`: the values it overwrote;
     - `removed`: removals and deleted rows, with their reasons.
   - Only for a posting the tab is credited to. A checklist that can't be built is skipped (logged), never
     failing the call.
@@ -218,7 +215,7 @@ context was compacted may have lost them: the notes are short, and the generic s
     user clicks back. Never while a review page waits. A raise adds `windowFocused: true` to the logged event.
   - When the page is on screen but still without focus on a call that changes it (the option is off, or the OS
     kept the window behind), results that are objects carry `browserBehind: { hint }` (the tools that
-    carry `tabHidden` except `get_form`, and `autofill_step`) and the logged event gets `windowInBackground: true`. The hint
+    carry `tabHidden` except `get_form`) and the logged event gets `windowInBackground: true`. The hint
     asks the user to bring the browser to the front, or to turn the option on (when it's off), or to click the
     browser window (when the raise didn't take). Not while a review page waits, nor when `tabHidden` is said.
     The skill passes it on when a field (a date) isn't taken.
@@ -229,8 +226,7 @@ context was compacted may have lost them: the notes are short, and the generic s
 
 | Tool | Input | Does |
 |---|---|---|
-| `autofill_step` | `tabId?` | Starts every step instead of `get_form`. Fills, without the model, what `profile.yaml` and `answers.yaml` settle: hinted profile fields, work, education, language and website rows (adding the rows the profile needs), link fields, Oracle's work, education and language entries and Dayforce's employment and education records (each added through its inline form and saved with that entry's own Save), and questions worded as an answer-bank entry, with a plain answer or one computed from the profile. Fills go `strict`. Returns `get_form`'s view with only the fields left (each with `reason`; a dropdown left as `no-strict-match` with the `options` listed), plus `filled` (`{ fieldId, label, value, rule, was? }`), `failed` (with `error`, `availableOptions` or `inexact`; also an add or Save the page refused), `added` (rows and items added) and `kept`. Logs `add-row` and `add-item` events besides the fills. Fills nothing (`note` says why) off a `step` page, on another posting's tab, with `forms.autofill: "off"`, or without a valid profile ([autofill](components/autofill.md)); `siteNotes` as on `get_form` |
-| `get_form` | `onlyEmpty?`, `section?`, `tabId?` | The page's `FormSchema`, lean: `required` only when true, `multiple` only when true, `options` only when non-empty, no `automationId` or `optionsLazy` (dropdowns and typeaheads always list options on demand). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose id or title contains it. Add buttons carry their `section` (ids like `add.work-experience`); notices such as upload confirmations are in `messages`, not `errors`. Adds `posting` (the id it's credited to) or `postingMismatch`, and `timingIssues` when `autofill-timing.yaml` has mistakes ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). Seeing `review` sets status `filled`, and adds `notAttached` when approved documents never went in (see `upload_file`); `confirmation` sets `submitted`. On a step of a posting this tab is credited to, `checklist`: warnings about the step (see **The hand-off checklist** below). On the review page, or a step whose only way on is Submit (`lastPage`: Oracle's last or only page, every Greenhouse, Lever, Ashby and SuccessFactors application), `handoff`. `debug: true` while autofill debug mode records every form call ([format](data-formats.md#debugdate-postingid-companionsrcformsdebugts)), so it isn't left on unnoticed; `siteNotes` the first time a page of its site is read in the session ([site notes](#site-notes)) |
+| `get_form` | `onlyEmpty?`, `section?`, `tabId?` | The page's `FormSchema`, lean: `required` only when true, `multiple` only when true, `options` only when non-empty, no `automationId` or `optionsLazy` (dropdowns and typeaheads always list options on demand). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose id or title contains it. Add buttons carry their `section` (ids like `add.work-experience`); notices such as upload confirmations are in `messages`, not `errors`. Adds `posting` (the id it's credited to) or `postingMismatch`, and `timingIssues` when `autofill-timing.yaml` has mistakes ([waits](components/workday-adapter.md#waits-autofill-timingyaml)). Seeing `review` sets status `filled`, and adds `notAttached` when approved documents never went in (see `upload_file`); `confirmation` sets `submitted`. On a step of a posting this tab is credited to, `checklist`: warnings about the step (see **The hand-off checklist** below). On the review page, or a step whose only way on is Submit (`lastPage`: Oracle's last or only page, every Greenhouse, Lever, Ashby and SuccessFactors application), `handoff`. `debug: true` while debug mode records every form call ([format](data-formats.md#debugdate-postingid-companionsrcformsdebugts)), so it isn't left on unnoticed; `siteNotes` the first time a page of its site is read in the session ([site notes](#site-notes)) |
 | `list_options` | `fieldIds?` (or `fieldId?`), `tabId?` | Options of dropdowns or a typeahead's top level (`hasChildren` = nested menu). `fieldIds` → `{ <fieldId>: options \| { error } }`, one call for a whole step (the adapter opens them one after another); `fieldId` alone → that field's options. The description says a miss in `fill_fields` returns the options anyway, so listing first is only for questions whose wording decides the answer |
 | `search_options` | `fieldId`, `query`, `tabId?` | Type into a typeahead (on Oracle, a dropdown: its lists search as you type) and return matches, each label once, once the results for this query are in |
 | `fill_fields` | `fills[] { fieldId, value, source, answerId? }`, `tabId?` | Fill in one batch. `source`: `profile`, `answer-bank` (+`answerId`), `computed`, `user`, `judgment`. `{ results[], postingMismatch? }`; the companion waits `fillTimeoutSeconds` (`autofill-timing.yaml`, default 120) for it. A clean success whose read-back equals the value exactly is just `{ fieldId, ok: true }` (`leanFillResult`); anything else keeps ok, read-back (e.g. the full text of a matched option), error, available options, and a typeahead's `unmatched` (entries with the options their search showed) and `inexact` (an option the page selected itself). On Oracle the fields are filled in page order, whatever order they're given in, since its address lists load from the one above. Dates also take `MM/YYYY` and `MM/DD/YYYY`; option text is matched as in [filling](components/workday-adapter.md#filling). A field that still shows an error after filling keeps `ok: true` with "Filled, but the page reports: …" in `error`. The description asks for the whole step in one call |

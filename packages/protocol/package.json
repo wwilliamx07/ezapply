@@ -16,10 +16,6 @@
       "types": "./dist/workday.d.ts",
       "default": "./dist/workday.js"
     },
-    "./match": {
-      "types": "./dist/match.d.ts",
-      "default": "./dist/match.js"
-    },
     "./sites": {
       "types": "./dist/sites.d.ts",
       "default": "./dist/sites.js"

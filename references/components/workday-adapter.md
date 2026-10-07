@@ -116,13 +116,6 @@ permit" doesn't match "Yes", by design. The bare-name and parenthetical rules an
 worked live: 12 of 15 skills given as plain names ("Java", "SQL", "AWS") were selected under Workday's own
 names.
 
-**Strict fills.** A fill sent with `strict: true` (`autofill_step` sends every fill so, except a city or postal
-code: [autofill](autofill.md#strict-matching)) matches dropdown, radio, checkbox-group and typeahead options
-only by `strictIndex` (`protocol/src/match.ts`): the option, its bare name or parenthetical, or the option
-without a leading rank ("5 - Fluent" for "Fluent"); never a prefix or substring. A dropdown miss fails with
-`No option matches "…" exactly.` and the options; a typeahead miss is `unmatched` with its search's options. A
-single-select prompt that selects an option itself on Enter still does: that's `inexact`. Not yet run live.
-
 ### Finding a dropdown's listbox
 Live Workday gives the dropdown button no usable `aria-controls`, and a closed listbox stays on screen for a
 moment while it animates away. The adapter used to take the first visible `[role="listbox"]`, so right
@@ -226,7 +219,7 @@ same day: date parts sent focus events by hand when the page has no focus (Chrom
 window is behind another app). With the browser in front it would have done nothing. `tab.show` now reports
 `focused` and debug mode records it, so focus can be ruled in or out from the records rather than from
 memory. Which path each part took (typed, or set directly as a last resort) is in the adapter trace now: a
-`date part set directly` or `date entered again` branch ([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)),
+`date part set directly` or `date entered again` branch ([adapters](adapters.md#debug-mode-the-adapter-trace)),
 not yet seen on a live run.
 
 The next run (another posting at the same employer, the same day) kept the browser in front, and every call recorded

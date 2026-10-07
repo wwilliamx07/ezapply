@@ -149,7 +149,7 @@ export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
       endSearch(c, menu);
       return found;
     },
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const first = selectProps(c);
       if (!first) return fail("The list isn't ready on the page.");
       const chosen: Option[] = first.isMulti && Array.isArray(first.value) ? [...first.value] : [];
@@ -158,10 +158,10 @@ export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
         const options = search ? await searched(c, wanted, menu) : flat(selectProps(c)?.options);
         const p = selectProps(c) as SelectProps;
         const labels = options.map((o) => labelOf(p, o));
-        const idx = matchOption(wanted, labels, strict);
+        const idx = matchOption(wanted, labels);
         if (idx < 0) {
           if (search) endSearch(c, menu);
-          return fail(`No option matches "${wanted}"${strict ? " exactly" : ""}.`, {
+          return fail(`No option matches "${wanted}".`, {
             availableOptions: labels.slice(0, 80),
             readBack: selected(c),
           });
@@ -184,7 +184,7 @@ export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
       }
       const readBack = selected(c);
       const want = asList(value);
-      const took = want.every((w) => readBack.some((r) => matchOption(w, [r], strict) === 0));
+      const took = want.every((w) => readBack.some((r) => matchOption(w, [r]) === 0));
       const back = first.isMulti ? readBack : (readBack[0] ?? null);
       return took ? { ok: true, readBack: back } : fail("Selection did not stick.", { readBack: back });
     },

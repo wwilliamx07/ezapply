@@ -198,10 +198,7 @@ describe("debug mode", () => {
   it("still records a call that timed out, with the bridge calls made before it", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
     try {
-      await writeFile(
-        join(dir, "ezapply.config.json"),
-        JSON.stringify({ schemaVersion: 1, debug: { autofill: true } }),
-      );
+      await writeFile(join(dir, "ezapply.config.json"), JSON.stringify({ schemaVersion: 1, debug: { enabled: true } }));
       const bridge = {
         call: async (method: string) => {
           if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
@@ -270,7 +267,7 @@ describe("debug mode", () => {
     try {
       await writeFile(
         join(dir, "ezapply.config.json"),
-        JSON.stringify({ schemaVersion: 1, debug: { autofill: true, markup: "always" } }),
+        JSON.stringify({ schemaVersion: 1, debug: { enabled: true, markup: "always" } }),
       );
       const sent: { method: string; debug?: unknown }[] = [];
       // An extension built before the trace: it ignores `debug` and never calls back with one.

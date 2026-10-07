@@ -9,7 +9,7 @@ import { hasLinkedInField, LISTS, listOfButton, listSlots, profileCount } from "
  * letter twice (now `notAttached`), and sections that start empty are easy to miss. The companion has the facts:
  * the page, the profile, and form-log.jsonl.
  *
- * Two parts: `stepWarnings` on each step (get_form, autofill_step, and logged by go_next as the step is left),
+ * Two parts: `stepWarnings` on each step (get_form, and logged by go_next as the step is left),
  * and `handoff` at the review page, from the log. Warnings are things to check, never errors: a row count can
  * be right on purpose (the user left out an old job).
  */
@@ -66,8 +66,6 @@ export interface LogEvent {
   value?: unknown;
   source?: string;
   ok?: boolean;
-  auto?: boolean;
-  was?: unknown;
   file?: string;
   removed?: unknown;
   reason?: string;
@@ -82,10 +80,6 @@ export interface Handoff {
   steps: { step: string; warnings: string[] }[];
   /** Answers from the user or your judgment: flag them for a second look. */
   answersToFlag: { fieldId: string; value: unknown; source: string }[];
-  /** Fields autofill_step filled, by section. */
-  automatic: Record<string, string[]>;
-  /** Values autofill_step overwrote (left from a previous application). */
-  replaced: { fieldId: string; was: unknown; now: unknown }[];
   /** What was removed: old attachments, entries, rows. */
   removed: { what: string; reason?: string }[];
 }
@@ -109,23 +103,11 @@ export function handoff(events: LogEvent[]): Handoff {
     }
   }
   const fills = [...lastFill.values()];
-  const automatic: Record<string, string[]> = {};
-  for (const f of fills.filter((x) => x.auto)) {
-    const section = f.fieldId?.split(".")[0] ?? "";
-    automatic[section] = [
-      ...(automatic[section] ?? []),
-      `${f.fieldId?.split(".").slice(1).join(".")} = ${JSON.stringify(f.value)}`,
-    ];
-  }
   return {
     steps: [...steps].filter(([, w]) => w.length > 0).map(([step, warnings]) => ({ step, warnings })),
     answersToFlag: fills
       .filter((f) => f.source === "user" || f.source === "judgment")
       .map((f) => ({ fieldId: f.fieldId as string, value: f.value, source: f.source as string })),
-    automatic,
-    replaced: fills
-      .filter((f) => f.auto && f.was !== undefined)
-      .map((f) => ({ fieldId: f.fieldId as string, was: f.was, now: f.value })),
     removed,
   };
 }

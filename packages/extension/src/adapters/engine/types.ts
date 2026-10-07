@@ -193,7 +193,7 @@ export interface WidgetDriver {
   dateParts?(c: HTMLElement): Field["dateParts"];
   /** Whether it takes several values; undefined leaves `multiple` off the field. */
   multiple?(c: HTMLElement): boolean | undefined;
-  fill(c: HTMLElement, value: FillValue, opts: { strict: boolean }): Promise<FillOutcome>;
+  fill(c: HTMLElement, value: FillValue): Promise<FillOutcome>;
   list?(c: HTMLElement): Promise<OptionInfo[]>;
   search?(c: HTMLElement, query: string): Promise<OptionInfo[]>;
   remove?(c: HTMLElement, values: string[] | null | undefined, field: Field): Promise<RemoveOutcome>;

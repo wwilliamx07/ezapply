@@ -2,8 +2,8 @@ import type { DebugRequest, FormSchema } from "@ezapply/protocol";
 import { waitName, watchWaits } from "./timing.js";
 
 /**
- * Autofill debug mode, the adapter's part: what happens inside the page during one form call, recorded only when
- * the companion asks (`debug` on the call, from `debug.autofill`). Without it every function here returns at once,
+ * Debug mode, the adapter's part: what happens inside the page during one form call, recorded only when
+ * the companion asks (`debug` on the call, from `debug.enabled`). Without it every function here returns at once,
  * no hook is installed, and the adapter runs exactly as it does without debug mode.
  *
  * Recorded in one place, since every driver goes through the engine's DOM helpers (dom.ts): the queries the adapter
@@ -218,13 +218,12 @@ export function note(k: string, data: Record<string, unknown>): void {
 }
 
 /** How a value was matched against the options on screen. */
-export function matched(wanted: string, options: string[], strict: boolean, index: number): void {
+export function matched(wanted: string, options: string[], index: number): void {
   if (!rec) return;
   rec.push("events", {
     k: "match",
     wanted,
     of: options.length,
-    ...(strict ? { strict } : {}),
     ...(index >= 0 ? { chosen: options[index] } : { options: options.slice(0, 40) }),
   });
 }

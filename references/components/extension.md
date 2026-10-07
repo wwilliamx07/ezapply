@@ -176,7 +176,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    `window.__ezapply_<site>[method](...args)` through a second `executeScript`, with the waits set first
    (`setTiming`) and then debug mode (`setDebug`, the call's `debug` or null). Results and thrown errors
    come back as `{ __ok }` / `{ __error }`, with `__debug` when the call was debugged: the adapter's trace
-   ([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)). The handler returns it beside the result
+   ([adapters](adapters.md#debug-mode-the-adapter-trace)). The handler returns it beside the result
    (protocol's `WithDebug`), or sets it on the error it throws, so it reaches the companion in the response's
    `debug` and never in the result. After a debugged call where a field failed, with `failures` asked for, a
    screenshot of the tab joins the trace when the tab is the active one in its window: one per call, after it,

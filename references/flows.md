@@ -123,7 +123,7 @@ convert scans with `pdf_from_images`, `pdf_merge` with a bookmark per section an
 check with `pdf_info` (and that the resume section is still one page), `pdf_compress` if over the limit
 (form limit, else 5 MB).
 
-## 7. Autofill ("fill out the application")
+## 7. Filling the application ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
 ([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md),
 [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](components/sites.md)):
@@ -148,17 +148,15 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    page shows, and only if neither explains it a `screenshot` (the last-resort escape hatch; a widget that
    still fails after one retry goes to the user without one). An Oracle application is often one page with only Submit: every section is filled,
    then hand-off. Oracle's work, education, language and license items are added through an inline form and
-   its `save.<block>` button: `autofill_step` adds the profile's work, education and language entries itself.
+   its `save.<block>` button, one entry at a time.
    Dayforce's employment and education records are added the same way, and its Personal Information is saved
    with its own Update (`save.personal-information`); its Submit step is the review page.
-3. Each step: `autofill_step` fills what the profile and answer bank settle (hinted profile fields; work,
-   education, language and website rows, adding the rows the profile needs; link fields; Oracle's items and
-   Dayforce's records through their inline forms; questions worded exactly as an answer-bank entry, with a plain or computed answer;
-   [autofill](components/autofill.md)) and returns the rest; Claude glances at what was filled, fixes what failed, and decides every field left (profile facts via hints; screening questions matched to the answer bank
+3. Each step: `get_form` (or the step `go_next` returned), then Claude decides every field (profile facts via
+   hints and labels, read as written: a level on a numeric scale takes a number; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    in one message per step, and a resolved miss or a new answer offered for saving to the answer bank; the
-   skills that fit the role, not necessarily all), `add_repeatable` for lists autofill doesn't fill
-   (certifications), `fill_fields` once for the whole step with a
+   skills that fit the role, not necessarily all), `add_repeatable` until each list's rows or items match the
+   profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
    field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
    doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in
@@ -171,7 +169,7 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    education or website rows through `remove_repeatable`, then the current documents and values are added.
 4. **Hand-off** at the review page (Oracle: once every section is filled and Submit is next). The page's
    `handoff` (the companion's summary from the log: warnings still open per step, answers from the user or
-   judgment, automatic fills, replaced and removed values) is what Claude's message is built from. If `go_next`
+   judgment, removed values) is what Claude's message is built from. If `go_next`
    or `get_form` reports `notAttached` there, Claude goes back and attaches those documents first. Then it summarizes what was filled, what was removed from a previous application (attachments, skills, rows), what came from the user or Claude's
    judgment, and what couldn't be filled. The user reviews and presses Submit.
 5. Every fill, removal, upload and step is appended to `form-log.jsonl`; status moves automatically: `attached` on
@@ -189,7 +187,7 @@ Once a document is finished, the attach mode (`documents.attach`, asked during o
 
 Then, if the application is open at the step with the file field, Claude attaches the documents right away
 (`upload_file`, after clearing leftovers); otherwise it says they're ready and attaches them when filling
-([flow 7](#7-autofill-fill-out-the-application)). In after-approval mode `upload_file` itself refuses anything
+([flow 7](#7-filling-the-application-fill-out-the-application)). In after-approval mode `upload_file` itself refuses anything
 not approved in its current version, so a rebuilt document is reviewed again.
 
 ## Posting status

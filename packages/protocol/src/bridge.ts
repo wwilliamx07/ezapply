@@ -60,7 +60,7 @@ export const RequestMessage = z.object({
 export type RequestMessage = z.infer<typeof RequestMessage>;
 
 /**
- * `debug`: a debug trace beside the result or error (autofill debug mode, rpc.ts's `WithDebug`), sent only for a
+ * `debug`: a debug trace beside the result or error (debug mode, rpc.ts's `WithDebug`), sent only for a
  * request that asked for one. Optional, so either side may be older.
  */
 export const ResponseMessage = z.union([

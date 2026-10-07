@@ -6,7 +6,6 @@ export * from "./errors.js";
 export * from "./forms.js";
 export * from "./greenhouse.js";
 export * from "./lever.js";
-export * from "./match.js";
 export * from "./oracle.js";
 export * from "./phenom.js";
 export * from "./postings.js";

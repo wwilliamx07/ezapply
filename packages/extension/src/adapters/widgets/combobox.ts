@@ -70,13 +70,13 @@ export function comboboxDriver(spec: ComboboxSpec = {}): WidgetDriver {
       key(i, "Escape");
       return found;
     },
-    fill: async (c, value: FillValue, { strict }) => {
+    fill: async (c, value: FillValue) => {
       const i = input(c);
       if (!i) return fail("No input found in the field.");
       const wanted = Array.isArray(value) ? String(value[0] ?? "") : String(value);
       const found = await suggest(c, i, wanted);
       const labels = found.map(text);
-      const idx = matchOption(wanted, labels, strict);
+      const idx = matchOption(wanted, labels);
       if (idx < 0) {
         key(i, "Escape");
         blur(i);

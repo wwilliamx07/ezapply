@@ -114,12 +114,7 @@ export type FormSchema = z.infer<typeof FormSchema>;
 export const FillValue = z.union([z.string(), z.array(z.string()), z.boolean()]);
 export type FillValue = z.infer<typeof FillValue>;
 
-/**
- * `strict`: take only an option the value names strictly (`match.ts`: exact, without or as its parenthetical,
- * without a leading rank), never the adapters' looser prefix or substring match. A miss fails with the options
- * seen. Sent by autofill_step, whose fills nobody checks field by field. An adapter built before it ignores it.
- */
-export const FillAction = z.object({ fieldId: z.string(), value: FillValue, strict: z.boolean().optional() });
+export const FillAction = z.object({ fieldId: z.string(), value: FillValue });
 export type FillAction = z.infer<typeof FillAction>;
 
 export const FillResult = z.object({
@@ -217,7 +212,7 @@ export type DebugRequest = z.infer<typeof DebugRequest>;
  * `autofill-timing.yaml`. Absent (an older companion): the adapter's defaults.
  * `frameId`: act on that frame of the tab (an application embedded in another site's page, from
  * `TabInfo.frames`) instead of the tab's own page. `tab.screenshot` always takes the whole tab.
- * `debug`: autofill debug mode is on for this call (see `DebugRequest`). An older extension ignores it and answers
+ * `debug`: debug mode is on for this call (see `DebugRequest`). An older extension ignores it and answers
  * without a trace.
  */
 const TabParam = z.object({

@@ -126,8 +126,8 @@ describe("stepWarnings", () => {
 describe("handoff", () => {
   it("summarises the application from its log", () => {
     const h = handoff([
-      { event: "fill", fieldId: "mi.first", value: "Jane", source: "profile", ok: true, auto: true, was: "Old" },
-      { event: "fill", fieldId: "mi.country", value: "Canada", source: "profile", ok: true, auto: true },
+      { event: "fill", fieldId: "mi.first", value: "Jane", source: "profile", ok: true },
+      { event: "fill", fieldId: "mi.country", value: "Canada", source: "profile", ok: true },
       { event: "fill", fieldId: "q.salary", value: "60000", source: "user", ok: true },
       { event: "fill", fieldId: "q.relocate", value: "No", source: "judgment", ok: true },
       // corrected later by the user: the last fill counts
@@ -144,8 +144,6 @@ describe("handoff", () => {
         { fieldId: "q.salary", value: "60000", source: "user" },
         { fieldId: "q.relocate", value: "Yes", source: "user" },
       ],
-      automatic: { mi: ['first = "Jane"', 'country = "Canada"'] },
-      replaced: [{ fieldId: "mi.first", was: "Old", now: "Jane" }],
       removed: [{ what: 'q.cover: ["cover.pdf"]', reason: "old" }],
     });
   });

@@ -20,7 +20,6 @@ As of 2026-10-06.
 | Phenom | Employers' careers sites run by Phenom, whose multi-step apply flow is on the employer's domain: a definition on the engine (shared drivers, a react-datepicker month picker, selects that settle late, rows, the resume required on step 1), built from steps 1 to 3 of a live flow saved with placeholder values ([sites](components/sites.md#phenom-sitesphenom)) |
 | Dayforce | Dayforce's candidate portal (`jobs.dayforcehcm.com`, every employer on one host): a definition on the engine with an Ant Design Select driver through rc-select's context, phone numbers read as two fields, Personal Information's own form and Update, employment and education records added, saved, edited and deleted through their forms, uploads, the Submit step as the review page. Built from one saved step and the portal's own scripts ([sites](components/sites.md#dayforce-sitesdayforce)) |
 | SAP SuccessFactors | SuccessFactors Recruiting's career site (`career<n>.sapsf.com` and the like, every employer of a data centre on one host): a definition on the engine for its one-page application, with its own paginated picklist driver (through its framework's component registry) and attachment driver (through the upload popup), a shared UI5 Web Components date picker driver, rows of lists added and removed, documents uploaded, replaced and removed, Apply as the submit. Built from one saved application and the page's own scripts ([sites](components/sites.md#sap-successfactors-sitessuccessfactors)) |
-| Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; all of it in two Workday runs |
 | Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions); the form tools' descriptions and the apply skill name no site: what a site does differently is in its notes, given once per chat session as `siteNotes` ([site notes](mcp-tools.md#site-notes)) |
@@ -32,13 +31,12 @@ As of 2026-10-06.
 ## Not yet verified for real
 - **Workday and Oracle on the engine** (2026-10-03). Their fillers and readers moved unchanged, the golden
   schemas of every fixture state and live snapshot are equal, and every behaviour test and the companion's e2e
-  tests pass. This is an adapter change made before the autofill live runs, against the plan
-  ("One adapter change per live run" in [development](development.md)): the next Workday and Oracle runs test
-  `strict` and the move together. If one is slower or fails where the last ones didn't, compare its debug
-  records with the runs before the move, and suspect the engine's fill loop (its waits after each field are the
-  same calls as before) before `strict`. **Workday ran live twice** (debug mode on;
-  [the first run](#the-first-workday-run-on-the-engine)). It wasn't slower: autofill's 20-field My Experience fill
-  took 13.4 s in the page. `strict` refused what it should have (a field of study and a language, below). Oracle
+  tests pass. This is an adapter change made before the next live runs, against the plan
+  ("One adapter change per live run" in [development](development.md)). If a run is slower or fails where the
+  last ones didn't, compare its debug records with the runs before the move, and suspect the engine's fill loop
+  (its waits after each field are the same calls as before). **Workday ran live twice** (debug mode on;
+  [the first run](#the-first-workday-run-on-the-engine)). It wasn't slower: a 20-field My Experience fill took 13.4 s in
+  the page. Oracle
   ran on it once (2026-10-06): its address and school lists failed, fixed since, below.
 - **Greenhouse, Lever and Ashby with the extension** (2026-10-03). Checked live through their built bundles in
   headless Edge. One real application so far, on Ashby: capture, text fields, the location,
@@ -61,8 +59,7 @@ As of 2026-10-06.
   country and the uploads worked. Three things didn't, all fixed and covered by tests, not yet run live again: the
   form couldn't be read at all with a multi-select on it (its id ends in `[]`, put into a selector unescaped); the
   lists that load as you type (Location (City), School, Discipline) never searched, each fill waiting 4 s for
-  nothing ([react-select](components/adapters.md#react-select-through-its-props)); and autofill counted the phone
-  as failed because the page formats it ([autofill](components/autofill.md)).
+  nothing ([react-select](components/adapters.md#react-select-through-its-props)).
 - **Telling sites by their pages, with access to every site** (2026-10-04): the signatures match every saved page
   of their own site and no other's, and on real captured pages they told every Workday, Oracle, Ashby and Phenom
   page and matched none of the rest (job boards, other ATSs, employers' own pages). Not yet run in
@@ -115,32 +112,17 @@ As of 2026-10-06.
   links to it wasn't checked. Not yet seen live: the first-fill
   binding and its `postingBound` notice, title matching against real postings' roles (the title is read on every
   site's saved pages, including Workday's sign-in page), and whether the binding lost at a restart matters.
-- **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
+- **Debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
   Workday fixture and with a timed-out call, then used on live runs; the first one's records
-  checked autofill's plan and ruled out the waits in the slowdown below.
-- **Autofill debug mode, the adapter trace, markup and export** (2026-10-05;
-  [adapters](components/adapters.md#autofill-debug-mode-the-adapter-trace)): tested on the Workday behavioural
+  ruled out the waits in the slowdown below.
+- **Debug mode, the adapter trace, markup and export** (2026-10-05;
+  [adapters](components/adapters.md#debug-mode-the-adapter-trace)): tested on the Workday behavioural
   fixture, over MCP in the companion's e2e tests, and the export on a filled fixture page. A six-field fill took the
   same time with debug on and off on the fixture. Not yet run in a browser: the hooks on a real page (a site that
   replaces `fetch` or `console.error` itself keeps its own, unrecorded), the size of a real step's trace and
   markup through `executeScript` and the bridge, the failure screenshot, and the export on a real saved step. It's
   an adapter change ("One adapter change per live run" in [development](development.md)): the next Workday run
   goes with debug off first, and its timings must match the earlier runs' before the trace is trusted.
-- **Deterministic autofill** (`autofill_step`; [autofill](components/autofill.md)): run live in full once,
-  on Workday ([the first run on the engine](#the-first-workday-run-on-the-engine)): rows added and filled,
-  `strict` refusals right, the language levels missed (fixed). Before that, one live run of its first phase. It
-  filled My Information correctly, including the strict read-backs on the phone
-  type and the province, and nothing on the question steps; both causes were fixed afterwards. The rest was
-  built after it: work, education, language and website rows (adding the rows), link fields, Oracle's item
-  forms, computed answers, options listed for values with several wordings, fills in chunks, and `strict` fills
-  in both adapters. Replayed on that run's recorded pages, it adds the rows the agent added and fills 34 of the
-  37 row fields with the agent's own values (the other three: a reworded role description and two language
-  levels the agent judged lower) and 8 question fields as chosen in the run. Run live once on Oracle (2026-10-06): it added a link row and an
-  education entry through its inline form and Save; what failed was the list searches above and one strict miss
-  (a value the list words differently). `strict` is
-  an adapter change ("One adapter change per live run" in [development](development.md)): a slower next run
-  points at it first. Oracle's work form has never been seen live, so its fields are matched by
-  hint and label on trust.
 - **Fills twice as slow per field in debug mode's first live run, cause unknown.** Dropdowns took about 3.5–4 s
   each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in an earlier run on the
   same tenant. Ruled out:
@@ -239,16 +221,9 @@ As of 2026-10-06.
   Terminal, and an npm-installed `claude.cmd` launched through the shell.
 
 ## The first Workday run on the engine
-Workday, five steps, debug mode on, reached the review page. The first live run of autofill's
-rows and of the engine. The user stepped in twice. Calls: 42, 171 s in calls, 73 s of that with the tab hidden
-(step 1's `autofill_step`, 72 s, ran while the review page was in front).
-- **Autofill:** My Information 8 filled; My Experience added 8 rows and filled 20 fields. Refused by `strict`,
-  correctly: the field of study (the page picked a longer name for it) and a language the list holds only as two
-  regional variants (the agent asked the user). Missed: the nine language levels,
-  labelled "Read", "Speak", "Write", which the label test didn't know (fixed:
-  [autofill](components/autofill.md)), and the stored "how did you hear" answer, "School job board", which
-  isn't an option. Application Questions: nothing, since no answer-bank wording matched. The agent filled them
-  by meaning.
+Workday, five steps, debug mode on, reached the review page. The first live run of the engine, with deterministic
+autofill then in place ([removed](#deterministic-autofill-removed) since). The user stepped in twice. Calls: 42,
+171 s in calls, 73 s of that with the tab hidden (step 1's first call, 72 s, ran while the review page was in front).
 - **Multi-part dates failed again**: four `MM/YYYY` work dates and an `MM/DD/YYYY` graduation date read back
   right while Workday said they were required, and the user retyped them all. Cause unknown
   ([dates](components/workday-adapter.md#dates-typed-into-workdays-split-widget)). The fill result said
@@ -277,13 +252,6 @@ rows and of the engine. The user stepped in twice. Calls: 42, 171 s in calls, 73
 Another posting at the same employer, the same evening, debug mode on, the browser kept in front (`focused: true` on all
 19 calls). It reached the Terms and Conditions box on step 4 with no help from the user: every date was taken
 the first time, and each step advanced on the first Save and Continue. 102 s in calls.
-- **Autofill:** My Information 8 of 9 (the stored "how did you hear" isn't an option). My Experience added 8
-  rows and filled 29 of 31 fields, now including all nine language levels; the two left were the same `strict`
-  refusals (the field of study and the language). It took 36.4 s: 3.3 s adding rows, 3.7 s listing the degree and
-  level options, 19.5 s for 25 fields and 9.7 s for the last 6. The 6-field chunk was slow because the language
-  missed: about 0.8 s a field otherwise, near the first run's 0.67 s. Application Questions: nothing, as before.
-  The agent filled all five from the profile and answer bank and every one was taken; no stored wording matched
-  the form's, and the agent didn't offer to save the form's wordings, so the employer's next form asks again.
 - **The agent's own fills:** "how did you hear" cost five calls and 16 s ("Job Boards" missed, two
   `search_options` of 6.5 s each returning the top level whatever the query, then "Job Boards > Other" on its
   own judgment). One `fill_fields` of 26.7 s held 14 skills (10 found, 3 more on a second try), the first role
@@ -417,18 +385,27 @@ To answer from the next live runs:
 5. **Title matching on real roles.** Compare the roles the agent records with the titles the pages show (every
    debug record of a read holds `FormSchema.job`), and tune `compareTitles` if real pairs come out `unsure` or,
    worse, `other`.
-6. **Autofill's wrong fills are silent.** The safeguards are the section-fit check, `filled` in the result, and the
-   automatic fills listed at the hand-off. Is a glance at `filled` on each step enough?
-7. **How compact `filled` must be.** The model needs the label to notice a wrong value, but every label costs
-   tokens. Measure on the next live run.
-8. **Country and province names.** The profile may hold "ON" where the list says "Ontario". A strict miss goes
-   to the model, and the debug report's loose-match section shows which aliases come up.
-9. **Role descriptions** are filled from the profile's highlights as stored, not tailored as the resume is; in
-   the replay the agent reworded one. Keep as stored?
-10. **Language levels** are one level per language for every skill (reading, writing, speaking). The agent rated
-    one language's reading and writing a step lower. Keep one level, or add per-skill levels to the profile?
-11. **Postings captured from one job-board results URL** (several from a single search page) can't be told
+6. **Postings captured from one job-board results URL** (several from a single search page) can't be told
     apart by URL. That's a capture problem, outside the matching.
+
+## Removed
+### Deterministic autofill (removed)
+`autofill_step` filled, without the model, what the profile and the answer bank settled on a step: hinted profile
+fields, work, education, language and link rows (adding them), Oracle's and Dayforce's item forms, and questions
+worded as an answer-bank entry. It was removed on 2026-10-07 with its MCP tool, its `forms.autofill` setting, the
+hand-off's `automatic` and `replaced` lists, its part of the debug record (`notes.autofill`, the index's counts)
+and of `ezapply debug report`; each step starts with `get_form` again. The code and its reference page are in git
+history before that change.
+
+*Why:* in the debugged live runs it filled about 45% of the fields (59% on Workday, about 27% on the
+hosted boards), but the agent still made at least one `fill_fields` call per step for the rest, so it saved
+values, not turns, and every turn re-sends the conversation. Its token saving was never measured. Its mistakes were
+the costly kind: rows and levels were placed by label patterns, so a SuccessFactors language level, a text field
+labelled with a 1–10 scale, got a word ("Native"); the read-back matched, so it passed as a clean fill, and the
+agent left it. Reading labels is what the model does well, and every new site brought
+wordings the patterns misread. Strict option matching in the adapters (`strict` fills, `protocol/src/match.ts`), built only for it, went with it.
+What stayed: the profile hints on fields,
+which the agent uses.
 
 ## Where the build departs from the original plan
 The original design plan (`plan.md`) was removed on 2026-09-27 and is in git history. This table keeps

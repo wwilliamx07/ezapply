@@ -2,7 +2,7 @@
 export const dayforce = `Dayforce:
 - Steps: Candidate Info, Questionnaire (a page per questionnaire), Submit, each with Next and Previous.
 - The resume first: uploading it sends it to Dayforce, which parses it into the fields. Upload it before
-  autofill_step, then check what the parse filled rather than trusting it.
+  filling, then get_form and check what the parse filled rather than trusting it.
 - Personal Information is a form of its own: after filling it, press its \`save\` button
   (save.personal-information). Shown as a summary, its \`edit\` button opens it again.
 - Employment and education are records saved one by one with their \`save\` button. Record dates are \`YYYY-MM-DD\`.

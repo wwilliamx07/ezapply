@@ -20,7 +20,6 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 | 7 | Auto mode (application manager) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
 | 8 | Agents that try to break a new adapter (adapter building) | Medium | M–L | — |
 | 9 | One directory per adapter (adapter building) | Medium | M–L | — |
-| 10 | Sections say which profile list they belong to (deterministic autofill) | Medium | S–M | — |
 
 Suggested order: the live runs in `references/status.md` ("Not yet verified for real"): a Workday run with debug
 mode off whose timings match the earlier runs' (the adapter trace's no-op path), which also presses a row's Delete
@@ -547,27 +546,3 @@ directory and its files; the checklist), `components/adapters.md`, `protocol.md`
 
 **Challenge.** Workday's and Oracle's fixtures and helpers (`test/adapters.ts`) are shared with the companion's
 e2e tests. They move with the sites, and the e2e tests import them from there.
-
----
-
-## Improvements to deterministic autofill
-
-### 10. Sections say which profile list they belong to (Medium, S–M)
-
-**Why.** To fill rows and records from the profile, the companion guesses which list a section belongs to from its
-title and id (`forms/lists.ts`): `rowOf` takes a section whose id ends `-<n>` and matches its title against
-`/work|employment|experience/`, `/education/`, `/language/`…; `savedItemOf` reads the kind from a saved item's id
-(`.experience-<n>`, `.education-<n>`, Oracle's shape) or the title before its colon; add buttons go by label, then
-section. So adapters shape their output to those guesses (Dayforce builds Oracle-shaped saved-item ids for it), the
-conventions live in another package, and a mismatch fails silently: a list titled "Professional Background" or
-"Schools Attended" matches nothing, and autofill adds no rows without saying why.
-
-**How.** An optional fact, `list` (`work` | `education` | `languages` | `certifications` | `links`), on
-`Section` and `addButtons[]`, set by the adapter from markup that says it outright (Dayforce's `workHistory-0`
-forms, Workday's automation ids, Oracle's blocks). `listSlots`, `listOfButton` and `missingItems` use it first
-and fall back to the title guess, so adapters move over one at a time. Optional, so no `PROTOCOL_VERSION` bump. The
-conformance test then requires it on every row, saved item and list add button, and `building-adapters.md` drops
-the id and title conventions in favour of it.
-
-**Open question.** Whether to drop the title guess once every adapter sets `list`, or keep it for a site whose
-markup doesn't say.

@@ -117,14 +117,13 @@ The "Import your profile" pre-section (LinkedIn and Indeed import) holds no fiel
 Every filler acts, waits, and reads back, like Workday's. `fill` handles the fields **in page order** (the
 definition's `fill.order: "page"`),
 whatever order they came in, and returns results in the order asked: the address lists depend on each other
-(country → province → city → postal code), each loading its options for the choice above it. A fill sent
-`strict` matches list options, pills and radios only strictly, as on [Workday](workday-adapter.md#filling); a
-date's month, day and year lists are matched as before, since the adapter builds their values itself.
+(country → province → city → postal code), each loading its options for the choice above it. A
+date's month, day and year lists are matched by values the adapter builds itself.
 
 | Kind | Approach |
 |---|---|
 | text, number, textarea | Native setter + `input`/`change` (Knockout's `value` binding reads on change, `textInput` on input), then focus leaves. A read-only input is refused. A phone number the page reformats (`416-555-0100` shown as `(416) 555-0100`, live) counts when the digits are the same |
-| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler; a list that still hasn't shown is searched anyway, and only if the search shows nothing either is it "Could not open the list" (live, a school list didn't show within the open waits twice, while `search_options`, which always types, found the school). An option matching the value (`matchOption`; with `strict`, only a strict match: see [Workday's strict fills](workday-adapter.md#filling)) is pressed; else the value is typed, and once the options change and one of them holds the value (or "no results" shows, not having shown before; [searching](#searching-a-list)) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
+| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler; a list that still hasn't shown is searched anyway, and only if the search shows nothing either is it "Could not open the list" (live, a school list didn't show within the open waits twice, while `search_options`, which always types, found the school). An option matching the value (`matchOption`) is pressed; else the value is typed, and once the options change and one of them holds the value (or "no results" shows, not having shown before; [searching](#searching-a-list)) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
 | radio (pills) | Press the matching pill unless already pressed: a pressed single-choice pill unselects itself when pressed again |
 | radio (native) | Press the input (Knockout's `checked` binding reads it on click), else its label |
 | checkbox-group (pills) | Press each pill whose state must change |
@@ -182,9 +181,6 @@ Add Another Link adds a link row directly. `removeRepeatable(sectionId)` deletes
 delete button; a timeline entry by the delete button it shows only while hovered (the adapter hovers it
 first), after which the page removes it a second later. Done once there are fewer saved items.
 
-`autofill_step` runs this flow by itself for each work, education and language entry of the profile that no
-saved item names ([autofill](autofill.md#item-forms-oracle-dayforce)).
-
 Adding one education and two work entries through the inline form and Save **worked live**.
 Languages and licenses (tiles) and the deletes are still unverified live. An empty block shows no fields,
 only its add button, so the `ezapply-apply` skill has Claude match every add button's section to the
@@ -233,7 +229,7 @@ typing a search again, `checkMs` for pills, radios and checkboxes, `date*`, `upl
   phone number, stale "required" errors, and "Saved" as an error. The **Cover Letter** upload field didn't
   appear in `get_form` on the live page, though the page the user saved earlier has one; why is unknown
   (Claude put the cover letter under Additional Documents). Next time, a saved copy of the page will tell.
-- **On the engine, live** (2026-10-06, another employer's single-page flow, autofill and the agent): City and
+- **On the engine, live** (2026-10-06, another employer's single-page flow): City and
   Postal Code failed at every attempt, the search problem [above](#searching-a-list), and the school list twice
   with "Could not open the list". Both fixed and reproduced by the fixture's `liveSearch` postal list (its tests
   fail on the old logic), not yet run live.
@@ -248,4 +244,4 @@ typing a search again, `checkMs` for pills, radios and checkboxes, `date*`, `upl
 
 ## Updating for Oracle changes
 Change `selectors.ts` (every Oracle string of the adapter), add a snapshot the user saves from the browser (or one exported from a debug-mode run:
-`ezapply debug export`, [the loop](../development.md#debugging-a-live-run-autofill-debug-mode)), and extend `oracle-live.test.ts` and the fixture.
+`ezapply debug export`, [the loop](../development.md#debugging-a-live-run-debug-mode)), and extend `oracle-live.test.ts` and the fixture.

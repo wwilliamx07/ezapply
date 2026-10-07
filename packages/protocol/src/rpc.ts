@@ -18,7 +18,7 @@ export type Handlers<M extends MethodMap> = {
 };
 
 /**
- * A handler's result with a debug trace beside it (autofill debug mode: the adapter's trace and the page's markup).
+ * A handler's result with a debug trace beside it (debug mode: the adapter's trace and the page's markup).
  * The trace travels in the response's `debug`, outside the result, so `request` never returns it and it can't end
  * up in a tool result: only a caller that passed `onDebug` gets it. A handler that fails carries one the same way,
  * as its thrown error's `debug`.

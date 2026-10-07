@@ -11,7 +11,6 @@ import {
   ErrorCode,
   ExtensionApi,
   EzError,
-  type Field,
   type Handlers,
   isFormSite,
   PROTOCOL_VERSION,
@@ -801,129 +800,6 @@ describe("form tools over MCP", () => {
     });
   }
 
-  it("autofills what the profile and answer bank decide, and returns only the rest", async () => {
-    const ext = fakeExtension();
-    await ext.outcome;
-    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    await writeFile(
-      join(dir, "ws", "profile", "profile.yaml"),
-      [
-        "schemaVersion: 1",
-        "identity: { firstName: Jane, lastName: Doe }",
-        "contact:",
-        "  email: jane@example.com",
-        "  address: { city: Toronto, country: Canada }",
-      ].join("\n"),
-    );
-    await writeFile(
-      join(dir, "ws", "profile", "answers.yaml"),
-      [
-        "schemaVersion: 1",
-        "entries:",
-        "  - { id: how_heard, canonical: How did you hear about us?, answer: { default: Job Board > LinkedIn } }",
-        "  - { id: previously_employed, canonical: Have you worked here before?, answer: 'No' }",
-      ].join("\n"),
-    );
-    const client = await mcpClient();
-    const r = (await callJson(client, "autofill_step")).data;
-    expect(r.filled).toEqual([
-      expect.objectContaining({ fieldId: "my-information.legalName--firstName", value: "Jane" }),
-      expect.objectContaining({ fieldId: "my-information.countryDropdown", value: "Canada" }),
-      expect.objectContaining({
-        fieldId: "my-information.source",
-        value: "Job Board > LinkedIn",
-        rule: "answer:how_heard",
-      }),
-      expect.objectContaining({ fieldId: "application-questions.previousWorker", value: "No" }),
-    ]);
-    expect(r.failed).toEqual([]);
-    // Only what's left to decide comes back, each with why.
-    const left = Object.fromEntries(
-      r.sections.flatMap((s: { fields: { id: string; reason?: string }[] }) => s.fields.map((f) => [f.id, f.reason])),
-    );
-    expect(left).toEqual({
-      "my-information.skills": "multi-select",
-      "application-questions.degreeLevel": "no-rule",
-      "application-questions.agreement": "no-rule",
-      "application-questions.startDate": "section-mismatch",
-      "application-questions.resume": "file",
-      "application-questions.coverLetter": "file",
-      // No work entries in this profile: the row is one too many, and the model decides.
-      "work-experience-1.jobTitle": "extra-row",
-    });
-    expect(r).toMatchObject({ pageKind: "step", nextLabel: "Save and Continue", posting: cap.postingId });
-    // The page really holds the values, and the log says they were automatic.
-    const after = (await callJson(client, "get_form")).data;
-    const value = (id: string) =>
-      after.sections.flatMap((s: { fields: Field[] }) => s.fields).find((f: Field) => f.id === id)?.currentValue;
-    expect(value("my-information.legalName--firstName")).toBe("Jane");
-    expect(value("application-questions.previousWorker")).toBe("No");
-    const log = (await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8"))
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l));
-    expect(log[0]).toMatchObject({ event: "fill", source: "profile", auto: true, rule: "hint:identity.firstName" });
-    expect(log.filter((e) => e.auto)).toHaveLength(4);
-
-    // A second call finds them already right.
-    expect((await callJson(client, "autofill_step")).data).toMatchObject({ filled: [], kept: 4 });
-    // Turned off, it fills nothing and returns the whole step.
-    await writeFile(
-      join(dir, "ws", "ezapply.config.json"),
-      JSON.stringify({ schemaVersion: 1, forms: { autofill: "off" } }),
-    );
-    const off = (await callJson(client, "autofill_step")).data;
-    expect(off).toMatchObject({ filled: [], note: expect.stringMatching(/off/) });
-    expect(off.sections.flatMap((s: { fields: unknown[] }) => s.fields)).toHaveLength(11);
-    await client.close();
-  });
-
-  it("adds the work rows the profile needs and fills them, strictly", async () => {
-    const ext = fakeExtension();
-    await ext.outcome;
-    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    await writeFile(
-      join(dir, "ws", "profile", "profile.yaml"),
-      [
-        "schemaVersion: 1",
-        "identity: { firstName: Jane, lastName: Doe }",
-        "contact:",
-        "  email: jane@example.com",
-        "  address: { city: Toronto, country: Canada }",
-        "work:",
-        "  - { company: Acme, title: Developer, start: 2025-01, end: null }",
-        "  - { company: Globex, title: Intern, start: 2023-05, end: 2023-08 }",
-      ].join("\n"),
-    );
-    const client = await mcpClient();
-    const r = (await callJson(client, "autofill_step")).data;
-    // The fixture's step has one work row: one more was added, and both took their entry's title.
-    expect(r.added).toEqual(["work: 1 row added (add.work-experience)"]);
-    expect(r.filled).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          fieldId: "work-experience-1.jobTitle",
-          value: "Developer",
-          rule: "row:work[0].title",
-        }),
-        expect.objectContaining({ fieldId: "work-experience-2.jobTitle", value: "Intern", rule: "row:work[1].title" }),
-      ]),
-    );
-    expect(ext.calls.filter((c) => c.method === "form.fill").flatMap((c) => c.params.fills as unknown[])).toEqual(
-      expect.arrayContaining([{ fieldId: "work-experience-2.jobTitle", value: "Intern", strict: true }]),
-    );
-    const log = (await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8"))
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l));
-    expect(log[0]).toMatchObject({ event: "add-row", addButtonId: "add.work-experience", auto: true, ok: true });
-    // Run again: nothing to add, the titles kept.
-    const again = (await callJson(client, "autofill_step")).data;
-    expect(again.added).toBeUndefined();
-    expect(again.filled).toEqual([]);
-    await client.close();
-  });
-
   it("in debug mode, records every form call under debug/ and keeps it out of the results", async () => {
     const ext = fakeExtension({ tabs: [{ tabId: 7, url: APPLY_URL, windowInBackground: true }] });
     await ext.outcome;
@@ -934,11 +810,11 @@ describe("form tools over MCP", () => {
     );
     await writeFile(
       join(dir, "ws", "ezapply.config.json"),
-      JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "off" }, debug: { autofill: true } }),
+      JSON.stringify({ schemaVersion: 1, forms: { focusBrowser: "off" }, debug: { enabled: true } }),
     );
     const client = await mcpClient();
-    const auto = (await callJson(client, "autofill_step")).data;
-    // The model overrides one automatic fill, fills a profile fact no rule covered, and a value no option matches.
+    const read = (await callJson(client, "get_form")).data;
+    // One value the page takes, one no option matches, and one the fixture's degrees don't hold either.
     const filled = await callJson(client, "fill_fields", {
       fills: [
         { fieldId: "my-information.legalName--firstName", value: "Janet", source: "user" },
@@ -948,42 +824,33 @@ describe("form tools over MCP", () => {
     });
     const form = (await callJson(client, "get_form")).data;
     expect(form.debug).toBe(true);
-    expect(auto.debug).toBe(true);
+    expect(read.debug).toBe(true);
     // The adapter's trace and the markup go into the records only.
-    expect(JSON.stringify([auto, filled, form])).not.toMatch(/"bridge"|"notes"|"trace"|"events"|"markup"|doctype/i);
+    expect(JSON.stringify([read, filled, form])).not.toMatch(/"bridge"|"notes"|"trace"|"events"|"markup"|doctype/i);
 
     const session = join(dir, "ws", "debug", `${new Date().toISOString().slice(0, 10)}-${cap.postingId}`);
     const index = await poll(async () => {
       const lines = (await readFile(join(session, "index.jsonl"), "utf8").catch(() => "")).trim().split("\n");
       return lines.length === 3 ? lines.map((l) => JSON.parse(l)) : undefined;
     });
-    expect(index.map((l: { tool: string }) => l.tool)).toEqual(["autofill_step", "fill_fields", "get_form"]);
+    expect(index.map((l: { tool: string }) => l.tool)).toEqual(["get_form", "fill_fields", "get_form"]);
     expect(index[0]).toMatchObject({
       seq: 1,
       ok: true,
-      autofill: { filled: 2, failed: 0 },
       windowInBackground: true,
       debug: true,
     });
-    const record = JSON.parse(await readFile(join(session, "0001-autofill_step.json"), "utf8"));
-    expect(record.bridge.map((b: { method: string }) => b.method)).toEqual(["form.get", "form.fill", "form.get"]);
-    expect(record.notes.autofill[0]).toMatchObject({
-      stage: "pass 1",
-      left: { "work-experience-1.jobTitle": "extra-row" },
-    });
-    expect(record).toMatchObject({ tool: "autofill_step", posting: cap.postingId, extensionVersion: "9.9.9" });
+    const record = JSON.parse(await readFile(join(session, "0001-get_form.json"), "utf8"));
+    expect(record.bridge.map((b: { method: string }) => b.method)).toEqual(["form.get"]);
+    expect(record).toMatchObject({ tool: "get_form", posting: cap.postingId, extensionVersion: "9.9.9" });
 
     // Each adapter call's trace, and the page before the call's first one, saved beside the record.
-    const [firstRead, autofill] = record.bridge;
+    const [firstRead] = record.bridge;
     expect(firstRead.params).not.toHaveProperty("debug");
     expect(firstRead.trace).toMatchObject({
       page: { before: { url: APPLY_URL, step: { title: "My Information" } } },
       markup: { before: "0001-before.html" },
     });
-    expect(autofill.trace.markup).toBeUndefined();
-    expect(autofill.trace.events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ k: "field", op: "fill", ok: true })]),
-    );
     const before = await readFile(join(session, "0001-before.html"), "utf8");
     expect(before).toMatch(/^<!doctype html>/);
     expect(before).not.toMatch(/<script/);
@@ -992,7 +859,9 @@ describe("form tools over MCP", () => {
     const fill = JSON.parse(await readFile(join(session, "0002-fill_fields.json"), "utf8")).bridge.find(
       (b: { method: string }) => b.method === "form.fill",
     );
-    // (The fixture's degrees don't include "Bachelor's Degree" either.)
+    expect(fill.trace.events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ k: "field", op: "fill", ok: true })]),
+    );
     expect(fill.trace.failedFields).toEqual(["application-questions.degreeLevel", "my-information.countryDropdown"]);
     const events = fill.trace.events.map((e: { k: string }) => e.k);
     expect(events).toEqual(expect.arrayContaining(["press", "listbox", "match", "wait"]));
@@ -1011,11 +880,6 @@ describe("form tools over MCP", () => {
     expect(report).toMatch(/- #2 my-information\.countryDropdown: 0002-fail-my-information\.countryDropdown\.html/);
     expect(report).toMatch(/3 form calls/);
     expect(report).toMatch(/browser window behind another app: 3 of 3 \(#1, #2, #3\)/);
-    expect(report).toMatch(/hint:identity\.firstName: 1 filled/);
-    expect(report).toMatch(
-      /my-information\.legalName--firstName: hint:identity\.firstName put "Jane", #2 \(user\) set "Janet"/,
-    );
-    expect(report).toMatch(/application-questions\.degreeLevel "Degree Level" \(dropdown, formField-degreeLevel/);
     await client.close();
   });
 
@@ -1183,10 +1047,9 @@ describe("form tools over MCP", () => {
     const first = await mcpClient("session-notes-1");
     expect((await callJson(first, "get_form")).data.siteNotes).toMatch(/^Workday:/);
     expect((await callJson(first, "get_form")).data).not.toHaveProperty("siteNotes");
-    expect((await callJson(first, "autofill_step")).data).not.toHaveProperty("siteNotes");
     await first.close();
     const next = await mcpClient("session-notes-2");
-    expect((await callJson(next, "autofill_step")).data.siteNotes).toMatch(/^Workday:/);
+    expect((await callJson(next, "get_form")).data.siteNotes).toMatch(/^Workday:/);
     await next.close();
   });
 
@@ -1262,10 +1125,11 @@ describe("form tools over MCP", () => {
     });
     const next = await callJson(client, "go_next", { tabId: 7 });
     expect(next.data.error.code).toBe("posting_mismatch");
-    expect((await callJson(client, "autofill_step", { tabId: 7 })).data).toMatchObject({
-      filled: [],
-      note: expect.stringMatching(/another posting/),
+    const fill = await callJson(client, "fill_fields", {
+      tabId: 7,
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
     });
+    expect(fill.data.error.code).toBe("posting_mismatch");
     await client.close();
   });
 
@@ -1429,53 +1293,6 @@ describe("form tools over MCP", () => {
       formTenant: "acme",
       activePosting: { tenant: "jobs.acme.com/cx_1" },
     });
-    await client.close();
-  });
-
-  it("on Oracle, fills the link fields and adds each missing language through its inline form", async () => {
-    const oracleApply = "https://jobs.acme.com/en/sites/CX_1/job/42/apply/section/1";
-    const ext = fakeExtension({ tabs: [{ tabId: 9, url: oracleApply }] });
-    await ext.outcome;
-    const posting = await capture(ext, "https://jobs.acme.com/en/sites/CX_1/job/42", "Firmware Engineer");
-    await writeFile(
-      join(dir, "ws", "profile", "profile.yaml"),
-      [
-        "schemaVersion: 1",
-        "identity: { firstName: Jane, lastName: Doe }",
-        "contact:",
-        "  email: jane@example.com",
-        "  address: { city: Toronto, country: Canada }",
-        "links: { linkedin: 'https://linkedin.com/in/jane', github: 'https://github.com/jane' }",
-        "languages:",
-        "  - { language: English, proficiency: native }",
-        "  - { language: French, proficiency: fluent }",
-      ].join("\n"),
-    );
-    const client = await mcpClient();
-    const r = (await callJson(client, "autofill_step")).data;
-    expect(r).toMatchObject({ adapter: "oracle", posting: posting.postingId });
-    // One more link field for the two links (the page has no LinkedIn field of its own), then both languages.
-    expect(r.added).toEqual(["links: 1 row added (add.link)", "languages: English saved", "languages: French saved"]);
-    const filled = Object.fromEntries(r.filled.map((f: { fieldId: string; value: unknown }) => [f.fieldId, f.value]));
-    expect(filled).toMatchObject({
-      "resume-and-urls.siteLink-1": "https://linkedin.com/in/jane",
-      "resume-and-urls.siteLink-2": "https://github.com/jane",
-      "contact-information.lastName": "Doe",
-      // The city's list labels it "Toronto, Ontario"; the field shows "Toronto" once chosen.
-      "address.city": "Toronto",
-    });
-    // Both languages are saved tiles now, each filled with a level the pills hold ("Fluent" for native too).
-    const tiles = r.sections.filter((s: { id: string }) => s.id.startsWith("languages.item-"));
-    expect(tiles.map((s: { title: string }) => s.title)).toEqual([
-      "Languages: English, Fluent",
-      "Languages: French, Fluent",
-    ]);
-    expect(r.failed).toEqual([]);
-    const log = await readFile(join(dir, "ws", "postings", posting.postingId, "form-log.jsonl"), "utf8");
-    expect(log).toMatch(/"event":"add-item","list":"languages","item":"French","auto":true,"ok":true/);
-    // Again: everything is on the page already.
-    const again = (await callJson(client, "autofill_step")).data;
-    expect(again.added).toBeUndefined();
     await client.close();
   });
 

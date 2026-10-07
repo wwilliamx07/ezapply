@@ -133,7 +133,7 @@ const REPO_CACHE_DENY = [
 ];
 
 /**
- * debug/ (autofill debug mode) holds the user's filled values and the pages, for working on ezapply, not for the
+ * debug/ (debug mode) holds the user's filled values and the pages, for working on ezapply, not for the
  * applying agent: reading it would only cost context.
  */
 const DEBUG_READ_DENY = ["Read(/debug/**)", "Read(./debug/**)"];

@@ -7,7 +7,6 @@
  * a Node test that isn't a DOM environment at all.
  */
 
-import { strictIndex } from "@ezapply/protocol/match";
 import { T } from "./timing.js";
 import { act, matched, outside, paused, resumed, waitEnded, waitStarted } from "./trace.js";
 
@@ -232,18 +231,14 @@ export async function waitFor<R>(
  * or the parenthetical itself ("Python" → "Python (Programming Language)", "SQL" → "Structured Query Language
  * (SQL)"); a prefix either way; a substring. Each rule after the exact one must single out one label: Workday
  * lists some options twice, so labels are counted once.
- *
- * `strict` (a fill sent with `strict: true`, as autofill_step sends): only what `strictIndex` accepts (protocol's
- * match.ts), never a prefix or substring.
  */
-export function matchOption(wanted: string, options: string[], strict = false): number {
-  const index = findOption(wanted, options, strict);
-  matched(wanted, options, strict, index);
+export function matchOption(wanted: string, options: string[]): number {
+  const index = findOption(wanted, options);
+  matched(wanted, options, index);
   return index;
 }
 
-function findOption(wanted: string, options: string[], strict: boolean): number {
-  if (strict) return strictIndex(wanted, options);
+function findOption(wanted: string, options: string[]): number {
   const w = norm(wanted).toLowerCase();
   const n = options.map((o) => norm(o).toLowerCase());
   const exact = n.indexOf(w);

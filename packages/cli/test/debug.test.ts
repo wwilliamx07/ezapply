@@ -32,10 +32,10 @@ describe("ezapply debug", () => {
     expect(JSON.parse(await readFile(join(root, "ezapply.config.json"), "utf8"))).toEqual({
       schemaVersion: 1,
       documents: { attach: "immediately" },
-      debug: { autofill: true },
+      debug: { enabled: true },
     });
     await setDebug(root, false);
-    expect(JSON.parse(await readFile(join(root, "ezapply.config.json"), "utf8")).debug).toEqual({ autofill: false });
+    expect(JSON.parse(await readFile(join(root, "ezapply.config.json"), "utf8")).debug).toEqual({ enabled: false });
   });
 
   it("reports the newest session, says when there is none, and cleans up", async () => {

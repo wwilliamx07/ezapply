@@ -63,7 +63,7 @@ export async function runDebug(root: string, args: string[], write: (s: string) 
   }
 }
 
-/** Set `debug.autofill` in ezapply.config.json, keeping everything else as written. */
+/** Set `debug.enabled` in ezapply.config.json, keeping everything else as written. */
 export async function setDebug(root: string, on: boolean): Promise<void> {
   const path = join(root, "ezapply.config.json");
   let raw: Record<string, unknown> = { schemaVersion: 1 };
@@ -74,7 +74,7 @@ export async function setDebug(root: string, on: boolean): Promise<void> {
       throw new EzError(ErrorCode.BadRequest, `${path} isn't valid JSON: fix it first.`);
     }
   }
-  const debug = { ...((raw.debug as Record<string, unknown> | undefined) ?? {}), autofill: on };
+  const debug = { ...((raw.debug as Record<string, unknown> | undefined) ?? {}), enabled: on };
   const next = { ...raw, debug };
   WorkspaceConfig.parse(next);
   await mkdir(root, { recursive: true });

@@ -20,10 +20,10 @@ export function toggleButtonsDriver(buttons = "button[aria-pressed]"): WidgetDri
       return on ? text(on) : null;
     },
     options: (c) => all(c).map(text),
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       const list = all(c);
       const labels = list.map(text);
-      const idx = matchOption(asString(value), labels, strict);
+      const idx = matchOption(asString(value), labels);
       if (idx < 0) return fail(`No option matches "${asString(value)}".`, { availableOptions: labels });
       const b = list[idx] as HTMLElement;
       // A pressed toggle may unpress itself when pressed again.

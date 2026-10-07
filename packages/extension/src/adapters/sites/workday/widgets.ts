@@ -22,7 +22,7 @@ function driver(kind: FieldKind, is: (c: HTMLElement) => boolean, more: Partial<
     is,
     value: (c) => currentValue(c, kind),
     options: (c) => knownOptions(c, kind),
-    fill: (c, value, { strict }) => fillField({ field: { kind }, container: c }, value, strict),
+    fill: (c, value) => fillField({ field: { kind }, container: c }, value),
     ...more,
   };
 }

@@ -4,7 +4,7 @@ Six sites, each a definition on the [adapter engine](adapters.md): a `site.ts` a
 only, except SuccessFactors, which has two widgets of its own (`widgets.ts`). Three are hosted job boards (Greenhouse, Lever, Ashby; about 150 lines each), and each of their
 applications is **one page with Submit at the end**: there are no steps, rows or inline forms, `next` always refuses (Submit is the only way on), `back` has nowhere to go, and
 the schema says `lastPage: true`, so the agent fills the page and hands over to the user
-([the hand-off](autofill.md)). The fourth, [Phenom](#phenom-sitesphenom), is an employer's careers site whose
+([the hand-off](../flows.md#7-filling-the-application-fill-out-the-application)). The fourth, [Phenom](#phenom-sitesphenom), is an employer's careers site whose
 application has steps and rows, like Workday's; the fifth, [Dayforce](#dayforce-sitesdayforce), a candidate portal whose
 application has steps and records saved one by one, like Oracle's items; the sixth,
 [SAP SuccessFactors](#sap-successfactors-sitessuccessfactors), a career site whose application is one page again, but with
@@ -88,8 +88,8 @@ before the field within the form (the EEO block's "Voluntary Self-Identification
 
 **Hints** by id: names, email, phone, the phone's country (`contact.phone.countryCode`), and the EEO fields
 (gender, Hispanic or Latino, race, veteran status, disability); by prompt: LinkedIn, GitHub, website or
-portfolio. The country list's options are "Canada +1": strict matching takes "Canada" for it
-([strict matching](autofill.md#strict-matching)).
+portfolio. The country list's options are "Canada +1": the option match takes "Canada" for it
+([drivers](adapters.md#widget-drivers)).
 
 ## Lever (`sites/lever/`)
 **Pages.** `jobs.lever.co/<company>/<posting id>` (and `jobs.eu.lever.co`), with the application on `…/apply`.
@@ -192,7 +192,7 @@ driver goes by the control:
 
 **Ids and sections.** A row's fields are a section of their own, named from the list's description ("Work
 experience :", else its "Add …" legend) and the row's place: `work-experience-1`, `education-1`, `languages-1`,
-so autofill and the checklist match them to the profile's lists by title, as Workday's. A row with a "−" button
+so the checklist matches them to the profile's lists by title, as Workday's. A row with a "−" button
 (`button.array-button-remove`) is removable, and each list's "+ Add" (`button.array-button-add`) is
 `add.<list>`. Other fields take the nearest legend that reads as a heading ("Skills :"), else the step's title (the
 others are data paths: `cntryFields`, `jsqData`). A field labelled by its instruction alone under such a heading
@@ -253,8 +253,8 @@ text); required is antd's `ant-form-item-required` on the label or `aria-require
   A list that can't be searched keeps a read-only search box, which isn't a read-only field;
 - a phone number: a compact group of a dialling-code list and the number, read as two fields (`mobilePhoneCountryCode`
   and `mobilePhone`; the list has no id of its own). The dialling codes' labels are React elements (a flag, `+1`,
-  the country), read as "🇨🇦 +1 Canada", which strict matching takes "Canada" for
-  ([strict matching](autofill.md#strict-matching));
+  the country), read as "🇨🇦 +1 Canada", which the option match takes "Canada" for
+  ([drivers](adapters.md#widget-drivers));
 - radio groups, checkbox groups and single checkboxes (antd's, with native inputs inside their labels), native
   `date` inputs (a record's dates), textareas, antd's number input, text;
 - files: the resume ("Resume Upload"), cover letter and additional documents, each an antd Upload under its own
@@ -287,10 +287,9 @@ shown first; its Update saves it to the candidate's profile and shows it as a su
   (`*-delete-modal-ok-button`) the removal presses. **Deleting a saved record deletes it from the candidate's
   Dayforce profile**, as the dialog says, not from this application only.
 
-`autofill_step` adds the profile's work and education entries through these forms as on Oracle
-([autofill](autofill.md)): the Add, the new record's fields, its Update. Two companion details came with Dayforce:
-the Save pressed is the one whose section is the entry's list (Personal Information's Update sits above the record's
-while both are open), and a button of kind `edit` never counts as a list's add button.
+The agent adds the profile's work and education entries through these forms as on Oracle: the Add, the new
+record's fields, its Update (the record's own, not Personal Information's, which sits above it while both are open).
+A button of kind `edit` never counts as a list's add button in the checklist.
 
 **Its notes** ([`siteNotes`](../mcp-tools.md#site-notes)): the resume first (Dayforce parses it), Personal
 Information and records saved with their `save` button, record dates as `YYYY-MM-DD`, deleting a saved record
@@ -302,7 +301,7 @@ confirmation, LinkedIn, the mobile number and its dialling code (and their confi
 postal code, country and province (`countryCode`, `stateCode`). The home phone has none: the profile has one number.
 Inside records: work title, company, start, end and "current job", and description; education school, degree,
 major, GPA and dates. The records' dates are native date inputs taking `YYYY-MM-DD`, which a profile's `YYYY-MM`
-can't fill, so autofill leaves them to the agent.
+can't fill as stored, so the agent supplies the day.
 
 **Dependent fields** appear as earlier ones are answered (the province list after the country, "Please Provide
 Additional Details" after some sources, a questionnaire's follow-up), so fills go in page order. A list that waits
@@ -376,7 +375,7 @@ lists match by title. Rows are numbered by their place: SuccessFactors renumbers
 (`cellPhone`) and email (`contactEmail`). A list's field name is only in its component (`getFieldName()`), so on a live
 page `country` and `state` are hinted as the address's country and region; those two names weren't seen (the saved
 page has no components) and are assumed. Rows get no hints: their fields are the employer's numbered ones, whose
-meaning only their labels give, and autofill matches row fields by label anyway ([autofill](autofill.md)). The typed
+meaning only their labels give, and the agent reads row fields by their labels anyway. The typed
 signature (`disclaimerAcknowledge`) has none: it's the user's.
 
 **Rows.** A list's rows are its `.rcmSectionComponent`s with a "Row number n" beside them. Each has a Remove
@@ -394,7 +393,7 @@ page, filtered as you type. The driver finds its component in juic's registry (`
   page, filtered `contains` the query when searching. Up to five pages; "No Selection" (no value) and disabled options
   dropped. A search's results are filtered again here, in case the server answered with the whole list;
 - **fills** by searching for the value first (one request), then the whole list for a wording the value doesn't
-  contain, matching (strictly when asked), and calling the component's `setValue({ value, label })`, which is what
+  contain, matching, and calling the component's `setValue({ value, label })`, which is what
   choosing an option in its list does (`itemSelected`): it shows the label, sets the hidden value, and tells the lists
   that depend on it (`paginatedPicklistMgr` enables Province/ State and loads it) and the form. A list waiting for an
   earlier answer is disabled (`input.disabled`) and refused. Fills go in page order, so a country comes before its

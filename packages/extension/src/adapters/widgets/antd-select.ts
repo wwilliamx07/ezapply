@@ -102,7 +102,7 @@ export function antSelectDriver(): WidgetDriver {
             .filter((o) => o.label.toLowerCase().includes(q))
         : [];
     },
-    fill: async (c, value, { strict }) => {
+    fill: async (c, value) => {
       if (selectOf(c)?.classList.contains("ant-select-disabled")) {
         return fail(
           "The list is disabled on the page: it may wait for an earlier answer (a country before its regions).",
@@ -113,9 +113,9 @@ export function antSelectDriver(): WidgetDriver {
         if (!ctx) return fail("The list isn't ready on the page.");
         const options = choices(ctx);
         const labels = options.map(labelOf);
-        const idx = matchOption(wanted, labels, strict);
+        const idx = matchOption(wanted, labels);
         if (idx < 0) {
-          return fail(`No option matches "${wanted}"${strict ? " exactly" : ""}.`, {
+          return fail(`No option matches "${wanted}".`, {
             availableOptions: labels.slice(0, 80),
             readBack: selected(c),
           });
@@ -125,7 +125,7 @@ export function antSelectDriver(): WidgetDriver {
         await waitFor(() => chosenValues(context(c)).includes(option.value), T.dropdownSelectMs);
       }
       const readBack = selected(c);
-      const took = asList(value).every((w) => readBack.some((r) => matchOption(w, [r], strict) === 0));
+      const took = asList(value).every((w) => readBack.some((r) => matchOption(w, [r]) === 0));
       const back = multi(c) ? readBack : (readBack[0] ?? null);
       return took ? { ok: true, readBack: back } : fail("Selection did not stick.", { readBack: back });
     },

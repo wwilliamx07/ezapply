@@ -3,8 +3,8 @@ import type { Profile } from "../profile/schema.js";
 
 /**
  * The profile's lists that repeatable parts of a form are filled from (work rows, education rows, language rows,
- * links), and how a section or an add button is matched to one: by its title, a heuristic. Shared by the
- * hand-off checklist (row counts) and autofill (which entry goes in which row).
+ * links), and how a section or an add button is matched to one: by its title, a heuristic. Used by the hand-off
+ * checklist to compare each list's rows on the page with the profile's entries.
  */
 
 export type ListKey = "work" | "education" | "languages" | "certifications" | "links";

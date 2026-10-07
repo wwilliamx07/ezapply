@@ -15,7 +15,7 @@ skills treat them all alike.
 | `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
 | `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
-| `engine/trace.ts` | Autofill debug mode's trace ([below](#autofill-debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
+| `engine/trace.ts` | Debug mode's trace ([below](#debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
 | `engine/markup.ts` | Debug mode's markup snapshots: `cleanMarkup`, `pageMarkup`, `failureMarkup` |
 | `widgets/` | Shared drivers ([below](#shared-drivers-widgets)) |
 | `sites/<site>/site.ts` | The site's definition; `main.ts` is its bundle entry (`install(site)`) |
@@ -71,7 +71,7 @@ For each `FieldSpot`, its driver gives the kind, the current value, known option
   the registry), and `lastPage: true` on a `step` whose forward button is a submit control.
 
 The schema's facts (`kind`, `saved`, `lastPage`) are what the companion reads instead of site names
-([autofill](autofill.md), [checklist](companion.md)), so a new site needs no companion change.
+([checklist](companion.md)), so a new site needs no companion change.
 
 ## The API (`api.ts`)
 `createAdapter(site, doc, getUrl)` returns `version`, `site`, `setTiming`, `setDebug`, `takeDebug`, `getForm`,
@@ -110,10 +110,15 @@ handles gets a shared driver named after it, and only a widget of the site's own
 folder ([building adapters](../building-adapters.md#principles)).
 
 A `WidgetDriver` is one kind of widget: `kind`, `is(container)`, `value`, and optionally `options`,
-`lazyOptions`, `dateParts`, `multiple`, `fill(container, value, { strict })`, `list`, `search`, `remove`,
+`lazyOptions`, `dateParts`, `multiple`, `fill(container, value)`, `list`, `search`, `remove`,
 `upload`. Every fill acts, waits, reads back, and returns `{ ok, readBack, error?, availableOptions?, unmatched? }`.
-A `strict` fill matches options only by `strictIndex` ([autofill](autofill.md#strict-matching)); a miss returns
-the options seen.
+Options are matched by `matchOption` (`engine/dom.ts`), case-insensitive: the option itself; the option without its
+trailing parenthetical, or the parenthetical alone ("Python" for "Python (Programming Language)"); a prefix either
+way; a substring. Each rule after the exact one must single out one label, so "Yes" picks "Yes, I will require
+sponsorship" only when no other option begins so, and "Canada" takes Greenhouse's "Canada +1" and Dayforce's
+"🇨🇦 +1 Canada". A miss returns the options seen. The agent reads every read-back, so a loose pick is seen. A
+stricter mode that took only exact wordings served deterministic autofill and went with it
+([status](../status.md#deterministic-autofill-removed)).
 
 ### Shared drivers (`widgets/`)
 | Driver | For |
@@ -201,8 +206,8 @@ sends the result with every call; `setTiming` applies it before the method runs,
 site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-autofill-timingyaml) and
 `TIMING_DOCS` in `protocol/src/timing.ts`.
 
-## Autofill debug mode: the adapter trace
-With [debug mode](../development.md#debugging-a-live-run-autofill-debug-mode) on, every adapter call records what
+## Debug mode: the adapter trace
+With [debug mode](../development.md#debugging-a-live-run-debug-mode) on, every adapter call records what
 happens inside the page. The companion asks for it on each call (`debug` in the form call's parameters); the
 background sets it with `setDebug` right after `setTiming`, in the same script, and takes it with `takeDebug`
 after the method returns or throws ([background](extension.md#serving-form-requests-formsts)). It travels back

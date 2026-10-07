@@ -6,9 +6,9 @@ import type { Logger } from "../logger.js";
 import type { Workspace } from "../workspace/workspace.js";
 
 /**
- * Autofill debug mode: with `debug.autofill` on in ezapply.config.json, every form call is written to
+ * Debug mode: with `debug.enabled` on in ezapply.config.json, every form call is written to
  * `debug/<date>-<postingId>/` in the workspace. One `NNNN-<tool>.json` per call (the parameters, every bridge call
- * with its full result and the adapter's trace of it, the tab, timings, the autofill plan, the result the agent
+ * with its full result and the adapter's trace of it, the tab, timings, the result the agent
  * got) and a line in `index.jsonl`. The page's markup (`debug.markup`) and failure screenshots the trace brings go
  * into files of their own beside it: `NNNN-before.html`, `NNNN-after.html`, `NNNN-fail-<fieldId>.html`,
  * `NNNN-fail.png`. None of it enters the conversation: the trace comes back beside the bridge's result, never in it
@@ -69,7 +69,7 @@ export interface CallRecord {
     /** The adapter's trace of this call (adapters/engine/trace.ts); its markup and screenshot as file names. */
     trace?: Trace;
   }[];
-  /** Extra notes from the call, such as autofill_step's plan per stage (each pass, each Oracle item). */
+  /** Extra notes from the call, such as `noTrace` when the extension sent no adapter trace. */
   notes: Record<string, unknown[]>;
   result?: unknown;
   error?: { code: string; message: string };
@@ -94,8 +94,8 @@ export class DebugRecorder {
       const raw = JSON.parse(await readFile(this.ws.path("ezapply.config.json"), "utf8"));
       const parsed = WorkspaceConfig.safeParse(raw);
       if (!parsed.success) return OFF;
-      const { autofill, maxMB, markup } = parsed.data.debug;
-      return { on: autofill, maxMB, markup };
+      const { enabled, maxMB, markup } = parsed.data.debug;
+      return { on: enabled, maxMB, markup };
     } catch {
       return OFF;
     }
@@ -166,7 +166,6 @@ export class DebugRecorder {
 function indexLine(r: CallRecord) {
   const fills = r.bridge.filter((b) => b.method === "form.fill").flatMap((b) => (b.result as FillLike[]) ?? []);
   const failed = fills.filter((f) => f && f.ok === false).map((f) => f.fieldId);
-  const autofill = r.result as { filled?: unknown[]; failed?: unknown[]; kept?: number; sections?: unknown[] };
   const shown = r.shown as { hidden?: boolean; focused?: boolean } | undefined;
   return {
     seq: r.seq,
@@ -178,9 +177,6 @@ function indexLine(r: CallRecord) {
     ...(failed.length ? { failedFields: failed } : {}),
     ...(shown?.hidden ? { tabHidden: true } : {}),
     ...(shown?.focused === false ? { windowInBackground: true } : {}),
-    ...(r.tool === "autofill_step" && autofill?.filled
-      ? { autofill: { filled: autofill.filled.length, failed: autofill.failed?.length ?? 0, kept: autofill.kept } }
-      : {}),
     ...(r.error ? { error: r.error.message } : {}),
     debug: true,
   };

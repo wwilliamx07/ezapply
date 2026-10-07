@@ -176,8 +176,8 @@ describe("live Ashby application with radio and checkbox groups (jobs.ashbyhq.co
     const adapter = createAdapter(ashby, document, () => url);
     adapter.setTiming({ afterFieldQuietMs: 0, afterFieldMaxMs: 0 });
     const results = await adapter.fill([
-      { fieldId: "application.degree-type", value: ["Master's"], strict: true },
-      { fieldId: "application.how-many-prior-internships-have-you-had", value: "2", strict: true },
+      { fieldId: "application.degree-type", value: ["Master's"] },
+      { fieldId: "application.how-many-prior-internships-have-you-had", value: "2" },
     ]);
     expect(results.map((r) => [r.ok, r.readBack])).toEqual([
       [true, ["Master's"]],
@@ -248,7 +248,7 @@ describe("live Phenom apply flow (an employer's careers domain, …/apply?jobSeq
       kind: "checkbox",
       label: "I currently work here",
     });
-    // Rows aren't hinted: autofill fills them from the profile's lists by their labels.
+    // Rows aren't hinted: the agent fills them from the profile's lists by their labels.
     expect(f["work-experience-1.title"]?.hint).toBeUndefined();
     expect(f["education-1.schoolName"]).toMatchObject({ kind: "typeahead", currentValue: ["Springfield University"] });
     expect(f["languages-1.listening"]).toMatchObject({ kind: "dropdown", required: true });
@@ -699,7 +699,7 @@ describe("SuccessFactors' lists, rows and documents (its components modelled fro
     expect(await api.searchOptions("job-specific-information.how-did-you-hear-about-this-position", "ref")).toEqual([
       { label: "Referral" },
     ]);
-    const [result] = await api.fill([{ fieldId: "profile-information.country", value: "Canada", strict: true }]);
+    const [result] = await api.fill([{ fieldId: "profile-information.country", value: "Canada" }]);
     expect(result).toMatchObject({ ok: true, readBack: "Canada" });
     expect(country.getValue()).toEqual({ value: "1", label: "Canada" });
     // The value was searched for first.
@@ -709,7 +709,7 @@ describe("SuccessFactors' lists, rows and documents (its components modelled fro
   it("refuses a disabled list and names the options when nothing matches", async () => {
     page();
     const api = createAdapter(successfactors, document, () => URL);
-    const [miss] = await api.fill([{ fieldId: "profile-information.country", value: "Atlantis", strict: true }]);
+    const [miss] = await api.fill([{ fieldId: "profile-information.country", value: "Atlantis" }]);
     expect(miss).toMatchObject({ ok: false, availableOptions: ["Canada", "United Kingdom", "United States"] });
     (document.getElementById("95:_input") as HTMLInputElement).disabled = true;
     const [disabled] = await api.fill([{ fieldId: "profile-information.province-state", value: "Ohio" }]);

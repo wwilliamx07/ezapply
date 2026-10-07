@@ -255,9 +255,9 @@ describe("updateAppConfig", () => {
 
 describe("WorkspaceConfig", () => {
   it("brings the browser to the front by default, and falls back to that on a bad value", () => {
-    expect(WorkspaceConfig.parse({ schemaVersion: 1 }).forms).toEqual({ autofill: "on", focusBrowser: "on" });
+    expect(WorkspaceConfig.parse({ schemaVersion: 1 }).forms).toEqual({ focusBrowser: "on" });
     expect(WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: "off" } }).forms.focusBrowser).toBe("off");
-    const bad = WorkspaceConfig.parse({ schemaVersion: 1, forms: { autofill: "off", focusBrowser: true } });
-    expect(bad.forms).toEqual({ autofill: "off", focusBrowser: "on" });
+    const bad = WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: true } });
+    expect(bad.forms).toEqual({ focusBrowser: "on" });
   });
 });

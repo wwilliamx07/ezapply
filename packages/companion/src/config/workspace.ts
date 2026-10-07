@@ -41,11 +41,6 @@ export const WorkspaceConfig = z.object({
   forms: z
     .object({
       /**
-       * on: autofill_step fills, without the model, what the profile and the answer bank decide (forms/autofill.ts).
-       * off: it fills nothing and returns the whole step, so a run can be compared with and without it.
-       */
-      autofill: z.enum(["on", "off"]).default("on"),
-      /**
        * on: a form call that changes the page brings the browser window to the front first (tab.show's
        * focusWindow). Widgets that track focus need it: Chrome sends no focus events to a window behind another
        * app, and Workday's split dates weren't taken there. The cost: the browser comes in front of the
@@ -54,11 +49,11 @@ export const WorkspaceConfig = z.object({
        */
       focusBrowser: z.enum(["on", "off"]).default("on").catch("on"),
     })
-    .default({ autofill: "on", focusBrowser: "on" }),
+    .default({ focusBrowser: "on" }),
   debug: z
     .object({
-      /** Autofill debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */
-      autofill: z.boolean().default(false),
+      /** Debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */
+      enabled: z.boolean().default(false),
       /** debug/ is kept under this size: the oldest sessions go first. */
       maxMB: z.number().int().min(1).max(100_000).default(500),
       /**
@@ -68,7 +63,7 @@ export const WorkspaceConfig = z.object({
        */
       markup: z.enum(["failures", "always", "none"]).default("failures").catch("failures"),
     })
-    .default({ autofill: false, maxMB: 500, markup: "failures" }),
+    .default({ enabled: false, maxMB: 500, markup: "failures" }),
   decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
   context: z
     .object({

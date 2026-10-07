@@ -42,8 +42,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user. " +
         "`tabHidden` (here and on other form tools): the application tab is hidden and runs slowly; pass its hint " +
         "to the user once. " +
-        "On the review page, `notAttached`: approved documents never attached. `siteNotes` (here or on " +
-        "autofill_step, the first time a site's page is read in this session): what this site does differently; " +
+        "On the review page, `notAttached`: approved documents never attached. `siteNotes` (the first time a " +
+        "site's page is read in this session): what this site does differently; " +
         "follow them for this application.",
       inputSchema: {
         onlyEmpty: z.boolean().optional().describe("Only fields that are empty or show an error."),
@@ -55,26 +55,6 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
     tool(s.log, "get_form", (args: { onlyEmpty?: boolean; section?: string; tabId?: number }) =>
       s.forms.getForm({ ...args, session }),
     ),
-  );
-
-  server.registerTool(
-    "autofill_step",
-    {
-      title: "Autofill the step",
-      description:
-        "Start every application step with this instead of get_form. It fills, without you, what profile.yaml and " +
-        "answers.yaml decide: profile fields the page marks; work, education, language and website rows (adding " +
-        "rows the profile needs, or each missing entry through its inline form, saved); link fields; questions whose wording equals an answers.yaml entry, with a plain answer or one computed from " +
-        "the profile. It returns: `filled` (each field, value and rule; `was` = a value it replaced, left from a " +
-        "previous application), `failed` (fills that didn't take, or `inexact`: the page holds a near match, so " +
-        "set the right option; also an add or Save the page refused), `added` (rows and items it added), `kept` " +
-        "(fields already right), and the step as get_form shows it with only the fields left to decide, each with " +
-        "its `reason`. Check `filled` for anything wrong, fix `failed`, then fill the rest in one fill_fields " +
-        "call. On a page that isn't an application step, or another posting's tab, it fills nothing and says why " +
-        "in `note`.",
-      inputSchema: { tabId },
-    },
-    tool(s.log, "autofill_step", ({ tabId }: { tabId?: number }) => s.forms.autofillStep(tabId, session)),
   );
 
   server.registerTool(

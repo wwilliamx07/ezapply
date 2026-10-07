@@ -39,7 +39,7 @@ const pageAsItIs = () => ({
   wait: Object.getOwnPropertyDescriptor(T, "dropdownOpenMs"),
 });
 
-describe("the adapter trace (autofill debug mode)", () => {
+describe("the adapter trace (debug mode)", () => {
   it("with debug off, installs nothing and records nothing", async () => {
     const before = pageAsItIs();
     const [r] = await api.fill([{ fieldId: id("formField-countryDropdown"), value: "Canada" }]);

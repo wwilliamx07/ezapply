@@ -12,13 +12,12 @@ so a change here is a change to the contract between them.
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site by its URL alone, else `generic`: what decides where no page can be read), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b)` (Workday's `-1` posting suffix counts as the same job; [which posting](../mcp-tools.md#forms)) |
 | `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `siteSignatures()` (each site's `[id, signature]`, in registry order), `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions); no zod (`@ezapply/protocol/sites`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
-| `match.ts` | Strict option matching, with no imports (`@ezapply/protocol/match`, used by the adapters and the companion's autofill planner, so both mean the same by it): `normOption`, `strictMatch(wanted, option)` (the option, without or as its trailing parenthetical, without a leading rank like "5 - ", without a trailing dialling code, or without a leading flag and dialling code: "Canada" for Greenhouse's "Canada +1" and Dayforce's "🇨🇦 +1 Canada"), `strictIndex` ([autofill](autofill.md#strict-matching)) |
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
 | `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT` ([oracle-adapter](oracle-adapter.md#which-pages)) |
 | `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
 | `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts`, `dayforce.ts`, `successfactors.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply`; Dayforce's `…/<client>/<site>/jobs/<id>` on `*.dayforcehcm.com` with or without a locale, the client as tenant, the posting id as job, a canonical path from the client to the id ([sites](sites.md#dayforce-sitesdayforce)); SuccessFactors' career site paths on its `career<n>` hosts (`sapsf.com`, `successfactors.eu`…), `company` as tenant, `career_job_req_id` (or `jobId`) as job, a signed-in page's URL naming neither ([sites](sites.md#sap-successfactors-sitessuccessfactors)) |
 
-The package exports `.` (everything), and `./workday`, `./oracle`, `./sites`, `./match` and `./timing` for the in-page adapters:
+The package exports `.` (everything), and `./workday`, `./oracle`, `./sites` and `./timing` for the in-page adapters:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
 waits, making each adapter 850 KB instead of 60 KB). `detectSite` counts only candidate-facing Workday hosts
 as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
@@ -94,8 +93,8 @@ when the connection drops. Ids are prefixed per side (`e` for the extension) so 
 **A debug trace beside the result.** A handler may return `new WithDebug(result, debug)`, or throw an error with
 a `debug` property; the response then carries `debug` next to `result` or `error`. The caller gets it only through
 the `onDebug` callback it passed to `request` (the companion's `ExtensionBridge.call` takes it as its fourth
-argument), never from what `request` resolves to. That's how autofill debug mode's adapter trace and markup
-([adapters](adapters.md#autofill-debug-mode-the-adapter-trace)) reach the companion's record without passing
+argument), never from what `request` resolves to. That's how debug mode's adapter trace and markup
+([adapters](adapters.md#debug-mode-the-adapter-trace)) reach the companion's record without passing
 through anything that builds a tool result.
 
 ### Methods
@@ -110,7 +109,7 @@ through anything that builds a tool result.
 the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml` against the tab's
 site's waits; the keys are `STANDARD_WAITS`'s in `timing.ts` ([waits](adapters.md#waits-owned-by-the-site)). Unknown
 keys are ignored and an older extension strips the field, so it came without a version bump. They also take
-`debug?` (`DebugRequest { before?, after?, failures? }`), sent only while autofill debug mode is on: the adapter
+`debug?` (`DebugRequest { before?, after?, failures? }`), sent only while debug mode is on: the adapter
 records its trace for the call, and the page's markup before it, after it and at each failed field as the flags
 say, and the response brings it back in its `debug`. The `tab.*` methods ignore it.
 
@@ -155,9 +154,8 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `currentValue` (string, string[], boolean or null), `error?`, `hint? { profileKey }`.
 - `FieldKind`: `text`, `textarea`, `number`, `password`, `date`, `dropdown`, `typeahead`, `radio`,
   `checkbox`, `checkbox-group`, `file`.
-- `FillAction`: `{ fieldId, value, strict? }`. `strict`: take only an option the value names strictly
-  (`match.ts`), never the adapters' looser prefix or substring match; a miss fails with the options seen.
-  `autofill_step` sends it, since nobody checks its fills one by one; an adapter built before it ignores it.
+- `FillAction`: `{ fieldId, value }`. (A `strict?` flag, for deterministic autofill, was removed with it; an
+  extension built before that still accepts it, and nothing sends it.)
 - `FillValue`: a string, a string array, or a boolean. `FillResult`: `{ fieldId, ok, readBack?, error?,
   availableOptions?, unmatched?, inexact? }`: `unmatched[] { value, suggestions[] }` lists typeahead entries
   that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which
@@ -189,7 +187,7 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
   `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
-  `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict`, and
+  `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict` (since removed), and
   `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`; then `tab.show`'s `focused`, and
   `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused`; then `TabInfo.frames`, the `frameId`
   param of the form methods and `tab.show`, and `FormSchema.frameId`. An older extension ignores `frameId` and

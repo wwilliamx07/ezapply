@@ -76,7 +76,7 @@ export class ProfileService {
     const entries = a.value.entries;
     const unanswered = entries.filter((e) => !isAnswered(e));
     // `source` names the profile path an answer is computed from. Agents have used it to record who gave the
-    // answer (`source: user`); say so, since only a profile path means anything to autofill.
+    // answer (`source: user`); say so, since only a profile path says what to compute the answer from.
     const notProfile = entries.filter((e) => e.source && !e.source.startsWith("profile."));
     return {
       exists: true,

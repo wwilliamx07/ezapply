@@ -33,15 +33,15 @@ on the page, the adapter computes it and the generic skill explains it once for 
 | `pageKind` (`posting`, `auth`, `start-choice`, `step`, `review`, `confirmation`, `unknown`), `actions` | What to do with the page as a whole |
 | `step`, `nextLabel`, `backLabel`, `lastPage` | Where it is; `lastPage`: Submit is the only way on, hand off after this page |
 | Field `kind`, `required`, `options`, `optionsLazy`, `multiple`, `dateParts`, `error`, `helpText` ("Read-only on this page.") | How to fill it, and what's wrong with it |
-| Field `hint` | Which profile value it takes; autofill fills it |
+| Field `hint` | Which profile value it takes |
 | `addButtons[].kind`: `row`, `form`, `save`, `edit` | Adds a row of fields; opens an inline form; saves a form; opens a saved item's form again |
 | Section `removable`, `saved` | `remove_repeatable` works on it; a saved item without fields |
 | `errors` vs `messages`, `refusedReason` | What the page refused, what it only noted, why `go_next` won't go on |
 | `job` | Which posting the application is for |
 
-The companion reads these facts, never the adapter's id: `autofill_step` adds rows for `row` buttons, items through
-`form` buttons and their `save`, matches `saved` sections to profile entries, and hands off on `review` or
-`lastPage`. A site that fits the facts needs no companion change.
+The companion and the agent read these facts, never the adapter's id: the checklist counts rows and `saved`
+sections against the profile's lists (never a `save` or `edit` button), the agent adds rows through `row` buttons and
+items through `form` buttons and their `save`, and hands off on `review` or `lastPage`. A site that fits the facts needs no companion change.
 
 **3. Notes only for what no fact can say.** Judgment and caveats: a document the site needs before anything else
 (and what it does with it), a removal that reaches beyond this application (the candidate's profile on the site), a
@@ -57,7 +57,7 @@ widely used libraries, so the drivers grow with the libraries sites use, not wit
 - If none drives the widget and it comes from a library other sites use, write a shared driver named after the
   library (`antd-select.ts`, not `dayforce-select.ts`). Give it options only where another site could need them
   (`selectDriver({ settled })`): a quirk of one site's data is better handled where every site benefits (Dayforce's
-  dialling codes read "🇨🇦 +1 Canada": strict matching learned to take "Canada" for it, rather than the driver
+  dialling codes read "🇨🇦 +1 Canada": the shared option match takes "Canada" for it, rather than the driver
   rewording one site's labels).
 - A driver of the site's own (`sites/<site>/widgets.ts`) only for a widget that is the site's own (Workday's
   prompt, Oracle's cx-select).
@@ -119,8 +119,8 @@ real run.
   or a form that's part of the step), `edit`. Keys `add.<list>`, `save.<section>`, `edit.<section>`.
 - **Rows and saved items** (`rows(doc)`): what can be removed, with its delete button. A saved item (a summary
   without fields) gets a section id `<block>.<kind>-<n>`, `kind` being `experience`, `education` or `item`, and a
-  title starting with its list ("Employment History: Analyst, Example Corp"), so autofill can tell which profile
-  entries it already holds.
+  title starting with its list ("Employment History: Analyst, Example Corp"), so the checklist can count it against
+  the profile's list.
 - **Pages** (`page`): the page kind, the step and its key (whatever changes on a move: a step bar, a URL), the job,
   errors and notices kept apart, next and back, `nextBlocked`, `isSubmit`, and the actions a posting or start page
   offers.
@@ -154,7 +154,7 @@ the site's posting page comes out wrong (no JSON-LD, a title that is only the ro
 ### 7. Check it live
 - On public forms: a script drives the built bundle with obviously fake values and never submits
   ([how](components/adapters.md#checking-a-site-live)).
-- Then one real application with [debug mode](development.md#debugging-a-live-run-autofill-debug-mode) on. Its
+- Then one real application with [debug mode](development.md#debugging-a-live-run-debug-mode) on. Its
   records (`ezapply debug export`) give the steps that couldn't be saved before: save them as fixtures and test
   them. One adapter change per live run, so a failure points at one change.
 

@@ -29,33 +29,31 @@ function field(html: string): HTMLElement {
 describe("native controls", () => {
   it("text and textarea: set past a value tracker, read back, a reformatted phone accepted, read-only refused", async () => {
     const c = field('<label for="n">Name</label><input id="n" type="text">');
-    expect(await textDriver("text").fill(c, "Jane", { strict: false })).toEqual({ ok: true, readBack: "Jane" });
+    expect(await textDriver("text").fill(c, "Jane")).toEqual({ ok: true, readBack: "Jane" });
     const tel = field('<input type="tel">');
     tel.querySelector("input")?.addEventListener("change", (e) => {
       (e.target as HTMLInputElement).value = "(416) 555-0100";
     });
-    expect(await textDriver("text").fill(tel, "4165550100", { strict: false })).toMatchObject({ ok: true });
+    expect(await textDriver("text").fill(tel, "4165550100")).toMatchObject({ ok: true });
     const ro = field('<input type="text" readonly value="a@b.c">');
-    expect(await textDriver("text").fill(ro, "x", { strict: false })).toMatchObject({ ok: false, error: /read-only/ });
+    expect(await textDriver("text").fill(ro, "x")).toMatchObject({ ok: false, error: /read-only/ });
     const area = field("<textarea></textarea>");
     expect(textDriver("textarea").value(area)).toBe("");
-    expect(await textDriver("textarea").fill(area, "Line one\nLine two", { strict: false })).toMatchObject({
+    expect(await textDriver("textarea").fill(area, "Line one\nLine two")).toMatchObject({
       ok: true,
     });
   });
 
-  it("select: the placeholder isn't an option, strict refuses a prefix, the options come back on a miss", async () => {
+  it("select: the placeholder isn't an option, a prefix picks the one option it begins, the options come back on a miss", async () => {
     const c = field(
       '<select><option value="">Select...</option><option value="1">Yes, I do</option><option value="0">No</option></select>',
     );
     const d = selectDriver();
     expect(d.options?.(c)).toEqual(["Yes, I do", "No"]);
     expect(d.value(c)).toBeNull();
-    expect(await d.fill(c, "Yes", { strict: true })).toMatchObject({
-      ok: false,
-      availableOptions: ["Yes, I do", "No"],
-    });
-    expect(await d.fill(c, "No", { strict: true })).toEqual({ ok: true, readBack: "No" });
+    expect(await d.fill(c, "Maybe")).toMatchObject({ ok: false, availableOptions: ["Yes, I do", "No"] });
+    expect(await d.fill(c, "Yes")).toEqual({ ok: true, readBack: "Yes, I do" });
+    expect(await d.fill(c, "No")).toEqual({ ok: true, readBack: "No" });
     expect(d.value(c)).toBe("No");
   });
 
@@ -64,11 +62,11 @@ describe("native controls", () => {
       '<label><input type="radio" name="a" value="y"><span>Yes</span></label><label><input type="radio" name="a" value="n"><span>No</span></label>',
     );
     expect(radioDriver().options?.(r)).toEqual(["Yes", "No"]);
-    expect(await radioDriver().fill(r, "No", { strict: true })).toEqual({ ok: true, readBack: "No" });
+    expect(await radioDriver().fill(r, "No")).toEqual({ ok: true, readBack: "No" });
     expect(radioDriver().value(r)).toBe("No");
 
     const one = field('<label><input type="checkbox"><span>I agree</span></label>');
-    expect(await checkboxDriver().fill(one, true, { strict: false })).toEqual({ ok: true, readBack: true });
+    expect(await checkboxDriver().fill(one, true)).toEqual({ ok: true, readBack: true });
 
     const group = field(
       ["He/him", "She/her", "They/them"]
@@ -76,7 +74,7 @@ describe("native controls", () => {
         .join(""),
     );
     const g = checkboxGroupDriver();
-    expect(await g.fill(group, ["She/her", "They/them"], { strict: true })).toEqual({
+    expect(await g.fill(group, ["She/her", "They/them"])).toEqual({
       ok: true,
       readBack: ["She/her", "They/them"],
     });
@@ -87,8 +85,8 @@ describe("native controls", () => {
   it("date inputs take the format their type wants; passwords are never filled", async () => {
     const c = field('<input type="month">');
     expect(dateInputDriver().dateParts?.(c)).toEqual(["MM", "YYYY"]);
-    expect(await dateInputDriver().fill(c, "2030-04-30", { strict: false })).toEqual({ ok: true, readBack: "2030-04" });
-    expect(await passwordDriver.fill(field('<input type="password">'), "x", { strict: false })).toMatchObject({
+    expect(await dateInputDriver().fill(c, "2030-04-30")).toEqual({ ok: true, readBack: "2030-04" });
+    expect(await passwordDriver.fill(field('<input type="password">'), "x")).toMatchObject({
       ok: false,
       error: /never filled/,
     });
@@ -129,7 +127,7 @@ describe("react-select, driven through its props", () => {
     return c;
   }
 
-  it("lists its options without opening it, chooses one strictly, and reads the current value", async () => {
+  it("lists its options without opening it, chooses one, and reads the current value", async () => {
     const c = reactSelect([
       { label: "Canada +1", value: "ca" },
       { label: "United States +1", value: "us" },
@@ -137,9 +135,9 @@ describe("react-select, driven through its props", () => {
     const d = reactSelectDriver();
     expect(d.is(c)).toBe(true);
     expect(await d.list?.(c)).toEqual([{ label: "Canada +1" }, { label: "United States +1" }]);
-    expect(await d.fill(c, "Canada", { strict: true })).toEqual({ ok: true, readBack: "Canada +1" });
+    expect(await d.fill(c, "Canada")).toEqual({ ok: true, readBack: "Canada +1" });
     expect(d.value(c)).toBe("Canada +1");
-    expect(await d.fill(c, "United", { strict: true })).toMatchObject({ ok: false, error: /exactly/ });
+    expect(await d.fill(c, "Mexico")).toMatchObject({ ok: false, error: /No option matches/ });
   });
 
   it("adds to a list that takes several values, and removes from it", async () => {
@@ -148,7 +146,7 @@ describe("react-select, driven through its props", () => {
       true,
     );
     const d = reactSelectDriver();
-    expect(await d.fill(c, ["Python", "Go"], { strict: true })).toEqual({ ok: true, readBack: ["Python", "Go"] });
+    expect(await d.fill(c, ["Python", "Go"])).toEqual({ ok: true, readBack: ["Python", "Go"] });
     expect(await d.remove?.(c, ["Python"], {} as never)).toMatchObject({
       ok: true,
       removed: ["Python"],
@@ -226,7 +224,7 @@ describe("react-select, driven through its props", () => {
     const d = reactSelectDriver({ menu: keyUpMenu });
     expect(await d.search?.(c, "Springfield")).toEqual([{ label: "Springfield University" }]);
     expect(state).toMatchObject({ open: false, text: "" });
-    expect(await d.fill(c, "Shelbyville University", { strict: true })).toEqual({
+    expect(await d.fill(c, "Shelbyville University")).toEqual({
       ok: true,
       readBack: "Shelbyville University",
     });
@@ -248,7 +246,7 @@ describe("react-select, driven through its props", () => {
     );
     const d = reactSelectDriver();
     expect(await d.search?.(c, "Springfield")).toHaveLength(2);
-    expect(await d.fill(c, "Springfield, Oregon, United States", { strict: true })).toEqual({
+    expect(await d.fill(c, "Springfield, Oregon, United States")).toEqual({
       ok: true,
       readBack: "Springfield, Oregon, United States",
     });
@@ -284,7 +282,7 @@ describe("Ant Design's Select, driven through rc-select's context", () => {
   }
   const element = (...children: unknown[]) => ({ $$typeof: "react.element", props: { children } });
 
-  it("lists every option by its text, and chooses one strictly (a country past its flag and dialling code)", async () => {
+  it("lists every option by its text, and chooses one (a country past its flag and dialling code)", async () => {
     const c = antSelect([
       { label: element(element("🇨🇦"), " +", 1, " ", "Canada"), value: "CA" },
       { label: element(element("🇺🇸"), " +", 1, " ", "United States"), value: "US" },
@@ -293,9 +291,9 @@ describe("Ant Design's Select, driven through rc-select's context", () => {
     expect(d.is(c)).toBe(true);
     expect(d.value(c)).toBeNull();
     expect(await d.list?.(c)).toEqual([{ label: "🇨🇦 +1 Canada" }, { label: "🇺🇸 +1 United States" }]);
-    expect(await d.fill(c, "Canada", { strict: true })).toEqual({ ok: true, readBack: "🇨🇦 +1 Canada" });
+    expect(await d.fill(c, "Canada")).toEqual({ ok: true, readBack: "🇨🇦 +1 Canada" });
     expect(d.value(c)).toBe("🇨🇦 +1 Canada");
-    expect(await d.fill(c, "Mexico", { strict: true })).toMatchObject({
+    expect(await d.fill(c, "Mexico")).toMatchObject({
       ok: false,
       availableOptions: ["🇨🇦 +1 Canada", "🇺🇸 +1 United States"],
     });
@@ -303,7 +301,7 @@ describe("Ant Design's Select, driven through rc-select's context", () => {
 
   it("refuses a disabled list, which waits for an earlier answer", async () => {
     const c = antSelect([{ label: "Ontario", value: "ON" }], true);
-    expect(await antSelectDriver().fill(c, "Ontario", { strict: true })).toMatchObject({
+    expect(await antSelectDriver().fill(c, "Ontario")).toMatchObject({
       ok: false,
       error: /disabled/,
     });
@@ -320,7 +318,7 @@ describe("toggle buttons, a search field, a file field", () => {
     }
     const d = toggleButtonsDriver();
     expect(d.options?.(c)).toEqual(["Yes", "No"]);
-    expect(await d.fill(c, "No", { strict: true })).toEqual({ ok: true, readBack: "No" });
+    expect(await d.fill(c, "No")).toEqual({ ok: true, readBack: "No" });
   });
 
   it("a search field: types, waits for suggestions that come on a key event, chooses one, or lists them on a miss", async () => {
@@ -343,11 +341,11 @@ describe("toggle buttons, a search field, a file field", () => {
       input: (x) => x.querySelector("input"),
       options: (x) => [...x.querySelectorAll<HTMLElement>(".r")],
     });
-    expect(await d.fill(c, "Toronto", { strict: false })).toMatchObject({
+    expect(await d.fill(c, "Toronto")).toMatchObject({
       ok: false,
       unmatched: [{ value: "Toronto", suggestions: ["Toronto, ON, CAN", "Toronto, OH, USA"] }],
     });
-    expect(await d.fill(c, "Toronto, ON, CAN", { strict: true })).toEqual({ ok: true, readBack: ["Toronto, ON, CAN"] });
+    expect(await d.fill(c, "Toronto, ON, CAN")).toEqual({ ok: true, readBack: ["Toronto, ON, CAN"] });
   });
 
   it("a file field: done when the page shows the new file; removed by its own button", async () => {
@@ -386,7 +384,7 @@ describe("a list that settles late, and a month picker", () => {
         s.value = wanted;
       }, 60);
     });
-    expect(await selectDriver({ settled: true }).fill(c, "Ontario", { strict: true })).toEqual({
+    expect(await selectDriver({ settled: true }).fill(c, "Ontario")).toEqual({
       ok: true,
       readBack: "Ontario",
     });
@@ -437,24 +435,24 @@ describe("a list that settles late, and a month picker", () => {
     const { c, input } = monthPicker();
     const d = monthPickerDriver();
     expect(d.dateParts?.(c)).toEqual(["MM", "YYYY"]);
-    expect(await d.fill(c, "2025-08", { strict: true })).toEqual({ ok: true, readBack: "08/2025" });
+    expect(await d.fill(c, "2025-08")).toEqual({ ok: true, readBack: "08/2025" });
     expect(input.value).toBe("08/2025");
     expect(document.querySelector(".react-datepicker")).toBeNull();
     // Already showing it: nothing to do.
-    expect(await d.fill(c, "08/2025", { strict: true })).toEqual({ ok: true, readBack: "08/2025" });
+    expect(await d.fill(c, "08/2025")).toEqual({ ok: true, readBack: "08/2025" });
   });
 
   it("month picker: says which years can be chosen, refuses a disabled month and a date without a month", async () => {
     const d = monthPickerDriver();
-    expect(await d.fill(monthPicker().c, "2019-05", { strict: true })).toMatchObject({
+    expect(await d.fill(monthPicker().c, "2019-05")).toMatchObject({
       ok: false,
       error: "Only 2025–2026 can be chosen here.",
     });
-    expect(await d.fill(monthPicker(["2026"], [11]).c, "2026-12", { strict: true })).toMatchObject({
+    expect(await d.fill(monthPicker(["2026"], [11]).c, "2026-12")).toMatchObject({
       ok: false,
       error: /Dec 2026 can't be chosen/,
     });
-    expect(await d.fill(monthPicker().c, "2025", { strict: true })).toMatchObject({ ok: false, error: /YYYY-MM/ });
+    expect(await d.fill(monthPicker().c, "2025")).toMatchObject({ ok: false, error: /YYYY-MM/ });
   });
 });
 
@@ -484,14 +482,14 @@ describe("a UI5 Web Components date picker", () => {
 
   it("sets the value in the component's own format and fires the change its app listens to", async () => {
     const { c, el, heard } = picker();
-    expect(await ui5DatePickerDriver().fill(c, "2024-03-05", { strict: true })).toEqual({
+    expect(await ui5DatePickerDriver().fill(c, "2024-03-05")).toEqual({
       ok: true,
       readBack: "03/05/2024",
     });
     expect((el as unknown as { value: string }).value).toBe("03/05/2024");
     expect(heard).toEqual([{ value: "03/05/2024", valid: true }]);
     const iso = picker('value="" format-pattern="yyyy-MM-dd"');
-    expect(await ui5DatePickerDriver().fill(iso.c, "03/05/2024", { strict: true })).toMatchObject({
+    expect(await ui5DatePickerDriver().fill(iso.c, "03/05/2024")).toMatchObject({
       readBack: "2024-03-05",
     });
   });
@@ -499,13 +497,13 @@ describe("a UI5 Web Components date picker", () => {
   it("refuses a month without a day, a read-only picker and a pattern with month names", async () => {
     const d = ui5DatePickerDriver();
     const { c, heard } = picker();
-    expect(await d.fill(c, "2024-03", { strict: true })).toMatchObject({ ok: false, error: /takes a day/ });
+    expect(await d.fill(c, "2024-03")).toMatchObject({ ok: false, error: /takes a day/ });
     expect(heard).toEqual([]);
-    expect(await d.fill(picker('value="" readonly=""').c, "2024-03-05", { strict: true })).toMatchObject({
+    expect(await d.fill(picker('value="" readonly=""').c, "2024-03-05")).toMatchObject({
       ok: false,
       error: /read-only/,
     });
-    expect(await d.fill(picker('value="" format-pattern="MMM d, y"').c, "2024-03-05", { strict: true })).toMatchObject({
+    expect(await d.fill(picker('value="" format-pattern="MMM d, y"').c, "2024-03-05")).toMatchObject({
       ok: false,
       error: /names months/,
     });

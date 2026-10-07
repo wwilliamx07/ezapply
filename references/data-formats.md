@@ -57,10 +57,9 @@ dropped.
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
   "forms": {
-    "autofill": "on",       // or "off": autofill_step fills nothing (components/autofill.md)
     "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
   },
-  "debug": { "autofill": false, "maxMB": 500, "markup": "failures" },   // autofill debug mode: record every form call under debug/
+  "debug": { "enabled": false, "maxMB": 500, "markup": "failures" },   // debug mode: record every form call under debug/
   "decisions": { "provider": "none" },
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
@@ -99,11 +98,11 @@ Written by every `ezapply init`, for this OS only. POSIX: `#!/bin/sh` and `exec 
 workspace ([cli](components/cli.md#init-workspace-initts)).
 
 ### `debug/<date>-<postingId>/` (`companion/src/forms/debug.ts`)
-Written only while `debug.autofill` is on (`ezapply debug on`). It's read for every form call, so it applies
+Written only while `debug.enabled` is on (`ezapply debug on`). It's read for every form call, so it applies
 to the next call. One folder per posting and day (`no-posting` when the tab isn't credited to one). The
 folder holds:
 - `index.jsonl`: one line per form call: `{ seq, ts, tool, ok, ms, queuedMs, failedFields?, tabHidden?,
-  windowInBackground?, autofill? { filled, failed, kept }, error?, debug: true }`. Reading starts here.
+  windowInBackground?, error?, debug: true }`. Reading starts here.
   `windowInBackground`: the page had no focus (`shown.focused` false), so the browser window was behind
   another app, usually the terminal.
 - `NNNN-<tool>.json`: the whole call, with these fields:
@@ -118,14 +117,11 @@ folder holds:
   - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
     answer before the companion slims it), or its error, and for each adapter call (`form.*`) its `trace`
     (below);
-  - `notes`: for `autofill_step`, `autofill` (per stage, `stage` being `pass 1`, `pass 2` or an Oracle item
-    like `item:languages[0]`: the planned fills, kept fields, the reason for each field left, and the dropdown
-    options listed so far) and `readBack` (each fill's strict check), and `noTrace` when the extension sent
-    no trace (built before it);
+  - `notes`: `noTrace` when the extension sent no trace (built before it);
   - `result`: what the agent got, or `error`.
 - `NNNN-before.html`, `NNNN-after.html`: the whole page, cleaned (scripts, styles, stylesheet links, SVG
   contents and inline handlers removed; live values written into attributes, never a password's), before the
-  call's first adapter call and after its last ([markup](components/adapters.md#autofill-debug-mode-the-adapter-trace)).
+  call's first adapter call and after its last ([markup](components/adapters.md#debug-mode-the-adapter-trace)).
   Before with `debug.markup` `failures` or `always`; after with `always`.
 - `NNNN-fail-<fieldId>.html`: at each field that failed (unless `none`): its section, every popup or listbox
   open on screen, and the last one the page closed during the field. `<fieldId>` has characters other than
@@ -147,7 +143,7 @@ the call in the page:
   the wait in `T` the caller passed or its length, `max`, `quiet` and `quietMs` for a settle, `ms` taken, `end`
   `condition`, `quiet`, `max` or `slept`); `branch` (`name`: `dropdown re-open`, `date entered again`, `date
   part set directly`, `typeahead search again`, `selected on Enter`, `upload by drop`, `search the list`, with details); `match`
-  (`wanted`, `of` options, `strict`, `chosen`, or the `options` on a miss, up to 40); `listbox` (Workday:
+  (`wanted`, `of` options, `chosen`, or the `options` on a miss, up to 40); `listbox` (Workday:
   `shown`, `stale`, `read`, `options`, up to 80) and `list` (Oracle: `options`); `field` (`op` `fill`,
   `upload`, `remove`, `list` or `search`, `fieldId`, and once it ends `ms`, `ok`, `error`) and `field-end`;
 - `mutations`: the page's DOM changes, `+` and `-` (`el`, `n` elements in it; only the topmost node of each
@@ -194,7 +190,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `posting.md` | companion | cleaned description with a header (role, company, location, requisition, URL) |
 | `notes.md` | Claude | starts with `## Application requirements` (the posting's instructions for applying), then job requirements, key terms, evidence map, gaps |
 | `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, companion | tailored documents and bundles |
-| `form-log.jsonl` | companion | autofill audit trail (below) |
+| `form-log.jsonl` | companion | the application's audit trail (below) |
 | `approvals.json` | companion | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
 | `.build/<name>/` | companion | TeX aux files and logs |
 | `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
@@ -222,14 +218,8 @@ rewrite the file, and it's found again from the capture ([which posting](mcp-too
 One JSON object per line, each with `ts`. Written only for form activity on a tab that may be this posting's
 application ([which posting](mcp-tools.md#forms): its job, the tab's binding, its tenant or its title, or nothing
 saying otherwise):
-- `{ event: "fill", fieldId, value, source, answerId?, ok, error?, auto?, rule? }`, `source` ∈ `profile`,
-  `answer-bank`, `computed`, `user`, `judgment`. `auto: true` and `rule` (`hint:contact.email`, `answer:how_heard`,
-  `computed:sponsorship_now`, `row:work[1].title`, `item:languages[0].level`, `link:links[1].url`) mark a fill by
-  `autofill_step`, with `was` when it overwrote a value; one that took a loose match is `ok: false` with
-  `error: "inexact: …"`
-- `{ event: "add-row", addButtonId, auto: true, ok, error? }`: a row `autofill_step` added for the profile's list
-- `{ event: "add-item", list, item, auto: true, ok, error? }`: an Oracle item (`item` names the entry: a company,
-  school or language) `autofill_step` added through its inline form; `ok` once its Save took
+- `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
+  `computed`, `user`, `judgment`
 - `{ event: "step-check", step?, stepIndex?, warnings[] }`: written by `go_next` before it moves, with what
   still looked off on the step (`checklist`); the review page's `handoff.steps` reads the last per step
 - `{ event: "upload", fieldId, file, ok, error? }`
@@ -239,6 +229,9 @@ saying otherwise):
   progress bar; live titles are often all "Application")
 - `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
+
+Logs written while deterministic autofill existed ([removed](status.md#deterministic-autofill-removed)) may also
+hold fills with `auto`, `rule` and `was`, and `add-row` and `add-item` events. Nothing reads those fields now.
 
 Any event can also carry `tabActivated: true` (the companion switched to the application tab before the call),
 `windowFocused: true` (the extension brought the browser window to the front: `forms.focusBrowser`),

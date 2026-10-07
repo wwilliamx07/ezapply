@@ -122,7 +122,7 @@ async function requireAccess(url: string): Promise<void> {
 
 type Timing = Record<string, number> | undefined;
 
-/** What a form call brings besides its arguments: the waits, and autofill debug mode when it's on. */
+/** What a form call brings besides its arguments: the waits, and debug mode when it's on. */
 interface CallOptions {
   timing?: Timing;
   debug?: DebugRequest;
@@ -136,7 +136,7 @@ type Trace = { failedFields?: string[]; screenshot?: string } & Record<string, u
  * companion sent (from the workspace's autofill-timing.yaml) set first; none restores the defaults. An embedded
  * form's frame gets its own adapter, and its own submit guard, as any page does: only that frame is injected.
  *
- * With `debug` (autofill debug mode) the adapter records its trace for this call (`setDebug`, set in the same
+ * With `debug` (debug mode) the adapter records its trace for this call (`setDebug`, set in the same
  * script as the waits) and hands it back (`takeDebug`); it goes to the companion beside the result
  * (`WithDebug`), or on the error, never in the result itself. After a call where a field failed, a screenshot of the
  * tab joins it when the tab is on screen: the page can't reach the extension mid-call, and the browser allows only a
