@@ -1,5 +1,6 @@
 import type { FillResult, FillValue, OptionInfo } from "@ezapply/protocol";
 import {
+  answersQuery,
   callReact,
   cssEscape,
   isVisible,
@@ -187,21 +188,39 @@ async function openCombo(input: HTMLInputElement): Promise<boolean> {
 }
 
 /**
- * Type a query and wait for the list to show its results: options that differ from those before, or "no
- * results". Long lists (countries, cities) search as you type, some of them on the server.
+ * Type a query and wait for the list to show its results: options that differ from those before, one of them
+ * holding the query, or "no results" (one already showing before the query is the list still loading). Long lists
+ * (countries, cities, postal codes) search as you type, some of them on the server.
+ *
+ * Seen live on a city and a postal code: typing first re-renders the whole unfiltered list, and the server search
+ * runs about half a second later. Taking that list for the results failed the field and closed the list before
+ * the search ran. The widget searches only when the text changes, and it keeps the last text typed even after the
+ * list closes, so typing the same value again searched nothing, at every later attempt. When no results come, the
+ * text is cleared, left for the widget to take (`typeaheadClearMs`), and typed again. (Results that don't hold the
+ * query cost the same: both waits run out before they're read.)
  */
 async function typeQuery(field: HTMLInputElement, query: string): Promise<void> {
   const busy = () => comboList(live(field))?.getAttribute("aria-busy") === "true";
   await waitFor(() => !busy(), T.typeaheadResultsMs, 100);
   const input = live(field);
   const before = signature(input);
-  input.focus();
-  setNativeValue(input, query);
+  const emptyBefore = noResults(input);
   const done = () => {
     const now = live(field);
-    return !busy() && ((comboOptions(now).length > 0 && signature(now) !== before) || noResults(now));
+    if (busy()) return false;
+    if (noResults(now)) return !emptyBefore;
+    const labels = comboOptions(now).map(optionText);
+    return labels.length > 0 && labels.join("\u0001") !== before && answersQuery(labels, query);
   };
-  await waitFor(done, T.typeaheadResultsMs, 100);
+  input.focus();
+  setNativeValue(input, query);
+  if (!(await waitFor(done, T.typeaheadResultsMs, 100))) {
+    branch("typeahead search again", { query });
+    setNativeValue(live(field), "");
+    await sleep(T.typeaheadClearMs);
+    setNativeValue(live(field), query);
+    await waitFor(done, T.typeaheadResultsMs, 100);
+  }
   await settle(input.ownerDocument, T.typeaheadResultsQuietMs, T.typeaheadResultsMaxMs);
 }
 
@@ -234,7 +253,9 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[], s
   const input = () => live(field);
   if (input().readOnly) return fail("This field is read-only on the page.", { readBack: input().value });
   if (candidates.some((c) => shows(input().value, c))) return { ok: true, readBack: input().value };
-  if (!(await openCombo(input()))) return fail("Could not open the list.");
+  // A list that didn't show by itself may still show when searched: live, a school list failed to open twice
+  // within the open waits, while `search_options` on it, which types whatever the open did, found the school.
+  const opened = await openCombo(input());
   let labels = comboOptions(input()).map(optionText);
   if (tracing()) note("list", { options: labels.slice(0, 80) });
   let idx = pick(candidates, labels, strict);
@@ -249,6 +270,10 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[], s
     idx = pick(candidates, labels, strict);
   }
   if (idx < 0) {
+    if (!opened && !labels.length && !noResults(input())) {
+      await closeCombo(input());
+      return fail("Could not open the list.");
+    }
     if (input().classList.contains(SEL.comboAutoSuggest)) {
       await closeCombo(input());
       return same(input().value, value)

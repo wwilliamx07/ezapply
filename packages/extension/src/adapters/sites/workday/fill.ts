@@ -1,5 +1,6 @@
 import type { FillResult, FillValue, OptionInfo } from "@ezapply/protocol";
 import {
+  answersQuery,
   blur,
   callReact,
   cssEscape,
@@ -266,6 +267,20 @@ function selectedItems(c: HTMLElement): string[] {
   return [...new Set([...c.querySelectorAll(SEL.selectedChips)].map(text).filter(Boolean))];
 }
 
+/** A ticked option of a list with checkboxes (its `promptLeafNode` has `data-automation-checked`). */
+function isTicked(option: HTMLElement): boolean {
+  const item = option.closest<HTMLElement>("[data-automation-checked]");
+  if (item) return /^checked$/i.test(item.getAttribute("data-automation-checked") ?? "");
+  const box = option.parentElement?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  return Boolean(box && (box.checked || box.getAttribute("aria-checked") === "true"));
+}
+
+/** Whether `label` is selected: its chip shows, or its option on screen is ticked. */
+function isSelected(c: HTMLElement, label: string): boolean {
+  if (selectedItems(c).some((s) => lower(s) === lower(label))) return true;
+  return promptOptions(c).some((o) => lower(text(o)) === lower(label) && isTicked(o));
+}
+
 function optionInfo(el: HTMLElement): OptionInfo {
   const hasChildren =
     el.getAttribute("data-automation-id") === "promptOption" &&
@@ -278,7 +293,9 @@ function optionInfo(el: HTMLElement): OptionInfo {
 /**
  * Type a query and wait for its results. Results count only once the options on screen differ from those
  * before the query: live Workday renders search results a moment after the page goes quiet, and reading on
- * quiet returned the previous query's results (or none), one call behind.
+ * quiet returned the previous query's results (or none), one call behind. One of them must also hold the
+ * query: on a hierarchical prompt, live, the category menu ("All", …) rendered after the query was typed and was
+ * taken for the results before the search had answered.
  */
 async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElement | null> {
   const input = c.querySelector<HTMLInputElement>(`${within(SEL.multiSelect, "input")}, input`);
@@ -291,7 +308,8 @@ async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElemen
   // it also shows briefly while results load).
   let emptySince = 0;
   const done = () => {
-    if (promptOptions(c).length > 0 && promptSignature(c) !== before) return true;
+    const options = promptOptions(c);
+    if (options.length > 0 && promptSignature(c) !== before && answersQuery(options.map(text), query)) return true;
     if (!noItemsShown(c)) {
       emptySince = 0;
       return false;
@@ -365,9 +383,16 @@ async function selectPath(
     if (idx < 0) return { options: [...new Set(labels)] };
     const option = options[idx] as HTMLElement;
     selected = labels[idx] as string;
+    const last = i === path.length - 1;
+    // A multi-select with checkboxes ticks a search's only result itself on Enter, and pressing that option
+    // then unticked it (live: skills and a citizenship were selected, then unselected).
+    if (last && isSelected(c, selected)) {
+      branch("selected on Enter", { label: selected });
+      break;
+    }
     press(option);
     await settle(c.ownerDocument, T.typeaheadSelectQuietMs, T.typeaheadSelectMaxMs);
-    if (i === path.length - 1 && !selectedItems(c).some((s) => norm(s) === norm(selected))) {
+    if (last && !isSelected(c, selected)) {
       callReact(option, "onClick", {});
       await settle(c.ownerDocument, T.typeaheadSelectQuietMs, T.typeaheadSelectMaxMs);
     }
@@ -378,10 +403,13 @@ async function selectPath(
 /**
  * Select each value on its own: one that matches nothing is reported in `unmatched` with the options its search
  * showed, and the rest are still selected (seen live: a skills list stopped at its first unmatched entry).
- * When Workday selects an option itself on Enter (single-select prompts do), it's reported in `inexact`.
+ * When Workday selects an option itself on Enter (single-select prompts do), it's reported in `inexact`. A value
+ * whose option was pressed but didn't stay selected is in the error, apart from those that matched nothing: "No
+ * option matches" for those sent the agent looking for other values of an option it had found.
  */
 async function fillTypeahead(c: HTMLElement, values: string[], strict: boolean): Promise<Result> {
   const unmatched: { value: string; suggestions: string[] }[] = [];
+  const unkept: string[] = [];
   const inexact: { value: string; selected: string }[] = [];
   const input = () => c.querySelector("input") ?? c;
   for (const value of values) {
@@ -394,9 +422,7 @@ async function fillTypeahead(c: HTMLElement, values: string[], strict: boolean):
     const before = new Set(selectedItems(c).map(lower));
     const outcome = await selectPath(c, path, strict);
     if ("selected" in outcome) {
-      if (!selectedItems(c).some((s) => lower(s) === lower(outcome.selected))) {
-        unmatched.push({ value, suggestions: [] });
-      }
+      if (!isSelected(c, outcome.selected)) unkept.push(outcome.selected);
       continue;
     }
     key(input(), "Escape");
@@ -412,9 +438,13 @@ async function fillTypeahead(c: HTMLElement, values: string[], strict: boolean):
     ...(unmatched.length ? { unmatched } : {}),
     ...(inexact.length ? { inexact } : {}),
   };
-  if (!unmatched.length) return { ok: true, ...extra };
+  if (!unmatched.length && !unkept.length) return { ok: true, ...extra };
   const only = unmatched.length === 1 && values.length === 1 ? unmatched[0] : undefined;
-  return fail(`No option matches: ${unmatched.map((u) => `"${u.value}"`).join(", ")}.`, {
+  const problems = [
+    unmatched.length ? `No option matches: ${unmatched.map((u) => `"${u.value}"`).join(", ")}.` : "",
+    unkept.length ? `Chosen, but the page didn't keep: ${unkept.map((u) => `"${u}"`).join(", ")}.` : "",
+  ];
+  return fail(problems.filter(Boolean).join(" "), {
     ...extra,
     ...(only?.suggestions.length ? { availableOptions: only.suggestions } : {}),
   });

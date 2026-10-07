@@ -202,8 +202,9 @@ function cleanCompany(s: string): string | undefined {
 
 export function companyFromUrl(url: string): string | undefined {
   const u = new URL(url);
-  // Oracle Cloud hosts (fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com) don't name the employer; the title does.
-  if (/(^|\.)oraclecloud\.com$/i.test(u.hostname)) return undefined;
+  // Oracle Cloud hosts (fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com) and SuccessFactors' career hosts
+  // (career17.sapsf.com) name the provider's data centre, not the employer; the title does.
+  if (/(^|\.)(oraclecloud\.com|sapsf\.(com|eu|cn)|successfactors\.(com|eu))$/i.test(u.hostname)) return undefined;
   if (ATS_HOSTS.test(u.hostname)) {
     // Workday: acme.wd5.myworkdayjobs.com, wd5.myworkdaysite.com/recruiting/acme/...
     if (/myworkday/i.test(u.hostname)) return workdayTenant(url);

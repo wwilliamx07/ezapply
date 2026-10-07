@@ -1,12 +1,14 @@
-# Greenhouse, Lever, Ashby, Phenom and Dayforce (`packages/extension/src/adapters/sites/`)
+# Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP SuccessFactors (`packages/extension/src/adapters/sites/`)
 
-Five sites, each a definition on the [adapter engine](adapters.md) using shared drivers only: a `site.ts` and a
-`main.ts`. Three are hosted job boards (Greenhouse, Lever, Ashby; about 150 lines each), and each of their
+Six sites, each a definition on the [adapter engine](adapters.md): a `site.ts` and a `main.ts`, on shared drivers
+only, except SuccessFactors, which has two widgets of its own (`widgets.ts`). Three are hosted job boards (Greenhouse, Lever, Ashby; about 150 lines each), and each of their
 applications is **one page with Submit at the end**: there are no steps, rows or inline forms, `next` always refuses (Submit is the only way on), `back` has nowhere to go, and
 the schema says `lastPage: true`, so the agent fills the page and hands over to the user
 ([the hand-off](autofill.md)). The fourth, [Phenom](#phenom-sitesphenom), is an employer's careers site whose
 application has steps and rows, like Workday's; the fifth, [Dayforce](#dayforce-sitesdayforce), a candidate portal whose
-application has steps and records saved one by one, like Oracle's items. Workday and Oracle have pages of their own:
+application has steps and records saved one by one, like Oracle's items; the sixth,
+[SAP SuccessFactors](#sap-successfactors-sitessuccessfactors), a career site whose application is one page again, but with
+rows of lists like Workday's and documents. Workday and Oracle have pages of their own:
 [Workday](workday-adapter.md), [Oracle](oracle-adapter.md).
 
 ## Why these three
@@ -20,9 +22,10 @@ be built from real markup and checked live without an account. The others couldn
 |---|---|
 | iCIMS | Blocks headless browsers; its application sits behind a candidate account |
 | SmartRecruiters | Bot protection (DataDome) on its application pages. Not worked around, on purpose |
-| SuccessFactors, Taleo, BrassRing | The application is behind a candidate account on each employer's site |
+| Taleo, BrassRing | The application is behind a candidate account on each employer's site |
 
-Each needs pages the user saves from a real application in their own browser. None is planned yet.
+Each needs pages the user saves from a real application in their own browser. None is planned yet. SuccessFactors was
+in this list too; it was built from such a page ([below](#sap-successfactors-sitessuccessfactors)).
 
 ## What the three boards share
 - **Registry entries** (`protocol/src/sites.ts`, URL rules in `greenhouse.ts`, `lever.ts`, `ashby.ts`): https
@@ -317,6 +320,129 @@ application": the Updates are `type=submit` buttons too, so the type says nothin
 carry every message of the portal, "your application has been submitted" included. The posting's Apply is found by
 its words ("Apply", or `aria-label` "Apply for …"), since the posting page wasn't saved.
 
+## SAP SuccessFactors (`sites/successfactors/`)
+**Why.** SuccessFactors is among the most used providers ([why these three](#why-these-three)). Its career site hosts
+every employer of a data centre on one host (`career17.sapsf.com`, `career2.successfactors.eu`…), and its application
+sits behind a candidate account, so it was built from a page the user saved from their own application.
+
+**Pages.** The application is `…/career?company=<company>&career_job_req_id=<requisition>&career_ns=job_application`
+(or the older `…/sfcareer/jobreqcareer?jobId=<requisition>&company=<company>`); once the candidate is signed in it can
+be `…/portalcareer?_s.crb=<session token>`, whose URL names neither. It's **one page** of collapsible sections, from
+the employer's template: My Documents, Profile Information, background lists (Outside Work Experience, Formal
+Education, Certifications/Licenses, Geographic Mobility…), Job-Specific Information, with View Profile, Save and Apply
+at the foot. Apply submits it. The employer's own careers site in front of it (SuccessFactors' Recruiting Marketing,
+on the employer's domain, where postings are found) is another product with other markup, and isn't this site.
+
+**Registry** (`protocol/src/successfactors.ts`): the URL rule takes an https `career<n>` host on `sapsf.com`,
+`sapsf.eu`, `sapsf.cn`, `successfactors.com` or `successfactors.eu`, on the career site's paths (`/career`,
+`/careers`, `/portalcareer`, `/sfcareer/…`). Tenant: `company`, lowercased. Job: `career_job_req_id`, else `jobId`.
+A signed-in page's URL has neither, so the page's `job` (below) is what ties it to its posting there
+([which posting](../mcp-tools.md#forms)). A posting captured on the career site keeps `career_job_req_id` and
+`company` in its canonical URL ([postings](postings.md)), since the host is every employer's and requisitions are
+numbered per employer. **Signature:** the application's own containers (`#rcmJobApplicationCtr`, its sections'
+`.rcmFormSectionContent`) and the career site's form with its hidden company field
+(`form#careerform input#career_company`). **Waits:** standard, but `uploadMs` 30 s (not measured): a document is
+posted to SuccessFactors' server before the field names it.
+
+**Built with juic.** The page is SuccessFactors' own component framework (juic): each component renders its markup
+with ids starting with its own (`141:` gives `141:_input`, `141:_selectButton`), numbered as the page renders, and its
+markup calls it with `juic.fire("141:", method, event)`; juic keeps every component in `juic.Component._registry` by
+that id. So element ids say nothing stable, and no key or selector uses them. The fields' `name`s, the sections'
+titles and the components' classes do.
+
+**Fields.** Each section's content (`.rcmFormSectionContent`, titled by the heading its `aria-labelledby` names) holds
+`.RCMFormField`s: a `label.rcmFormFieldLabel` (a `.requiredField` star when required) and one control. A field
+counts unless it, or something between it and its section's content, is hidden (`displayNone`, `hidden`, a display of
+none); a **collapsed section** still counts, since its fields are the application's and filling them needs no
+expanding. A field showing only text (the account's Username) is left out. The driver goes by the control:
+- a **paginated picklist** (`input.rcmpaginatedselectinput`, every list: country, province, degree, the questions):
+  [its own driver](#the-paginated-picklist-through-its-component);
+- a **date** (`[ui5-date-picker]`, a UI5 Web Components date picker under the scoped tag
+  `ui5-date-picker-xweb-calendar-widget`): the shared [`ui5DatePickerDriver`](adapters.md#shared-drivers-widgets),
+  `MM/DD/YYYY` with a day (`dateParts`), so a profile's `YYYY-MM` doesn't fill it;
+- an **attachment field** (`.attachWrapper`): [its own driver](#documents);
+- text (`input[data-testid='sfTextField']`, a pay field's `type=currency` too); and textareas, native selects,
+  radios and checkboxes, which SuccessFactors' field factory can render (read from its script) but the saved page
+  doesn't have, with the native drivers.
+
+**Ids and sections.** A text field's key is its `name` (`firstName`, `cellPhone`, `customExptSal`, the employer's
+`conflictEJust`), except a list's numbered fields (`VFLD1`, `VFLD3`), whose key is the prompt's slug, as is every
+list's, date's and document's (their markup has no name). A field's section is its section's title; a **row** of a
+list is a section of its own named by the list and its place ("Outside Work Experience 2"), which the companion's
+lists match by title. Rows are numbered by their place: SuccessFactors renumbers them on a removal, and an Add appends.
+
+**Hints**, outside rows, by `name`: first, middle and last name, preferred name (`prefName`), the candidate's full name
+(`candidateName`, "Legal Full Name"), address lines (`address`, `address2`), city, postal code (`zip`), phone
+(`cellPhone`) and email (`contactEmail`). A list's field name is only in its component (`getFieldName()`), so on a live
+page `country` and `state` are hinted as the address's country and region; those two names weren't seen (the saved
+page has no components) and are assumed. Rows get no hints: their fields are the employer's numbered ones, whose
+meaning only their labels give, and autofill matches row fields by label anyway ([autofill](autofill.md)). The typed
+signature (`disclaimerAcknowledge`) has none: it's the user's.
+
+**Rows.** A list's rows are its `.rcmSectionComponent`s with a "Row number n" beside them. Each has a Remove
+(`[id$='_deleteIcon'] [role='button']`), hidden on the last row of a list the employer requires, so that row isn't
+removable. Remove takes the row off at once, without asking (read from the section's script; the change reaches the
+employer's system with Save or Apply). A list's Add (`.addRowButton`, kind `row`, `add.<list>`) appends a row and is
+hidden once the list is full.
+
+### The paginated picklist, through its component
+`RCMPaginatedPicklistSingleSelect`: a text input that opens a list fetched from SuccessFactors' server 100 options a
+page, filtered as you type. The driver finds its component in juic's registry (`141:` from `141:_input`) and:
+- **lists and searches** by asking the server as the component's own list does
+  (`RCMPaginatedPicklistModel.fetchItems`): `getPicklistByPageWithExcludeOption` on the model's controller, with the
+  picklist's id, the option chosen in the list it depends on (`_parentOptionId`: a country for provinces) and the
+  page, filtered `contains` the query when searching. Up to five pages; "No Selection" (no value) and disabled options
+  dropped. A search's results are filtered again here, in case the server answered with the whole list;
+- **fills** by searching for the value first (one request), then the whole list for a wording the value doesn't
+  contain, matching (strictly when asked), and calling the component's `setValue({ value, label })`, which is what
+  choosing an option in its list does (`itemSelected`): it shows the label, sets the hidden value, and tells the lists
+  that depend on it (`paginatedPicklistMgr` enables Province/ State and loads it) and the form. A list waiting for an
+  earlier answer is disabled (`input.disabled`) and refused. Fills go in page order, so a country comes before its
+  provinces.
+
+**Why not clicks.** The list is built in a popup only when opened, from the server's pages, and that popup's markup
+wasn't saved. The component needs neither, and lists every option. **The risk:** these are juic's internals (the
+registry, the model's controller and its argument order), read from the page's scripts, not run live.
+
+### Documents
+My Documents holds the Resume/CV, Cover Letter and Additional Documents, each an `.RCMFormField.attachmentField` with
+one `.attachWrapper` per attachment (the V12 attachment view, `RCMV12AttachmentView`). An uploaded one shows its file
+name (`[id$='_attachDownloadLabelLink']`, with `_attach` marked `successBtn`); its icon (`[id$='_attachIcon']`) is a
+pencil on a required document (it replaces it) and a bin on an optional one (it deletes it). Additional Documents
+keeps an empty slot with a plus beside what it holds, so it takes several (`multiple`; on a live page the view's
+`attachmentType` says so, `MULTIATTACHMENTS`).
+- **Upload:** the driver presses the slot's icon (the empty slot, or a required document's pencil), which opens a popup
+  (`RCMV12AttachmentPopUpContent`) with a file input (`input.fileUpload`, "Upload from my computer"); it puts the file
+  in that input and fires its change. The page moves the input into a form of its own and posts it to SuccessFactors
+  through a hidden frame; once the server answers, the field names the file. Done when it does, failed with the
+  field's own message when one shows. An optional document already there has to be removed first: its icon would
+  delete it, not replace it.
+- **Remove:** presses the bin, then OK in the confirmation dialog where the employer has one ("Are you sure you want to
+  delete this file?"); the document is deleted on SuccessFactors' side at once (`deleteResumeOrCoverLetter`,
+  `deleteAttachment`). A required document can't be removed, only replaced, and the removal says so.
+
+Built from the attachment handler's script and the saved fields; the popup's markup is the script's, not seen.
+
+**Its notes** ([`siteNotes`](../mcp-tools.md#site-notes)): the page comes filled from the candidate's profile with this
+employer, so correct what's there rather than adding rows beside it; documents go to the employer's site as soon as
+they're chosen, and removing one deletes it there (ask first); a typed signature or disclaimer acknowledgement is the
+user's.
+
+**Errors:** each field's own (`.rcmValidationMsgArea`, shown), with its prompt where the message doesn't name it, and
+the page's notice area (`#confirmationMsg`) when what it shows is an error; otherwise its notices ("… uploaded
+successfully") go to `messages`.
+
+**Apply by its hook and its words.** `isSubmit` is Apply's hook (`[id$='_submitBtn']`, a `span role=button`) or a
+control reading "Apply" or "Submit" (with "now" or "application"). Save (`_saveBtn`) keeps a draft and isn't Submit,
+but nothing presses it either. Apply is the page's `next`, so `nextLabel` says Apply, `lastPage` is set, and `go_next`
+refuses.
+
+**The job** is the page's heading ("Operations Analyst (1000)") without the requisition, which comes from the
+hidden `#career_job_req_id` (else the heading's parenthetical). **Other pages:** a page with a password field and no
+form is `auth`; a confirmation is told by the page's own text, without its notes (the welcome above the form thanks
+the candidate "for your interest", which `CONFIRMATION_TEXT` would take for one). Neither was seen. There's no posting
+page on this site to act on: postings are on the employer's careers site.
+
 ## What was verified, and how
 Each definition was built from a live application page rendered by headless Edge (saved, without scripts and
 styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`, and later
@@ -355,6 +481,14 @@ styles, as `test/fixtures/live/greenhouse-apply.html`, `lever-apply.html`, `ashb
   jsdom: on the saved page, and on records built from those scripts' markup inside it. The Ant Design driver is
   tested on a model of rc-select's context.
 
+- **SAP SuccessFactors**: built from one saved page of a live application, a signed-in candidate's, with the
+  profile, two lists and the documents filled from an earlier application (saved as `successfactors-application.html`,
+  employer, job and candidate details replaced; the shadow roots' templates and the inline `juic.fire` handlers removed). What it doesn't show was read
+  from the page's own scripts, saved with it: the picklist's component and its server request, the attachment view,
+  its upload popup and deletion, the rows' Add and Remove, the date picker's change event, and the field types the
+  field factory can render. The definition has run only in jsdom: on the saved page, with juic's registry, the
+  picklists, the upload popup and the delete dialog modelled from those scripts.
+
 **Not yet tried:** uploads on Lever, the confirmation page of any of them, and a real application on
 Greenhouse or Lever. On Phenom: the definition on a live page (through the extension), steps 4 to 6 (their
 markup, and the Review step's Submit), removing a row, adding one, and the posting page's own markup beyond its
@@ -362,4 +496,10 @@ Apply link. On Dayforce: everything live. The driver choosing from rc-select's c
 found at all: it's rc-select's internals), uploads and the resume's parse, whether Next goes on with Personal
 Information or a record still open, the Update and delete flows, the questionnaire, the Submit step, the posting
 page and its Apply, the confirmation page, and a signed-out application (whose email is editable, with a
-confirmation).
+confirmation). On SuccessFactors: everything live. The picklist's component found in juic's registry, its server
+request's arguments (the `contains` filter included) and `setValue` choosing as a click would; the province list
+enabled and loaded after a country; the date picker's change taken by the page; the upload popup, its file input,
+the post and the field naming the file (and whether the popup still holds an input for a second upload to the same
+field); removing a document and its dialog; adding and removing a row; the field names of the country and province
+lists; Apply's errors; a signed-out application; the confirmation and sign-in pages; and an employer whose template
+has textareas, checkboxes, radios or native selects.

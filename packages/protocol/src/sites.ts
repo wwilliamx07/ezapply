@@ -10,10 +10,19 @@ import { greenhouseHostPageJob, greenhouseJob, greenhouseTenant, isGreenhouseUrl
 import { isLeverUrl, leverCanonicalPath, leverJob, leverTenant } from "./lever.js";
 import { isOracleUrl, oracleJob, oracleJobPath, oracleTenant } from "./oracle.js";
 import { isPhenomUrl, phenomCanonicalPath, phenomJob, phenomTenant } from "./phenom.js";
+import { isSuccessFactorsUrl, successFactorsJob, successFactorsTenant } from "./successfactors.js";
 import { STANDARD_WAITS, type Timing } from "./timing.js";
 import { isWorkdayUrl, workdayCanonicalPath, workdayJob, workdayTenant } from "./workday.js";
 
-export type FormSiteId = "workday" | "oracle" | "greenhouse" | "lever" | "ashby" | "phenom" | "dayforce";
+export type FormSiteId =
+  | "workday"
+  | "oracle"
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "phenom"
+  | "dayforce"
+  | "successfactors";
 
 /**
  * The extension's host permissions, granted at install: every site. Phenom and Oracle run on employers' own domains,
@@ -144,6 +153,19 @@ export const SITES: readonly SiteInfo[] = [
     // it (and a drop after `uploadMs` would send it again), an Update saves the record to the candidate's profile
     // before its form closes, and Next checks the step there.
     waits: { ...STANDARD_WAITS, uploadMs: 30_000, addRowMs: 15_000, stepMs: 30_000 },
+  },
+  // SAP SuccessFactors Recruiting's career site: a host per data centre (career17.sapsf.com…) for every employer.
+  {
+    id: "successfactors",
+    name: "SAP SuccessFactors",
+    // Its application's own containers (the form's region, its sections' content) and the career site's form with
+    // the employer's hidden company field, which SuccessFactors renders on its career pages.
+    signature: "#rcmJobApplicationCtr, .rcmFormSectionContent, form#careerform input#career_company",
+    isUrl: isSuccessFactorsUrl,
+    tenant: successFactorsTenant,
+    job: successFactorsJob,
+    // Not measured. A document is posted to SuccessFactors' server (through a hidden frame) before the page names it.
+    waits: { ...STANDARD_WAITS, uploadMs: 30_000 },
   },
 ];
 

@@ -14,7 +14,16 @@ export interface OracleOptions {
   profileChoice?: boolean;
   /** A resume already attached from the candidate's profile. */
   resumeOnFile?: string;
+  /**
+   * The postal code list as seen live: it opens on nothing, then "No results found" while its first page loads;
+   * typing re-renders that unfiltered page at once and searches `POSTAL_SEARCH_DELAY_MS` later; closing the list
+   * drops a search not yet run; and the widget keeps the last text typed, searching only when the text changes.
+   */
+  liveSearch?: boolean;
 }
+
+/** With `liveSearch`: how long the postal code list waits after typing before it searches. */
+export const POSTAL_SEARCH_DELAY_MS = 300;
 
 const COUNTRIES = ["Canada", "United States", "United Kingdom", "Finland", "France"];
 /** As live: the list labels a city with its province, and the field shows the city alone once chosen. */
@@ -287,6 +296,8 @@ export function buildOracleApplication(doc: Document, opts: OracleOptions = {}) 
     chosen?: (label: string) => void;
     /** Opening the list the first time re-renders the widget: a new input replaces this one (seen live). */
     rerenderOnOpen?: boolean;
+    /** `liveSearch`'s behaviour, searching this long after the text changes. */
+    liveSearchMs?: number;
   }
   const combos = new Map<string, Combo>();
   const wireCombo = (id: string, source: () => string[], o: ComboOptions = {}) => {
@@ -298,7 +309,9 @@ export function buildOracleApplication(doc: Document, opts: OracleOptions = {}) 
     const shown = () => (state.selected === null ? "" : display(state.selected));
     const row = input.closest(".input-row") as HTMLElement | null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastTerm = "";
     const close = () => {
+      if (o.liveSearchMs) clearTimeout(timer);
       slot.innerHTML = "";
       input.setAttribute("aria-expanded", "false");
     };
@@ -328,7 +341,19 @@ export function buildOracleApplication(doc: Document, opts: OracleOptions = {}) 
         });
       }
     };
-    const open = () => render((o.firstPage ?? ((a: string[]) => a))(source()));
+    const firstPage = () => (o.firstPage ?? ((a: string[]) => a))(source());
+    const open = () => {
+      if (!o.liveSearchMs) return render(firstPage());
+      // Nothing at first, then "No results found" while the first page loads.
+      input.setAttribute("aria-expanded", "true");
+      setTimeout(() => {
+        if (input.getAttribute("aria-expanded") === "true" && !slot.innerHTML) render([]);
+      }, 50);
+      setTimeout(() => {
+        if (input.getAttribute("aria-expanded") === "true" && !slot.querySelector("[role=gridcell]"))
+          render(firstPage());
+      }, 100);
+    };
     input.addEventListener("click", () => {
       if (o.rerenderOnOpen) {
         // The widget reloads: a fresh input takes this one's place, open, and this one is left detached.
@@ -357,6 +382,14 @@ export function buildOracleApplication(doc: Document, opts: OracleOptions = {}) 
       const term = input.value.toLowerCase();
       const finds = o.finds ?? ((l: string, t: string) => l.toLowerCase().includes(t));
       const found = () => source().filter((l) => finds(l, term));
+      if (o.liveSearchMs) {
+        render(firstPage());
+        if (term === lastTerm) return;
+        lastTerm = term;
+        clearTimeout(timer);
+        timer = setTimeout(() => render(found()), o.liveSearchMs);
+        return;
+      }
       clearTimeout(timer);
       if (o.searchMs) {
         render([], true);
@@ -396,6 +429,7 @@ export function buildOracleApplication(doc: Document, opts: OracleOptions = {}) 
     display: (l) => l.split(",")[0] ?? l,
     finds: (l, t) => !t.includes(",") && l.toLowerCase().startsWith(t),
     firstPage: (all) => all.slice(0, 2),
+    ...(opts.liveSearch ? { liveSearchMs: POSTAL_SEARCH_DELAY_MS } : {}),
   });
   wireCombo("country-codes-dropdownphoneNumber", () => ["+1 Canada", "+1 United States", "+358 Finland"]);
   wireCombo("month-300000392474837-24", () => MONTHS);

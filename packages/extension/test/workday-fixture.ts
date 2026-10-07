@@ -55,6 +55,12 @@ export interface StepOptions {
    * whose field renders this many ms later, as live steps did; its Next goes on to Review.
    */
   questionsStepRenderMs?: number;
+  /**
+   * The Skills prompt as two live variants. `checkboxes`: each option has a checkbox and a press toggles it (a
+   * pill added or removed, the popup left open), and Enter ticks a search's only result itself. `menuFirst`: Enter
+   * shows the category menu at once, where the plain prompt shows "No Items.", and the results after it.
+   */
+  skillsPrompt?: "checkboxes" | "menuFirst";
 }
 
 /** The live-dropdown listeners each document was given by its last build. */
@@ -284,7 +290,22 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
   const skillsSelected = doc.querySelector(
     '[data-automation-id="formField-skills"] [data-automation-id="selectedItemList"]',
   ) as HTMLElement;
-  const skillsPopup = (labels: string[]) => {
+  const checkboxes = opts.skillsPrompt === "checkboxes";
+  const pill = (label: string) =>
+    [...skillsSelected.querySelectorAll("li")].find((li) => li.textContent === label) ?? null;
+  const toggle = (label: string, leaf: HTMLElement) => {
+    const had = pill(label);
+    if (had) had.remove();
+    else {
+      const li = doc.createElement("li");
+      li.setAttribute("data-automation-id", "selectedItem");
+      li.innerHTML = `<div data-automation-id="promptSelectionLabel">${label}</div>`;
+      skillsSelected.append(li);
+    }
+    leaf.setAttribute("data-automation-checked", had ? "Not Checked" : "Checked");
+    (leaf.querySelector("input") as HTMLInputElement).checked = !had;
+  };
+  const skillsPopup = (labels: string[], placeholder = ["No Items."]) => {
     doc.querySelector("#skills-popup")?.remove();
     const popup = doc.createElement("div");
     popup.id = "skills-popup";
@@ -292,12 +313,17 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     const inner = doc.createElement("div");
     inner.setAttribute("data-associated-widget", "ms-skills");
     popup.append(inner);
-    for (const label of labels.length ? labels : ["No Items."]) {
+    const leaves: HTMLElement[] = [];
+    for (const label of labels.length ? labels : placeholder) {
       const leaf = doc.createElement("div");
       leaf.setAttribute("data-automation-id", "promptLeafNode");
-      leaf.innerHTML = `<div data-automation-id="promptOption">${label}</div>`;
+      leaf.innerHTML = checkboxes
+        ? `<div data-automation-id="checkbox"><input type="checkbox"></div><div data-automation-id="promptOption">${label}</div>`
+        : `<div data-automation-id="promptOption">${label}</div>`;
+      if (checkboxes) leaf.setAttribute("data-automation-checked", pill(label) ? "Checked" : "Not Checked");
       if (labels.length) {
         leaf.addEventListener("click", () => {
+          if (checkboxes) return toggle(label, leaf);
           const li = doc.createElement("li");
           li.setAttribute("data-automation-id", "selectedItem");
           li.innerHTML = `<div data-automation-id="promptSelectionLabel">${label}</div>`;
@@ -306,15 +332,23 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
         });
       }
       inner.append(leaf);
+      leaves.push(leaf);
     }
     doc.body.append(popup);
+    return leaves;
   };
   skillsInput.addEventListener("keydown", (e) => {
     if (e.key === "Escape") doc.querySelector("#skills-popup")?.remove();
     if (e.key !== "Enter") return;
     const q = skillsInput.value.toLowerCase();
-    skillsPopup([]);
-    setTimeout(() => skillsPopup(SKILLS.filter((s) => s.toLowerCase().includes(q))), SKILLS_SEARCH_MS);
+    if (opts.skillsPrompt === "menuFirst") skillsPopup([], ["Partial List (First 500 Entries)", "All"]);
+    else skillsPopup([]);
+    setTimeout(() => {
+      const results = SKILLS.filter((s) => s.toLowerCase().includes(q));
+      const leaves = skillsPopup(results);
+      if (checkboxes && results.length === 1 && !pill(results[0] as string))
+        toggle(results[0] as string, leaves[0] as HTMLElement);
+    }, SKILLS_SEARCH_MS);
   });
 
   // Prompt: Enter in the input opens a popup with matching options (and a nested category).

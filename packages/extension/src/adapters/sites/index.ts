@@ -6,6 +6,7 @@ import { greenhouse } from "./greenhouse/site.js";
 import { lever } from "./lever/site.js";
 import { oracle } from "./oracle/site.js";
 import { phenom } from "./phenom/site.js";
+import { successfactors } from "./successfactors/site.js";
 import { workday } from "./workday/site.js";
 
 /**
@@ -20,4 +21,5 @@ export const SITE_DEFINITIONS: Record<FormSiteId, SiteDefinition> = {
   ashby,
   phenom,
   dayforce,
+  successfactors,
 };

@@ -111,7 +111,10 @@ Workday shows each entry of a list as a section `<list>-N` ("Work Experience 2",
 "Websites 1"). `forms/lists.ts` matches a section's title, without its number, to a profile list (`work`,
 `education`, `languages`, `certifications`, `links`), the same heuristic the checklist uses. Website rows hold
 the profile's links in order (GitHub, portfolio, others), and LinkedIn too when the page has no LinkedIn field of
-its own (Workday has one; Oracle's link fields don't).
+its own (Workday has one; Oracle's link fields don't). SuccessFactors' lists are rows the same way ("Outside Work
+Experience 2", "Formal Education 1"), added with their Add (`kind: "row"`), without hints: their fields are the
+employer's numbered ones, matched here by label ("Company Name", "Title", "School", "Degree", "Major"). Their dates
+take a day, so a profile's `YYYY-MM` leaves them (`no-rule`), as it does Dayforce's.
 
 **Which entry a row takes** (`mapRows`): first the rows that already name an entry (their company, school,
 language or URL equals it, case and spacing aside), as on a form pre-filled from the last application; then
@@ -265,4 +268,4 @@ each with the value chosen in the run.
 
 **All of it, twice on Workday** (debug mode on): rows added and filled, `strict` refusing what it should, the
 language levels missed on their labels the first time (fixed) and filled the second. What those runs found is in
-[status](../status.md#the-first-workday-run-on-the-engine). Not yet run live on Oracle.
+[status](../status.md#the-first-workday-run-on-the-engine). Run live once on Oracle ([status](../status.md#not-yet-verified-for-real)).

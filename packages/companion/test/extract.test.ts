@@ -91,12 +91,22 @@ describe("helpers", () => {
     expect(companyFromUrl("https://www.linkedin.com/jobs/view/4012345678")).toBeUndefined();
     expect(companyFromUrl("https://www.indeed.com/viewjob?jk=abc123")).toBeUndefined();
     expect(companyFromUrl("https://www.indeed.com/cmp/Initech/jobs")).toBe("Initech");
+    // A provider's data centre names no employer.
+    expect(companyFromUrl("https://career17.sapsf.com/career?company=soylent&career_job_req_id=1000")).toBeUndefined();
   });
 
   it("canonicalizeUrl keeps only job id params", () => {
     expect(canonicalizeUrl("https://Example.com/jobs/1/?utm_source=x&gh_jid=42")).toBe(
       "https://example.com/jobs/1?gh_jid=42",
     );
+  });
+
+  it("canonicalizeUrl keeps a SuccessFactors requisition with its employer, on a host every employer shares", () => {
+    expect(
+      canonicalizeUrl(
+        "https://career17.sapsf.com/career?company=soylent&career_job_req_id=1000&career_ns=job_application&navBarLevel=JOB_SEARCH",
+      ),
+    ).toBe("https://career17.sapsf.com/career?company=soylent&career_job_req_id=1000");
   });
 
   it("canonicalizeUrl drops Workday's locale segment, so one job is one posting", () => {

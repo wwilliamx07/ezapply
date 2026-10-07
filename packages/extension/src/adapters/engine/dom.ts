@@ -266,6 +266,23 @@ function findOption(wanted: string, options: string[], strict: boolean): number 
   return -1;
 }
 
+/**
+ * Whether options read after typing `query` can be its results: one of them holds the query (case, spacing and
+ * punctuation aside). A list that changed only because it opened or re-rendered (Workday's category menu, Oracle's
+ * whole unfiltered list) doesn't; in live runs both were read as the results before the search had answered. Any
+ * one word of the query would be too loose: an unfiltered list of postal codes holds most halves of a code.
+ * Results that don't hold the query (a search that matches on something else) cost the wait its full length.
+ */
+export function answersQuery(options: string[], query: string): boolean {
+  const flat = (s: string) =>
+    norm(s)
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  const q = flat(query);
+  return !q || options.some((o) => flat(o).includes(q));
+}
+
 /** "YYYY", "YYYY-MM", "YYYY-MM-DD", "MM/YYYY" or "MM/DD/YYYY" → its parts. */
 export function parseDate(value: string): { year: string; month?: string; day?: string } | null {
   const v = value.trim();

@@ -5,6 +5,7 @@ import { greenhouse } from "./greenhouse.js";
 import { lever } from "./lever.js";
 import { oracle } from "./oracle.js";
 import { phenom } from "./phenom.js";
+import { successfactors } from "./successfactors.js";
 import { workday } from "./workday.js";
 
 /**
@@ -23,4 +24,5 @@ export const SITE_NOTES: Record<FormSiteId, string> = {
   ashby,
   phenom,
   dayforce,
+  successfactors,
 };

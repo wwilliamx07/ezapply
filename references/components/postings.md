@@ -7,7 +7,9 @@ a time is **active**: the default context for every request.
 Captures and metadata updates are serialized (one at a time) so two quick clicks can't race.
 
 1. **Canonical URL** (`canonicalizeUrl`): lowercase host, trailing slashes dropped, only query parameters
-   that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`, `jobseqno`: Phenom's only job id in its apply page's URL), and on
+   that identify a job kept (`gh_jid`, `jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`, `jobseqno`: Phenom's only job id in its apply page's URL, and `career_job_req_id` with `company`:
+   SuccessFactors' requisition and the employer, on a career host every employer of a data centre shares, whose
+   requisitions are numbered per employer), and on
    Workday the leading locale segment (`/en-US/`) dropped: Workday links to the same job with and without
    it. On Oracle (`oracleJobPath`) the language segment is dropped and so is everything after the job id, so
    a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. Each registry site
@@ -48,13 +50,13 @@ reaches `posting.md`.
   the site's reader (role, location, requisition) → the page title split on separators
   on ` | `, ` - `, ` – ` (unless the reader says the title is only the role; Oracle titles read "<role> - <Company> Careers") → company from the
   URL: on Workday the tenant (`workdayTenant`: the subdomain on myworkdayjobs.com, the path segment after
-  `recruiting` on myworkdaysite.com); on an Oracle Cloud host (`*.oraclecloud.com`) nothing, since the host
-  names Oracle's pod, not the employer; on LinkedIn and
+  `recruiting` on myworkdaysite.com); on an Oracle Cloud host (`*.oraclecloud.com`) or a SuccessFactors career host (`career17.sapsf.com`) nothing,
+  since the host names the provider's pod or data centre, not the employer; on LinkedIn and
   Indeed nothing (their job paths, `/jobs/view/<id>` and `/viewjob`, don't name the company), except Indeed
   company pages (`/cmp/<company>`); on another ATS host (Greenhouse, Lever, Ashby, iCIMS…) the first path
   segment (`boards.greenhouse.io/acme`); otherwise the site's own domain name.
 - **Tenant:** the content's site's own reading of its URL (the registry's `tenant`): a Workday tenant, an Oracle career site (host and site number, `jobs.example.com/cx_1`), a
-  Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host, a Dayforce client.
+  Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host, a Dayforce client, a SuccessFactors `company`.
 - Body: the site's reader's description where it has one (Workday's description container); elsewhere Mozilla Readability's main content,
   falling back to the whole body. Converted to markdown with Turndown.
 - `posting.md` starts with a header (`# role`, company, location, requisition, URL, a rule) then the body.
@@ -83,7 +85,8 @@ On real captures it tied two postings captured on one employer's careers site to
 requisitions by the page's Apply link, and another employer's to its Greenhouse job by `gh_jid`. Pages from a
 school's job board (Symplicity), employers' own career sites, iCIMS and SAP SuccessFactors link to nothing in the
 registry: those are
-bound on first use.
+bound on first use. (SuccessFactors' career site joined the registry since; a page linking to it with
+`career_job_req_id` would now be tied by that link.)
 
 ## Other operations
 - `list()`: every posting with a valid `meta.json`, newest update first (invalid ones are logged and

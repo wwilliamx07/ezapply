@@ -15,6 +15,7 @@ import {
   textDriver,
 } from "../src/adapters/widgets/native.js";
 import { reactSelectDriver } from "../src/adapters/widgets/react-select.js";
+import { ui5DatePickerDriver } from "../src/adapters/widgets/ui5-datepicker.js";
 import { installDomShims } from "./workday-fixture.js";
 
 installDomShims(document.defaultView as Window);
@@ -454,5 +455,59 @@ describe("a list that settles late, and a month picker", () => {
       error: /Dec 2026 can't be chosen/,
     });
     expect(await d.fill(monthPicker().c, "2025", { strict: true })).toMatchObject({ ok: false, error: /YYYY-MM/ });
+  });
+});
+
+describe("a UI5 Web Components date picker", () => {
+  /**
+   * The component as an app registers it under a scoped tag, carrying the `ui5-date-picker` attribute. Its app hears a
+   * date through the `change` event the component fires, with `{ value, valid }` (SuccessFactors' calendar widget).
+   */
+  function picker(attrs = 'value="" format-pattern="MM/dd/yyyy"') {
+    const c = field(
+      `<label>Start Date</label><ui5-date-picker-xweb ui5-date-picker="" ${attrs}></ui5-date-picker-xweb>`,
+    );
+    const el = c.querySelector("[ui5-date-picker]") as HTMLElement;
+    const heard: unknown[] = [];
+    el.addEventListener("change", (e) => heard.push((e as CustomEvent).detail));
+    return { c, el, heard };
+  }
+
+  it("reads the date and its parts from the component's attributes, as a saved page keeps them", () => {
+    const { c } = picker('value="12/31/2024" format-pattern="MM/dd/yyyy"');
+    const d = ui5DatePickerDriver();
+    expect(d.is(c)).toBe(true);
+    expect(d.value(c)).toBe("12/31/2024");
+    expect(d.dateParts?.(c)).toEqual(["MM", "DD", "YYYY"]);
+    expect(d.value(picker().c)).toBeNull();
+  });
+
+  it("sets the value in the component's own format and fires the change its app listens to", async () => {
+    const { c, el, heard } = picker();
+    expect(await ui5DatePickerDriver().fill(c, "2024-03-05", { strict: true })).toEqual({
+      ok: true,
+      readBack: "03/05/2024",
+    });
+    expect((el as unknown as { value: string }).value).toBe("03/05/2024");
+    expect(heard).toEqual([{ value: "03/05/2024", valid: true }]);
+    const iso = picker('value="" format-pattern="yyyy-MM-dd"');
+    expect(await ui5DatePickerDriver().fill(iso.c, "03/05/2024", { strict: true })).toMatchObject({
+      readBack: "2024-03-05",
+    });
+  });
+
+  it("refuses a month without a day, a read-only picker and a pattern with month names", async () => {
+    const d = ui5DatePickerDriver();
+    const { c, heard } = picker();
+    expect(await d.fill(c, "2024-03", { strict: true })).toMatchObject({ ok: false, error: /takes a day/ });
+    expect(heard).toEqual([]);
+    expect(await d.fill(picker('value="" readonly=""').c, "2024-03-05", { strict: true })).toMatchObject({
+      ok: false,
+      error: /read-only/,
+    });
+    expect(await d.fill(picker('value="" format-pattern="MMM d, y"').c, "2024-03-05", { strict: true })).toMatchObject({
+      ok: false,
+      error: /names months/,
+    });
   });
 });

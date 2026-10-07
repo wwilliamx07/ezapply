@@ -98,7 +98,7 @@ the DOM listeners the submit guard relies on.
 | text, number, textarea | Native prototype setter + `input`/`change`, blur; fallback: React `onChange`/`onBlur` |
 | password | Refused: the user types passwords |
 | dropdown | Open the listbox (a portal under `body`; [finding it](#finding-a-dropdowns-listbox)), pick the best match, check the button label; fallback: React `onClick` on the option. No match → `availableOptions`. Closing waits until the listbox has gone |
-| typeahead | Per value: type the query, wait for its results ([searching](#typeahead-searches-and-lists)) and pick the match; a value like `"Job Board > LinkedIn"` walks nested menus; already-selected values are skipped; chips are read back. Each value is matched on its own: one that matches nothing goes to `unmatched` with the options its search showed and the rest are still selected; one where Workday selected an option itself (single-select prompts select on Enter) goes to `inexact`. `ok` is false while anything is unmatched |
+| typeahead | Per value: type the query, wait for its results ([searching](#typeahead-searches-and-lists)) and pick the match; a value like `"Job Board > LinkedIn"` walks nested menus; already-selected values are skipped; chips are read back. Each value is matched on its own: one that matches nothing goes to `unmatched` with the options its search showed and the rest are still selected; one where Workday selected an option itself (single-select prompts select on Enter) goes to `inexact`; one whose option was chosen but didn't stay selected is named in the error ("Chosen, but the page didn't keep: …"), not in `unmatched`, so the agent doesn't go looking for other wordings of an option it found. An option already selected when its search's results show (a checkbox list ticks a search's only result on Enter) isn't pressed ([checkbox lists](#typeahead-searches-and-lists)). `ok` is false while anything is unmatched or unkept |
 | radio, checkbox, checkbox-group | Click the label or input; check `checked`/`aria-checked` |
 | date | `YYYY`, `YYYY-MM` or `YYYY-MM-DD` (also `MM/YYYY`, `MM/DD/YYYY`), typed into the Month/Day/Year parts present ([dates](#dates-typed-into-workdays-split-widget)); errors if the form needs a part not given. Read back from what the parts hold for the page; a mismatch fails with "the page didn't take the date … ask the user to type it" |
 | file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`; else a drop on the drop zone; confirmed only by a **newly shown** file whose name matches, so a same-named file left from a previous application doesn't pass |
@@ -170,12 +170,26 @@ without a choice ignores the next press on its button. Filling it after `list_op
 without the second attempt.
 
 ### Typeahead searches and lists
-- **Waiting for results.** Typing a query waits until the options on screen differ from those before it
-  (checked every 100 ms, up to 4 s, then once more after React's Enter handler), or until "No Items." has
+- **Waiting for results.** Typing a query waits until the options on screen differ from those before it and
+  one of them holds the query, case, spacing and punctuation aside (`answersQuery` in `engine/dom.ts`; checked
+  every 100 ms, up to 4 s, then once more after React's Enter handler), or until "No Items." has
   stayed for 2 s (a search that found nothing; it also shows briefly while results load). Reading once the
   DOM went quiet, as before, returned the previous query's results in the second live run: each
   `search_options` call got the one before's, and the first got none. (Calls on one tab were already one at a
   time in the companion, so this was timing, not overlap.)
+  **Why the query must show in them** (2026-10-06): on a hierarchical prompt (a field of study under "All" and
+  "Partial List (First 500 Entries)") the category menu rendered just after the query was typed, so the options
+  differed from those before, and were read as the results about 100 ms after Enter: "No option matches", while the
+  search found the value a moment later. Results that hold no part of the query as typed (a search that matches on
+  something else) now cost the full wait and its retry, about 6 s, before they're read.
+- **Checkbox lists.** Some multi-selects show a checkbox on each option (a `promptLeafNode` with
+  `data-automation-checked`), keep the popup open when one is pressed, and toggle on every press. On Enter they
+  tick a search's only result themselves. Pressing that option then unticked it: live, every skill searched by
+  its exact name and a citizenship were selected and then unselected in the same moment, the fill reported "No
+  option matches", and the agent's retries with other wordings did the same. An option is now pressed only when
+  it isn't already selected (its chip shows, or its `data-automation-checked` is `Checked`); the trace notes
+  `selected on Enter` when it was. While such a popup is open its chips list may leave the page; debug mode's
+  failure markup then holds it as "the last popup the page closed".
 - **Each option once.** Both option hooks (`promptOption`, `promptLeafNode`) match one live option, one inside
   the other; the innermost is kept (a press on it reaches the outer one's handlers). `search_options` and
   `list_options` also list each label once, and "No Items." is never an option.
@@ -270,7 +284,7 @@ with their row (`file-upload-item` / `file-upload-successful`), or the rows them
 name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
 
 ## Waits (`autofill-timing.yaml`)
-Every wait the adapter makes (about 46: after each field, opening and closing a dropdown, a typeahead's
+Every wait the adapter makes (about 48: after each field, opening and closing a dropdown, a typeahead's
 search, typing a date, uploads, rows, steps) is a named value in `T` (`engine/timing.ts`), with a line on what
 it's for in `TIMING_DOCS` (`protocol/src/timing.ts`). Workday's values are its registry entry's waits: the
 standard ones (`STANDARD_WAITS`), which were measured here

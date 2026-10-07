@@ -12,5 +12,6 @@ export * from "./phenom.js";
 export * from "./postings.js";
 export * from "./rpc.js";
 export * from "./sites.js";
+export * from "./successfactors.js";
 export * from "./timing.js";
 export * from "./workday.js";

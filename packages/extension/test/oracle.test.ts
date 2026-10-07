@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createOracleApi } from "./adapters.js";
 import { buildOracleApplication } from "./oracle-fixture.js";
 import { installDomShims } from "./workday-fixture.js";
@@ -145,6 +145,37 @@ describe("filling", () => {
     // Already chosen: filling it again, by the label or what the field shows, changes nothing.
     const again = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
     expect(again[0]).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+  });
+
+  describe("a list that searches late and only when its text changes, as live", () => {
+    beforeEach(() => setup({ liveSearch: true }));
+    afterEach(() => api.setTiming(null));
+
+    it("waits for the search, not the unfiltered list typing shows first", async () => {
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+      expect(fixture.comboValue("postalCode-36")).toBe("K2K 3E9, Kanata, Ontario");
+    });
+
+    it("searches again for text the widget kept from a search the closed list dropped", async () => {
+      const input = document.getElementById("postalCode-36") as HTMLInputElement;
+      input.focus();
+      input.click();
+      input.value = "K2K 3E9";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      input.blur();
+      await new Promise((res) => setTimeout(res, 20));
+      api.setTiming({ typeaheadResultsMs: 800 });
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+    }, 10_000);
+
+    it("searches a list that didn't show within the open waits", async () => {
+      api.setTiming({ dropdownOpenMs: 10, dropdownOpenRetryMs: 10 });
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+    });
   });
 
   it("takes a phone number the page formats as it likes", async () => {

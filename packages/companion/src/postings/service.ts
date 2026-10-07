@@ -37,7 +37,21 @@ const HIDDEN_DIRS = new Set([".history", ".build", ".previews"]);
 
 /** Job query parameters that identify a posting; everything else is dropped from the canonical URL. */
 // `jobseqno`: Phenom's job on an employer's careers site, the only thing naming the job in its apply page's URL.
-const JOB_ID_PARAMS = new Set(["gh_jid", "jobid", "job_id", "jid", "jk", "currentjobid", "id", "reqid", "jobseqno"]);
+// `career_job_req_id` and `company`: the requisition and the employer on SuccessFactors' career site, a host shared by
+// every employer in a data centre whose requisitions are numbered per employer.
+const JOB_ID_PARAMS = new Set([
+  "gh_jid",
+  "jobid",
+  "job_id",
+  "jid",
+  "jk",
+  "currentjobid",
+  "id",
+  "reqid",
+  "jobseqno",
+  "career_job_req_id",
+  "company",
+]);
 
 /** Posting ids are folder names ezapply made (`2026-09-24_acme_backend-engineer`): no separators, no `..`. */
 const POSTING_ID = /^[\w.-]+$/;

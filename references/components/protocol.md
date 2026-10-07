@@ -16,7 +16,7 @@ so a change here is a change to the contract between them.
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
 | `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT` ([oracle-adapter](oracle-adapter.md#which-pages)) |
 | `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
-| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts`, `dayforce.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply`; Dayforce's `…/<client>/<site>/jobs/<id>` on `*.dayforcehcm.com` with or without a locale, the client as tenant, the posting id as job, a canonical path from the client to the id ([sites](sites.md#dayforce-sitesdayforce)) |
+| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts`, `dayforce.ts`, `successfactors.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply`; Dayforce's `…/<client>/<site>/jobs/<id>` on `*.dayforcehcm.com` with or without a locale, the client as tenant, the posting id as job, a canonical path from the client to the id ([sites](sites.md#dayforce-sitesdayforce)); SuccessFactors' career site paths on its `career<n>` hosts (`sapsf.com`, `successfactors.eu`…), `company` as tenant, `career_job_req_id` (or `jobId`) as job, a signed-in page's URL naming neither ([sites](sites.md#sap-successfactors-sitessuccessfactors)) |
 
 The package exports `.` (everything), and `./workday`, `./oracle`, `./sites`, `./match` and `./timing` for the in-page adapters:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
@@ -29,7 +29,7 @@ list of sites derives from it, so a new site's only protocol change is its entry
 
 | Field | Meaning |
 |---|---|
-| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce` (each also in `SiteId`) |
+| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce`, `successfactors` (each also in `SiteId`) |
 | `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
 | `signature` | What the site's own pages render, as a CSS selector list: a page (or frame) is the site's when its document matches any part. How the extension tells a site, before the URL ([telling a site](extension.md#telling-a-pages-site-framests)). Each part is the provider's own markup (its widgets' attributes, class names, script host), never a link to it or its embed script, which an employer's careers page has too |
 | `isUrl(url)` | A posting or application page of the site by its URL alone: what decides where no page can be read (a captured page's links, the companion's canonical URLs, a tab the extension can't read) |
@@ -202,6 +202,6 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
   companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
   **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason. **5:** `SiteId` gained `phenom`. **6:** `SiteId` gained `dayforce`, and
-  `addButtons[].kind` gained `edit`, which an older companion would reject.
+  `addButtons[].kind` gained `edit`, which an older companion would reject. **7:** `SiteId` gained `successfactors`.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

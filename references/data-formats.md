@@ -89,7 +89,7 @@ scale: 1                  # multiplies the defaults of the waits left unset (not
 ```
 Keys: `STANDARD_WAITS` in `protocol/src/timing.ts` (ms, 0–120000; `pollMs` 5 or more). A top-level key
 changes the wait on every site; a key under a site's id (`workday:`, `oracle:`, `greenhouse:`, `lever:`,
-`ashby:`, `phenom:`, `dayforce:`) changes it on that site only and wins. The defaults are each site's own waits (its registry entry);
+`ashby:`, `phenom:`, `dayforce:`, `successfactors:`) changes it on that site only and wins. The defaults are each site's own waits (its registry entry);
 where they differ between sites the template lists each site's. A missing file or key means the site's own. A mistake (bad YAML, an unknown key, a value out of range) falls back
 to the default for that part, is logged, and shows in `get_form` as `timingIssues`; it never fails a call.
 
@@ -146,7 +146,7 @@ the call in the page:
   or id, role, and its label or text up to 40 characters); `wait` (`kind` `waitFor`, `settle` or `sleep`, `name`
   the wait in `T` the caller passed or its length, `max`, `quiet` and `quietMs` for a settle, `ms` taken, `end`
   `condition`, `quiet`, `max` or `slept`); `branch` (`name`: `dropdown re-open`, `date entered again`, `date
-  part set directly`, `typeahead search again`, `upload by drop`, `search the list`, with details); `match`
+  part set directly`, `typeahead search again`, `selected on Enter`, `upload by drop`, `search the list`, with details); `match`
   (`wanted`, `of` options, `strict`, `chosen`, or the `options` on a miss, up to 40); `listbox` (Workday:
   `shown`, `stale`, `read`, `options`, up to 80) and `list` (Oracle: `options`); `field` (`op` `fill`,
   `upload`, `remove`, `list` or `search`, `fieldId`, and once it ends `ms`, `ok`, `error`) and `field-end`;
@@ -202,10 +202,10 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
-from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `phenom` | `dayforce` | `generic`, of the content: as its page
+from), `pageTitle`, `site` (`workday` | `oracle` | `greenhouse` | `lever` | `ashby` | `phenom` | `dayforce` | `successfactors` | `generic`, of the content: as its page
 showed it to the extension, else by its URL), `tenant?` (the employer's space on its site, read from the URL as
 that site reads it: a Workday tenant, an Oracle career site as `host/site`, a
-Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host, a Dayforce client), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
+Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host, a Dayforce client, a SuccessFactors `company`), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status`, `tabId?`,
 `application?`, `capturedAt`, `updatedAt`. `status`: `captured` | `drafting` | `attached` | `filled` | `submitted` |
 `archived`. `id` is also the folder name: letters, digits, `_`, `.`, `-` only.
 

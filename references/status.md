@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-05.
+As of 2026-10-06.
 
 ## Done
 | Area | State |
@@ -19,6 +19,7 @@ As of 2026-10-05.
 | Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted ([sites](components/sites.md)) |
 | Phenom | Employers' careers sites run by Phenom, whose multi-step apply flow is on the employer's domain: a definition on the engine (shared drivers, a react-datepicker month picker, selects that settle late, rows, the resume required on step 1), built from steps 1 to 3 of a live flow saved with placeholder values ([sites](components/sites.md#phenom-sitesphenom)) |
 | Dayforce | Dayforce's candidate portal (`jobs.dayforcehcm.com`, every employer on one host): a definition on the engine with an Ant Design Select driver through rc-select's context, phone numbers read as two fields, Personal Information's own form and Update, employment and education records added, saved, edited and deleted through their forms, uploads, the Submit step as the review page. Built from one saved step and the portal's own scripts ([sites](components/sites.md#dayforce-sitesdayforce)) |
+| SAP SuccessFactors | SuccessFactors Recruiting's career site (`career<n>.sapsf.com` and the like, every employer of a data centre on one host): a definition on the engine for its one-page application, with its own paginated picklist driver (through its framework's component registry) and attachment driver (through the upload popup), a shared UI5 Web Components date picker driver, rows of lists added and removed, documents uploaded, replaced and removed, Apply as the submit. Built from one saved application and the page's own scripts ([sites](components/sites.md#sap-successfactors-sitessuccessfactors)) |
 | Deterministic autofill | `autofill_step` ([autofill](components/autofill.md)): hinted profile fields; Workday's work, education, language and website rows, added and mapped to profile entries; link fields; Oracle's work, education and language entries through their inline forms; answer-bank questions by wording, plain or computed from the profile; strict option matching shared with the adapters (`strict` fills); options listed where a value has several wordings; fills in chunks of whole sections. Phase 1 run live once; all of it in two Workday runs |
 | Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
@@ -38,7 +39,7 @@ As of 2026-10-05.
   same calls as before) before `strict`. **Workday ran live twice** (debug mode on;
   [the first run](#the-first-workday-run-on-the-engine)). It wasn't slower: autofill's 20-field My Experience fill
   took 13.4 s in the page. `strict` refused what it should have (a field of study and a language, below). Oracle
-  hasn't run on it.
+  ran on it once (2026-10-06): its address and school lists failed, fixed since, below.
 - **Greenhouse, Lever and Ashby with the extension** (2026-10-03). Checked live through their built bundles in
   headless Edge. One real application so far, on Ashby: capture, text fields, the location,
   Yes/No buttons and the resume upload worked; every radio and checkbox group was missed, because the definition
@@ -46,6 +47,16 @@ As of 2026-10-05.
   live page and covered by a saved copy of it, not yet used in a real application
   ([sites](components/sites.md#ashby-sitesashby)). Not tried: uploads on Lever, the confirmation pages, a real
   application on Lever.
+- **Searches and multi-selects after two Workday runs and one Oracle run** (2026-10-06, debug mode on). Fixed and
+  covered by fixture tests that fail on the old logic, not yet run live: on Workday, multi-selects with checkboxes
+  (skills, a citizenship) unticked the option Workday had ticked itself on Enter, and a hierarchical prompt's
+  category menu was read as a search's results ([typeahead](components/workday-adapter.md#typeahead-searches-and-lists));
+  on Oracle, the address lists' late server search was missed and then never ran again for the same text, and a
+  school list that didn't show within the open waits failed without searching
+  ([searching a list](components/oracle-adapter.md#searching-a-list)). A search whose results don't hold the
+  query as typed now waits its full length before they're read (Workday about 6 s, Oracle about 9 s); how often
+  that happens on real lists is for the next runs' traces. Also seen, not investigated: a Workday failure screenshot
+  with several language-level dropdown lists still open on screen.
 - **A real Greenhouse application** (2026-10-06, filled, not submitted): text fields, the static lists, the phone's
   country and the uploads worked. Three things didn't, all fixed and covered by tests, not yet run live again: the
   form couldn't be read at all with a multi-select on it (its id ends in `[]`, put into a selector unescaped); the
@@ -76,6 +87,18 @@ As of 2026-10-05.
   candidate's Dayforce profile: use a record made for the test); the questionnaire's pages and their step key; the
   Submit step read as the review page. Save the questionnaire, a record open and saved, the Submit step and the
   posting page (`ezapply debug export`) as fixtures.
+- **SAP SuccessFactors** (2026-10-06): built from one saved application (a signed-in candidate's, the profile, two
+  lists and the documents filled from an earlier one) and, for the rest, from the page's own scripts saved with it;
+  tested in jsdom only, with its components modelled. Nothing has run live. Check in one real application, with debug
+  mode on: the application listed `successfactors` in `browser_status` and tied to its posting by the page's
+  requisition (a signed-in page's URL names no job); a list chosen through its component (the riskiest part: juic's
+  registry and the picklist's server request, whose argument order and `contains` filter were read from its script)
+  and read back, the province list enabled and loaded after a country, and whether the country and province lists
+  are hinted (their field names were assumed); a date taken by the page (its own validation message gone, the
+  value kept after Save); a document uploaded through the popup, and a second one to the same field (whether the
+  popup still has a file input); a row added and removed; a document removed (use one uploaded for the test: it's
+  deleted on SuccessFactors' side). Never press Apply; Save keeps a draft, and isn't needed. Save the upload popup,
+  an open list and Apply's errors (`ezapply debug export`) as fixtures.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Workday's application URL
@@ -88,7 +111,8 @@ As of 2026-10-05.
   shapes, the matching table and over MCP. Run over the user's postings, it ties about two in five: two by their
   careers page's Apply link, one by an embedded Greenhouse board's `gh_jid`, and the rest by their own URL. The
   others (a school's job board, employers' own career sites, iCIMS, SuccessFactors) are bound to their tab on the
-  first fill. Not yet seen live: the first-fill
+  first fill. SuccessFactors' career site joined the registry later; whether an employer's careers page in front of it
+  links to it wasn't checked. Not yet seen live: the first-fill
   binding and its `postingBound` notice, title matching against real postings' roles (the title is read on every
   site's saved pages, including Workday's sign-in page), and whether the binding lost at a restart matters.
 - **Autofill debug mode, the companion's part** (`ezapply debug on`, 2026-10-01): tested over MCP on the
@@ -111,9 +135,11 @@ As of 2026-10-05.
   forms, computed answers, options listed for values with several wordings, fills in chunks, and `strict` fills
   in both adapters. Replayed on that run's recorded pages, it adds the rows the agent added and fills 34 of the
   37 row fields with the agent's own values (the other three: a reworded role description and two language
-  levels the agent judged lower) and 8 question fields as chosen in the run. Not yet run live on Oracle. `strict` is
+  levels the agent judged lower) and 8 question fields as chosen in the run. Run live once on Oracle (2026-10-06): it added a link row and an
+  education entry through its inline form and Save; what failed was the list searches above and one strict miss
+  (a value the list words differently). `strict` is
   an adapter change ("One adapter change per live run" in [development](development.md)): a slower next run
-  points at it first. Oracle's work and education forms have never been seen, so their fields are matched by
+  points at it first. Oracle's work form has never been seen live, so its fields are matched by
   hint and label on trust.
 - **Fills twice as slow per field in debug mode's first live run, cause unknown.** Dropdowns took about 3.5–4 s
   each when filled (a 38-field step in 93 s, 11 dropdowns in 45 s), against about 1.8 s in an earlier run on the
@@ -323,10 +349,10 @@ the first time, and each step advanced on the first Save and Continue. 102 s in 
   the page and waits ([why](components/documents.md#review-before-attaching)); not yet seen live.
 
 ## Deferred
-**More of the most common providers.** iCIMS, SmartRecruiters, SuccessFactors, Taleo and BrassRing couldn't be
+**More of the most common providers.** iCIMS, SmartRecruiters, Taleo and BrassRing couldn't be
 built from public pages: their applications sit behind candidate accounts, block headless browsers, or show
 a bot challenge, which ezapply doesn't work around. Each needs pages saved from a real application
-([sites](components/sites.md#why-these-three)). None is planned yet.
+([sites](components/sites.md#why-these-three)); SuccessFactors was built that way. None is planned yet.
 
 **Removing the upgrade shims.** Two pieces exist only for installs from before the background daemon went:
 moving `~/.ezapply/daemon.json` to `config.json` (and `init` deleting `daemon-state.json`), and `ezapply chat`
@@ -415,7 +441,7 @@ what changed from it, and each linked page gives the reason.
 | Long-running daemon started by hand or at login | No daemon: the companion runs inside `ezapply chat` (after a stage where `ezapply mcp` started it on demand and it stopped when idle) ([architecture](architecture.md#processes-and-lifecycle)) |
 | `ezapply init` then a manual daemon start, a pairing code, `claude` | `npm run setup`, then Claude onboards; pairing without a code |
 | Content script declared for Workday hosts | Adapter injected into the MAIN world on demand ([workday-adapter](components/workday-adapter.md)) |
-| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce ([adapters](components/adapters.md)) |
+| A Workday adapter | One adapter engine with a definition per site: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors ([adapters](components/adapters.md)) |
 | Chrome only | Chrome and Firefox ([extension](components/extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | One TeX engine for everything (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` (default `auto`) ([documents](components/documents.md#tex-engines-texenginests)) |
 | Playwright tests of the extension with React harnesses | jsdom tests against a behavioural fixture and live snapshots; no Playwright (the recon scripts that used it were for the first adapter builds and are gone) |

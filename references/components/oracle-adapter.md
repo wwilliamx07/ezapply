@@ -124,7 +124,7 @@ date's month, day and year lists are matched as before, since the adapter builds
 | Kind | Approach |
 |---|---|
 | text, number, textarea | Native setter + `input`/`change` (Knockout's `value` binding reads on change, `textInput` on input), then focus leaves. A read-only input is refused. A phone number the page reformats (`416-555-0100` shown as `(416) 555-0100`, live) counts when the digits are the same |
-| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler. An option matching the value (`matchOption`; with `strict`, only a strict match: see [Workday's strict fills](workday-adapter.md#filling)) is pressed; else the value is typed, and once the options change (or "no results" shows) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
+| dropdown (cx-select) | Focus and press the input (the widget opens and loads every option), else its arrow button, else React's handler; a list that still hasn't shown is searched anyway, and only if the search shows nothing either is it "Could not open the list" (live, a school list didn't show within the open waits twice, while `search_options`, which always types, found the school). An option matching the value (`matchOption`; with `strict`, only a strict match: see [Workday's strict fills](workday-adapter.md#filling)) is pressed; else the value is typed, and once the options change and one of them holds the value (or "no results" shows, not having shown before; [searching](#searching-a-list)) the match is pressed; failing that, the value's part before its first comma is typed (the postal-code search finds "K2K 3E9" but not the full label "K2K 3E9, Kanata, Ontario"). The read-back is what the input shows after focus leaves, which may be the start of the option's label: the city option "Kanata, Ontario" shows "Kanata" once chosen. Leaving the input also puts back typed text the list didn't take, so what shows then is the choice, not the query. Nothing matches: the list is closed and the options are returned; the widget puts its old value back when focus leaves. An auto-suggest field keeps typed text |
 | radio (pills) | Press the matching pill unless already pressed: a pressed single-choice pill unselects itself when pressed again |
 | radio (native) | Press the input (Knockout's `checked` binding reads it on click), else its label |
 | checkbox-group (pills) | Press each pill whose state must change |
@@ -138,6 +138,25 @@ typing. Another list left open is closed before opening one. All three are from 
 the page bundle. And from the live run: choosing a province re-renders the city list, replacing its input, so
 the adapter looks the input up again by id whenever the one it holds has left the page; typing into the old
 one had searched nothing.
+
+### Searching a list
+`typeQuery` types the value and waits (up to `typeaheadResultsMs`) for options that differ from those before
+and of which one holds the value, case, spacing and punctuation aside (`answersQuery` in `engine/dom.ts`), or for
+"no results" when it wasn't already showing (a list still loading shows it too). If none come it clears the
+text, waits `typeaheadClearMs` (1 s), types the value again and waits once more (trace branch
+`typeahead search again`).
+
+**Why** (2026-10-06, a city and a postal code on a live tenant, both failing at every attempt): the address
+lists open on "no results" while their first page loads. Typing re-renders the whole unfiltered list at once
+(500 postal codes from `A0A`), and the server search runs about half a second later. The old wait took that
+re-render for the results (the options differed from the empty list before), matched nothing and closed the
+list, which dropped the search. The widget searches only when its text changes and keeps the last text typed
+after the list closes, so every later fill or `search_options` with the same value searched nothing (no request
+at all in 4 s) and read the unfiltered list again; a shorter query (a code's first half) did search. Requiring
+the value in the results makes the first attempt wait for the search; clearing and typing again makes the
+widget search a text it already holds. The clear's wait must outlast the widget's own delay before it searches,
+which is why it's a wait of its own. Results that don't hold the value (a search matching on something else) cost
+both waits before they're read, about 9 s.
 
 **Stale errors.** A list's "required" error stays a moment after it's filled, until the page validates
 again. After a batch, fields that were filled but still show an error get up to `afterFieldMaxMs` for it
@@ -190,8 +209,8 @@ untrusted event aimed at one. The email step's Next is not a submit control.
 Oracle's registry entry holds the standard waits, and `autofill-timing.yaml` changes them for Oracle under
 `oracle:` ([waits owned by the site](adapters.md#waits-owned-by-the-site),
 [Workday's waits](workday-adapter.md#waits-autofill-timingyaml)). They're the same named waits as Workday's:
-`dropdown*` for the lists, `typeahead*Results*` for a list's search, `checkMs` for pills, radios and
-checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` for items and Save, `step*`,
+`dropdown*` for the lists, `typeahead*Results*` for a list's search, `typeaheadClearMs` (Oracle's alone) before
+typing a search again, `checkMs` for pills, radios and checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` for items and Save, `step*`,
 `pageAction*`, `afterField*`.
 
 ## What was verified, and how
@@ -214,8 +233,11 @@ checkboxes, `date*`, `upload*`, `remove*`, `addRowMs` / `removeRow*` / `row*` fo
   phone number, stale "required" errors, and "Saved" as an error. The **Cover Letter** upload field didn't
   appear in `get_form` on the live page, though the page the user saved earlier has one; why is unknown
   (Claude put the cover letter under Additional Documents). Next time, a saved copy of the page will tell.
-- **Not yet live:** language and license tiles, deletes, the multi-page flow, confirmation detection, and the
-  adapter on the engine (2026-10-03; its golden schemas and behaviour tests are unchanged).
+- **On the engine, live** (2026-10-06, another employer's single-page flow, autofill and the agent): City and
+  Postal Code failed at every attempt, the search problem [above](#searching-a-list), and the school list twice
+  with "Could not open the list". Both fixed and reproduced by the fixture's `liveSearch` postal list (its tests
+  fail on the old logic), not yet run live.
+- **Not yet live:** language and license tiles, deletes, the multi-page flow, confirmation detection.
 
 ## Limits
 - **English button texts.** Apply, Use My Profile, Next, Previous, Submit and the confirmation wording are

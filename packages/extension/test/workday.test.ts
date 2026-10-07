@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { matchOption, press } from "../src/adapters/engine/dom.js";
+import { answersQuery, matchOption, press } from "../src/adapters/engine/dom.js";
 import { installSubmitGuard as installGuard } from "../src/adapters/engine/guard.js";
 import { workday } from "../src/adapters/sites/workday/site.js";
 import { createWorkdayApi } from "./adapters.js";
@@ -360,6 +360,14 @@ describe("matching option text", () => {
     expect(matchOption("Yes", ["Yes, I will require sponsorship", "No"], true)).toBe(-1);
     expect(matchOption("Yes", ["Yes, I will require sponsorship", "No"])).toBe(0);
   });
+
+  it("tells a search's results from a list that only opened or re-rendered", () => {
+    expect(answersQuery(["Partial List (First 500 Entries)", "All"], "Computer Science")).toBe(false);
+    expect(answersQuery(["A0A 0A1, Avondale, NL", "A0A 3E9, Holyrood, NL"], "K2K 3E9")).toBe(false);
+    expect(answersQuery(["Applied Computer Science", "Computer Science"], "Computer Science")).toBe(true);
+    expect(answersQuery(["C++ Programming Language"], "C++")).toBe(true);
+    expect(answersQuery(["K2K 3E9, Kanata, ON"], "k2k 3e9")).toBe(true);
+  });
 });
 
 describe("uploading over a leftover file", () => {
@@ -506,6 +514,39 @@ describe("timing", () => {
     api.setTiming({ dropdownOpenMs: 700, bogus: 1, stepMs: -5 } as never);
     expect(T).toEqual({ ...STANDARD_WAITS, dropdownOpenMs: 700 });
   });
+});
+
+describe("skills prompts as live variants", () => {
+  const id = (automationId: string) =>
+    api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === automationId)?.id as string;
+  const build = (skillsPrompt: "checkboxes" | "menuFirst") => {
+    fixture = buildWorkdayStep(document, { skillsPrompt });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+  };
+
+  it("keeps an option a list with checkboxes ticked itself on Enter, and ticks the others", async () => {
+    build("checkboxes");
+    await api.remove(id("formField-skills"));
+    const [r] = await api.fill([{ fieldId: id("formField-skills"), value: ["TypeScript", "React.js", "Python"] }]);
+    expect(r).toMatchObject({
+      ok: true,
+      readBack: ["TypeScript", "React.js", "Python (Programming Language)"],
+    });
+  }, 20_000);
+
+  it("waits for the results when the category menu shows first", async () => {
+    build("menuFirst");
+    await api.remove(id("formField-skills"));
+    const [r] = await api.fill([{ fieldId: id("formField-skills"), value: ["Python"] }]);
+    expect(r).toMatchObject({ ok: true, readBack: ["Python (Programming Language)"] });
+    expect((await api.searchOptions(id("formField-skills"), "sql")).map((o) => o.label)).toEqual([
+      "Structured Query Language (SQL)",
+      "U-SQL",
+    ]);
+  }, 20_000);
 });
 
 describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't close them)", () => {

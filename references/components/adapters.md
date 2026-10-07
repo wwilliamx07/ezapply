@@ -12,7 +12,7 @@ skills treat them all alike.
 | `engine/extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
 | `engine/api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
 | `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
-| `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
+| `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
 | `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
 | `engine/trace.ts` | Autofill debug mode's trace ([below](#autofill-debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
@@ -22,14 +22,16 @@ skills treat them all alike.
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
 
 Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (their own drivers, `page.ts`, `fill.ts`,
-`selectors.ts` and `widgets.ts` beside `site.ts`), and [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
-`site.ts` each, on shared drivers).
+`selectors.ts` and `widgets.ts` beside `site.ts`), [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
+`site.ts` each, on shared drivers), and [SAP SuccessFactors](sites.md#sap-successfactors-sitessuccessfactors) (a
+`site.ts`, with its picklist and attachment drivers in `widgets.ts`).
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
 other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
 differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 150 to 165 lines each; Phenom,
 with steps and rows, about 330; Dayforce, with steps, records, Personal Information's own form and phone numbers
-read as two fields, about 490.
+read as two fields, about 490; SuccessFactors, one page with rows and documents, about 320, plus 350 of drivers for
+its own framework's widgets.
 
 **Why TypeScript, not data.** A definition is code: typed, able to hold a small function where a selector isn't
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
@@ -126,6 +128,7 @@ the options seen.
 | `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
 | `toggleButtonsDriver(selector)` (`buttons.ts`) | A choice of `aria-pressed` buttons (Ashby's Yes / No), as a radio |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
+| `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites.md#sap-successfactors-sitessuccessfactors)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
 | `fileDriver({ input?, names, removeButton?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field. Done only when the page shows a **new** file of that name; removed by its own button |
 
 **The combobox types a key too.** Lever's location field searches on keyup, not on input (seen live): setting
@@ -178,8 +181,10 @@ checked in the version Dayforce bundles, but the driver hasn't run live ([status
 ### A site's own drivers
 A widget no shared driver handles gets a driver in the site's folder: Workday's listbox dropdown, prompt
 (typeahead with nested menus), split date and drop zone; Oracle's cx-select, date lists, pills and attachment
-buttons. Workday and Oracle wrap their existing fillers and readers as drivers (`sites/<site>/widgets.ts`), so
-none of their logic changed in the move.
+buttons; SuccessFactors' paginated picklist and attachment fields, both components of its own framework (juic), driven
+through juic's component registry and the attachment view's upload popup
+([sites](sites.md#the-paginated-picklist-through-its-component)). Workday and Oracle wrap their existing fillers and
+readers as drivers (`sites/<site>/widgets.ts`), so none of their logic changed in the move.
 
 ## Waits, owned by the site
 Each site owns its waits. Its registry entry (`SiteInfo.waits`, in `protocol/src/sites.ts`) gives every named wait
@@ -211,9 +216,9 @@ beside the result, never in it, and the companion writes it into the call's reco
   of the element (tag, automation id, role, label); every wait, with its name, how long it was allowed and took,
   and whether its condition, quiet or its maximum ended it; how each value was matched against the options; each
   field's start, end and outcome; and the branches the fillers take only sometimes, which they name themselves
-  (Workday: `dropdown re-open`, `date entered again`, `date part set directly`, `typeahead search again`,
+  (Workday: `dropdown re-open`, `date entered again`, `date part set directly`, `typeahead search again`, `selected on Enter`,
   `upload by drop`, and each dropdown's `listbox`: the listboxes on screen, the one read, its options; Oracle:
-  `search the list` and the list's options).
+  `search the list`, `typeahead search again` and the list's options).
 - **Around it:** the page's state before and after (URL, step, `document.visibilityState`, `hasFocus()`); its DOM
   changes, summarised (the topmost element of each addition and removal, with its size, and changes to
   `aria-expanded`, `aria-selected`, `aria-invalid`, `value`, `disabled` and `hidden`), which shows a listbox opening
@@ -259,7 +264,8 @@ its hooks come off after 15 minutes regardless.
 - Each site's `isSubmit`: Workday's and Oracle's own tests; Greenhouse, Lever and Ashby use `isSubmitByText`: a
   `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application". Phenom goes by
   the words alone, since its Next is a `type=submit` button too; Dayforce by its Submit's hook and the words, since
-  its forms' Update buttons are `type=submit`. On a one-page
+  its forms' Update buttons are `type=submit`; SuccessFactors by Apply's hook (`_submitBtn`) and the words "Apply" or
+  "Submit". On a one-page
   site Submit sits beside every field, so the guard's Enter case matters as much as the click.
 - The conformance test checks, for every registered site, that the guard blocks a synthetic click and Enter on
   its Submit and that `next` doesn't press it.
@@ -277,13 +283,18 @@ its hooks come off after 15 minutes regardless.
   boards, loads their embed scripts, frames them or has a form of its own matches none. A new site adds its saved
   pages to `SAVED` there.
 - **Drivers** (`widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
-  fiber), Ant Design's Select on a model of rc-select's context (labels that are React elements, a disabled list), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, and a month
-  picker that ignores typing.
+  fiber), Ant Design's Select on a model of rc-select's context (labels that are React elements, a disabled list), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, a month
+  picker that ignores typing, and a UI5 date picker heard through its change event.
 - **Sites from live pages** (`sites-live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
   application and Phenom step, and Phenom's `next` refusing step 1 without a resume; Dayforce's Candidate Info
   step, its Submit told by hook and words, its posting and confirmation told apart from its scripts' messages, and
   its records (markup from the portal's scripts, inside the saved page): an open one as a section with its Update, a
-  saved one as a saved item deleted through its dialog.
+  saved one as a saved item deleted through its dialog. SuccessFactors' application: the one page with Apply as the
+  way on, the job from its heading, the profile's named and hinted fields, lists, dates with their parts, rows and
+  their Add, the documents, a collapsed section still read, Apply told from Save; and, with juic's registry, the
+  picklists, the upload popup and the delete dialog modelled from its scripts: a list listed, searched and chosen
+  through its component, a disabled list refused, a row removed, documents uploaded beside others and replaced, an
+  optional one removed after its dialog and a required one refused.
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
   definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
 - **The debug trace** (`trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,
@@ -304,8 +315,8 @@ into the page's main world as the extension does, and calls the adapter's method
 - **No bot-protection workarounds.** A site that blocks headless browsers or shows a challenge (SmartRecruiters'
   DataDome, iCIMS) is built from pages the user saves from a real session instead.
 
-The script hardcodes this machine's paths, so it stays out of the repo until the adapter-building skill
-(`todo.md`) gives it a home.
+The script hardcodes this machine's paths, so it stays out of the repo until `todo.md`'s "Agents that try to
+break a new adapter" gives it a home.
 
 **Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's
 system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the
