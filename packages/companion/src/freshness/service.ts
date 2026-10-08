@@ -46,6 +46,12 @@ export interface ChangesResult {
   pending?: true;
 }
 
+/** What the network check found: remote heads past the indexed commit, as of the check. */
+interface RepoCheck {
+  pushed: { fullName: string; indexedSha: string; head: string }[];
+  notChecked: NotChecked[];
+}
+
 const DIFF_MAX_LINES = 200;
 const REPO_CONCURRENCY = 4;
 
@@ -65,7 +71,7 @@ interface Options {
  * the derived files: the agent does that with the user's agreement, then marks the change done.
  */
 export class FreshnessService {
-  private repoCheck: Promise<{ changes: WorkspaceChange[]; notChecked: NotChecked[] }> | null = null;
+  private repoCheck: Promise<RepoCheck> | null = null;
   /** Changes the user put off, hidden until the chat ends (this service lives as long as the chat). */
   private readonly later = new Set<string>();
   private readonly waitMs: number;
@@ -90,15 +96,24 @@ export class FreshnessService {
 
   async changes(opts: { refresh?: boolean } = {}): Promise<ChangesResult> {
     if (opts.refresh || !this.repoCheck) this.runRepoCheck();
-    const local = await this.localChanges();
     const timeout = new Promise<null>((r) => setTimeout(() => r(null), this.waitMs).unref());
     const remote = await Promise.race([this.repoCheck, timeout]);
-    const changes = [...(remote?.changes ?? []), ...local.changes].filter((c) => !this.later.has(c.id));
-    const notChecked = [...(remote?.notChecked ?? []), ...local.notChecked];
+    const current = await this.current(remote);
+    const changes = current.changes.filter((c) => !this.later.has(c.id));
+    const { notChecked } = current;
     return {
       changes,
       ...(notChecked.length ? { notChecked } : {}),
       ...(remote ? {} : { pending: true as const }),
+    };
+  }
+
+  private async current(remote: RepoCheck | null) {
+    const repos = await this.repoChanges(remote);
+    const local = await this.localChanges();
+    return {
+      changes: [...repos.changes, ...local.changes],
+      notChecked: [...repos.notChecked, ...local.notChecked],
     };
   }
 
@@ -109,8 +124,7 @@ export class FreshnessService {
    * `knowledge_mark_indexed` only, after re-indexing.
    */
   async mark(id: string, as: "done" | "later"): Promise<{ id: string; as: string; removed?: string[] }> {
-    const current = [...(await this.localChanges()).changes, ...((await this.repoCheck)?.changes ?? [])];
-    const change = current.find((c) => c.id === id);
+    const change = (await this.current(await this.repoCheck)).changes.find((c) => c.id === id);
     if (!change) {
       throw new EzError(
         ErrorCode.NotFound,
@@ -162,25 +176,60 @@ export class FreshnessService {
     }
   }
 
-  // ---- repos (network, once per chat) ----------------------------------------------------------
+  // ---- repos (network once per chat, the rest every call) --------------------------------------
 
   private runRepoCheck(): void {
     const check = this.checkRepos().catch((err: unknown) => {
       this.log.warn({ err: (err as Error).message }, "repo check failed");
-      return { changes: [], notChecked: [] };
+      return { pushed: [], notChecked: [] };
     });
     this.repoCheck = check;
   }
 
-  private async checkRepos(): Promise<{ changes: WorkspaceChange[]; notChecked: NotChecked[] }> {
+  /** New commits since indexing, by `ls-remote` only: nothing is fetched before the user agrees. */
+  private async checkRepos(): Promise<RepoCheck> {
+    const sel = await this.profile.repos();
+    if (!sel.exists || !sel.valid) return { pushed: [], notChecked: [] };
+    const queue: { repo: (typeof sel.value.repos)[number]; sha: string }[] = [];
+    for (const repo of sel.value.repos) {
+      const meta = await this.repos.knowledgeMeta(repo.fullName);
+      if (meta) queue.push({ repo, sha: meta.indexedSha });
+    }
+    const pushed: RepoCheck["pushed"] = [];
+    const notChecked: NotChecked[] = [];
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        const { repo, sha } = next;
+        try {
+          const head = await this.repos.remoteHead(repo.fullName, repo.source, this.remoteTimeoutMs);
+          if (head && head !== sha) pushed.push({ fullName: repo.fullName, indexedSha: sha, head });
+        } catch (err) {
+          const e = EzError.from(err);
+          notChecked.push({ what: repo.fullName, reason: e.message, ...(e.hint ? { hint: e.hint } : {}) });
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(REPO_CONCURRENCY, queue.length) }, worker));
+    if (pushed.length || notChecked.length) {
+      this.log.info({ pushed: pushed.map((p) => p.fullName), notChecked: notChecked.length }, "repo check");
+    }
+    return { pushed, notChecked };
+  }
+
+  /**
+   * The repo changes as of now. Only the remote heads are kept from the check: the selection and the
+   * knowledge folders are read again, so a re-index, a deselected repo's knowledge deleted, or a repo
+   * selected again ends its change in the same chat instead of being offered again.
+   */
+  private async repoChanges(
+    remote: RepoCheck | null,
+  ): Promise<{ changes: WorkspaceChange[]; notChecked: NotChecked[] }> {
     const sel = await this.profile.repos();
     if (!sel.exists || !sel.valid) return { changes: [], notChecked: [] };
-    const selected = sel.value.repos;
+    const chosen = new Set(sel.value.repos.map((r) => r.fullName.toLowerCase()));
     const changes: WorkspaceChange[] = [];
-    const notChecked: NotChecked[] = [];
 
     // Knowledge from repos no longer selected: claims_list still reads every knowledge folder.
-    const chosen = new Set(selected.map((r) => r.fullName.toLowerCase()));
     for (const repo of await this.repos.indexedRepos()) {
       if (chosen.has(repo.toLowerCase())) continue;
       changes.push({
@@ -193,39 +242,20 @@ export class FreshnessService {
       });
     }
 
-    // New commits since indexing, by `ls-remote` only: nothing is fetched before the user agrees.
-    const indexed: { repo: (typeof selected)[number]; sha: string }[] = [];
-    for (const repo of selected) {
-      const meta = await this.repos.knowledgeMeta(repo.fullName);
-      if (meta) indexed.push({ repo, sha: meta.indexedSha });
+    for (const { fullName, indexedSha, head } of remote?.pushed ?? []) {
+      if (!chosen.has(fullName.toLowerCase())) continue;
+      // Indexed again since the check: repo_sync fetched at least the head the check saw, so it's current.
+      if ((await this.repos.knowledgeMeta(fullName))?.indexedSha !== indexedSha) continue;
+      changes.push({
+        id: `repo-pushed:${fullName}@${head.slice(0, 7)}`,
+        kind: "repo-pushed",
+        summary: `${fullName} has new commits since it was indexed (${indexedSha.slice(0, 7)} → ${head.slice(0, 7)}).`,
+        detail: "Re-index it with the ezapply-index-repo skill (only what changed); knowledge_mark_indexed ends this.",
+        affects: ["claims"],
+      });
     }
-    const queue = [...indexed];
-    const worker = async () => {
-      for (let next = queue.shift(); next; next = queue.shift()) {
-        const { repo, sha } = next;
-        try {
-          const head = await this.repos.remoteHead(repo.fullName, repo.source, this.remoteTimeoutMs);
-          if (head && head !== sha) {
-            changes.push({
-              id: `repo-pushed:${repo.fullName}@${head.slice(0, 7)}`,
-              kind: "repo-pushed",
-              summary: `${repo.fullName} has new commits since it was indexed (${sha.slice(0, 7)} → ${head.slice(0, 7)}).`,
-              detail:
-                "Re-index it with the ezapply-index-repo skill (only what changed); knowledge_mark_indexed ends this.",
-              affects: ["claims"],
-            });
-          }
-        } catch (err) {
-          const e = EzError.from(err);
-          notChecked.push({ what: repo.fullName, reason: e.message, ...(e.hint ? { hint: e.hint } : {}) });
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(REPO_CONCURRENCY, queue.length) }, worker));
     changes.sort((a, b) => a.id.localeCompare(b.id));
-    if (changes.length || notChecked.length) {
-      this.log.info({ changes: changes.map((c) => c.id), notChecked: notChecked.length }, "repo check");
-    }
+    const notChecked = (remote?.notChecked ?? []).filter((n) => chosen.has(n.what.toLowerCase()));
     return { changes, notChecked };
   }
 

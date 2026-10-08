@@ -91,12 +91,16 @@ function pdfjs(): Promise<PdfJs> {
   return pdfjsPromise;
 }
 
-async function openPdfJs(path: string) {
+/** A PDF to read: its path, or its bytes (a review's snapshot). */
+export type PdfSource = string | Uint8Array;
+
+async function openPdfJs(source: PdfSource) {
   const lib = await pdfjs();
   const root = dirname(require.resolve("pdfjs-dist/package.json"));
-  // The loading task owns the worker; destroying it releases the document.
+  // The loading task owns the worker; destroying it releases the document. pdf.js takes over the buffer it's
+  // given, so bytes passed in are copied.
   const task = lib.getDocument({
-    data: await readPdfBytes(path),
+    data: typeof source === "string" ? await readPdfBytes(source) : new Uint8Array(source),
     verbosity: 0,
     standardFontDataUrl: `${join(root, "standard_fonts")}/`,
     cMapUrl: `${join(root, "cmaps")}/`,
@@ -106,8 +110,8 @@ async function openPdfJs(path: string) {
 }
 
 /** Text per page in reading order, the way a naive ATS parser would see it. */
-export async function pdfText(path: string, pages?: string): Promise<{ page: number; text: string }[]> {
-  const { doc, close } = await openPdfJs(path);
+export async function pdfText(source: PdfSource, pages?: string): Promise<{ page: number; text: string }[]> {
+  const { doc, close } = await openPdfJs(source);
   try {
     const indices = parsePageRanges(pages, doc.numPages);
     const out: { page: number; text: string }[] = [];
@@ -151,8 +155,12 @@ export async function pdfRender(path: string, pageNumber: number, scale: number)
 // ---- pdf-lib (structure) ------------------------------------------------------------------------
 
 export async function pdfInfo(path: string): Promise<PdfInfo> {
-  const bytes = (await stat(path)).size;
-  const raw = await readPdfBytes(path);
+  return pdfInfoOf(await readPdfBytes(path), path);
+}
+
+/** pdfInfo of bytes in hand (`path` is only reported back). */
+export async function pdfInfoOf(raw: Uint8Array, path: string): Promise<PdfInfo> {
+  const bytes = raw.byteLength;
   const doc = await PDFDocument.load(raw, { ignoreEncryption: true, updateMetadata: false });
   const sizes = new Map<string, { size: string; widthPt: number; heightPt: number; count: number }>();
   for (const p of doc.getPages()) {
@@ -171,7 +179,7 @@ export async function pdfInfo(path: string): Promise<PdfInfo> {
   const encrypted = doc.isEncrypted;
   let hasTextLayer = false;
   if (!encrypted) {
-    const sample = await pdfText(path, `1-${Math.min(3, doc.getPageCount())}`).catch(() => []);
+    const sample = await pdfText(raw, `1-${Math.min(3, doc.getPageCount())}`).catch(() => []);
     hasTextLayer = sample.some((p) => p.text.length > 20);
   }
   const title = doc.getTitle();

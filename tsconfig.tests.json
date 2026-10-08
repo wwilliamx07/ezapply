@@ -6,13 +6,15 @@
     "declarationMap": false,
     "noEmit": true,
     "lib": ["es2023", "dom", "dom.iterable"],
-    "types": ["node", "chrome"]
+    "types": ["node", "chrome"],
+    "jsx": "react-jsx"
   },
   "include": [
     "packages/protocol/test",
     "packages/companion/test",
     "packages/cli/test",
     "packages/extension/test",
+    "packages/ui/test",
     "vitest.config.ts"
   ]
 }

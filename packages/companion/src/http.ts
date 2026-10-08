@@ -64,7 +64,19 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     });
   }
 
-  // The document review page (token-guarded; see documents/review.ts).
+  // The UI package's scripts, styles and pdf.js's files (ui/assets.ts).
+  if (path.startsWith("/ui/")) {
+    await opts.services.ui.handle(req, res, path);
+    return;
+  }
+
+  // The onboarding page and its API (token-guarded; see onboarding/service.ts).
+  if (path === "/onboard" || path.startsWith("/onboard/")) {
+    await opts.services.onboarding.handleHttp(req, res);
+    return;
+  }
+
+  // The document review page and its API (token-guarded; see documents/review.ts).
   if (path.startsWith("/review/")) {
     await opts.services.reviews.handleHttp(req, res);
     return;

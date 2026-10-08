@@ -23,6 +23,10 @@
     "./timing": {
       "types": "./dist/timing.d.ts",
       "default": "./dist/timing.js"
+    },
+    "./textdiff": {
+      "types": "./dist/textdiff.d.ts",
+      "default": "./dist/textdiff.js"
     }
   },
   "dependencies": {

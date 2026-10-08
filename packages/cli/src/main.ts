@@ -123,10 +123,10 @@ async function cmdInit(args: string[]): Promise<number> {
     "Next:",
     `  cd "${config.workspace}"`,
     `  ${process.platform === "win32" ? ".\\ezapply" : "./ezapply"} chat`,
-    'Then say "set me up". Claude checks what\'s missing (TeX, the browser extension, GitHub, your resume)',
-    "and walks you through it. Always start ezapply this way: ezapply runs only while that chat is open, and",
-    "capturing another posting starts a fresh Claude session by itself. If a chat is open now, exit it and",
-    "start it again to use this build.",
+    'Then say "set me up". A setup page opens in your browser for what\'s missing (TeX, the browser extension,',
+    "GitHub, your resume), and Claude does the parts that need it. Always start ezapply this way: ezapply runs",
+    "only while that chat is open, and capturing another posting starts a fresh Claude session by itself. If a",
+    "chat is open now, exit it and start it again to use this build.",
     "",
   ];
   process.stdout.write(out.join("\n"));

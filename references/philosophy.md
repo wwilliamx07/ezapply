@@ -7,9 +7,11 @@ decides and submits.
 
 ## Principles
 
-1. **Claude Code is the only agent.** ezapply has no agent loop of its own and almost no UI. It exposes
-   tools over MCP, and a workspace of files and skills that tell Claude how to use them. Everything the
-   user does after capturing a posting happens in the Claude Code chat.
+1. **Claude Code is the only agent.** ezapply has no agent loop of its own. It exposes tools over MCP, and a
+   workspace of files and skills that tell Claude how to use them. Its own UI is two browser pages, for what is
+   reading or form-filling rather than judgment: reviewing documents, and setting up. Everything else the user
+   does after capturing a posting happens in the Claude Code chat, and what a page needs judgment for goes to
+   Claude there, as a task the user sees it do. The pages never run an agent of their own.
 2. **The user always submits.** Nothing in ezapply can submit an application. This is enforced in code,
    not just in instructions: the tool set has no general click, `go_next` refuses on the review page, and
    the page-level submit guard cancels any script-generated event aimed at a submit control. See
@@ -43,7 +45,9 @@ decides and submits.
 - Autofill on the job sites ezapply has an adapter for (Workday, Oracle Recruiting Cloud, Greenhouse, Lever,
   Ashby, Phenom, Dayforce, SAP SuccessFactors), including each company's own screening questions and widgets.
 - Single-PDF bundles when a posting requires one.
-- Guided onboarding: tools, extension, GitHub and repos, knowledge base, profile, templates, answers.
+- Guided onboarding on a page: tools, extension, GitHub and repos, knowledge base, profile, templates, answers.
+- Review on a page: each document as it will be attached, comments on its passages, what changed since the last
+  review.
 - A decision model (e.g. Jev) can be added later without changing tools or skills.
 
 ## Non-goals (v1)
@@ -51,6 +55,5 @@ decides and submits.
 - Autofill on a site without an adapter built from its own pages ([building adapters](building-adapters.md)).
   Capture works on any site.
 - Creating Workday accounts, completing Oracle's email step, or solving CAPTCHAs. The user signs in and tells Claude when done.
-- Screens of ezapply's own beyond the document review page and the GitHub setup pages. Everything else happens
-  in chat.
+- Screens of ezapply's own beyond the review and setup pages (and the GitHub setup pages they lead to).
 - Hidden text, keyword stuffing, or any other trick aimed at applicant-tracking systems.

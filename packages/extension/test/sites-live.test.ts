@@ -794,4 +794,93 @@ describe("SuccessFactors' lists, rows and documents (its components modelled fro
     });
     expect(await api.remove("my-documents.resume-cv")).toMatchObject({ ok: false, error: /only be replaced/ });
   });
+
+  it("knows a required document replaced under the same name by the tick the field shows", async () => {
+    page();
+    // The name doesn't change: only the slot's tick says the new file went in.
+    popupOn("52:_attachIcon", () => document.getElementById("52:_attachSuccess")?.classList.remove("displayNone"));
+    const api = createAdapter(successfactors, document, () => URL);
+    api.getForm();
+    const file = { name: "jane-doe-resume.pdf", mimeType: "application/pdf", base64: btoa("%PDF-1.4") };
+    expect(await api.upload("my-documents.resume-cv", file)).toMatchObject({
+      ok: true,
+      readBack: ["jane-doe-resume.pdf"],
+    });
+  });
+
+  it("says when the page re-renders during an upload, and finds the field again", async () => {
+    page();
+    // As seen live: the whole application rendered again, every element new, what wasn't saved gone.
+    const rerender = (keep: boolean) => () => {
+      const root = document.querySelector("#rcmJobApplicationCtr") as HTMLElement;
+      const copy = root.cloneNode(true) as HTMLElement;
+      const link = copy.querySelector("[id='58:_attachDownloadLabelLink']");
+      if (keep && link) {
+        copy.querySelector("[id='58:_attach']")?.classList.replace("attachmentBtn", "successBtn");
+        copy.querySelector("[id='58:_attachDownloadLabel']")?.classList.remove("displayNone");
+        link.textContent = "portfolio.pdf";
+      }
+      root.replaceWith(copy);
+    };
+    const file = { name: "portfolio.pdf", mimeType: "application/pdf", base64: btoa("%PDF-1.4") };
+
+    popupOn("58:_attachIcon", rerender(true));
+    let api = createAdapter(successfactors, document, () => URL);
+    api.getForm();
+    expect(await api.upload("my-documents.additional-documents", file)).toMatchObject({
+      ok: true,
+      readBack: ["transcript.pdf", "portfolio.pdf"],
+      error: /re-rendered.*get_form/,
+    });
+
+    page();
+    popupOn("58:_attachIcon", rerender(false));
+    api = createAdapter(successfactors, document, () => URL);
+    api.getForm();
+    expect(await api.upload("my-documents.additional-documents", file)).toMatchObject({
+      ok: false,
+      readBack: ["transcript.pdf"],
+      error: /re-rendered.*doesn't show in the field now/,
+    });
+  });
+
+  it("reads a question's radio group by its label and chooses through the component's click", async () => {
+    page();
+    // A question as SuccessFactors renders it (`rcmFormQuestionLabel`, juic's radios, no inputs).
+    const radio = (id: string, label: string) =>
+      `<div class="globalRadio sfRadioInputField fd-form-item" id="${id}:_anchorButton"><span id="${id}:_radio" class="radioCheck radioOff"><span class="radioContainer radioAnchorTag" id="${id}:_anchor" role="radio" aria-checked="false" aria-labelledby="${id}:_radiolabel" tabindex="0"><span class="radioIcon"><span class="dot"></span></span></span><label id="${id}:_radiolabel" class="radioLabel">${label}</label></span></div>`;
+    document
+      .getElementById("289:sectionContent")
+      ?.insertAdjacentHTML(
+        "beforeend",
+        `<div class="RCMFormField rcmFormQuestionElement "><label id="912:" for="908:" class="rcmFormQuestionLabel"><span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;Are you enrolled in a co-op program?</label><div class="fieldComponentInput" id="911:_fieldComponentInput"><div id="908:" class="radioGroup" role="radiogroup" aria-labelledby="912:">${radio("909", "Yes")}${radio("910", "No")}</div><div tabindex="-1" role="alert" id="913:" class="rcmValidationMsgArea displayNone"></div></div></div>`,
+      );
+    // The group checks the one clicked, and unchecks the other.
+    for (const id of ["909", "910"]) {
+      document.getElementById(`${id}:_radio`)?.addEventListener("click", () => {
+        for (const a of document.querySelectorAll("[id$=':_anchor']")) a.setAttribute("aria-checked", "false");
+        document.getElementById(`${id}:_anchor`)?.setAttribute("aria-checked", "true");
+      });
+    }
+    const api = createAdapter(successfactors, document, () => URL);
+    const field = api
+      .getForm()
+      .sections.flatMap((x) => x.fields)
+      .find((x) => x.id === "job-specific-information.are-you-enrolled-in-a-co-op-program");
+    expect(field).toMatchObject({
+      label: "Are you enrolled in a co-op program?",
+      kind: "radio",
+      required: true,
+      options: ["Yes", "No"],
+      currentValue: null,
+    });
+    const [yes] = await api.fill([
+      { fieldId: "job-specific-information.are-you-enrolled-in-a-co-op-program", value: "Yes" },
+    ]);
+    expect(yes).toMatchObject({ ok: true, readBack: "Yes" });
+    const [miss] = await api.fill([
+      { fieldId: "job-specific-information.are-you-enrolled-in-a-co-op-program", value: "Maybe" },
+    ]);
+    expect(miss).toMatchObject({ ok: false, availableOptions: ["Yes", "No"] });
+  });
 });

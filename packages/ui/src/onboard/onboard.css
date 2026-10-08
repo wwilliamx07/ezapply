@@ -1,0 +1,525 @@
+/* The onboarding page: the steps on the left, the current step in the middle, Claude's work on the right. On a
+   narrow window the steps become a row and Claude's panel goes under the step. */
+.ob {
+  display: grid;
+  height: 100vh;
+  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "top top top"
+    "nav main claude";
+}
+
+/* A grid item is as wide as its content unless told otherwise: the row of steps would widen the page. */
+.ob > * {
+  min-width: 0;
+}
+.ob .ez-topbar {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ob .ez-topbar-title {
+  flex: none;
+}
+.ob-progress {
+  flex: 1;
+  max-width: 320px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.ob-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transition: width 0.3s;
+}
+
+/* ---- steps ---- */
+.ob-nav {
+  grid-area: nav;
+  overflow-y: auto;
+  padding: 16px 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.ob-nav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ob-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ob-nav-item:hover {
+  background: var(--surface-2);
+}
+.ob-nav-current {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+.ob-nav-current:hover {
+  background: var(--accent-soft);
+}
+.ob-nav-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.ob-nav-current .ob-nav-mark {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.ob-nav-done,
+.ob-nav-current .ob-nav-done {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #fff;
+}
+.ob-nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ob-nav-optional {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+/* ---- the step ---- */
+.ob-main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 28px 32px 48px;
+}
+.ob-main > .ez-banner {
+  max-width: 820px;
+  margin: 0 auto 16px;
+}
+.ob-step {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ob-step p:not(.ob-lead) {
+  margin: 0;
+}
+.ob-step-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.ob-lead {
+  margin: 6px 0 0;
+  color: var(--text-2);
+}
+.ob-pager {
+  max-width: 820px;
+  margin: 16px auto 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ob-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ob-row > .ez-input {
+  flex: 1;
+  min-width: 200px;
+}
+.ob-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ob-saved {
+  color: var(--ok);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.ob-error-count,
+.ob-field-error {
+  color: var(--danger);
+  font-size: 0.8125rem;
+}
+.ob-mono {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+}
+
+.ob-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+}
+.ob-copy code {
+  flex: 1;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.ob-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ob-choice legend {
+  margin-bottom: 8px;
+}
+.ob-choice label {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.ob-choice-row {
+  flex-direction: row;
+  gap: 18px;
+}
+.ob-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: var(--text-2);
+}
+.ob-steps {
+  margin: 0;
+  padding-left: 1.3em;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ob-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ob-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ob-list svg {
+  color: var(--ok);
+}
+.ob-dot {
+  width: 10px;
+  height: 10px;
+  margin: 0 3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+.ob-box {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.ob-box .ez-field:last-of-type {
+  margin-bottom: 6px;
+}
+
+/* Repositories */
+.ob-filter .ez-input {
+  max-width: 280px;
+}
+.ob-repos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 460px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ob-repos li + li {
+  border-top: 1px solid var(--border);
+}
+.ob-repo {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.ob-repo:hover {
+  background: var(--surface-2);
+}
+.ob-repo-on {
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+}
+.ob-repo input {
+  margin-top: 4px;
+}
+.ob-repo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ob-repo-name {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+.ob-repo-desc {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+.ob-repo-meta {
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+
+/* A template's preview */
+.ob-preview {
+  height: 560px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--viewer-bg);
+}
+
+/* The profile form */
+.ob-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.ob-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+.ob-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0 16px;
+}
+.ob-grid .ez-field {
+  margin-bottom: 12px;
+}
+.ob-wanted .ez-input {
+  border-color: var(--warn);
+}
+.ob-wanted .ez-label .ez-badge {
+  margin-left: 6px;
+}
+.ob-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+.ob-item {
+  align-self: stretch;
+  padding: 12px 14px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ob-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ob-sticky {
+  position: sticky;
+  bottom: -28px;
+  margin: 0 -32px -28px;
+  padding: 14px 32px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* Screening questions */
+.ob-questions {
+  margin: 0;
+  padding-left: 1.3em;
+}
+.ob-questions li::marker {
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+/* Library */
+.ob-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-2);
+}
+.ob-drop-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---- Claude ---- */
+.ob-claude {
+  grid-area: claude;
+  overflow-y: auto;
+  padding: 20px 18px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ob-claude h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
+}
+.ob-claude p {
+  margin: 0;
+}
+.ob-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.ob-live::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.ob-live-on {
+  color: var(--ok);
+}
+.ob-live-on::before {
+  background: var(--ok);
+}
+.ob-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ob-task-kind {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ob-ask {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ob-ask .ez-label {
+  align-self: flex-start;
+}
+
+/* ---- narrow windows ---- */
+@media (max-width: 1100px) {
+  .ob {
+    grid-template-columns: 210px minmax(0, 1fr) 260px;
+  }
+}
+@media (max-width: 900px) {
+  .ob {
+    height: auto;
+    min-height: 100vh;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: "top" "nav" "main" "claude";
+  }
+  .ob-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+  }
+  .ob-nav ol {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .ob-nav-item {
+    width: auto;
+    white-space: nowrap;
+  }
+  .ob-nav-optional {
+    display: none;
+  }
+  .ob-main {
+    padding: 16px;
+  }
+  .ob-step {
+    padding: 20px;
+  }
+  .ob-sticky {
+    margin: 0 -20px -20px;
+    padding: 12px 20px;
+  }
+  .ob-claude {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .ob-progress {
+    display: none;
+  }
+}

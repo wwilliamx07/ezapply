@@ -1,4 +1,4 @@
-import { ErrorCode, EzError } from "@ezapply/protocol";
+import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
@@ -71,14 +71,39 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       title: "Extract PDF text",
       description:
         "Extract text in reading order, per page, as an ATS would parse it. Use to confirm headings and keywords come " +
-        `through as plain text in a sensible order. ${PATH_NOTE}`,
+        "through as plain text in a sensible order. With sinceReviewed: true (a PDF in a posting folder), instead " +
+        "what changed in its text since the user last answered a review of it, word by word, as the review page " +
+        `marks it: quote these changes when reporting a revision. ${PATH_NOTE}`,
       inputSchema: {
         path: z.string(),
         pages: z.string().optional().describe('1-based selection like "1" or "1-2,4". Default: all.'),
+        sinceReviewed: z
+          .boolean()
+          .optional()
+          .describe("The changes since the last review instead of the text (pages is ignored)."),
       },
       annotations: { readOnlyHint: true },
     },
-    tool(s.log, "pdf_text", ({ path, pages }: { path: string; pages?: string }) => s.documents.text(path, pages)),
+    tool(
+      s.log,
+      "pdf_text",
+      async ({ path, pages, sinceReviewed }: { path: string; pages?: string; sinceReviewed?: boolean }) => {
+        if (!sinceReviewed) return s.documents.text(path, pages);
+        const abs = s.workspace.resolveAllowed(path, ["postings"]);
+        const last = await s.reviews.lastReviewed(abs);
+        if (!last) {
+          return {
+            firstReview: true,
+            hint: "The user hasn't answered a review of this document yet, so there's nothing to compare with.",
+          };
+        }
+        const now = (await s.documents.text(path)).map((p) => p.text);
+        return {
+          since: { reviewedAt: last.at, reviewId: last.reviewId },
+          changes: diffPages(last.pages, now),
+        };
+      },
+    ),
   );
 
   server.registerTool(
@@ -189,8 +214,9 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       title: "Have the user review documents",
       description:
         "In the after-approval attach mode: open a page in the user's browser showing these PDFs (one posting's " +
-        "resume, cover letter or bundle) and wait for the answer (default up to 10 minutes): documents approved " +
-        "and change requests. The page shows the PDFs as they are now, so after any rebuild call this again with " +
+        "resume, cover letter or bundle) and wait for the answer (default up to 10 minutes): documents approved, " +
+        "and for each one to change, the user's request and comments on passages ({ page, quote, note }: the words " +
+        "they selected and what to change there). The page shows the PDFs as they are now, so after any rebuild call this again with " +
         "the changed files. Only approval on the page lets upload_file attach a document, in the version shown. " +
         "With reviewId instead of files: wait again for a review that timed out.",
       inputSchema: {

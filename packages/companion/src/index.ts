@@ -26,6 +26,7 @@ export { type CompanionHandle, type CompanionOptions, startCompanion } from "./m
 export { ProfileService } from "./profile/service.js";
 export { agentFileStatus, githubDetail, texStatus } from "./status.js";
 export { TemplateService } from "./templates/service.js";
+export { UiAssets } from "./ui/assets.js";
 export { exists } from "./util/fs.js";
 export { installCommand, installHint } from "./util/install-hints.js";
 export { clearWhichCache, which } from "./util/proc.js";

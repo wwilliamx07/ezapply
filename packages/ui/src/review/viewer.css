@@ -1,0 +1,179 @@
+/* The PDF viewer (Viewer.tsx): its toolbar, the pages, and the marks over them. Used by the review page and
+   the onboarding page's template previews. */
+.ez-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.ez-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.ez-toolbar-pages {
+  font-size: 0.875rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.ez-toolbar-gap {
+  flex: 1;
+}
+.ez-zoom {
+  min-width: 46px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.ez-scroller {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+.ez-pages {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  width: max-content;
+  min-width: 100%;
+}
+.ez-page {
+  position: relative;
+  flex: none;
+  background: #fff;
+  box-shadow: var(--shadow-page);
+}
+.ez-canvas-holder,
+.ez-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ez-page .textLayer {
+  z-index: 1;
+}
+
+/* Marks over the page: changes since the last review, comments. */
+.ez-marks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.ez-mark {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+}
+.ez-mark-added {
+  background: var(--ins);
+  box-shadow: inset 0 -2px 0 var(--ins-line);
+  mix-blend-mode: multiply;
+}
+.ez-mark-removed {
+  width: 0;
+  border-left: 2px solid var(--del);
+}
+.ez-mark-removed::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -5px;
+  border: 4px solid transparent;
+  border-top-color: var(--del);
+}
+.ez-mark-added,
+.ez-mark-removed {
+  pointer-events: auto;
+  cursor: help;
+}
+.ez-mark-comment {
+  background: var(--comment);
+  mix-blend-mode: multiply;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.ez-mark-active.ez-mark-comment {
+  background: var(--comment-active);
+}
+.ez-mark-active.ez-mark-added {
+  outline: 2px solid var(--ins-line);
+}
+.ez-mark-active.ez-mark-removed {
+  border-left-width: 3px;
+}
+.ez-mark-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #b77700;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.ez-mark-pending {
+  background: rgba(59, 91, 219, 0.25);
+  mix-blend-mode: multiply;
+}
+.ez-margin-n {
+  position: absolute;
+  left: 8px;
+  border: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ez-margin-n.ez-mark-active {
+  box-shadow: 0 0 0 3px rgba(224, 168, 0, 0.45);
+}
+
+/* The Comment button and the comment being written, by the selection. */
+.ez-float {
+  position: absolute;
+  z-index: 10;
+  box-shadow: var(--shadow-2);
+}
+.ez-popover {
+  width: 320px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ez-popover .ez-textarea {
+  min-height: 80px;
+}
+.ez-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ez-popover-actions .ez-help {
+  flex: 1;
+}
+.ez-quote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid #e0a800;
+  color: var(--text-2);
+  font-size: 0.85rem;
+  max-height: 4.5em;
+  overflow: hidden;
+}

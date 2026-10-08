@@ -14,7 +14,7 @@ workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), 
 | `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply chat`. Nothing else may write to stdout |
 | `status` | Whether an `ezapply chat` is running (its `/health`), and whether the extension is connected |
 | `debug on\|off\|report [dir]\|clean\|export` | Debug mode (`debug.ts`). `on` and `off` set `debug.enabled` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, and from the adapter's trace the slowest fields and waits, waits that ran to their maximum, slow paths taken (named branches, React handlers called directly), the page's errors and failed requests, what was saved at failures, and calls with no trace (an extension built before it). `export <session\|latest> <NNNN> [before\|after\|fail-<fieldId>]` writes a test fixture candidate from a saved page (`debugExport`, [below](#debug-export)). `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
-| `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
+| `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension, whether the browser pages are built, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
 
 `npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. A chat that's open keeps
 running the build it started with; `init` says to exit it and start it again.
@@ -62,7 +62,8 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    npm's global folder, which many installs (a system Node on macOS, for one) don't give.
 
 Prints the workspace, what was created/updated/kept, and "cd there, run `./ezapply chat` (`.\ezapply chat` on
-Windows), say 'set me up'", plus that an open chat must be restarted to use the new build.
+Windows), say 'set me up'" (a setup page opens in the browser for what's missing, and Claude does the parts that
+need it), plus that an open chat must be restarted to use the new build.
 
 ## The MCP relay (`mcp-relay.ts`)
 Claude Code talks to MCP servers over stdio, and the companion serves MCP over HTTP inside `ezapply chat`, so
@@ -168,7 +169,8 @@ companion), worded for a terminal: a missing TeX engine prints this OS's install
 Ghostscript its own. GitHub is read through `GitHubService.status()`, so a damaged keychain entry reads as
 logged out instead of crashing, and it fails only on a port mismatch. ezapply not running is fine (doctor is
 usually run from another terminal, and ezapply runs only while a chat is open); an earlier build's daemon
-holding the port fails. The protocol line appears only while a chat runs.
+holding the port fails. The protocol line appears only while a chat runs. `pages` fails when the UI package
+isn't built (`UiAssets.built()`: its `manifest.json`), since the review and setup pages need it.
 
 ## `debug export`
 `ezapply debug export <session|latest> <NNNN> [before|after|fail-<fieldId>]` (`companion/src/forms/debug-export.ts`)

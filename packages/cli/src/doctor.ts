@@ -11,6 +11,7 @@ import {
   KeyringStore,
   loadAppConfig,
   texStatus,
+  UiAssets,
   Workspace,
   which,
 } from "@ezapply/companion";
@@ -80,6 +81,10 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
   } else if (!checks.some((c) => c.name === "config")) {
     add("config", false, "missing (run ezapply init)");
   }
+
+  // The review page (and the companion's other pages) come from the UI package's build.
+  const ui = new UiAssets();
+  add("pages", ui.built(), ui.built() ? "built" : "not built (run npm run build in the ezapply folder)");
 
   // GitHub is optional until onboarding reaches it; only a broken setup (port mismatch) fails.
   const github = new GitHubService({

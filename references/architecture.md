@@ -10,7 +10,7 @@
  │ runs in ~/ezapply-home,   │                └──────────────┘                    │  • extension bridge (WS)  ────┼──┐
  │ reads EZAPPLY.md + skills │                                                    │  • postings, documents,       │  │
  └────────────┬──────────────┘                                                    │    profile, GitHub, repos     │  │
-              │ Read / Write / Edit / Bash                                        │  • /github, /review pages     │  │
+              │ Read / Write / Edit / Bash                                        │  • /github, /review, /onboard │  │
               ▼                                                                   └──────────────┬────────────────┘  │
  ┌───────────────────────────┐        files (workspace-restricted)                               │                   │
  │ workspace ~/ezapply-home  │ ◀─────────────────────────────────────────────────────────────────┘                   │
@@ -29,6 +29,7 @@
 | Protocol | `packages/protocol` | library | zod schemas and types shared by everything: bridge messages, RPC, forms, postings, errors |
 | Companion | `packages/companion` | library, run inside `ezapply chat` | Serves the MCP tools, talks to the extension, owns all file and network work |
 | CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), hosts the companion and runs Claude Code (`chat`), relays MCP for Claude Code (`mcp`) |
+| UI | `packages/ui` | static files the companion serves | The browser pages: document review and onboarding (React, pdf.js), and the stylesheet of the companion's own pages ([ui](components/ui.md)) |
 | Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors) on the companion's behalf |
 | Workspace | created by `ezapply init` | folder of files | The user's data, the agent file `EZAPPLY.md`, skills, and Claude Code config |
 
@@ -55,7 +56,8 @@ There is no background process. ezapply runs while the user has an `ezapply chat
   connection that breaks after the request went out is reported, never retried, because the tool may
   already have run. It exists because Claude Code talks to MCP servers over stdio; its own HTTP transport
   would bring timeouts of its own.
-- **The companion** is one HTTP server (MCP, GitHub pages, document review) plus the WebSocket bridge,
+- **The companion** is one HTTP server (MCP, GitHub pages, the review and onboarding pages and the UI package's
+  files) plus the WebSocket bridge,
   inside the `ezapply chat` process. Nothing in it may write to the terminal, which is Claude's: it logs to
   a file only, and the wrapper sends `console.*` and stderr to the log too (libraries such as pdfjs print).
   An uncaught error in companion code is logged and the process carries on, so a bug doesn't take Claude's
@@ -92,7 +94,8 @@ that a chat doesn't is stay up between chats, which matters to nobody: the tools
 | Relay → companion | MCP Streamable HTTP, `POST /mcp` | Bearer `mcpToken` | Stateless: a new `McpServer` per request, JSON responses (no SSE). This works because no state lives in an MCP session: it's all in services and on disk. Under `ezapply chat` each request carries `x-ezapply-chat-session` |
 | CLI → companion | `GET /health` | none | `ezapply status`, `doctor`, and a second `ezapply chat` checking the port |
 | Browser → companion | `GET /github/*` pages (`POST /github/reuse`) | one-time state values | GitHub App creation, reuse and login callbacks |
-| Browser → companion | `GET/POST /review/*` | random token in the URL | The document review page and its PDFs |
+| Browser → companion | `GET/POST /review/*`, `/onboard/*` | random token in the link, traded for a cookie on the page's path; POSTs from the companion's own origin only | The review and onboarding pages, their state, events (Server-Sent Events), actions and PDFs ([ui](components/ui.md#how-a-page-talks-to-the-companion)) |
+| Browser → companion | `GET /ui/*` | none (the same for everyone) | The UI package's scripts, styles and pdf.js's files |
 | Extension ↔ companion | WebSocket `ws://127.0.0.1:<port>/bridge`, JSON text frames | Origin pinning + pairing code | Versioned handshake, then symmetric RPC ([protocol](components/protocol.md)) |
 | Companion → GitHub | HTTPS REST API and `git` over HTTPS | user access token (per command, never stored in git config) | Read-only App permissions |
 
@@ -130,7 +133,8 @@ Formats of every file: [data-formats.md](data-formats.md).
   matches the package version (tested).
 - **Wiring.** Services are constructed once in `companion/src/main.ts` and passed explicitly (the
   `Services` object); tools never construct services and there are no module-level singletons besides
-  pure caches.
+  pure caches and the stylesheet hook of the companion's own pages (`useStylesheet` in `util/html.ts`, set once by
+  `main.ts`).
 - **Path guards.** Every path Claude passes is resolved against the workspace and checked against the
   folders that operation may touch (`Workspace.resolveAllowed`).
 - **Atomic writes.** JSON and generated files are written to a temp file and renamed (`util/fs.ts`).

@@ -1,18 +1,40 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, relative, sep } from "node:path";
-import { ErrorCode, EzError } from "@ezapply/protocol";
+import {
+  ErrorCode,
+  EzError,
+  type PreviousReview,
+  type ReviewAnswer,
+  type ReviewComment,
+  type ReviewPageFile,
+  type ReviewPageState,
+  type ReviewStatus,
+} from "@ezapply/protocol";
 import { z } from "zod";
 import { type AttachMode, WorkspaceConfig } from "../config/workspace.js";
 import type { Logger } from "../logger.js";
+import type { UiAssets } from "../ui/assets.js";
+import {
+  EventStreams,
+  pageCookie,
+  presentedToken,
+  readJsonBody,
+  sameOrigin,
+  sendJson,
+  tokenOk,
+} from "../ui/session.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
-import { escapeHtml, htmlPage, readForm } from "../util/html.js";
+import { htmlPage } from "../util/html.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { pdfInfoOf, pdfText } from "./pdf/toolkit.js";
 
 /** A review waits this long for the user. */
 const REVIEW_TTL_MS = 2 * 60 * 60_000;
 const MAX_REVIEW_FILES = 6;
+const MAX_REQUEST_CHARS = 4000;
+const MAX_COMMENTS = 50;
 
 /** postings/<id>/approvals.json: which version of each document the user approved. */
 const ApprovalsFile = z.object({
@@ -21,12 +43,47 @@ const ApprovalsFile = z.object({
 });
 type ApprovalsFile = z.infer<typeof ApprovalsFile>;
 
-export interface ReviewResult {
-  /** Documents approved as shown (paths relative to the posting folder). */
-  approved: string[];
-  /** Documents the user wants changed, with what they wrote. */
-  changes: { file: string; request: string }[];
-}
+/**
+ * postings/<id>/reviewed.json: the version of each document the user last answered a review of, with its text,
+ * so the next review shows what changed since.
+ */
+const ReviewedFile = z.object({
+  schemaVersion: z.literal(1),
+  documents: z.record(
+    z.string(),
+    z.object({
+      sha256: z.string(),
+      at: z.string(),
+      reviewId: z.string(),
+      approved: z.boolean(),
+      pages: z.array(z.string()).optional(),
+    }),
+  ),
+});
+type ReviewedFile = z.infer<typeof ReviewedFile>;
+
+const Rect = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+const AnswerBody = z.object({
+  documents: z
+    .array(
+      z.object({
+        index: z.number().int().min(0),
+        request: z.string().max(MAX_REQUEST_CHARS).optional(),
+        comments: z
+          .array(
+            z.object({
+              page: z.number().int().min(1),
+              quote: z.string().max(2000),
+              note: z.string().max(MAX_REQUEST_CHARS),
+              rects: z.array(Rect).max(200).optional(),
+            }),
+          )
+          .max(MAX_COMMENTS)
+          .optional(),
+      }),
+    )
+    .max(MAX_REVIEW_FILES),
+});
 
 interface ReviewFile {
   /** Relative to the posting folder, with forward slashes. */
@@ -34,24 +91,33 @@ interface ReviewFile {
   sha256: string;
   /** The exact bytes shown, so what's approved is what was seen even if the file is rebuilt meanwhile. */
   bytes: Buffer;
+  info?: ReviewPageFile["info"];
+  /** Its text per page, kept with the answer so the next review can show what changed. */
+  text?: string[];
+  previous?: PreviousReview;
 }
 
 interface Session {
   id: string;
   token: string;
   postingId: string;
+  posting: ReviewPageState["posting"];
   files: ReviewFile[];
+  pageLimit: number;
   expires: number;
-  result?: ReviewResult;
+  /** What the user sent: the agent's result, and the comments' places for the answered page. */
+  answer?: ReviewAnswer;
   supersededBy?: string;
   waiters: Set<() => void>;
+  events: EventStreams;
 }
 
 /**
- * Document review in the browser. In the after-approval attach mode Claude shows the generated PDFs on a
- * page served by the companion; the user approves each one or writes what should change. Approvals are recorded
- * per exact version (SHA-256), and upload_file attaches a document from postings/ only when its current
- * bytes match an approval, so an edited or rebuilt document needs approving again.
+ * Document review in the browser. In the after-approval attach mode Claude shows the generated PDFs on a page
+ * served by the companion (the UI package's review page); the user approves each one, or writes what should
+ * change and comments on passages. Approvals are recorded per exact version (SHA-256), and upload_file attaches a
+ * document from postings/ only when its current bytes match an approval, so an edited or rebuilt document needs
+ * approving again.
  *
  * Approval is a click on that page and nothing else: a chat message saying "approved" can't approve, so
  * neither can a prompt injection.
@@ -64,6 +130,7 @@ export class ReviewService {
     private readonly log: Logger,
     /** http://127.0.0.1:<port>: known only after the server listens. */
     private readonly localBaseUrl: () => string,
+    private readonly ui: UiAssets,
   ) {}
 
   async attachMode(): Promise<AttachMode> {
@@ -107,23 +174,31 @@ export class ReviewService {
       });
       files.push({ name: where.name, sha256: sha256(bytes), bytes });
     }
+    const pid = postingId as string;
+    const reviewed = await this.reviewed(pid);
+    await Promise.all(files.map((f) => this.read(f, reviewed)));
     const id = randomBytes(9).toString("base64url");
     const session: Session = {
       id,
       token: randomBytes(24).toString("base64url"),
-      postingId: postingId as string,
+      postingId: pid,
+      posting: await this.posting(pid),
       files,
+      pageLimit: (await this.ws.readConfig()).resume.pageLimit,
       expires: Date.now() + REVIEW_TTL_MS,
       waiters: new Set(),
+      events: new EventStreams(),
     };
     for (const old of this.sessions.values()) {
-      if (old.postingId === session.postingId && !old.result && !old.supersededBy) {
+      if (old.postingId === session.postingId && !old.answer && !old.supersededBy) {
         old.supersededBy = id;
-        for (const w of old.waiters) w();
+        this.changed(old);
       }
     }
     this.prune();
     this.sessions.set(id, session);
+    // A page left open past the review's life hears that it expired.
+    setTimeout(() => this.changed(session), REVIEW_TTL_MS + 1000).unref();
     this.log.info({ id, posting: session.postingId, files: files.length }, "review opened");
     return { reviewId: id, url: this.url(session), postingId: session.postingId, files: files.map((f) => f.name) };
   }
@@ -132,7 +207,7 @@ export class ReviewService {
   async wait(
     reviewId: string,
     timeoutMs: number,
-  ): Promise<({ done: true } & ReviewResult) | { done: false; url?: string; supersededBy?: string; hint: string }> {
+  ): Promise<({ done: true } & ReviewAnswer) | { done: false; url?: string; supersededBy?: string; hint: string }> {
     const s = this.sessions.get(reviewId);
     if (!s || s.expires < Date.now()) {
       throw new EzError(
@@ -141,7 +216,7 @@ export class ReviewService {
         "Present the documents again with review_documents { files }.",
       );
     }
-    if (!s.result && !s.supersededBy) {
+    if (!s.answer && !s.supersededBy) {
       await new Promise<void>((resolve) => {
         const done = () => {
           clearTimeout(timer);
@@ -152,7 +227,7 @@ export class ReviewService {
         s.waiters.add(done);
       });
     }
-    if (s.result) return { done: true, ...s.result };
+    if (s.answer) return { done: true, ...forAgent(s.answer) };
     if (s.supersededBy) {
       return { done: false, supersededBy: s.supersededBy, hint: "A newer review of this posting replaced this one." };
     }
@@ -166,7 +241,7 @@ export class ReviewService {
   /** True while a review waits for the user. */
   pending(): boolean {
     const now = Date.now();
-    for (const s of this.sessions.values()) if (!s.result && !s.supersededBy && s.expires > now) return true;
+    for (const s of this.sessions.values()) if (!s.answer && !s.supersededBy && s.expires > now) return true;
     return false;
   }
 
@@ -194,7 +269,7 @@ export class ReviewService {
       approved.push({ file: name, approvedAt: a.approvedAt, current: bytes !== null && sha256(bytes) === a.sha256 });
     }
     const open = [...this.sessions.values()].find(
-      (s) => s.postingId === postingId && !s.result && !s.supersededBy && s.expires > Date.now(),
+      (s) => s.postingId === postingId && !s.answer && !s.supersededBy && s.expires > Date.now(),
     );
     return {
       attachMode: await this.attachMode(),
@@ -203,130 +278,192 @@ export class ReviewService {
     };
   }
 
+  /**
+   * The text of a document as the user last reviewed it, for `pdf_text { sinceReviewed }`: by its name in its
+   * posting folder. Null when it was never reviewed (or had no text then).
+   */
+  async lastReviewed(abs: string): Promise<{ at: string; reviewId: string; sha256: string; pages: string[] } | null> {
+    const where = this.locate(abs);
+    if (!where) return null;
+    const entry = (await this.reviewed(where.postingId)).documents[where.name];
+    return entry?.pages ? { at: entry.at, reviewId: entry.reviewId, sha256: entry.sha256, pages: entry.pages } : null;
+  }
+
   // ---- the page ----------------------------------------------------------------------------------
 
-  /** Handles /review/<id> (GET page, POST answer) and /review/<id>/file/<n> (the PDF). */
+  /**
+   * Everything under /review/<id>: the page (GET, where `?t=` is traded for the page's cookie), its state, the
+   * PDFs, its events, and the answer (POST, from the companion's own origin only).
+   */
   async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
-    const m = url.pathname.match(/^\/review\/([\w-]+)(?:\/file\/(\d+))?$/);
+    const m = url.pathname.match(/^\/review\/([\w-]+)(?:\/(state|events|answer|file\/(\d+)))?$/);
     const s = m ? this.sessions.get(m[1] as string) : undefined;
-    const post = req.method === "POST" && m?.[2] === undefined;
-    const form = post ? await readForm(req) : null;
-    const token = post ? form?.get("t") : url.searchParams.get("t");
-    if (!m || !s || !tokenOk(token, s.token) || (req.method !== "GET" && !post)) {
-      htmlPage(
+    const part = m?.[2];
+    const api = part !== undefined;
+    if (!m || !s || !tokenOk(presentedToken(req, url), s.token)) {
+      if (api) return sendJson(res, 404, { error: "not found" });
+      return htmlPage(
         res,
         404,
         "Review not found",
         "<p>This link is wrong or has expired. Ask Claude to show the documents again.</p>",
       );
-      return;
     }
-    if (s.expires < Date.now()) {
-      htmlPage(res, 410, "Review expired", "<p>Ask Claude to show the documents again.</p>");
-      return;
-    }
-    if (m[2] !== undefined) {
-      const f = s.files[Number(m[2])];
-      if (!f) {
-        htmlPage(res, 404, "Not found", "");
-        return;
+    const base = `/review/${s.id}`;
+    if (!part) {
+      if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+      if (s.expires < Date.now()) {
+        return htmlPage(res, 410, "Review expired", "<p>Ask Claude to show the documents again.</p>");
       }
-      res.writeHead(200, {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${f.name.split("/").pop()?.replace(/["\\]/g, "") ?? "document.pdf"}"`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "SAMEORIGIN",
-      });
-      res.end(f.bytes);
-      return;
+      if (url.searchParams.has("t")) res.setHeader("Set-Cookie", pageCookie(s.token, base));
+      return this.ui.page(res, "review", "ezapply: Review", base);
     }
-    if (s.result) {
-      htmlPage(res, 200, "Already answered", `${resultHtml(s.result)}<p>You can close this tab.</p>`);
-      return;
-    }
-    if (s.supersededBy) {
-      htmlPage(
-        res,
-        410,
-        "A newer version is waiting",
-        "<p>Claude opened a newer review of these documents in another tab. Use that one.</p>",
-      );
-      return;
-    }
-    if (post && form) {
-      // No page after answering: the review page sends its answer with fetch and closes its tab on this 204.
-      await this.answer(s, form);
+    if (part === "answer") {
+      if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: "forbidden origin" });
+      const status = this.status(s);
+      if (status !== "open") return sendJson(res, 409, { status });
+      const body = AnswerBody.safeParse(await readJsonBody(req));
+      if (!body.success) return sendJson(res, 400, { error: "bad answer" });
+      await this.answer(s, body.data);
+      // No page after answering: the review page closes its tab on this 204.
       res.writeHead(204, { "Cache-Control": "no-store" });
       res.end();
       return;
     }
-    this.page(res, s);
-  }
-
-  private page(res: ServerResponse, s: Session): void {
-    const t = escapeHtml(s.token);
-    const docs = s.files
-      .map(
-        (f, i) => `<fieldset><legend><b>${escapeHtml(f.name)}</b></legend>
-        <iframe src="/review/${s.id}/file/${i}?t=${t}" title="${escapeHtml(f.name)}"></iframe>
-        <label>What should change? Leave empty to approve ${escapeHtml(f.name)} as shown.
-        <textarea name="c${i}" rows="3"></textarea></label></fieldset>`,
-      )
-      .join("\n");
-    // Sending closes the tab. A browser closes a tab from script only while its history holds one page, so the
-    // answer goes with fetch instead of navigating; where the browser still refuses, one line stays.
-    // Anything but the 204 (answered meanwhile, replaced by a newer review) reloads to show what happened.
-    const nonce = randomBytes(16).toString("base64");
-    const script = `const f=document.querySelector("form"),b=f.querySelector("button");
-      f.addEventListener("submit",async(e)=>{e.preventDefault();b.disabled=true;let r=null;
-      try{r=await fetch(f.action,{method:"POST",body:new URLSearchParams(new FormData(f))});}catch{}
-      if(!r){b.disabled=false;f.querySelector(".err").textContent="ezapply isn't reachable. Is ezapply chat still running?";return;}
-      if(r.status!==204){location.reload();return;}
-      window.close();document.body.textContent="Sent to Claude. You can close this tab.";});`;
-    htmlPage(
-      res,
-      200,
-      "Review before attaching",
-      `<p>These are the documents Claude prepared for this application. Documents you approve are attached as
-      shown; for the others, write what should change and Claude will revise them and show you the new version.</p>
-      <form method="post" action="/review/${s.id}">
-        <input type="hidden" name="t" value="${t}">
-        ${docs}
-        <p class="err"></p>
-        <button type="submit">Approve empty ones and send changes</button>
-      </form>
-      <script nonce="${nonce}">${script}</script>`,
-      {
-        csp: `frame-src 'self'; form-action 'self'; connect-src 'self'; script-src 'nonce-${nonce}'`,
-        wide: true,
-      },
-    );
-  }
-
-  private async answer(s: Session, form: URLSearchParams): Promise<ReviewResult> {
-    const result: ReviewResult = { approved: [], changes: [] };
-    s.files.forEach((f, i) => {
-      const request = (form.get(`c${i}`) ?? "").trim().slice(0, 4000);
-      if (request) result.changes.push({ file: f.name, request });
-      else result.approved.push(f.name);
+    if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+    if (part === "state") return sendJson(res, 200, this.state(s));
+    if (part === "events") return s.events.add(req, res);
+    const f = s.files[Number(m[3])];
+    if (!f) return sendJson(res, 404, { error: "not found" });
+    const filename =
+      f.name
+        .split("/")
+        .pop()
+        ?.replace(/["\\\r\n]/g, "") || "document.pdf";
+    res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `${url.searchParams.has("download") ? "attachment" : "inline"}; filename="${filename}"`,
+      "Content-Length": f.bytes.byteLength,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
     });
-    if (result.approved.length > 0) {
+    res.end(f.bytes);
+  }
+
+  private state(s: Session): ReviewPageState {
+    return {
+      id: s.id,
+      status: this.status(s),
+      posting: s.posting,
+      expiresAt: new Date(s.expires).toISOString(),
+      files: s.files.map((f, index) => ({
+        index,
+        name: f.name,
+        bytes: f.bytes.byteLength,
+        ...(f.info ? { info: f.info } : {}),
+        ...(/resume|cv/i.test(f.name) ? { pageLimit: s.pageLimit } : {}),
+        ...(f.previous ? { previous: f.previous } : {}),
+      })),
+      ...(s.answer ? { answer: s.answer } : {}),
+    };
+  }
+
+  private status(s: Session): ReviewStatus {
+    if (s.answer) return "answered";
+    if (s.supersededBy) return "replaced";
+    return s.expires < Date.now() ? "expired" : "open";
+  }
+
+  private async answer(s: Session, body: z.infer<typeof AnswerBody>): Promise<void> {
+    const answer: ReviewAnswer = { approved: [], changes: [] };
+    s.files.forEach((f, i) => {
+      const doc = body.documents.find((d) => d.index === i);
+      const request = doc?.request?.trim().slice(0, MAX_REQUEST_CHARS);
+      const comments: ReviewComment[] = (doc?.comments ?? [])
+        .map((c) => ({ ...c, quote: c.quote.trim(), note: c.note.trim() }))
+        .filter((c) => c.note);
+      if (request || comments.length) {
+        answer.changes.push({
+          file: f.name,
+          ...(request ? { request } : {}),
+          ...(comments.length ? { comments } : {}),
+        });
+      } else answer.approved.push(f.name);
+    });
+    const now = new Date().toISOString();
+    if (answer.approved.length > 0) {
       const file = await this.approvals(s.postingId);
-      const now = new Date().toISOString();
-      for (const f of s.files.filter((x) => result.approved.includes(x.name))) {
+      for (const f of s.files.filter((x) => answer.approved.includes(x.name))) {
         file.approvals[f.name] = { sha256: f.sha256, approvedAt: now, reviewId: s.id };
       }
       await writeJsonAtomic(this.ws.path("postings", s.postingId, "approvals.json"), file);
     }
-    s.result = result;
+    const reviewed = await this.reviewed(s.postingId);
+    for (const f of s.files) {
+      reviewed.documents[f.name] = {
+        sha256: f.sha256,
+        at: now,
+        reviewId: s.id,
+        approved: answer.approved.includes(f.name),
+        ...(f.text ? { pages: f.text } : {}),
+      };
+    }
+    await writeJsonAtomic(this.ws.path("postings", s.postingId, "reviewed.json"), reviewed);
+    s.answer = answer;
+    this.changed(s);
+    this.log.info({ id: s.id, approved: answer.approved.length, changes: answer.changes.length }, "review answered");
+  }
+
+  /** Wake the agent's wait and tell the open page to read its state again. */
+  private changed(s: Session): void {
     for (const w of s.waiters) w();
-    this.log.info({ id: s.id, approved: result.approved.length, changes: result.changes.length }, "review answered");
-    return result;
+    s.events.send("state");
   }
 
   // ---- internals ---------------------------------------------------------------------------------
+
+  /** What the page shows beside a document: its pages and text layer, and the version last reviewed. */
+  private async read(f: ReviewFile, reviewed: ReviewedFile): Promise<void> {
+    const info = await pdfInfoOf(new Uint8Array(f.bytes), f.name).catch(() => null);
+    if (info) {
+      const size = info.pageSizes[0];
+      f.info = {
+        pages: info.pages,
+        ...(size ? { pageSize: size.size } : {}),
+        hasTextLayer: info.hasTextLayer,
+        encrypted: info.encrypted,
+      };
+      if (info.hasTextLayer) {
+        const text = await pdfText(new Uint8Array(f.bytes)).catch(() => null);
+        if (text) f.text = text.map((p) => p.text);
+      }
+    }
+    const prev = reviewed.documents[f.name];
+    if (prev) {
+      f.previous = {
+        at: prev.at,
+        reviewId: prev.reviewId,
+        same: prev.sha256 === f.sha256,
+        approved: prev.approved,
+        ...(prev.pages ? { pages: prev.pages } : {}),
+      };
+    }
+  }
+
+  private async posting(postingId: string): Promise<ReviewPageState["posting"]> {
+    const meta = (await readJson(this.ws.path("postings", postingId, "meta.json")).catch(() => null)) as {
+      company?: unknown;
+      role?: unknown;
+    } | null;
+    return {
+      id: postingId,
+      ...(typeof meta?.company === "string" ? { company: meta.company } : {}),
+      ...(typeof meta?.role === "string" ? { role: meta.role } : {}),
+    };
+  }
 
   private url(s: Session): string {
     return `${this.localBaseUrl()}/review/${s.id}?t=${s.token}`;
@@ -336,6 +473,12 @@ export class ReviewService {
     const raw = await readJson(this.ws.path("postings", postingId, "approvals.json")).catch(() => null);
     const parsed = ApprovalsFile.safeParse(raw);
     return parsed.success ? parsed.data : { schemaVersion: 1, approvals: {} };
+  }
+
+  private async reviewed(postingId: string): Promise<ReviewedFile> {
+    const raw = await readJson(this.ws.path("postings", postingId, "reviewed.json")).catch(() => null);
+    const parsed = ReviewedFile.safeParse(raw);
+    return parsed.success ? parsed.data : { schemaVersion: 1, documents: {} };
   }
 
   /** postings/<id>/<name> → { postingId, name }, or null for anything else. */
@@ -348,27 +491,26 @@ export class ReviewService {
 
   private prune(): void {
     const now = Date.now();
-    for (const [id, s] of this.sessions) if (s.expires < now) this.sessions.delete(id);
+    for (const [id, s] of this.sessions) {
+      if (s.expires < now) {
+        s.events.close();
+        this.sessions.delete(id);
+      }
+    }
   }
 }
 
-function resultHtml(r: ReviewResult): string {
-  const list = (items: string[]) => items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
-  return [
-    r.approved.length ? `<p>Approved (attached as shown):</p><ul>${list(r.approved)}</ul>` : "",
-    r.changes.length
-      ? `<p>Changes requested (Claude will show you the revised version):</p><ul>${list(r.changes.map((c) => c.file))}</ul>`
-      : "",
-  ].join("");
+/** The answer as the agent gets it: comments without their places on the page. */
+function forAgent(a: ReviewAnswer): ReviewAnswer {
+  return {
+    approved: a.approved,
+    changes: a.changes.map((c) => ({
+      ...c,
+      ...(c.comments ? { comments: c.comments.map(({ page, quote, note }) => ({ page, quote, note })) } : {}),
+    })),
+  };
 }
 
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-function tokenOk(given: string | null | undefined, expected: string): boolean {
-  if (!given) return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
 }

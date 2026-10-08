@@ -40,7 +40,8 @@ Without the first-time steps (app already registered), `/github/start` goes stra
 
 ### Reusing an existing app
 Someone with an ezapply app from another computer or an earlier install doesn't need another one:
-onboarding asks, and `github_login` with `app: "existing"` connects it (`app: "new"` forces the manifest flow
+the onboarding page asks (its GitHub step opens the same `/github/` flow in a new tab), and `github_login` with
+`app: "existing"` connects it (`app: "new"` forces the manifest flow
 even when an app is registered; neither given: the registered app, else a new one). GitHub offers no way to
 list a user's apps before they sign in, and never shows an app's client secret again, so:
 1. `/github/start` (with a nonce whose choice is `existing`) serves a form page with the steps: open

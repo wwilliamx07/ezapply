@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import {
   type BridgeMessage,
   CompanionApi,
@@ -76,9 +77,21 @@ beforeEach(async () => {
 
 /** Start review_documents (it waits for the answer) and get the page's URL once the review is open. */
 async function startReview(client: Client, files: string[], opened = openedUrls) {
+  const before = opened.length;
   const result = callJson(client, "review_documents", { files });
-  const url = await waitUntil(() => opened.at(-1));
+  const url = await waitUntil(() => (opened.length > before ? opened.at(-1) : undefined));
   return { result, url, token: new URL(url).searchParams.get("t") ?? "" };
+}
+
+/** A one-page PDF with a line of text each, which pdf.js reads back. */
+async function textPdf(lines: string[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([612, 792]);
+  lines.forEach((line, i) => {
+    page.drawText(line, { x: 56, y: 720 - i * 18, size: 11, font });
+  });
+  return doc.save();
 }
 
 async function waitUntil<T>(probe: () => T | undefined, ms = 5000): Promise<T> {
@@ -102,9 +115,23 @@ async function poll<T>(probe: () => Promise<T | undefined>, ms = 5000): Promise<
   }
 }
 
-function answerReview(url: string, fields: Record<string, string>) {
+/**
+ * Answer a review as its page does: JSON to <review>/answer from the companion's own origin. The token goes in the
+ * query here, where the page would send its cookie.
+ */
+function answerReview(
+  url: string,
+  documents: { index: number; request?: string; comments?: unknown[] }[] = [],
+  opts: { token?: string; origin?: string | null } = {},
+) {
   const u = new URL(url);
-  return fetch(`${u.origin}${u.pathname}`, { method: "POST", body: new URLSearchParams(fields) });
+  const token = opts.token ?? u.searchParams.get("t") ?? "";
+  const origin = opts.origin === undefined ? u.origin : opts.origin;
+  return fetch(`${u.origin}${u.pathname}/answer?t=${token}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(origin ? { Origin: origin } : {}) },
+    body: JSON.stringify({ documents }),
+  });
 }
 
 afterEach(async () => {
@@ -1321,21 +1348,57 @@ describe("form tools over MCP", () => {
       `postings/${cap.postingId}/cover.pdf`,
     ]);
     expect(openedUrls).toEqual([review.url]);
-    const page = await fetch(review.url);
-    expect(page.headers.get("content-security-policy")).toContain("frame-src 'self'");
-    const html = await page.text();
-    expect(html).toContain("resume.pdf");
-    // The only script is the page's own, allowed by nonce: it sends the answer with fetch and closes the tab.
-    const nonce = html.match(/<script nonce="([^"]+)">/)?.[1];
-    expect(page.headers.get("content-security-policy")).toContain(`script-src 'nonce-${nonce}'`);
-    expect(html).toContain("window.close()");
     const reviewId = new URL(review.url).pathname.split("/").pop() as string;
-    const pdf = await fetch(`http://127.0.0.1:${handle.port}/review/${reviewId}/file/0?t=${review.token}`);
+    const base = `http://127.0.0.1:${handle.port}/review/${reviewId}`;
+    // The page is the UI package's: its scripts come from /ui/, none inline, and the link's token becomes a
+    // cookie for this review's path only.
+    const page = await fetch(review.url);
+    expect(page.status).toBe(200);
+    const csp = page.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    const html = await page.text();
+    const script = html.match(/<script type="module" src="(\/ui\/review-[^"]+\.js)">/)?.[1];
+    expect(script).toBeDefined();
+    expect(html).not.toMatch(/<script>|<script nonce/);
+    const js = await fetch(`http://127.0.0.1:${handle.port}${script}`);
+    expect(js.headers.get("content-type")).toMatch(/javascript/);
+    expect(js.headers.get("cache-control")).toContain("immutable");
+    const cookie = page.headers.get("set-cookie") ?? "";
+    expect(cookie).toBe(`ezapply_page=${review.token}; Path=/review/${reviewId}; HttpOnly; SameSite=Strict`);
+    const withCookie = { headers: { Cookie: cookie.split(";")[0] as string } };
+    // The page reads its state and the PDFs with the cookie.
+    const state = await (await fetch(`${base}/state`, withCookie)).json();
+    expect(state).toMatchObject({
+      id: reviewId,
+      status: "open",
+      posting: { id: cap.postingId },
+      files: [
+        { index: 0, name: "resume.pdf", bytes: 18, pageLimit: 1 },
+        { index: 1, name: "cover.pdf", bytes: 17 },
+      ],
+    });
+    // Not PDFs ezapply can read: no checks, no history.
+    expect(state.files[0].info).toBeUndefined();
+    expect(state.files[0].previous).toBeUndefined();
+    const pdf = await fetch(`${base}/file/0`, withCookie);
     expect(pdf.headers.get("content-type")).toBe("application/pdf");
     expect(await pdf.text()).toBe("%PDF-1.4 resume v1");
-    // Without the token there's nothing to see or answer.
-    expect((await fetch(`http://127.0.0.1:${handle.port}/review/${reviewId}/file/0`)).status).toBe(404);
-    expect((await answerReview(review.url, { t: "wrong", c0: "", c1: "" })).status).toBe(404);
+    const download = await fetch(`${base}/file/1?download=1`, withCookie);
+    expect(download.headers.get("content-disposition")).toBe('attachment; filename="cover.pdf"');
+    // Without the token or the cookie there's nothing to see or answer; a POST from elsewhere is refused.
+    expect((await fetch(`${base}/file/0`)).status).toBe(404);
+    expect((await fetch(`${base}/state`, { headers: { Cookie: "ezapply_page=wrong" } })).status).toBe(404);
+    expect((await fetch(`${base}`)).status).toBe(404);
+    expect((await answerReview(review.url, [], { token: "wrong" })).status).toBe(404);
+    expect((await answerReview(review.url, [], { origin: null })).status).toBe(403);
+    expect((await answerReview(review.url, [], { origin: "https://evil.example" })).status).toBe(403);
+    const bad = await fetch(`${base}/answer?t=${review.token}`, {
+      method: "POST",
+      headers: { Origin: `http://127.0.0.1:${handle.port}` },
+      body: "not json",
+    });
+    expect(bad.status).toBe(400);
 
     // Status, and a second wait that times out, before an answer.
     expect((await callJson(client, "posting_active")).data.documents).toMatchObject({
@@ -1349,11 +1412,21 @@ describe("form tools over MCP", () => {
       hint: expect.stringMatching(/review_documents { reviewId }/),
     });
 
-    const answered = await answerReview(review.url, {
-      t: review.token,
-      c0: "",
-      c1: "Make the second paragraph shorter.",
-    });
+    // Hearing about changes as they happen.
+    const events = await fetch(`${base}/events`, withCookie);
+    expect(events.headers.get("content-type")).toMatch(/text\/event-stream/);
+    const reader = (events.body as ReadableStream<Uint8Array>).getReader();
+
+    const comment = {
+      page: 1,
+      quote: "Dear hiring manager",
+      note: "Use the manager's name.",
+      rects: [{ x: 0.1, y: 0.2, w: 0.3, h: 0.02 }],
+    };
+    const answered = await answerReview(review.url, [
+      { index: 0, request: "  " },
+      { index: 1, request: "Make the second paragraph shorter.", comments: [comment, { ...comment, note: " " }] },
+    ]);
     // No page after answering: the 204 lets the review page close its tab.
     expect(answered.status).toBe(204);
     expect((await review.result).data).toEqual({
@@ -1364,13 +1437,35 @@ describe("form tools over MCP", () => {
       openedIn: "default",
       done: true,
       approved: ["resume.pdf"],
-      changes: [{ file: "cover.pdf", request: "Make the second paragraph shorter." }],
+      // The agent gets the comment's page, words and note, not where it sits on the page; an empty one is dropped.
+      changes: [
+        {
+          file: "cover.pdf",
+          request: "Make the second paragraph shorter.",
+          comments: [{ page: 1, quote: "Dear hiring manager", note: "Use the manager's name." }],
+        },
+      ],
     });
-    // An answered review answers a later wait at once.
+    let heard = "";
+    while (!heard.includes("event: state")) heard += new TextDecoder().decode((await reader.read()).value);
+    await reader.cancel();
+    // The page, read again, shows what was sent, with each comment's place.
+    const after = await (await fetch(`${base}/state`, withCookie)).json();
+    expect(after).toMatchObject({
+      status: "answered",
+      answer: { changes: [{ comments: [{ rects: comment.rects }] }] },
+    });
+    // An answered review answers a later wait at once, and a second answer is refused.
     expect((await callJson(client, "review_documents", { reviewId })).data).toMatchObject({ done: true });
-    expect(await (await answerReview(review.url, { t: review.token, c0: "", c1: "" })).text()).toContain(
-      "Already answered",
-    );
+    const twice = await answerReview(review.url, []);
+    expect(twice.status).toBe(409);
+    expect(await twice.json()).toEqual({ status: "answered" });
+    // What was reviewed is kept for the next review of the same documents.
+    const reviewed = JSON.parse(await readFile(join(folder, "reviewed.json"), "utf8"));
+    expect(reviewed.documents).toMatchObject({
+      "resume.pdf": { reviewId, approved: true },
+      "cover.pdf": { reviewId, approved: false },
+    });
 
     expect((await upload("resume.pdf", "application-questions.resume")).data).toMatchObject({ ok: true });
     expect((await upload("cover.pdf", "application-questions.coverLetter")).data.error.code).toBe("bad_request");
@@ -1395,6 +1490,61 @@ describe("form tools over MCP", () => {
     await client.close();
   });
 
+  it("shows what changed since the last review, to the page and to the agent", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    const resume = `postings/${cap.postingId}/resume.pdf`;
+    const lines = ["Jane Doe", "Led a team of four engineers.", "Wrote the on-call runbook used by twelve teams."];
+    await writeFile(join(folder, "resume.pdf"), await textPdf(lines));
+    const client = await mcpClient();
+
+    // Never reviewed: nothing to compare with.
+    expect((await callJson(client, "pdf_text", { path: resume, sinceReviewed: true })).data).toMatchObject({
+      firstReview: true,
+    });
+    const first = await startReview(client, [resume]);
+    const firstState = await (await fetch(`${first.url.replace("?", "/state?")}`)).json();
+    // A real PDF: the page gets its checks.
+    expect(firstState.files[0]).toMatchObject({
+      info: { pages: 1, hasTextLayer: true, encrypted: false },
+      pageLimit: 1,
+    });
+    expect(firstState.files[0].previous).toBeUndefined();
+    await answerReview(first.url, [{ index: 0, request: "Say six engineers." }]);
+    await first.result;
+
+    // Unchanged: the next review says so.
+    const same = await startReview(client, [resume]);
+    const sameState = await (await fetch(`${same.url.replace("?", "/state?")}`)).json();
+    expect(sameState.files[0].previous).toMatchObject({ same: true, approved: false });
+    await answerReview(same.url, [{ index: 0, request: "Still four." }]);
+    await same.result;
+
+    // Rebuilt with changes: the agent reads them word by word, and the page gets the text to mark them.
+    const revised = ["Jane Doe", "Led a team of six engineers.", "Wrote the on-call runbook used by teams."];
+    await writeFile(join(folder, "resume.pdf"), await textPdf(revised));
+    expect((await callJson(client, "pdf_text", { path: resume, sinceReviewed: true })).data).toMatchObject({
+      since: { reviewId: new URL(same.url).pathname.split("/").pop() },
+      changes: [
+        { page: 1, removed: "four", added: "six", before: "Doe Led a team of" },
+        { page: 1, removed: "twelve", before: "the on-call runbook used by" },
+      ],
+    });
+    const next = await startReview(client, [resume]);
+    const nextState = await (await fetch(`${next.url.replace("?", "/state?")}`)).json();
+    expect(nextState.files[0].previous).toMatchObject({ same: false, approved: false });
+    expect(nextState.files[0].previous.pages[0]).toContain("Led a team of four engineers.");
+    await answerReview(next.url);
+    await next.result;
+    // Approved this time: kept as the last reviewed version, approved.
+    const reviewed = JSON.parse(await readFile(join(folder, "reviewed.json"), "utf8"));
+    expect(reviewed.documents["resume.pdf"]).toMatchObject({ approved: true });
+    expect(reviewed.documents["resume.pdf"].pages[0]).toContain("Led a team of six engineers.");
+    await client.close();
+  });
+
   it("says which approved documents aren't attached, after an upload and on the review page", async () => {
     const ext = fakeExtension();
     await ext.outcome;
@@ -1407,7 +1557,7 @@ describe("form tools over MCP", () => {
       `postings/${cap.postingId}/resume.pdf`,
       `postings/${cap.postingId}/cover.pdf`,
     ]);
-    await answerReview(review.url, { t: review.token, c0: "", c1: "" });
+    await answerReview(review.url);
     await review.result;
     await callJson(client, "remove_items", { fieldId: "application-questions.coverLetter" });
     await callJson(client, "fill_fields", {
@@ -1477,7 +1627,7 @@ describe("form tools over MCP", () => {
     ext.calls.length = 0;
     await callJson(client, "fill_fields", { fills: [firstName] });
     expect(ext.calls[0]?.params).toMatchObject({ activate: false, focusWindow: false });
-    await answerReview(review.url, { t: review.token, c0: "" });
+    await answerReview(review.url);
     await review.result;
     await client.close();
   });

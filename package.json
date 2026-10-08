@@ -6,15 +6,16 @@
     "packages/protocol",
     "packages/companion",
     "packages/cli",
-    "packages/extension"
+    "packages/extension",
+    "packages/ui"
   ],
   "engines": {
     "node": ">=22.12"
   },
   "scripts": {
     "setup": "npm install && npm run build && node packages/cli/dist/main.js init",
-    "build": "tsc -b packages/protocol packages/companion packages/cli && npm run build -w @ezapply/extension",
-    "typecheck": "tsc -b packages/protocol packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/extension",
+    "build": "tsc -b packages/protocol packages/companion packages/cli && npm run build -w @ezapply/extension && npm run build -w @ezapply/ui",
+    "typecheck": "tsc -b packages/protocol packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
     "test": "npm run build && vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",
@@ -24,6 +25,7 @@
     "@biomejs/biome": "^2.5.14",
     "@types/node": "^24.13.6",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "@testing-library/react": "^16.3.3"
   }
 }

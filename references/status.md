@@ -19,14 +19,15 @@ As of 2026-10-06.
 | Greenhouse, Lever, Ashby | Definitions on the engine using shared drivers only, built from live public application pages and checked on live forms with fake values, never submitted ([sites](components/sites.md)) |
 | Phenom | Employers' careers sites run by Phenom, whose multi-step apply flow is on the employer's domain: a definition on the engine (shared drivers, a react-datepicker month picker, selects that settle late, rows, the resume required on step 1), built from steps 1 to 3 of a live flow saved with placeholder values ([sites](components/sites.md#phenom-sitesphenom)) |
 | Dayforce | Dayforce's candidate portal (`jobs.dayforcehcm.com`, every employer on one host): a definition on the engine with an Ant Design Select driver through rc-select's context, phone numbers read as two fields, Personal Information's own form and Update, employment and education records added, saved, edited and deleted through their forms, uploads, the Submit step as the review page. Built from one saved step and the portal's own scripts ([sites](components/sites.md#dayforce-sitesdayforce)) |
-| SAP SuccessFactors | SuccessFactors Recruiting's career site (`career<n>.sapsf.com` and the like, every employer of a data centre on one host): a definition on the engine for its one-page application, with its own paginated picklist driver (through its framework's component registry) and attachment driver (through the upload popup), a shared UI5 Web Components date picker driver, rows of lists added and removed, documents uploaded, replaced and removed, Apply as the submit. Built from one saved application and the page's own scripts ([sites](components/sites.md#sap-successfactors-sitessuccessfactors)) |
+| SAP SuccessFactors | SuccessFactors Recruiting's career site (`career<n>.sapsf.com` and the like, every employer of a data centre on one host): a definition on the engine for its one-page application, with its own paginated picklist driver (through its framework's component registry) and attachment driver (through the upload popup, telling a same-named replacement by the field's tick and a page re-render by the field leaving it), a radio group driver for its questions, a shared UI5 Web Components date picker driver, rows of lists added and removed, documents uploaded, replaced and removed, Apply as the submit. Built from one saved application and the page's own scripts, and corrected after a live run ([sites](components/sites.md#sap-successfactors-sitessuccessfactors)) |
 | Audit and status | `form-log.jsonl` (with `matchedBy`), automatic status credited only to the posting a tab may belong to: its job, the tab's binding, its tenant or its title ([which posting](mcp-tools.md#forms)); postings captured off the form sites tied to their application by the captured page's link or an embedded board's job, else bound to the tab on the first change; tab choice by the best match, duplicate lookup by company, resume after interruption |
 | Firefox | Separate build, origin support, event-page keepalive, site-access handling |
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions); the form tools' descriptions and the apply skill name no site: what a site does differently is in its notes, given once per chat session as `siteNotes` ([site notes](mcp-tools.md#site-notes)) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
 | Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, a template imported from a scratchpad copy, a LaTeX document in `library/` that no template came from, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
-| Setup | `npm run setup` + agent-led onboarding (`./ezapply chat`), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
+| Setup | `npm run setup` + onboarding on a page (`./ezapply chat`, "set me up": the steps in the browser, what needs judgment done by Claude as tasks, [ui](components/ui.md#the-onboarding-page-onboard)), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
+| Browser pages | The UI package ([ui](components/ui.md)): the review page in pdf.js with comments on passages and what changed since the last review (`reviewed.json`, the same word diff for the page and `pdf_text { sinceReviewed }`), and the onboarding page; the token traded for a cookie on the page's path, POSTs from the companion's origin only, no inline script, nothing loaded from elsewhere; the companion's own pages in the same style |
 
 ## Not yet verified for real
 - **Workday and Oracle on the engine** (2026-10-03). Their fillers and readers moved unchanged, the golden
@@ -86,16 +87,16 @@ As of 2026-10-06.
   posting page (`ezapply debug export`) as fixtures.
 - **SAP SuccessFactors** (2026-10-06): built from one saved application (a signed-in candidate's, the profile, two
   lists and the documents filled from an earlier one) and, for the rest, from the page's own scripts saved with it;
-  tested in jsdom only, with its components modelled. Nothing has run live. Check in one real application, with debug
-  mode on: the application listed `successfactors` in `browser_status` and tied to its posting by the page's
-  requisition (a signed-in page's URL names no job); a list chosen through its component (the riskiest part: juic's
-  registry and the picklist's server request, whose argument order and `contains` filter were read from its script)
-  and read back, the province list enabled and loaded after a country, and whether the country and province lists
-  are hinted (their field names were assumed); a date taken by the page (its own validation message gone, the
-  value kept after Save); a document uploaded through the popup, and a second one to the same field (whether the
-  popup still has a file input); a row added and removed; a document removed (use one uploaded for the test: it's
-  deleted on SuccessFactors' side). Never press Apply; Save keeps a draft, and isn't needed. Save the upload popup,
-  an open list and Apply's errors (`ezapply debug export`) as fixtures.
+  tested in jsdom with its components modelled, then verified against a live tenant
+  ([what was verified](components/sites.md#what-was-verified-and-how)). That run found three gaps, fixed since (2026-10-08)
+  and tested in jsdom only: question radio groups weren't read, a required document replaced under the same name was
+  reported as failed, and an upload during which the page re-rendered waited out `uploadMs` on the old field.
+  Check in one real application, with debug mode on: a question's radio answered through `fill_fields` and read back
+  (and a follow-up question it shows read on the next `get_form`); the resume replaced under the same name and
+  reported `ok`; if the page re-renders during an upload, the result says so at once. What sets the re-render off
+  is unknown: record the calls around it if it recurs. Also still to see: the province list loaded after a country
+  in the same call, a row added and removed, and Apply's errors. Never press Apply. Save a page with a question's
+  radios and Apply's errors (`ezapply debug export`) as fixtures.
 - **The hand-off checklist** (`checklist`, `handoff`, 2026-10-01): tested on the fixtures. Not yet seen on live
   Workday and Oracle sections, where the title matching and row counting are guesses until then.
 - **Telling postings apart by requisition** (2026-10-01): tested on URLs and over MCP. Workday's application URL
@@ -193,8 +194,16 @@ As of 2026-10-06.
 - **Capturing from embedded job boards** in a real browser: whether `allFrames` quietly skips frames the
   click's `activeTab` grant doesn't cover (as expected) in both Chrome and Firefox, and the board opening in
   its own tab when it can't be read. Tested with the frame-choice logic only.
-- **The review page in real browsers:** PDFs shown in an iframe by Chrome's and Firefox's viewers under the
-  page's CSP (tested over HTTP only).
+- **The review and onboarding pages in a real browser:** checked in headless Edge with generated PDFs and a
+  stand-in agent: the viewer, zoom, comments (whole words, kept on their words at another zoom), the changes since
+  the last review marked on the page, sending; and onboarding's resume import and build with its preview, a
+  drafted profile shown in the form and saved, the screening questions and preferences, and the narrow layout.
+  Not yet seen: either page in Firefox; the tab closing after Send on this page (the browser refused in the
+  headless check, as expected for a tab the test opened); a real agent working through the tasks in a chat; the
+  extension, GitHub, repositories, cover letter and library steps against the real things; the OS's folder
+  dialog (its PowerShell script parses; no dialog was opened); pdf.js on a large or image-heavy PDF.
+- **The first LaTeX build from the onboarding page** once stalled for minutes in the headless check (the next
+  run built at once), likely MiKTeX fetching packages on its first use; not seen again.
 - **The reconnect alarm after a browser restart** in a real Chrome and Firefox (tested by loading the
   background against a stubbed API).
 - **CI's `tex` and `firefox` jobs** haven't run on GitHub yet; locally, the TeX tests pass with MiKTeX with

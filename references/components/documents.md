@@ -83,7 +83,7 @@ Anything else fails with `path_not_allowed`.
 
 ## Review before attaching
 How a finished document reaches an application is the **attach mode**, `documents.attach` in
-`ezapply.config.json` (set by `attach_mode_set`; onboarding asks):
+`ezapply.config.json` (set by `attach_mode_set`, or on the onboarding page's preferences step):
 - **`after-approval`** (default): Claude shows the documents in the browser and attaches only what the user
   approves there.
 - **`immediately`**: attached as soon as it's built, without a review step.
@@ -91,13 +91,26 @@ How a finished document reaches an application is the **attach mode**, `document
 The default is the reviewing one because what's attached goes to an employer; a user who trusts the loop can
 switch.
 
-**The review page** (`ReviewService`, `documents/review.ts`). `review_documents { files }` takes 1–6 PDFs from
-one posting folder, reads their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the
-`Opener`. The page shows each PDF in the browser's own viewer (an iframe of `/review/<id>/file/<n>`, served as
-`application/pdf`, inline, only to the same origin) with a box "What should change? Leave empty to approve
-it as shown", and one submit button. The files are served from the bytes read when the review opened, so the
-user approves exactly what they saw even if Claude rebuilds meanwhile. Answering records each document with an
-empty box as approved and returns the others with the user's words.
+**The review page** (`ReviewService`, `documents/review.ts`; the page itself is the UI package's,
+[ui](ui.md#the-review-page-reviewid)). `review_documents { files }` takes 1–6 PDFs from one posting folder, reads
+their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the `Opener`. Opening reads what
+the page shows beside each document: its page count, page size, text layer and encryption (`pdfInfoOf` on the
+bytes; a file that isn't a readable PDF has none), its text per page (`pdfText` on the bytes), and the version the
+user last answered a review of, by its name in the posting folder (`reviewed.json`). The page shows each PDF in
+pdf.js, takes comments on selected passages and a request for the whole document, and marks what changed since
+the last review. The files are served from the bytes read when the review opened, so the user approves exactly
+what they saw even if Claude rebuilds meanwhile. Answering records each document with no request and no comment as
+approved, and returns the others with the user's request and comments (`{ page, quote, note }`: the agent gets the
+quoted words, not where they sit on the page).
+
+**What changed since the last review.** When a review is answered, each of its documents is recorded in
+`postings/<id>/reviewed.json` ([format](../data-formats.md#postingsidreviewedjson)) with its hash, whether it was
+approved, and its text per page. The next review of a document by the same name gets that as `previous`: the
+same bytes ("unchanged since you approved it"), or the text to compare, which the page diffs word by word and
+marks on the PDF ([how](ui.md#what-changed-since-the-last-review-changests-protocolsrctextdiffts)). The agent gets the
+same changes from `pdf_text { path, sinceReviewed: true }`, to quote in its report after a revision instead of
+describing it from memory. Approvals stay per version (the hash): the diff is a reading aid. *Why not latexdiff:*
+it needs Perl and a LaTeX source, and the user approves the PDF; `tex_diff` stays for the agent.
 
 **One call opens and waits.** `review_documents` blocks until the answer (or its timeout, default 10 minutes).
 Claude Code moves an MCP call still running after 120 s to the background and delivers its result as a task
@@ -111,18 +124,20 @@ any rebuild, review the changed files again.
 
 Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
-a review expires after 2 hours, or when the chat ends. Every URL needs the random
-token, compared in constant time; wrong or missing tokens get a 404.
+a review expires after 2 hours, or when the chat ends; an open page hears each of these (Server-Sent Events). Every
+URL needs the random token or the cookie it became, compared in constant time; wrong or missing tokens get a
+404, and an answer from another origin a 403.
 
-**Sending closes the tab.** There is no page after answering: the POST answers `204`, and the page's script
-closes its tab. A browser lets a script close a tab only while the tab's history holds one page, which is the
-case for a tab the `Opener` opened on the review URL, so the script sends the answer with `fetch` instead of
-submitting the form, which would add a page. Where the browser still refuses (the user pasted the link into
-a tab they'd used), the page is replaced by one line, "Sent to Claude. You can close this tab." Any answer
-other than the 204 (the review was answered meanwhile, or replaced) reloads the page, which then says which;
-a failed request (ezapply closed) shows an error and leaves the form as filled. The script is allowed by a
-per-response nonce (`script-src 'nonce-…'`, `connect-src 'self'`). Seen working in Chromium with the tab
-opened from the command line, as the `Opener` does; not yet tried in Firefox.
+**Sending closes the tab.** There is no page after answering: the answer (`POST <review>/answer`, JSON) is
+answered `204`, and the page closes its tab. A browser lets a script close a tab only while the tab's history
+holds one page, which is the case for a tab the `Opener` opened on the review URL (taking the token off the
+address bar replaces that entry, adding none). Where the browser still refuses (the user pasted the link into a
+tab they'd used), the page says "Sent to Claude. You can close this tab." A 409 (the review was answered
+meanwhile, or replaced) shows the page as it now is; a failed request (ezapply closed) says so and keeps what the
+user wrote, which is also kept across a reload. The page's scripts come from the companion, none inline, and its
+token becomes a cookie on the review's path ([ui](ui.md#how-a-page-talks-to-the-companion)). Closing the tab was
+seen working in Chromium with the tab opened from the command line, as the `Opener` does; not yet tried in
+Firefox, nor on this page.
 
 **Approvals** go to `postings/<id>/approvals.json`: per document (path relative to the posting folder) the
 SHA-256 of the approved bytes, when, and the review. `upload_file` in the `after-approval` mode refuses a file
@@ -151,8 +166,8 @@ fails with a hint.
 | Function | Backend | Behaviour |
 |---|---|---|
 | `pdfRender(path, page, scale)` | pdf.js + `@napi-rs/canvas` | PNG of one page (scale 1 = 72 dpi); the tool also saves it under `.previews/` |
-| `pdfText(path, pages?)` | pdf.js | Text per page in reading order, as an applicant-tracking system would see it |
-| `pdfInfo(path)` | pdf-lib (+ pdf.js for the text-layer check) | Pages, bytes, page sizes, encryption, text layer present, title and author |
+| `pdfText(source, pages?)` | pdf.js | Text per page in reading order, as an applicant-tracking system would see it. `source` is a path or bytes (a review's snapshot; copied, since pdf.js takes over the buffer it's given) |
+| `pdfInfo(path)`, `pdfInfoOf(bytes, path)` | pdf-lib (+ pdf.js for the text-layer check) | Pages, bytes, page sizes, encryption, text layer present, title and author; `pdfInfoOf` for bytes in hand |
 | `pdfMerge(inputs, output, opts)` | pdf-lib | Inputs in order with optional page ranges (`"1-2,4"`), a bookmark per input, page sizes normalized (`auto` = to the first page, `letter`, `a4`, `none`), title/author metadata. Returns `sections[] { label, source, firstPage, lastPage }` and `normalizedPages` |
 | `pdfFromImages(images, output, pageSize)` | `@napi-rs/canvas` + pdf-lib | One image per page, centred with an 18 pt margin, never upscaled; landscape images get a landscape page |
 | `pdfCompress(path, output, target?)` | pdf-lib, then Ghostscript if installed | Lossless re-save first; if still over target, Ghostscript downsampling presets. Reports before/after, method, whether the target was met |

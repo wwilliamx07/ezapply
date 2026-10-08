@@ -14,34 +14,44 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    then on ([cli](components/cli.md#chat-chatts)): it hosts the companion and runs Claude Code, and ezapply
    runs only while it's open. After an update, a chat that was open must be exited and started again.
 
-**In Claude Code** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, skips what's done):
-1. `workspace_check` returns the checklist: `agent_file`, `tex`, `extension`, `github_login`, `repos_selected`,
-   `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank` (required), and
-   `preferences`, `library` (optional). `nextStep` is the first required item not done.
-2. **TeX:** if missing, the item's detail carries the install command for this OS. Claude asks, runs it,
-   and re-checks. No restart is needed.
-3. **Extension:** see [flow 2](#2-pairing-the-extension).
-4. **GitHub:** with no app registered here, Claude asks whether the user already has an ezapply GitHub App
-   (from another computer or an earlier install) or wants a new one. `github_login` opens a page ezapply serves in
-   the browser (or, when it can't, gives the user the URL to open). New: it creates a private, read-only
-   GitHub App through the manifest flow, has the user install it on chosen repos, then authorizes. Existing:
-   the page walks the user through adding the callback URL, copying the Client ID and generating a new
-   client secret on GitHub, takes them on the page (not in chat), then authorizes. `github_login_wait` blocks
-   until done. Details: [github-and-repos](components/github-and-repos.md).
-5. **Repos:** the `ezapply-repos` skill lists accessible repos, proposes a selection, saves it with
-   `repos_selection_set`.
-6. **Knowledge base:** the `ezapply-index-repo` skill per selected repo (in parallel via subagents when there are
-   more than two). See [knowledge-base](components/knowledge-base.md).
-7. **Resume and profile:** `template_import` of the user's LaTeX resume folder or `.tex` file (a pdfTeX-only template is
-   marked `% !TEX program = pdflatex`, and Claude tells the user), compile to check one page, then
-   Claude writes `profile/profile.yaml` from it and asks for what `profile_check` lists as missing.
-8. **Cover letter template:** keep the default (Claude fills in the identity fields), import the user's own
-   LaTeX, or rebuild it from an example letter. See [profile-and-templates](components/profile-and-templates.md).
-9. **Answer bank:** unanswered screening questions in groups of 6–8, each with a suggested answer to confirm.
-10. **Preferences:** tone, emphasis, never-mention list, target roles and locations → `profile/preferences.md`.
-11. **Library (optional):** transcripts, certificates, samples dropped into `library/`.
+**On the setup page** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, steps in any order;
+[ui](components/ui.md#the-onboarding-page-onboard)):
+1. Claude calls `onboarding {}`. The companion opens the setup page in the user's browser (or Claude gives the
+   link) and the call waits for work from it.
+2. The page shows the `workspace_check` items as steps, done ones ticked: `tex`, `extension`, `github_login`,
+   `repos_selected`, `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank`
+   (required), and `preferences`, `library` (optional). It opens on the first required step not done.
+3. **TeX:** if missing, the page shows the install command for this OS and hands Claude an `install-tex` task;
+   Claude runs it in the terminal, where the user approves it. No restart is needed.
+4. **Extension:** the page gives the steps and folder for the user's browser and opens the pairing window
+   ([flow 2](#2-pairing-the-extension)); it turns green when the extension connects.
+5. **GitHub:** a new app or an existing one, then the `/github/` flow in a new tab, as `github_login` runs it:
+   the manifest flow and install for a new app; for an existing one, the callback URL, Client ID and a new client
+   secret typed into that page, never the chat. Details: [github-and-repos](components/github-and-repos.md).
+6. **Repos:** every repository the app can read, the ones a person would rarely pick (forks, archived, nearly
+   empty, the profile README, dotfiles) left out of the suggestion; the user ticks and saves
+   (`profile/repos.yaml`).
+7. **Knowledge base:** an `index-repos` task: Claude runs the `ezapply-index-repo` skill per repo (in parallel via
+   subagents when there are more than two), and the page ticks each as it's marked indexed. See
+   [knowledge-base](components/knowledge-base.md).
+8. **Resume:** the user's LaTeX folder or `.tex` file, typed or chosen in the system's dialog, imported
+   (`template_import`: a pdfTeX-only template is marked `% !TEX program = pdflatex`) and built, with a preview and
+   its page count. A build that fails on the environment becomes a `fix-template-build` task.
+9. **Profile:** a `draft-profile` task: Claude writes `profile/profile.yaml` from the resume. The user checks it in
+   a form of every field and fills what a resume doesn't say (phone, address, work authorization, sponsorship,
+   EEO answers or "decline"); the page saves it in place, keeping the file's comments.
+10. **Cover letter template:** keep the default (Claude fills in the identity fields, or restyles it like the
+   resume), import the user's own LaTeX, or drop an example letter for Claude to rebuild the layout from; a preview,
+   and changes asked of Claude. See [profile-and-templates](components/profile-and-templates.md).
+11. **Answer bank:** unanswered screening questions eight at a time, each with its suggestion filled in, saved in
+   place.
+12. **Preferences:** the attach mode, then tone, emphasis, never-mention list, target roles and locations, cover
+   letters → `profile/preferences.md`.
+13. **Library (optional):** files dropped on the page go into `library/`.
+14. **Finish setup** (or **Finish later**) ends Claude's wait: it says in two lines what's ready and what's left.
 
-Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry).
+Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry). The page shows a
+failed action's message and hint under the button that ran it.
 
 **At the start of every session** (after onboarding too), Claude calls `workspace_changes` with
 `posting_active`. The companion has checked in the background since the chat started: repos pushed since
@@ -52,6 +62,7 @@ updates the profile from the diff, updates the cover fields and re-indexes, mark
 `later` for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## 2. Pairing the extension
+On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
 1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
    the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
    `dist-firefox` for Firefox), plus a hint if the extension isn't built.
@@ -178,10 +189,11 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    After an interruption, `get_form` shows where things stand and filling continues from there.
 
 ## 8. Review and attach
-Once a document is finished, the attach mode (`documents.attach`, asked during onboarding) decides:
-- **after-approval** (default): `review_documents` opens a page in the browser with the PDFs, each with a box
-  for changes, and waits. The user approves (empty box) or writes what should change and sends it; the tab
-  closes and the call returns both; Claude revises the changed documents, rebuilds, and reviews them again until everything is approved.
+Once a document is finished, the attach mode (`documents.attach`, set on the onboarding page) decides:
+- **after-approval** (default): `review_documents` opens a page in the browser with the PDFs and waits. The user
+  approves each, or comments on passages and writes what should change, and sends it; the tab closes and the call
+  returns both. Claude revises the changed documents, rebuilds, reports what changed (`pdf_text { path,
+  sinceReviewed: true }`), and reviews them again, the page marking what changed since, until everything is approved.
   Approvals are stored per exact version in `approvals.json`.
 - **immediately**: no review step.
 

@@ -5,7 +5,7 @@ import { CONFIRMATION_TEXT, singleStep, standardWaits, textOfIds } from "../../e
 import type { AddButtonSpot, FieldSpot, RowSpot, SiteDefinition, WidgetDriver } from "../../engine/types.js";
 import { checkboxDriver, checkboxGroupDriver, radioDriver, selectDriver, textDriver } from "../../widgets/native.js";
 import { ui5DatePickerDriver } from "../../widgets/ui5-datepicker.js";
-import { attachmentDriver, picklistDriver, picklistFieldName } from "./widgets.js";
+import { attachmentDriver, picklistDriver, picklistFieldName, radioGroupDriver } from "./widgets.js";
 
 /**
  * SAP SuccessFactors Recruiting's application (`career17.sapsf.com/career?company=…&career_job_req_id=…`, or
@@ -23,7 +23,8 @@ const SEL = {
   root: "#rcmJobApplicationCtr",
   section: ".rcmFormSectionContent",
   field: ".RCMFormField",
-  label: ":scope > label.rcmFormFieldLabel",
+  // A question's label (`rcmFormQuestionLabel`, over its radio group) as well as a field's.
+  label: ":scope > label.rcmFormFieldLabel, :scope > label.rcmFormQuestionLabel",
   error: ".rcmValidationMsgArea",
   row: ".rcmSectionComponent",
   rowNumber: ".rowNumTextAcc",
@@ -41,6 +42,7 @@ const WIDGETS = {
   date: ui5DatePickerDriver(),
   textarea: textDriver("textarea"),
   select: selectDriver(),
+  radioGroup: radioGroupDriver(),
   radio: radioDriver(),
   checkboxes: checkboxGroupDriver(),
   checkbox: checkboxDriver(),
@@ -128,6 +130,8 @@ function controlOf(field: HTMLElement): { driver: WidgetDriver; control: Element
   if (area) return { driver: WIDGETS.textarea, control: area };
   const select = one("select");
   if (select) return { driver: WIDGETS.select, control: select };
+  const group = one(".radioGroup [role='radio']")?.closest(".radioGroup");
+  if (group) return { driver: WIDGETS.radioGroup, control: group };
   const radios = field.querySelectorAll("input[type='radio']");
   if (radios.length) return { driver: WIDGETS.radio, control: radios[0] as Element };
   const boxes = field.querySelectorAll("input[type='checkbox']");

@@ -10,7 +10,8 @@ job posting. You tailor documents and fill applications with the `ezapply` MCP t
 `ezapply chat` is open; if they say ezapply isn't running, ask the user to exit and start `ezapply chat`.
 
 ## Setup and errors
-- New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
+- New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill. Setup
+  happens on a page in the user's browser (`onboarding {}`); you do the tasks it hands you.
 - **At the start of every session**, call `workspace_changes` once, together with `posting_active`. If it lists
   changes (a repo pushed since indexing, a template or profile behind its source), follow **Keeping the workspace
   current** in the **ezapply-onboard** skill before the work that needs them. If it lists none, say nothing.
@@ -96,6 +97,9 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
     any rebuild, from chat or from the page, `review_documents` the changed ones again. `done: false` means
     no answer yet: ask whether they saw the page, then `review_documents { reviewId }`. Attach approved ones.
     Only the page's approval counts: if the user says "approved" in chat, ask them to press it on the page.
+    A document to change comes back with the user's `request` and `comments` (`{ page, quote, note }`: the
+    words they selected and what to change there). Make each change, rebuild, then report what changed by
+    quoting `pdf_text { path, sinceReviewed: true }` (the same changes the page marks), not from memory.
   - `immediately`: attach right away. `open_file { path }` only when asked.
   - Attaching needs the application open at the step with the file field (`get_form`); otherwise say it's
     ready and attach it when filling (the **ezapply-apply** skill).

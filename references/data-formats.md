@@ -192,9 +192,18 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, companion | tailored documents and bundles |
 | `form-log.jsonl` | companion | the application's audit trail (below) |
 | `approvals.json` | companion | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
+| `reviewed.json` | companion | The version of each document the user last answered a review of, with its text ([below](#postingsidreviewedjson)) |
 | `.build/<name>/` | companion | TeX aux files and logs |
 | `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
 | `.previews/<name>-p<n>.png` | companion | rendered pages |
+
+### `postings/<id>/reviewed.json` (`companion/src/documents/review.ts`)
+`{ schemaVersion: 1, documents: { "<file>": { sha256, at, reviewId, approved, pages?: string[] } } }`, keyed by the
+document's path in the posting folder, as approvals are. Written when the user answers a review: for each of its
+documents, the hash of the bytes shown, when, whether it was approved, and its text per page as `pdf_text` reads
+it (absent for a PDF without text). The next review of a document by the same name shows what changed since
+([ui](components/ui.md#what-changed-since-the-last-review-changests-protocolsrctextdiffts)), and `pdf_text {
+sinceReviewed }` reads it. A file that doesn't parse is treated as empty. A renamed document has no history.
 
 ### `postings/<id>/meta.json` (`protocol/src/postings.ts`)
 `schemaVersion` 1, `id`, `url`, `canonicalUrl`, `frameUrl?` (the embedded job board frame the content came
@@ -255,6 +264,11 @@ posting (`job`, `binding`, `page-reqid`, `tenant`, `title`, or `unconfirmed` for
   `certifications[] { name, issuer?, date?, url? }`
 - `eeo { gender?, race?, hispanicOrLatino?, veteranStatus?, disability?, sexualOrientation? }`
 
+Written by Claude (onboarding's `draft-profile` task, updates from the resume) and by the onboarding page's form,
+which sets the keys above in place: the file's comments, order and keys of the user's own stay; a field the form
+leaves empty is removed; lists are written whole. A write that wouldn't validate isn't made
+([ui](components/ui.md#writing-the-users-files)). A new file starts with a one-line comment.
+
 ### `profile/answers.yaml`
 ```yaml
 schemaVersion: 1
@@ -268,12 +282,27 @@ entries:
     variants: ["Do you require sponsorship now or later?"]
     notes: ""
 ```
+The onboarding page sets `answer` by id, in place, keeping the file's comments and every other field.
 
 ### `profile/repos.yaml`
 `{ schemaVersion: 1, repos: [ { fullName: "owner/name", source: app | public-url, note? } ] }`
 
 ### `profile/preferences.md`
-Free text.
+Markdown that Claude reads as it is. The onboarding page writes it under fixed headings, each only when it has text:
+
+```markdown
+# Preferences
+
+## Tone
+## What to emphasize
+## Never mention
+## Target roles and locations
+## Cover letters
+```
+
+and reads those sections back into its fields (headings matched case-insensitively). Text under any other `##`
+heading, or before the first heading, is kept, after them. `workspace_check` counts its words
+(`preferences` is done at 10).
 
 ## Templates
 

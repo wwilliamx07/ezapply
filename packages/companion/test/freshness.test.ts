@@ -93,6 +93,15 @@ describe("FreshnessService: repos", () => {
     await expect(svc.mark(changes[0]?.id ?? "", "done")).rejects.toThrow(/re-index/);
   });
 
+  it("stops reporting new commits once the repo is re-indexed in the same chat", async () => {
+    const svc = service();
+    expect((await svc.changes()).changes.map((c) => c.kind)).toEqual(["repo-pushed"]);
+    const before = (await repos.knowledgeMeta("jane/proj"))?.indexedSha ?? "";
+    await markIndexed("jane/proj", git(origin, "rev-parse", "HEAD"));
+    expect((await svc.changes()).changes).toEqual([]); // no refresh: the check isn't run again
+    await markIndexed("jane/proj", before);
+  });
+
   it("hides a change put off until the chat ends, and shows a newer push again", async () => {
     const svc = service();
     const [first] = (await svc.changes()).changes;
@@ -129,7 +138,9 @@ describe("FreshnessService: repos", () => {
     const r = await svc.mark("repo-deselected:jane/gone", "done");
     expect(r.removed).toEqual(["knowledge/jane__gone"]);
     await expect(stat(repos.knowledgePath("jane/gone"))).rejects.toThrow();
+    expect((await svc.changes()).changes.map((c) => c.id)).toEqual(["repo-deselected:jane/private"]);
     await rm(repos.knowledgePath("jane/private"), { recursive: true });
+    expect((await svc.changes()).changes).toEqual([]);
   });
 });
 

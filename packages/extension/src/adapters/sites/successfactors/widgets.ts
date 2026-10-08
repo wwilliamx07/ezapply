@@ -5,10 +5,11 @@ import { act, outside } from "../../engine/trace.js";
 import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../../engine/types.js";
 
 /**
- * SuccessFactors' own widgets, both components of its in-house framework (juic): the paginated picklist every list
- * is, and the attachment fields. juic keeps each component in `juic.Component._registry` under the id its markup
- * starts with (`141:` for `141:_input`), and its markup calls it through `juic.fire(id, method, event)`. Both drivers
- * were built from the page's own scripts and a saved application; neither has run live (references/components/sites.md).
+ * SuccessFactors' own widgets, all components of its in-house framework (juic): the paginated picklist every list
+ * is, the attachment fields and the radio groups of its questions. juic keeps each component in
+ * `juic.Component._registry` under the id its markup starts with (`141:` for `141:_input`), and its markup calls it
+ * through `juic.fire(id, method, event)`. Built from the page's own scripts, a saved application and a live run
+ * (references/components/sites.md).
  */
 
 interface PicklistOption {
@@ -188,6 +189,47 @@ export function picklistDriver(): WidgetDriver {
 const shown = (el: Element | null | undefined): el is HTMLElement =>
   Boolean(el) && isVisible(el as Element) && !(el as Element).closest(".displayNone");
 
+/**
+ * A question's radio group (`.radioGroup`, `role=radiogroup`; "Are you registered in a co-op program?"): each choice
+ * a `span[role=radio]` whose `aria-checked` the component keeps, its words in `.radioLabel` beside it. A click on it
+ * reaches the component's `_itemSelect` (an `onclick` on the `<id>_radio` span around it), which tells the group;
+ * the group checks it and may show follow-up questions under it. Where SuccessFactors renders real
+ * `input[type=radio]`s instead (its Fiori setting), the native radio driver takes the field.
+ */
+export function radioGroupDriver(): WidgetDriver {
+  const radios = (c: HTMLElement) => [...c.querySelectorAll<HTMLElement>(".radioGroup [role='radio']")];
+  const labelOf = (r: HTMLElement) =>
+    text(r.closest(".globalRadio")?.querySelector(".radioLabel") ?? null) || norm(r.getAttribute("aria-label"));
+  const checked = (r: HTMLElement) => r.getAttribute("aria-checked") === "true";
+  return {
+    kind: "radio",
+    is: (c) => radios(c).length > 0,
+    value: (c) => {
+      const on = radios(c).find(checked);
+      return on ? labelOf(on) : null;
+    },
+    options: (c) => radios(c).map(labelOf),
+    fill: async (c, value) => {
+      const list = radios(c);
+      const labels = list.map(labelOf);
+      const wanted = asString(value);
+      const idx = matchOption(wanted, labels);
+      if (idx < 0) return fail(`No option matches "${wanted}".`, { availableOptions: labels });
+      const r = list[idx] as HTMLElement;
+      if (r.getAttribute("aria-disabled") === "true") return fail("This choice is disabled on the page.");
+      if (!checked(r)) {
+        press(r);
+        await waitFor(() => checked(r), T.checkMs);
+      }
+      return checked(r)
+        ? { ok: true, readBack: labels[idx] as string }
+        : fail("Selection did not stick.", {
+            readBack: list.find(checked) ? labelOf(list.find(checked) as HTMLElement) : null,
+          });
+    },
+  };
+}
+
 /** One attachment of a field: an uploaded document, or the empty slot that takes one. */
 interface Attachment {
   wrapper: HTMLElement;
@@ -222,6 +264,28 @@ function takesSeveral(c: HTMLElement): boolean {
   const type = view?._config?.urlParams?.attachmentType;
   return type ? type === "MULTIATTACHMENTS" : c.querySelectorAll(".attachWrapper").length > 1;
 }
+
+/** A slot's own signs of an upload: "Uploading..." while it posts, then a tick once SuccessFactors has the file. */
+const uploading = (a: Attachment) => shown(a.wrapper.querySelector("[id$='_attachLoading']"));
+const ticked = (a: Attachment) => shown(a.wrapper.querySelector("[id$='_attachSuccess']"));
+
+/**
+ * The field as the page shows it now. SuccessFactors can re-render the whole application, which replaces every
+ * element (seen live, a couple of seconds into an upload); the field is then found again by its label.
+ */
+function fieldNow(c: HTMLElement): HTMLElement | null {
+  if (c.isConnected) return c;
+  const label = text(c.querySelector("label"));
+  return (
+    [...c.ownerDocument.querySelectorAll<HTMLElement>(".RCMFormField")].find(
+      (f) => f.querySelector(".attachWrapper") && text(f.querySelector("label")) === label,
+    ) ?? null
+  );
+}
+
+const RERENDERED =
+  "SuccessFactors re-rendered the whole application during the upload, which drops what wasn't saved: answers " +
+  "filled before it, and documents uploaded just before it. Read the form again (get_form) and refill what's empty.";
 
 /** The upload popup's file input, once open: the visible one not yet moved into a field's upload form. */
 const popupInput = (doc: Document) =>
@@ -278,8 +342,9 @@ export function attachmentDriver(): WidgetDriver {
         );
       }
       const doc = c.ownerDocument;
-      const count = () => names(c).filter((n) => n === file.name).length;
-      const before = count();
+      const count = (f: HTMLElement) => names(f).filter((n) => n === file.name).length;
+      const before = count(c);
+      const tickedBefore = ticked(slot);
       press(slot.icon);
       const input = await waitFor(() => popupInput(doc), T.dropdownOpenMs + T.typeaheadMenuMaxMs);
       if (!input) return fail("The upload popup did not open.", { readBack: names(c) });
@@ -296,8 +361,34 @@ export function attachmentDriver(): WidgetDriver {
         input.dispatchEvent(new w.Event("input", { bubbles: true }));
         input.dispatchEvent(new w.Event("change", { bubbles: true }));
       });
-      await waitFor(() => count() > before || fieldMessage(c), T.uploadMs, 200);
-      if (count() > before) return { ok: true, readBack: names(c) };
+      // A replacement under the same name (the resume's) adds no name: the slot's own signs tell, the tick it shows
+      // once the file is in (unless it showed one already) or the "Uploading..." seen before it named the file.
+      let posted = false;
+      const replaced = () => {
+        if (uploading(slot)) posted = true;
+        const now = attachments(c).find((a) => a.wrapper === slot.wrapper);
+        return Boolean(
+          now && now.name === file.name && !uploading(slot) && (posted || (ticked(slot) && !tickedBefore)),
+        );
+      };
+      await waitFor(() => !c.isConnected || count(c) > before || replaced() || fieldMessage(c), T.uploadMs, 200);
+      if (!c.isConnected) {
+        // The old field is gone with the rest of the page: what the new one shows is what counts.
+        const now = await waitFor(() => fieldNow(c), T.rowMaxMs);
+        const got = now ? await waitFor(() => count(now) > before, T.rowMaxMs) : false;
+        const readBack = now ? names(now) : [];
+        if (got) return { ok: true, readBack, error: `Uploaded. ${RERENDERED}` };
+        const shows = readBack.includes(file.name)
+          ? "The field shows a document of this name, which may be the earlier one"
+          : "This document doesn't show in the field now";
+        return fail(
+          `${RERENDERED} ${shows}: upload it again once the form is read (SuccessFactors may have kept it anyway: ` +
+            "if it shows twice later, remove one).",
+          { readBack },
+        );
+      }
+      // A refused replacement still names the old file of the same name: the field's message says it failed.
+      if (count(c) > before || (replaced() && !fieldMessage(c))) return { ok: true, readBack: names(c) };
       const message = fieldMessage(c);
       return fail(message ? `The page says: ${message}` : "The upload did not appear in the field.", {
         readBack: names(c),

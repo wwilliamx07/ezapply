@@ -11,21 +11,25 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | Path | Role |
 |---|---|
 | `main.ts` | `startCompanion(options)`: builds every service, the bridge and the HTTP server; returns `{ port, services, chat, onServerError, close }` |
-| `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `freshness`, `forms`, `bridge`, `opener`, `extensionDir?` |
+| `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `freshness`, `forms`, `onboarding`, `bridge`, `opener`, `ui`, `extensionDir?` |
 | `http.ts` | The HTTP server: routes, guards, stateless MCP transport, tool calls counted per chat session |
 | `chat.ts` | `ChatSessions` (tool calls per Claude session) and `ChatHost`, what `ezapply chat` reads to decide on a restart ([below](#chat-sessions-chatts)) |
 | `mcp/server.ts` | Creates the `McpServer` and registers the tool groups, with the chat session of the request (the form tools give a site's notes once per session) |
-| `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `templates.ts`, `github.ts`, `forms.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
+| `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `onboarding.ts`, `templates.ts`, `github.ts`, `forms.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
 | `mcp/result.ts` | `tool()` / `rawTool()`: turn results into compact JSON text and errors into `{ error }` results |
 | `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site, and applications embedded in other pages as tabs of their own: `formTabs`, with every call on one naming its frame: `framed`; [embedded applications](../mcp-tools.md#forms)), one call per tab at a time, `tab.show` before each call (the tab brought to the front, and the browser window before a call that changes the page when `forms.focusBrowser` is on; `tabHidden` when the tab stays hidden, `browserBehind` when the window stays behind another app: [the tab in front](../mcp-tools.md#forms)), crediting form activity to the posting the tab may belong to and binding the tab to it on the first change (`decide`, `claim`, `bindTab`: [which posting](../mcp-tools.md#forms)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (debug mode: a record per form call when `debug.enabled` is on, with the adapter's trace of each bridge call and its markup and screenshots as files of their own: `extractFiles`), `debugRequest` (what each adapter call asks for, by `debug.markup`), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/debug-export.ts`: `debugExport`, `scrub`, `profileStrings` (`ezapply debug export`: [cli](cli.md#debug-export)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, for the checklist; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
 | `forms/sites/` | `SITE_NOTES`: each site's notes for the agent, one module per site, given once per chat session as `siteNotes` ([site notes](../mcp-tools.md#site-notes)) |
 | `forms/match.ts` | Which posting an application tab belongs to: `postingFacts`, `matchPosting` (evidence: site, job, binding, the page's requisition, tenant, title), `compareTitles` ([which posting](../mcp-tools.md#forms)) |
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension |
+| `bridge/pairing.ts` | `startPairing` (open the pairing window, optionally forgetting the paired extension) and `extensionFolders` (what to load, and whether it's built): shared by `extension_pair` and the onboarding page |
+| `onboarding/service.ts` | `OnboardingService`: the onboarding page's session, routes and actions, its state (from `workspace_check` and the services), the agent's task queue behind `onboarding`, and the watch that tells an open page what changed elsewhere; `skipReason` (repos not suggested) → [ui](ui.md#the-onboarding-page-onboard) |
+| `ui/assets.ts` | `UiAssets`: the UI package's files at `/ui/`, each page's HTML shell, `UI_CSP`, the base stylesheet's address → [ui](ui.md#serving-companionsrcuiassetsts) |
+| `ui/session.ts` | What the pages share: the token traded for a cookie (`presentedToken`, `pageCookie`, `tokenOk`), `sameOrigin`, `readJsonBody`, `sendJson`, `EventStreams` (Server-Sent Events) → [ui](ui.md#how-a-page-talks-to-the-companion) |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
 | `freshness/service.ts` | `FreshnessService`: what in the workspace is behind its source, behind `workspace_changes` and `workspace_change_mark` ([below](#keeping-the-workspace-current-workspace_changes)) |
 | `postings/` | Capture ingest and extraction, the application a posting is tied to (`application.ts`) → [postings.md](postings.md) |
-| `documents/` | `service.ts`, `review.ts` (the review page, approvals, the attach mode), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
-| `profile/` | `service.ts` (profile, answers, repo selection, preferences, library), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
+| `documents/` | `service.ts`, `review.ts` (the review page's API, approvals, `reviewed.json`, the attach mode), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
+| `profile/` | `service.ts` (profile, answers, repo selection, preferences, library; the onboarding page's in-place writes: `saveProfile`, `saveAnswers`, `savePreferences`, `parsePreferences`, `formatPreferences`), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
 | `templates/service.ts` | `TemplateService`: template import, example letters, the main file and its content files, the engine a template needs → [profile-and-templates.md](profile-and-templates.md#templates-templatesresume-templatescover) |
 | `github/` | `service.ts` (App, login, tokens, repo listing), `secrets.ts` (`SecretStore`: OS keychain, or memory in tests) → [github-and-repos.md](github-and-repos.md) |
 | `repos/` | Read-only repo cache, contributions, claims, knowledge meta → [github-and-repos.md](github-and-repos.md), [knowledge-base.md](knowledge-base.md) |
@@ -39,14 +43,16 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `util/open.ts` | `Opener` and `createDesktopOpener`: the companion's pages and PDFs in the user's browser, other files in their default app ([below](#opening-pages-and-files-utilopents)) |
 | `util/browser.ts` | `findBrowser`: the program that opens a URL in a given browser on this machine |
 | `util/wait.ts` | `waitFor(probe, timeout)`: polling, also used by the CLI |
-| `util/html.ts` | `htmlPage` (the companion's pages: no scripts, never framed, CSP per page), `escapeHtml`, `readForm` |
+| `util/html.ts` | `htmlPage` (the companion's own pages: no scripts, never framed, CSP per page, the UI package's stylesheet once `useStylesheet` is set), `escapeHtml`, `readForm` |
+| `util/dialog.ts` | `pickPath`: the OS's own folder or `.tex` file dialog for the onboarding page; `dialogCommand` → [ui](ui.md#writing-the-users-files) |
 | `util/proc.ts` | `run()` (no shell, tree-kill on timeout), `which()` |
 | `util/install-hints.ts` | OS-specific install commands for TeX, git and Ghostscript: `installCommand` (for people, `ezapply doctor`) and `installHint` (for Claude, in error hints) |
 | `version.ts` | `COMPANION_VERSION` (kept equal to the package version by a test) |
 
 ## Startup (`startCompanion`)
 1. Read and validate the workspace config (fails fast on an invalid `ezapply.config.json`).
-2. Build services; seed `profile/answers.yaml` if it doesn't exist.
+2. Build services, with `UiAssets` (the `ui` option overrides it) whose stylesheet the companion's own pages take,
+   and `OnboardingService`; seed `profile/answers.yaml` if it doesn't exist.
 3. Build the bridge with the pairing code, the pinned id, and `onPaired` / `onForgotten`, which persist the
    pairing.
 4. Build `FormsService` over postings and the bridge, `ChatSessions`, and the HTTP server; listen on
@@ -82,7 +88,9 @@ Code owns, so it never writes to stdout or stderr: the logger writes to the log 
 | `/health` | GET | none | `{ ok, name: "ezapply", mode: "chat", version, protocolVersion, extensionConnected }`; no user data. `mode` tells a second `ezapply chat` it's this build (earlier builds' background daemon had none) |
 | `/mcp` | POST | Bearer `mcpToken`, no `Origin` | MCP Streamable HTTP. Stateless: a fresh `McpServer` and transport per request, built with the request's chat session (`x-ezapply-chat-session`), JSON responses |
 | `/github/*` | GET (POST for `/github/reuse`) | one-time state values | GitHub App creation, reuse, install and login pages ([github-and-repos](github-and-repos.md)) |
-| `/review/<id>`, `/review/<id>/file/<n>` | GET / POST | random token (`t`) | The document review page, its PDFs, and the user's answer ([documents](documents.md#review-before-attaching)) |
+| `/review/<id>` and `state`, `file/<n>`, `events`, `answer` under it | GET / POST | random token (`t`), then a cookie on the page's path; POSTs from the companion's origin | The document review page, its state, PDFs and events, and the user's answer ([ui](ui.md#the-review-page-reviewid)) |
+| `/onboard` and `state`, `events`, `repos`, `file`, `action`, `library` under it | GET / POST | the same | The onboarding page and its API ([ui](ui.md#the-onboarding-page-onboard)) |
+| `/ui/*` | GET | none | The UI package's built files and pdf.js's data files ([ui](ui.md#serving-companionsrcuiassetsts)) |
 | `/bridge` | WebSocket upgrade | Origin pinning, then pairing code | The extension connection |
 
 Every request, including upgrades, must carry `Host: 127.0.0.1:<port>` or `localhost:<port>`, or it gets
@@ -192,7 +200,9 @@ Items in onboarding order, each `{ step, done, detail, required }`:
 | `attach_mode` (optional) | always | the attach mode and what it means |
 | `library` (optional) | always | file count |
 
-Returns `{ ready, nextStep?, items }`, where `nextStep` is the first required item not done.
+Returns `{ ready, nextStep?, items }`, where `nextStep` is the first required item not done. The onboarding page
+shows these items as its steps (`agent_file` as a banner, `attach_mode` within preferences;
+[ui](ui.md#the-onboarding-page-onboard)).
 
 ## Keeping the workspace current (`workspace_changes`)
 `workspace_check` says whether things exist; `FreshnessService` (`freshness/service.ts`) says whether what's
@@ -217,14 +227,20 @@ put off and then changed again comes back under a new id, and `done` on an id th
 refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the agent whether the request in
 hand needs it first.
 
-- **The repos are checked once per chat**, in the background from startup, and kept for the chat: `ezapply
+- **The repos are checked once per chat**, in the background from startup, and the heads kept for the chat: `ezapply
   chat` restarts Claude for every captured posting, and the network check would repeat for nothing.
   `workspace_changes { refresh: true }` runs it again. `ls-remote` only, never a fetch, so nothing in
   `repo-cache/` changes before the user agrees (re-indexing fetches anyway). Four repos at a time, 10 s each,
   through the same hardened git invocation as `repo_sync` (HTTPS only, the token in git's environment). A repo
   that can't be reached, or a logged-out user, goes into `notChecked` with the error's hint, never into an
   error. `workspace_changes` waits up to 15 s for a check still running, then answers with `pending: true`.
-- **The local checks run on every call:** they cost milliseconds and catch an edit made mid-chat.
+  Only the remote heads are kept from the check. On every call, the selection and the knowledge folders are
+  read again: a repo whose `indexedSha` moved since the check (re-indexed, so `repo_sync` fetched at least the
+  head the check saw) drops out, and so do repos no longer selected. `repo-deselected` is worked out entirely
+  then, so deleting that knowledge or selecting the repo again ends it. *Why:* the whole result used to be
+  kept, and after a re-index in the same chat the agent was offered the same re-index again.
+- **The local checks run on every call:** they cost milliseconds and catch an edit made mid-chat. They're
+  listed while the repo check is still `pending`, along with `repo-deselected`.
 - **Hashes** cover what an import copies (build output skipped, as `template_import` skips it), so compiling
   in the user's own folder isn't a change, and line endings are normalised. The `% !TEX program` line an
   import may add exists only in the workspace copy, so it isn't one either.

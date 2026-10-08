@@ -11,7 +11,8 @@ Everything forms ask that isn't a screening question: identity, contact (email, 
 work authorization, job preferences, work history (`YYYY-MM`, `end: null` for current), education,
 skills, languages, certifications, and optional EEO self-identification.
 
-- Written by Claude during onboarding from the user's resume, then completed in chat. When the resume template
+- Drafted by Claude from the user's resume (onboarding's `draft-profile` task), then completed by the user in the
+  onboarding page's form, which writes it in place ([ui](ui.md#writing-the-users-files)), or in chat. When the resume template
   changes later, `workspace_changes` reports it with the diff (`resume-edited`), and the profile is updated
   from that diff alone.
 - `profile_check` validates it and lists commonly needed fields still missing: phone, region, postal code,

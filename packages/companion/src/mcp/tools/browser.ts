@@ -1,13 +1,9 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { newPairingToken } from "../../config/app.js";
+import { PAIRING_MS, startPairing } from "../../bridge/pairing.js";
 import type { Services } from "../../services.js";
 import { waitFor } from "../../util/wait.js";
 import { tool } from "../result.js";
-
-const PAIRING_MS = 15 * 60_000;
 
 export function registerBrowserTools(server: McpServer, s: Services): void {
   server.registerTool(
@@ -51,15 +47,8 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
       inputSchema: { replace: z.boolean().optional() },
     },
     tool(s.log, "extension_pair", async ({ replace }: { replace?: boolean }) => {
-      if (replace) await s.bridge.forgetPaired(newPairingToken());
-      const status = s.bridge.status();
-      if (status.connected) return { connected: true, extension: status };
-
-      const dir = s.extensionDir;
-      const chrome = dir ? join(dir, "dist") : undefined;
-      const firefox = dir ? join(dir, "dist-firefox", "manifest.json") : undefined;
-      const built = Boolean(chrome && firefox && existsSync(chrome) && existsSync(firefox));
-      s.bridge.openPairing(PAIRING_MS);
+      const { connected, status, chrome, firefox, built } = await startPairing(s, replace);
+      if (connected) return { connected: true, extension: status };
       return {
         connected: false,
         pairingOpenMinutes: PAIRING_MS / 60_000,

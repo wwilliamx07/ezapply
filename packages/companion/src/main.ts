@@ -11,11 +11,14 @@ import { KeyringStore, type SecretStore } from "./github/secrets.js";
 import { GitHubService } from "./github/service.js";
 import { createHttpServer } from "./http.js";
 import { createLogger, type Logger } from "./logger.js";
+import { OnboardingService } from "./onboarding/service.js";
 import { PostingsService } from "./postings/service.js";
 import { ProfileService } from "./profile/service.js";
 import { RepoService } from "./repos/service.js";
 import type { Services } from "./services.js";
 import { TemplateService } from "./templates/service.js";
+import { UiAssets } from "./ui/assets.js";
+import { useStylesheet } from "./util/html.js";
 import { createDesktopOpener, type Opener } from "./util/open.js";
 import { COMPANION_VERSION } from "./version.js";
 import { Workspace } from "./workspace/workspace.js";
@@ -36,6 +39,8 @@ export interface CompanionOptions {
   secrets?: SecretStore;
   /** The extension package folder, so extension_pair can tell the user what to load. */
   extensionDir?: string;
+  /** The UI package's built pages (tests point it at a folder of their own). Defaults to packages/ui/dist. */
+  ui?: UiAssets;
   /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
   /** Test hooks: GitHub endpoints and git clone URL. */
@@ -74,7 +79,14 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   await workspace.readConfig(); // fail fast on an invalid ezapply.config.json
   const postings = new PostingsService(workspace, log.child({ svc: "postings" }));
   const documents = new DocumentsService(workspace, log.child({ svc: "documents" }), opener);
-  const reviews = new ReviewService(workspace, log.child({ svc: "reviews" }), () => `http://${config.host}:${port}`);
+  const ui = opts.ui ?? new UiAssets();
+  useStylesheet(() => ui.baseStylesheet());
+  const reviews = new ReviewService(
+    workspace,
+    log.child({ svc: "reviews" }),
+    () => `http://${config.host}:${port}`,
+    ui,
+  );
   const profile = new ProfileService(workspace, log.child({ svc: "profile" }));
   const templates = new TemplateService(workspace, log.child({ svc: "templates" }));
   await profile.ensureAnswerSeed();
@@ -104,6 +116,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   const freshness = new FreshnessService(workspace, profile, templates, repos, log.child({ svc: "freshness" }));
   const forms = new FormsService(workspace, postings, bridge, reviews, profile, log.child({ svc: "forms" }));
 
+  const onboarding = new OnboardingService(
+    () => services,
+    () => `http://${config.host}:${port}`,
+  );
   const services: Services = {
     version: COMPANION_VERSION,
     log,
@@ -117,8 +133,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     repos,
     freshness,
     forms,
+    onboarding,
     bridge,
     opener,
+    ui,
     ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
   };
   const sessions = new ChatSessions();

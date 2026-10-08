@@ -4,6 +4,7 @@ import { registerBrowserTools } from "./tools/browser.js";
 import { registerDocumentTools } from "./tools/documents.js";
 import { registerFormTools } from "./tools/forms.js";
 import { registerGitHubTools } from "./tools/github.js";
+import { registerOnboardingTools } from "./tools/onboarding.js";
 import { registerPostingTools } from "./tools/postings.js";
 import { registerProfileTools } from "./tools/profile.js";
 import { registerTemplateTools } from "./tools/templates.js";
@@ -34,6 +35,7 @@ export function createMcpServer(services: Services, session?: string): McpServer
   registerBrowserTools(server, services);
   registerDocumentTools(server, services);
   registerProfileTools(server, services);
+  registerOnboardingTools(server, services);
   registerTemplateTools(server, services);
   registerGitHubTools(server, services);
   registerFormTools(server, services, session);

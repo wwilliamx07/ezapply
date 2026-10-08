@@ -62,7 +62,7 @@ export function githubDetail(gh: GitHubStatus): string {
 }
 
 /**
- * Onboarding / readiness checklist, in the order the ezapply-onboard skill walks through it.
+ * Onboarding / readiness checklist, in the order the onboarding page shows its steps.
  * Each item is cheap to compute so Claude can call this freely.
  */
 export async function workspaceStatus(
