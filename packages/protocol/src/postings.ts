@@ -24,7 +24,7 @@ export const CapturePayload = z.object({
   html: z.string(),
   /** body HTML with elements that were not visible to the user removed. */
   visibleHtml: z.string(),
-  /** document.body.innerText (rendered, visible text only). */
+  /** document.body.innerText (rendered, visible text only); empty from a frame that isn't rendered. */
   visibleText: z.string(),
   /** Contents of every <script type="application/ld+json"> on the page (head included). */
   jsonLd: z.array(z.string()).default([]),

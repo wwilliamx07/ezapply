@@ -52,6 +52,9 @@ export function capturePage(): PageCapture {
     }
   }
   for (const n of hidden) (n as Element).remove();
+  // A frame that isn't rendered (an invisible reCAPTCHA's, in a display:none iframe) shows the user nothing, but
+  // its innerText falls back to textContent, scripts included, and would outweigh the page's own text.
+  const rendered = typeof body.checkVisibility !== "function" || body.checkVisibility();
 
   const jsonLd = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(
     (s) => s.textContent ?? "",
@@ -68,7 +71,7 @@ export function capturePage(): PageCapture {
     pageTitle: document.title,
     html: body.innerHTML,
     visibleHtml: clone.innerHTML,
-    visibleText: body.innerText,
+    visibleText: rendered ? body.innerText : "",
     jsonLd,
     frames,
   };

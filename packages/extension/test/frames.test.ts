@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import type { PageCapture } from "../src/capture/capture.js";
+import { capturePage, type PageCapture } from "../src/capture/capture.js";
 import { chooseFrame, type FrameCapture, unreadableBoard } from "../src/capture/frames.js";
 
 const page = (over: Partial<PageCapture>): PageCapture => ({
@@ -36,6 +37,40 @@ describe("choosing the frame that holds the posting", () => {
     const bigger = frame(5, { url: "https://jobs.lever.co/acme/1", visibleText: words(900) });
     expect(chooseFrame([top, chat, bigger])).toBe(bigger);
     expect(chooseFrame([top, chat])).toBe(top);
+  });
+
+  it("passes over a frame that isn't rendered", () => {
+    // jsdom renders nothing and has no innerText: stand in for a hidden frame's document and a shown one's.
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+    const saved = {
+      checkVisibility: proto.checkVisibility,
+      innerText: Object.getOwnPropertyDescriptor(proto, "innerText"),
+    };
+    let shown = false;
+    proto.checkVisibility = () => shown;
+    Object.defineProperty(proto, "innerText", {
+      configurable: true,
+      get: function (this: HTMLElement) {
+        return this.textContent;
+      },
+    });
+    try {
+      document.body.innerHTML = "<div>token</div><script>recaptcha.anchor.Main.init('…')</script>";
+      const hidden = capturePage();
+      expect(hidden.visibleText).toBe("");
+      expect(hidden.visibleHtml).toBe("");
+
+      shown = true;
+      expect(capturePage().visibleText).toContain("token");
+
+      const top = frame(0, { url: "https://jobs.example.com/view/1", visibleText: words(300) });
+      const captcha = frame(7, { ...hidden, url: "https://www.google.com/recaptcha/enterprise/anchor" });
+      expect(chooseFrame([top, captcha])).toBe(top);
+    } finally {
+      proto.checkVisibility = saved.checkVisibility;
+      if (saved.innerText) Object.defineProperty(proto, "innerText", saved.innerText);
+      else delete proto.innerText;
+    }
   });
 
   it("spots a large job board frame it couldn't read", () => {

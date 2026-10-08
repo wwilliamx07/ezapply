@@ -83,7 +83,7 @@ non-default ports.
    ([access](components/extension.md#access-to-websites)).
 2. The extension injects `capturePage` into the tab's frames it may read (every frame; with access withheld,
    the tab's own origin by the click's `activeTab` grant). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
-   the live DOM with `checkVisibility`), `innerText`, JSON-LD blocks, URL, title and its visible iframes. The
+   the live DOM with `checkVisibility`), `innerText` (empty for a frame that isn't rendered), JSON-LD blocks, URL, title and its visible iframes. The
    frame holding the posting is chosen: the top one, unless an embedded job board frame has the `JobPosting`
    data or more text. A large embedded board it couldn't read opens in a new tab instead, for the user to
    capture there ([extension](components/extension.md#set-posting)). The chosen frame's site, as its body shows

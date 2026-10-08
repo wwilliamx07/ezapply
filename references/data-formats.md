@@ -185,7 +185,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `meta.json` | companion | `PostingMeta` (below) |
 | `capture/raw.html` | companion | `document.body.innerHTML` at capture, verbatim |
 | `capture/visible.html` | companion | body HTML with invisible elements removed |
-| `capture/visible.txt` | companion | `document.body.innerText` |
+| `capture/visible.txt` | companion | `document.body.innerText`; empty when the frame wasn't rendered |
 | `capture/jsonld.json` | companion | array of the page's JSON-LD blocks (strings) |
 | `posting.md` | companion | cleaned description with a header (role, company, location, requisition, URL) |
 | `notes.md` | Claude | starts with `## Application requirements` (the posting's instructions for applying), then job requirements, key terms, evidence map, gaps |

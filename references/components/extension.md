@@ -110,6 +110,10 @@ and a capture of the top frame alone holds only the company's page around it.
 - `chooseFrame`: the top frame, unless it has no `JobPosting` JSON-LD and a child frame does, or a child
   frame (with at least 300 characters) shows more text than the page around it. The payload keeps the tab's
   URL and title, takes the content from that frame, and sets `frameUrl`.
+- A frame that isn't rendered (its body fails `checkVisibility`, as in the `display:none` iframe of an invisible
+  reCAPTCHA) reports no visible text. Its `innerText` would otherwise fall back to `textContent`, scripts
+  included, and could outweigh the page itself: a job page that shows its description without `JobPosting`
+  data (LinkedIn's) was captured as the reCAPTCHA frame, with an empty description.
 - `unreadableBoard`: when the chosen frame has no `JobPosting` data but contains a visible iframe of at least
   300×300 from a known job board host that couldn't be read (only when access to websites is withheld), nothing
   is captured: the board's URL opens in a new tab next to the page, and the badge says to click Set posting there.
