@@ -96,7 +96,7 @@ side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It r
    connection's error, as a banner; the rest is shown but disabled. Setup not finished is a banner of its own with
    **Continue setup** (the steps left are named); the rest stays usable, since setup's own tasks go to the agent.
 3. **Posting card:** role, company, site, deadline, its status and the requirement chips from `notes.md`, and
-   **Reset** (asks first: a new conversation for the posting; the documents stay). For the general conversation, a
+   **Reset Conversation** (red when hovered; asks first: a new conversation for the posting; the documents stay). For the general conversation, a
    line saying there's no posting.
 4. **This tab:** what the window's current tab is to the active posting (its page, its application on a site,
    another posting's application, another page), read again when the tab changes.
@@ -127,7 +127,9 @@ side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It r
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
    waiting), or that the agent runs only under `ezapply`.
-10. **Footer:** the conversation's cost so far.
+10. **Footer:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in its
+    title) and the model (Default model, Fable, Opus, Sonnet, Haiku), which ezapply keeps and applies to the running
+    conversation at once ([agent](agent.md#permission-mode-and-model)); and the conversation's cost so far.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

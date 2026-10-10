@@ -208,6 +208,22 @@ export type AgentEvent = z.infer<typeof AgentEvent>;
 export const AgentStatus = z.enum(["idle", "starting", "working", "unavailable"]);
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
+/**
+ * Claude Code permission modes the panel offers. `default` asks on the panel for what the workspace doesn't allow.
+ * Not `bypassPermissions`: postings are untrusted text, and the approval cards are what stands between a prompt
+ * injected into one and a command run on the user's machine; Claude Code also refuses to switch to it in a session
+ * not launched for it.
+ */
+export const AgentPermissionMode = z.enum(["default", "acceptEdits", "auto", "plan", "dontAsk"]);
+export type AgentPermissionMode = z.infer<typeof AgentPermissionMode>;
+/** The model: Claude Code's own default, or an alias for the latest of a family. */
+export const AgentModel = z.enum(["default", "fable", "opus", "sonnet", "haiku"]);
+export type AgentModel = z.infer<typeof AgentModel>;
+/** The agent's settings, chosen in the panel; kept in the workspace's `agent/settings.json`. */
+export const AgentSettings = z.object({ permissionMode: AgentPermissionMode, model: AgentModel });
+export type AgentSettings = z.infer<typeof AgentSettings>;
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = { permissionMode: "default", model: "default" };
+
 // ---- the panel's methods over the bridge (the extension relays them from its side panel) ----
 
 export const PanelPosting = z.object({
@@ -223,7 +239,12 @@ export const PanelPosting = z.object({
 export type PanelPosting = z.infer<typeof PanelPosting>;
 
 export const PanelState = z.object({
-  agent: z.object({ status: AgentStatus, conversation: z.string().optional(), queued: z.number() }),
+  agent: z.object({
+    status: AgentStatus,
+    conversation: z.string().optional(),
+    queued: z.number(),
+    settings: AgentSettings,
+  }),
   activePostingId: z.string().nullable(),
   /** The newest postings, for the picker. */
   postings: z.array(PanelPosting),
@@ -273,6 +294,8 @@ export const PanelMethods = {
   },
   "panel.stop": { params: Empty, result: z.object({ stopped: z.boolean() }) },
   "panel.reset": { params: z.object({ key: z.string() }), result: Empty },
+  /** Change the agent's permission mode or model: kept, and applied to a running conversation at once. */
+  "panel.settings": { params: AgentSettings.partial(), result: AgentSettings },
   "panel.answer": { params: z.object({ cardId: z.string(), answers: AskAnswers }), result: Empty },
   "panel.reply": { params: z.object({ cardId: z.string(), message: z.string().min(1).max(20_000) }), result: Empty },
   "panel.permission": {

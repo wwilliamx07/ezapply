@@ -1,5 +1,8 @@
 import {
   type AgentEvent,
+  AgentModel,
+  AgentPermissionMode,
+  type AgentSettings,
   type Card,
   GENERAL_CONVERSATION,
   type PanelConversation,
@@ -24,6 +27,25 @@ export const REQUESTS = {
 };
 
 type TabInfo = (PanelTab & { tabId: number }) | null;
+
+/** The permission modes as the panel names them, and what each does (the select's title). */
+export const MODES: Record<AgentPermissionMode, { label: string; what: string }> = {
+  default: {
+    label: "Ask first",
+    what: "Claude asks on the panel before commands and edits the workspace doesn't allow",
+  },
+  acceptEdits: { label: "Accept edits", what: "File edits go ahead without asking; commands still ask" },
+  auto: { label: "Auto", what: "Claude Code decides what's safe to run without asking, and asks for the rest" },
+  plan: { label: "Plan only", what: "Claude reads and plans, and changes nothing" },
+  dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
+};
+export const MODELS: Record<AgentModel, string> = {
+  default: "Default model",
+  fable: "Fable",
+  opus: "Opus",
+  sonnet: "Sonnet",
+  haiku: "Haiku",
+};
 
 /**
  * The extension's side panel: everything the user does with ezapply after setup ("Everything in the browser"). It
@@ -214,10 +236,11 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                 variant="ghost"
                 size="sm"
                 disabled={!connected}
+                className="ez-panel-reset"
                 onClick={reset}
                 title="A new conversation for this posting"
               >
-                Reset
+                Reset Conversation
               </Button>
             </div>
             <div className="ez-chips">
@@ -327,9 +350,23 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           onSend={send}
           onStop={() => void transport.call("panel.stop", {}).catch(fail)}
         />
-        {conv?.totalCostUsd !== undefined ? (
-          <p className="ez-panel-cost">This conversation: ${conv.totalCostUsd.toFixed(2)}</p>
-        ) : null}
+        <div className="ez-panel-settings">
+          {agent?.settings ? (
+            <AgentSettingsBar
+              settings={agent.settings}
+              disabled={!connected || agent.status === "unavailable"}
+              onChange={(change) =>
+                void transport
+                  .call("panel.settings", change)
+                  .then(() => refreshState())
+                  .catch(fail)
+              }
+            />
+          ) : null}
+          {conv?.totalCostUsd !== undefined ? (
+            <p className="ez-panel-cost">This conversation: ${conv.totalCostUsd.toFixed(2)}</p>
+          ) : null}
+        </div>
       </footer>
     </div>
   );
@@ -626,6 +663,49 @@ function AgentLine({
       {text.trim()}
     </p>
   ) : null;
+}
+
+/** The permission mode and model, kept by ezapply and applied to the running conversation at once. */
+function AgentSettingsBar({
+  settings,
+  disabled,
+  onChange,
+}: {
+  settings: AgentSettings;
+  disabled: boolean;
+  onChange: (change: Partial<AgentSettings>) => void;
+}) {
+  return (
+    <>
+      <select
+        className="ez-select ez-select-sm"
+        aria-label="Permission mode"
+        title={MODES[settings.permissionMode].what}
+        value={settings.permissionMode}
+        disabled={disabled}
+        onChange={(e) => onChange({ permissionMode: AgentPermissionMode.parse(e.target.value) })}
+      >
+        {AgentPermissionMode.options.map((m) => (
+          <option key={m} value={m} title={MODES[m].what}>
+            {MODES[m].label}
+          </option>
+        ))}
+      </select>
+      <select
+        className="ez-select ez-select-sm"
+        aria-label="Model"
+        value={settings.model}
+        disabled={disabled}
+        onChange={(e) => onChange({ model: AgentModel.parse(e.target.value) })}
+      >
+        {AgentModel.options.map((m) => (
+          <option key={m} value={m}>
+            {MODELS[m]}
+          </option>
+        ))}
+      </select>
+    </>
+  );
 }
 
 function ChatBar({

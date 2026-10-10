@@ -22,7 +22,7 @@ const POSTING = {
 
 function state(over: Partial<PanelState> = {}): PanelState {
   return {
-    agent: { status: "idle", queued: 0 },
+    agent: { status: "idle", queued: 0, settings: { permissionMode: "default", model: "default" } },
     activePostingId: POSTING.id,
     postings: [POSTING],
     cards: [],
@@ -110,16 +110,32 @@ describe("the side panel", () => {
   it("opens the application when this tab isn't it, captures on Set posting, and resets after asking", async () => {
     const t = fakeTransport({ tab: { kind: "page", text: "Not this posting's application", tabId: 3 } });
     render(<PanelApp transport={t.transport} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Open the application/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Open the application/ }, { timeout: 5000 }));
     expect(t.transport.openTab).toHaveBeenCalledWith(POSTING.url);
     fireEvent.click(screen.getByRole("button", { name: /Set posting/ }));
     expect(t.transport.capture).toHaveBeenCalledTimes(1);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: POSTING.id }]));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: POSTING.id }]), { timeout: 5000 });
     confirm.mockRestore();
     fireEvent.click(screen.getByRole("button", { name: "Extension settings" }));
     expect(t.transport.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the permission mode and model, and changes them through ezapply", async () => {
+    const t = fakeTransport({});
+    render(<PanelApp transport={t.transport} />);
+    const mode = (await screen.findByRole("combobox", { name: "Permission mode" })) as HTMLSelectElement;
+    const model = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(mode.value).toBe("default");
+    expect(model.value).toBe("default");
+    expect([...mode.options].map((o) => o.value)).not.toContain("bypassPermissions");
+    t.setState(state({ agent: { ...state().agent, settings: { permissionMode: "acceptEdits", model: "default" } } }));
+    fireEvent.change(mode, { target: { value: "acceptEdits" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "acceptEdits" }]));
+    await waitFor(() => expect(mode.value).toBe("acceptEdits"));
+    fireEvent.change(model, { target: { value: "sonnet" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { model: "sonnet" }]));
   });
 
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {
@@ -180,7 +196,11 @@ describe("the side panel", () => {
     });
     expect(screen.queryByText("elsewhere")).toBeNull();
 
-    t.setState(state({ agent: { status: "working", conversation: POSTING.id, queued: 0 } }));
+    t.setState(
+      state({
+        agent: { status: "working", conversation: POSTING.id, queued: 0, settings: state().agent.settings },
+      }),
+    );
     t.push({ type: "update", update: { changed: true } });
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
     await waitFor(() => expect(t.calls).toContainEqual(["panel.stop", {}]));

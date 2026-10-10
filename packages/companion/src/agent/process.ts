@@ -2,6 +2,12 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
+import {
+  type AgentModel,
+  type AgentPermissionMode,
+  type AgentSettings,
+  DEFAULT_AGENT_SETTINGS,
+} from "@ezapply/protocol";
 import { readStreamLine, type StreamItem } from "./stream.js";
 
 /** How to run Claude Code: the native `claude.exe`, or the npm install's `claude.cmd` (only runs through cmd). */
@@ -39,6 +45,8 @@ export interface AgentProcessOptions {
   sessionId: string;
   /** Continue an existing session rather than start one with this id. */
   resume: boolean;
+  /** The permission mode and model it starts with (the panel's settings). */
+  settings?: AgentSettings;
   env?: NodeJS.ProcessEnv;
   onItem: (item: StreamItem) => void;
   onExit: (code: number | null, stderrTail: string) => void;
@@ -50,13 +58,19 @@ export interface AgentProcessOptions {
  *   turns while stdin is open, so a conversation is one process; `--verbose` is required for stream-json output.
  * - `--replay-user-messages`: each message is echoed when Claude takes it, so the panel can mark it taken (a
  *   message sent while a tool runs waits for the tool to end).
- * - `--permission-mode default`: without it a `-p` run may start in auto mode, and nothing would reach the panel.
+ * - `--permission-mode` always (`default` unless the panel chose another): without it a `-p` run may start in
+ *   auto mode, and nothing would reach the panel. `--model` only when the panel chose one, so Claude Code's own
+ *   default (the user's setting) applies otherwise.
  * - `--permission-prompt-tool`: what would prompt in the terminal asks the panel instead.
  * - `--disallowedTools AskUserQuestion`: questions go through `ask_user`, which holds a whole step's questions
  *   and text answers; Claude Code's own tool holds four questions of four options.
  * - Not `--bare`: bare mode skips the workspace's skills, `.mcp.json` and settings, and the subscription login.
  */
-export function agentArgs(sessionId: string, resume: boolean): string[] {
+export function agentArgs(
+  sessionId: string,
+  resume: boolean,
+  settings: AgentSettings = DEFAULT_AGENT_SETTINGS,
+): string[] {
   return [
     "-p",
     "--input-format",
@@ -66,7 +80,8 @@ export function agentArgs(sessionId: string, resume: boolean): string[] {
     "--verbose",
     "--replay-user-messages",
     "--permission-mode",
-    "default",
+    settings.permissionMode,
+    ...(settings.model === "default" ? [] : ["--model", settings.model]),
     "--permission-prompt-tool",
     PERMISSION_TOOL,
     "--disallowedTools",
@@ -97,7 +112,7 @@ export class AgentProcess {
 
   constructor(private readonly opts: AgentProcessOptions) {
     const { file, shell } = opts.claude;
-    const args = [...opts.claude.args, ...agentArgs(opts.sessionId, opts.resume)];
+    const args = [...opts.claude.args, ...agentArgs(opts.sessionId, opts.resume, opts.settings)];
     const env: NodeJS.ProcessEnv = { ...(opts.env ?? process.env), [SESSION_ENV]: opts.sessionId };
     // A long MCP call (ask_user, a review) must hold the turn, which is -p's default; the user's own setting
     // to background such calls would end the turn with the question open.
@@ -135,6 +150,20 @@ export class AgentProcess {
   interrupt(): string {
     const id = `interrupt-${++this.controlSeq}`;
     this.write({ type: "control_request", request_id: id, request: { subtype: "interrupt" } });
+    return id;
+  }
+
+  /** Switch the permission mode mid-session (Claude Code's `set_permission_mode`). Returns the request's id. */
+  setPermissionMode(mode: AgentPermissionMode): string {
+    const id = `mode-${++this.controlSeq}`;
+    this.write({ type: "control_request", request_id: id, request: { subtype: "set_permission_mode", mode } });
+    return id;
+  }
+
+  /** Switch the model mid-session (`set_model`; "default" goes back to Claude Code's default). Returns its id. */
+  setModel(model: AgentModel): string {
+    const id = `model-${++this.controlSeq}`;
+    this.write({ type: "control_request", request_id: id, request: { subtype: "set_model", model } });
     return id;
   }
 

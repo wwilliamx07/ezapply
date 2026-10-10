@@ -1,7 +1,8 @@
 // Stands in for `claude -p --input-format stream-json --output-format stream-json` in the agent tests. Its output
 // follows lines recorded from Claude Code (stream.test.ts pins the fields read). Each start appends its arguments
 // to $STUB_LOG. Messages: anything → "echo: <text>"; "slow" → a tool call that waits for an interrupt; "crash" →
-// exits 3 mid-turn. With $STUB_FAIL_RESUME set, a --resume start fails before answering.
+// exits 3 mid-turn. With $STUB_FAIL_RESUME set, a --resume start fails before answering. A mode or model switch
+// is appended to $STUB_LOG too; with $STUB_REFUSE_SWITCH set, it's refused as Claude Code refuses one.
 import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -70,6 +71,21 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       slow = null;
       result({ subtype: "error_during_execution", is_error: true, terminal_reason: "aborted_tools" });
     }
+    return;
+  }
+  if (m.type === "control_request" && ["set_permission_mode", "set_model"].includes(m.request?.subtype)) {
+    if (process.env.STUB_LOG)
+      appendFileSync(
+        process.env.STUB_LOG,
+        `${JSON.stringify(m.request)}
+`,
+      );
+    out({
+      type: "control_response",
+      response: process.env.STUB_REFUSE_SWITCH
+        ? { subtype: "error", request_id: m.request_id, error: "not allowed here", error_code: "refused" }
+        : { subtype: "success", request_id: m.request_id },
+    });
     return;
   }
   if (m.type !== "user") return;

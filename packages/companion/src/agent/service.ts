@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type AgentEvent, type AgentStatus, ErrorCode, EzError, GENERAL_CONVERSATION } from "@ezapply/protocol";
+import {
+  type AgentEvent,
+  AgentSettings,
+  type AgentStatus,
+  DEFAULT_AGENT_SETTINGS,
+  ErrorCode,
+  EzError,
+  GENERAL_CONVERSATION,
+} from "@ezapply/protocol";
 import { z } from "zod";
 import type { Logger } from "../logger.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
@@ -29,6 +37,7 @@ const ConversationsFile = z.object({
 });
 type ConversationsFile = z.infer<typeof ConversationsFile>;
 type Conversation = z.infer<typeof Conversation>;
+const SettingsFile = AgentSettings.partial().extend({ schemaVersion: z.literal(1) });
 
 /** What the panel shows about the agent. */
 export interface AgentState {
@@ -60,6 +69,8 @@ interface Live {
   untaken: { id: string; text: string; at: string }[];
   mcpChecked: boolean;
   stopping: boolean;
+  /** Settings switches sent and not yet answered: what each was, for a notice if Claude Code refuses it. */
+  switching: Map<string, string>;
 }
 
 /**
@@ -68,7 +79,8 @@ interface Live {
  * and refuses while it works, since two agents filling forms or editing one posting's files would collide.
  *
  * On disk, in the workspace's `agent/`: `conversations.json` (each conversation's session, earlier sessions ended
- * by Reset) and `<conversation>/<session>.jsonl` (the session's events, for the panel's history).
+ * by Reset), `<conversation>/<session>.jsonl` (the session's events, for the panel's history) and `settings.json`
+ * (the permission mode and model chosen in the panel).
  */
 export class AgentService {
   private live: Live | null = null;
@@ -76,6 +88,7 @@ export class AgentService {
   private readonly stateListeners = new Set<() => void>();
   private fileWrites: Promise<unknown> = Promise.resolve();
   private readonly logWrites = new Map<string, Promise<unknown>>();
+  private current: AgentSettings | null = null;
 
   constructor(private readonly opts: AgentServiceOptions) {
     opts.needs.onSettled((record, outcome) => {
@@ -219,6 +232,35 @@ export class AgentService {
     return (await this.readFile()).conversations[key]?.totalCostUsd;
   }
 
+  /** The permission mode and model conversations run with (`agent/settings.json`, else the defaults). */
+  async settings(): Promise<AgentSettings> {
+    if (this.current) return this.current;
+    const raw = await readJson(this.settingsPath()).catch(() => null);
+    const parsed = SettingsFile.safeParse(raw);
+    this.current = { ...DEFAULT_AGENT_SETTINGS, ...(parsed.success ? stripVersion(parsed.data) : {}) };
+    return this.current;
+  }
+
+  /**
+   * Change the settings: kept for every conversation from now on, and switched in the running process at once
+   * (Claude Code takes a mode or model change mid-session, between tool calls). A refusal comes back as a notice.
+   */
+  async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
+    const before = await this.settings();
+    const next = AgentSettings.parse({ ...before, ...change });
+    await writeJsonAtomic(this.settingsPath(), { schemaVersion: 1, ...next });
+    this.current = next;
+    const l = this.live;
+    if (l?.process.alive) {
+      if (next.permissionMode !== before.permissionMode)
+        l.switching.set(l.process.setPermissionMode(next.permissionMode), `permission mode to ${next.permissionMode}`);
+      if (next.model !== before.model) l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
+    }
+    this.opts.log.info({ ...next }, "agent: settings changed");
+    this.stateChanged();
+    return next;
+  }
+
   /** End the running process (the companion is closing). */
   async close(): Promise<void> {
     await this.closeLive(3000);
@@ -231,6 +273,7 @@ export class AgentService {
     const c = (await this.readFile()).conversations[key] as Conversation;
     const sessionId = c.sessionId;
     const resumed = c.started;
+    const settings = await this.settings();
     const live: Live = {
       key,
       sessionId,
@@ -241,12 +284,14 @@ export class AgentService {
       untaken: [],
       mcpChecked: false,
       stopping: false,
+      switching: new Map(),
     };
     live.process = new AgentProcess({
       claude,
       cwd: this.opts.workspace.root,
       sessionId,
       resume: resumed,
+      settings,
       ...(this.opts.env ? { env: this.opts.env } : {}),
       onItem: (item) => this.onItem(live, item),
       onExit: (code, tail) => this.onExit(live, code, tail),
@@ -301,8 +346,20 @@ export class AgentService {
         this.stateChanged();
         return;
       }
-      case "controlResponse":
+      case "controlResponse": {
+        const what = l.switching.get(item.requestId);
+        if (what === undefined) return;
+        l.switching.delete(item.requestId);
+        if (!item.ok) {
+          this.emit(l.key, {
+            kind: "notice",
+            at: new Date().toISOString(),
+            level: "warn",
+            text: `Claude Code didn't switch the ${what}${item.error ? `: ${item.error}` : ""}. It applies when this conversation next starts.`,
+          });
+        }
         return;
+      }
     }
   }
 
@@ -373,6 +430,10 @@ export class AgentService {
     await next.catch((err) => this.opts.log.warn({ err: (err as Error).message }, "agent: could not write the log"));
   }
 
+  private settingsPath(): string {
+    return this.opts.workspace.path(AGENT_DIR, "settings.json");
+  }
+
   private logPath(key: string, sessionId: string): string {
     return this.opts.workspace.path(AGENT_DIR, key, `${sessionId}.jsonl`);
   }
@@ -419,6 +480,10 @@ function withCost(f: ConversationsFile, key: string, sessionId: string, cost: nu
   const c = f.conversations[key];
   if (!c || c.sessionId !== sessionId) return f;
   return { ...f, conversations: { ...f.conversations, [key]: { ...c, totalCostUsd: cost } } };
+}
+
+function stripVersion({ schemaVersion: _, ...rest }: z.infer<typeof SettingsFile>): Partial<AgentSettings> {
+  return rest;
 }
 
 /** A posting id (a plain folder name) or the general conversation. */

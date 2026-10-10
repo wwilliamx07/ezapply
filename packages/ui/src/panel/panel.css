@@ -425,8 +425,24 @@ body {
   min-width: 0;
   resize: vertical;
 }
+.ez-panel-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ez-select-sm {
+  width: auto;
+  min-height: 26px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.ez-panel-reset:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 .ez-panel-cost {
-  margin: 0;
+  margin: 0 0 0 auto;
   font-size: 12px;
   color: var(--text-3);
 }

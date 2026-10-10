@@ -196,6 +196,9 @@ describe("reading Claude Code's stream-json", () => {
     expect(fresh.join(" ")).toContain("--disallowedTools AskUserQuestion");
     expect(fresh).not.toContain("--bare");
     expect(agentArgs("abc", true).slice(-2)).toEqual(["--resume", "abc"]);
+    expect(fresh).not.toContain("--model");
+    const chosen = agentArgs("abc", false, { permissionMode: "acceptEdits", model: "sonnet" }).join(" ");
+    expect(chosen).toContain("--permission-mode acceptEdits --model sonnet --permission-prompt-tool");
   });
 });
 
@@ -224,11 +227,13 @@ describe("the agent service", () => {
     return agent;
   }
   const turns = (k: string) => events.filter(([key, e]) => key === k && e.kind === "turnEnd").length;
-  const starts = async () =>
+  const logged = async () =>
     (await readFile(join(dir, "starts.log"), "utf8").catch(() => ""))
       .split("\n")
       .filter(Boolean)
-      .map((l) => JSON.parse(l) as string[]);
+      .map((l) => JSON.parse(l) as unknown);
+  const starts = async () => (await logged()).filter((l): l is string[] => Array.isArray(l));
+  const switches = async () => (await logged()).filter((l) => !Array.isArray(l));
   const after = async (k: string, n: number) => {
     await waitFor(async () => (turns(k) >= n ? true : null), 10_000);
     expect(turns(k)).toBeGreaterThanOrEqual(n);
@@ -295,6 +300,51 @@ describe("the agent service", () => {
     expect(c.earlier).toEqual([expect.objectContaining({ sessionId: before.conversations.p1.sessionId })]);
     const last = (await starts()).at(-1) as string[];
     expect(last.slice(-2)).toEqual(["--session-id", c.sessionId]);
+  });
+
+  it("keeps the permission mode and model, starts with them, and switches a running conversation at once", async () => {
+    make();
+    expect(await agent.settings()).toEqual({ permissionMode: "default", model: "default" });
+    await agent.send("p1", "one");
+    await after("p1", 1);
+    expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({ permissionMode: "plan", model: "default" });
+    await agent.setSettings({ model: "haiku" });
+    await waitFor(async () => ((await switches()).length === 2 ? true : null), 5000);
+    expect(await switches()).toEqual([
+      { subtype: "set_permission_mode", mode: "plan" },
+      { subtype: "set_model", model: "haiku" },
+    ]);
+    // Unchanged settings send nothing; a mode the panel doesn't offer is refused.
+    await agent.setSettings({ model: "haiku" });
+    await expect(agent.setSettings({ permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
+    expect(JSON.parse(await readFile(join(dir, "agent", "settings.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      permissionMode: "plan",
+      model: "haiku",
+    });
+
+    // ezapply started again: the settings are read back, and the next process starts with them.
+    await agent.close();
+    events = [];
+    make();
+    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "haiku" });
+    await agent.send("p1", "two");
+    await after("p1", 1);
+    expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku");
+    expect(await switches()).toHaveLength(2);
+  });
+
+  it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {
+    make({ STUB_REFUSE_SWITCH: "1" });
+    await agent.send("p1", "one");
+    await after("p1", 1);
+    await agent.setSettings({ permissionMode: "auto" });
+    await waitFor(async () => (events.some(([, e]) => e.kind === "notice") ? true : null), 5000);
+    expect(events.find(([, e]) => e.kind === "notice")?.[1]).toMatchObject({
+      level: "warn",
+      text: expect.stringContaining("didn't switch the permission mode to auto: not allowed here"),
+    });
+    expect(await agent.settings()).toMatchObject({ permissionMode: "auto" });
   });
 
   it("starts afresh when a session can't be resumed, and says so", async () => {

@@ -142,7 +142,7 @@ Formats of every file: [data-formats.md](data-formats.md).
   line plus its hint; only unexpected errors show a stack.
 - **Finding installed tools.** `which()` caches hits only, and on Windows first appends the folders where
   winget installs MiKTeX and Git, so a tool installed mid-session works without a restart.
-- **Versioning.** `PROTOCOL_VERSION` (currently 8) is checked at the bridge handshake; a mismatch is
+- **Versioning.** `PROTOCOL_VERSION` (currently 9) is checked at the bridge handshake; a mismatch is
   refused with which side to update. Every stored format has a `schemaVersion`. `COMPANION_VERSION`
   matches the package version (tested).
 - **Wiring.** Services are constructed once in `companion/src/main.ts` and passed explicitly (the

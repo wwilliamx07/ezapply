@@ -128,6 +128,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
         await agent.reset(key);
         return {};
       },
+      "panel.settings": (change) => agent.setSettings(change),
       "panel.answer": async ({ cardId, answers }) => {
         panel.answer(cardId, answers);
         return {};

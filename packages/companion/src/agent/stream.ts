@@ -19,7 +19,7 @@ export type StreamItem =
   | { type: "init"; sessionId: string; mcpServers: { name: string; status: string }[] }
   | { type: "taken"; text: string }
   | { type: "turnEnd"; event: Extract<AgentEvent, { kind: "turnEnd" }>; queued: number }
-  | { type: "controlResponse"; requestId: string; ok: boolean };
+  | { type: "controlResponse"; requestId: string; ok: boolean; error?: string };
 
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json | undefined =>
@@ -141,7 +141,12 @@ export function readStreamLine(line: string, now: () => string = () => new Date(
     case "control_response": {
       const response = obj(e.response);
       return [
-        { type: "controlResponse", requestId: str(response?.request_id) ?? "", ok: response?.subtype === "success" },
+        {
+          type: "controlResponse",
+          requestId: str(response?.request_id) ?? "",
+          ok: response?.subtype === "success",
+          ...(str(response?.error) ? { error: str(response?.error) } : {}),
+        },
       ];
     }
     default:
