@@ -127,6 +127,27 @@ const PATHS: Record<string, ReactNode> = {
   chevronLeft: <path d="M15 5l-7 7 7 7" />,
   chevronRight: <path d="M9 5l7 7-7 7" />,
   send: <path d="M4 12l16-8-6 16-2.5-6.5z" />,
+  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  stop: <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" />,
+  chevronDown: <path d="M6 9l6 6 6-6" />,
+  target: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  wand: (
+    <>
+      <path d="M5 19L15.5 8.5" />
+      <path d="M17 3v3M15.5 4.5h3M20 8v2M19 9h2M12 4v1.5M11.25 4.75h1.5" />
+    </>
+  ),
+  form: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 8h8M8 12h8M8 16h5" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

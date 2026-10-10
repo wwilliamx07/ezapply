@@ -43,6 +43,8 @@ export interface BridgeOptions {
   onForgotten: (pairingToken: string) => Promise<void>;
   handlers: Handlers<typeof CompanionApi>;
   log: Logger;
+  /** Called when the extension connects or disconnects (the side panel's watch ends with the connection). */
+  onConnectionChange?: (connected: boolean) => void;
   /** Override RECONNECT_GRACE_MS (tests). */
   reconnectGraceMs?: number;
 }
@@ -353,6 +355,7 @@ export class ExtensionBridge {
         this.conn = null;
         conn.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "The extension disconnected."));
         log.info("bridge: extension disconnected");
+        this.opts.onConnectionChange?.(false);
       }
     });
     socket.on("error", (err) => log.warn({ err: err.message }, "bridge: socket error"));
@@ -379,6 +382,7 @@ export class ExtensionBridge {
       }),
     };
     this.conn = conn;
+    this.opts.onConnectionChange?.(true);
     if (previous) {
       previous.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Replaced by a newer connection."));
       previous.socket.close(CloseCode.Replaced, "replaced");

@@ -15,7 +15,7 @@ import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
 import { frameSite, frameUrl, tabSite } from "./frames.js";
 
-type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status">;
+type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status" | "panel.update">;
 
 /** The sites the form tools work on, as the user knows them. */
 const SUPPORTED = SITES.map((s) => s.name).join(", ");

@@ -47,8 +47,9 @@ this skill, they win. They come once per site, so keep them in mind for the rest
    them.
 3. `get_form`. Handle the page kind:
    - `posting`: `page_action { action: "apply" }`, then `get_form`.
-   - `auth`: tell the user to sign in or create the account in their browser and tell you when done. Never
-     fill passwords or account forms.
+   - `auth`: ask the user to sign in or create the account in their browser, with an `ask_user` card (a
+     `single` question: "Signed in" or "Not now"; in chat when it returns `noPanel`), and wait for the answer.
+     Never fill passwords or account forms.
    - `start-choice`: `page_action { action: "apply_manually" }`, unless the user prefers
      `use_last_application` (their last application or profile on the site).
    - `review`: go to **Hand-off**.
@@ -90,8 +91,12 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      - Company-specific answers use `byCompany`.
      - Numbers, ages and dates: compute from the profile.
      - Compound questions: answer each part.
-   - **Ask the user in chat** (one message per step, listing each question with your proposed answer and
-     the exact options) for:
+   - **Ask the user** with one `ask_user` card per step: each question with the field's exact options as
+     `options` (`single` or `multi`; `text` for free text), your proposed answer in `proposed` and where it came
+     from in `why`, `sensitive: true` on sensitive and EEO questions (they get a suggestion too, when you have
+     one), and `remember: { answerId }` where an answer-bank entry covers the question. When it returns `noPanel`,
+     ask in chat instead, one message per step listing each question with your proposed answer and the exact
+     options. Ask for:
      - no matching answer
      - `answer: null` or `sensitive: true`
      - EEO questions not set in the profile
@@ -110,6 +115,8 @@ this skill, they win. They come once per site, so keep them in mind for the rest
        keep asking.
      - Don't add `source`: it names a profile path an answer is computed from, not who gave it.
      - Edit `answers.yaml` with the Edit tool (not a shell append), then `answers_check`.
+     - On a card, `remember` makes this offer: what the user saves comes back in `savedToAnswerBank`, and
+       `toSave` lists the answers the bank has no entry for yet, to add as above.
    - **Dropdowns and typeaheads:** fill with your best reading of the option text: a value that matches
      nothing returns the field's `availableOptions`, so don't list first. When the exact wording decides
      the answer (reversed polarity, categories, ranges such as GPA bands), list those fields first, all of

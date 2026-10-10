@@ -62,5 +62,10 @@ the page; you do the parts that need you, as tasks it sends.
 4. `done` means the user finished (or paused) on the page: say in two lines what's ready and what's left
    (`notDone`), and that they can ask you to set them up again any time.
 
+**In the ezapply panel** (ezapply started with `ezapply`), you don't wait in `onboarding`: a task arrives as a
+message ("Setup task t3 from the setup page …") with what to do and its parameters. Do it, then report it
+without waiting: `onboarding { taskId, result: { ok, note? }, wait: false }`. To open the page, call
+`onboarding { wait: false }`.
+
 The same call reopens the page later, when the user wants to change a step (another resume, more repos).
 Never ask in chat for what the page collects: a password, a client secret, an address, screening answers.

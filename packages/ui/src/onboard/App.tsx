@@ -175,7 +175,9 @@ function Onboarding() {
           </span>
         </h2>
         <p className="ez-help">
-          Claude does the steps that need judgment. It works in your terminal, where you approve what it runs.
+          {state.agentIn === "panel"
+            ? "Claude does the steps that need judgment. Follow it in the ezapply panel, where you approve what it runs."
+            : "Claude does the steps that need judgment. It works in your terminal, where you approve what it runs."}
         </p>
         {tasks.length === 0 ? (
           <p className="ez-help">Nothing asked of Claude yet.</p>
@@ -184,7 +186,7 @@ function Onboarding() {
             {tasks.map((t) => (
               <li key={t.id}>
                 <span className="ob-task-kind">{TASK_LABELS[t.kind]}</span>
-                <TaskLine task={t} listening={state.agentListening} />
+                <TaskLine task={t} listening={state.agentListening} agentIn={state.agentIn} />
               </li>
             ))}
           </ol>

@@ -5,6 +5,7 @@ import { basename, extname, join, relative, sep } from "node:path";
 import {
   ErrorCode,
   EzError,
+  GENERAL_CONVERSATION,
   type OnboardPreferences,
   type OnboardRepo,
   type OnboardState,
@@ -60,7 +61,7 @@ const STEPS: [string, OnboardStepId][] = [
 const HOW: Record<OnboardTaskKind, string> = {
   "install-tex":
     "Say in one line what this installs and roughly how big it is, then run params.command with your shell tool " +
-    "(it can take several minutes; the user approves it in the terminal). workspace_check confirms it.",
+    "(it can take several minutes; the user approves it). workspace_check confirms it.",
   "index-repos":
     "Run the ezapply-index-repo skill for each repo in params.repos, in parallel subagents when there are more than " +
     "two. Each ends with knowledge_mark_indexed, which the page shows as it happens.",
@@ -126,8 +127,10 @@ export type OnboardingNext =
 /**
  * Onboarding on a page (the UI package's onboard page): the workspace_check list as steps the user works through
  * in the browser, where most of them are form-filling. What needs judgment or a shell goes to the agent as a
- * task: the agent sits in a blocking `onboarding` call, takes the next task, does it with its tools and skills,
- * and reports. Claude Code stays the only agent, in the user's chat, with the user's approval of its commands.
+ * task. Under `ezapply` (the side panel's agent, agent/service.ts) a task is a message to the general
+ * conversation, and the agent reports it with `onboarding { taskId, result, wait: false }`. Under `ezapply chat`
+ * there's no panel agent: Claude in the terminal sits in a blocking `onboarding` call, takes the next task and
+ * reports. Either way Claude Code is the only agent, and the user approves its commands.
  */
 export class OnboardingService {
   private token: string | null = null;
@@ -260,7 +263,8 @@ export class OnboardingService {
           createdAt: new Date().toISOString(),
         };
         this.tasks.push(task);
-        for (const w of this.waiters) w();
+        if (s.agent.available) this.dispatch(task);
+        else for (const w of this.waiters) w();
         return { task };
       }
       case "pair": {
@@ -305,6 +309,24 @@ export class OnboardingService {
         for (const w of this.waiters) w();
         return { finished: true };
     }
+  }
+
+  /**
+   * Hand a task to the panel's agent, as a message to the general conversation. Claude busy in another
+   * conversation fails the task with why; the page offers it again.
+   */
+  private dispatch(task: OnboardTask): void {
+    const s = this.services();
+    task.status = "running";
+    const message =
+      `Setup task ${task.id} from the setup page (${task.kind}). ${HOW[task.kind]}\n` +
+      `Parameters: ${JSON.stringify(task.params)}\n` +
+      `When it's done, report it: onboarding { taskId: "${task.id}", result: { ok, note? }, wait: false }.`;
+    s.agent.send(GENERAL_CONVERSATION, message).catch((err: Error) => {
+      task.status = "failed";
+      task.note = err.message;
+      this.changed();
+    });
   }
 
   /** Build a template's main file, for the page to show (and say what went wrong). */
@@ -428,7 +450,8 @@ export class OnboardingService {
       agentFile: { done: agent?.done ?? false, detail: agent?.detail ?? "" },
       steps,
       tasks: this.tasks,
-      agentListening: this.listening > 0,
+      agentListening: s.agent.available ? s.agent.state().status !== "unavailable" : this.listening > 0,
+      agentIn: s.agent.available ? "panel" : "terminal",
       tex: {
         done: item("tex")?.done ?? false,
         detail: item("tex")?.detail ?? "",

@@ -250,7 +250,7 @@ export class GitHubService {
       hint:
         `The ezapply GitHub App was created while ezapply listened on ${app.localBaseUrl}, so GitHub sends ` +
         `logins there. Either move ezapply back (\`ezapply init --port ${new URL(app.localBaseUrl).port}\`, ` +
-        `then restart \`ezapply chat\`), or have the user open ${this.webBase}/settings/apps/${app.slug} and change ` +
+        `then restart ezapply), or have the user open ${this.webBase}/settings/apps/${app.slug} and change ` +
         `the Callback URL to ${now}/github/callback and the Setup URL to ${now}/github/installed.`,
     };
   }

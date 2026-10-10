@@ -1,22 +1,23 @@
 # The agent behind the panel (`companion/src/agent/`)
 
 The companion runs Claude Code headless and relays what it does, so the user can work with it from the
-extension's side panel instead of a terminal ("Everything in the browser" in `todo.md`). Claude Code is still the
+extension's side panel instead of a terminal. Claude Code is still the
 only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as `ezapply
 chat`; the companion only starts it, writes the user's messages to it and reads what it does.
 
-**Built so far:** the runner, the conversations, the cards and their two tools (`ask_user`, `permission_ask`).
-Nothing starts the runner yet: it needs `CompanionOptions.claude`, which no caller passes until the panel and its
-bridge methods exist, so `AgentService.state()` is `unavailable` in every build today.
+It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Code to the companion
+(`CompanionOptions.claude`). Under `ezapply chat` it has none: `AgentService.state()` is `unavailable`, the panel
+says so, and Claude in the terminal does the work.
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `findClaude` (also used by `ezapply chat`); `PERMISSION_TOOL`, `SESSION_ENV` |
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT`; `findClaude` (also used by `ezapply chat`); `PERMISSION_TOOL`, `SESSION_ENV` |
+| `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
 | `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset |
 | `agent/needs.ts` | `NeedsYou`: the cards (questions and approvals) waiting on the user |
 | `mcp/tools/agent.ts` | `ask_user` and `permission_ask` ([mcp-tools](../mcp-tools.md#the-panel)) |
-| `protocol/src/panel.ts` | The shared types: `AgentEvent`, `AskSpec` and its checks (`askSpecProblems`, `askAnswerProblems`), `Card`, `AgentStatus`, `GENERAL_CONVERSATION` |
+| `protocol/src/panel.ts` | The shared types: `AgentEvent`, `AskSpec` and its checks (`askSpecProblems`, `askAnswerProblems`), `Card`, `AgentStatus`, `GENERAL_CONVERSATION`; the panel's bridge methods (`PanelMethods`), `PanelState`, `PanelConversation`, `PanelTab`, `PanelUpdate` |
 
 **Why headless Claude Code, and why this way.** *Rejected:* the Claude Agent SDK (the same harness as a library and
 a dependency; its `canUseTool` callback is the host protocol `--permission-prompt-tool` gives the CLI); an agent
@@ -43,6 +44,7 @@ reached.
 | `--permission-mode default` | Without it a `-p` run may start in auto mode, and no approval would reach the panel |
 | `--permission-prompt-tool mcp__ezapply__permission_ask` | What would prompt in the terminal asks the panel instead ([cards](#cards-needsts)) |
 | `--disallowedTools AskUserQuestion` | Questions go through `ask_user`: Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen questions |
+| `--append-system-prompt <PANEL_PROMPT>` | Where its words go: the user reads them in a narrow panel and never sees a terminal; questions go on `ask_user` cards, commands are approved in the panel. The skills say the rest |
 | `--session-id <uuid>` / `--resume <uuid>` | A new conversation's session, or the one it had |
 
 Not `--bare`: bare mode skips the workspace's skills, `.mcp.json`, settings and `CLAUDE.md`, and doesn't use a
@@ -54,7 +56,9 @@ need, unless that variable is set, which would end the turn with the question op
 **Stop** writes `{ type: "control_request", request_id, request: { subtype: "interrupt" } }`; Claude Code answers
 with a `control_response` and ends the turn (`terminal_reason: "aborted_tools"`). A tool call running then gets a
 "rejected" result: a form call already sent still finishes in the companion and on the page, but Claude doesn't
-see its result (the next `get_form` shows the page as it is). Not SIGTERM, which leaves the turn unfinished with no
+see its result (the next `get_form` shows the page as it is). Stop doesn't wait for a running form call to end,
+as `ezapply chat`'s restart does: the user pressed Stop to stop, and whatever the call did to the form stays on the
+page for them to see. Not SIGTERM, which leaves the turn unfinished with no
 result. **Closing** ends stdin (the process exits once idle) and kills the tree after a grace period (`taskkill /T
 /F` on Windows, as `ezapply chat` does). A message written while a tool call runs is taken when the call ends, in
 the same turn.
@@ -72,7 +76,9 @@ Only these fields are read, so a line of a kind it doesn't know is skipped rathe
 `tool_result { tool_use_id, is_error, content }`), `result` (`is_error`, `total_cost_usd`, `duration_ms`,
 `terminal_reason`, `queued_turn_count`, `result`), `system/api_retry` and `control_response`. Thinking, rate-limit
 and summary lines are skipped. They become `AgentEvent`s: `user` (with `taken`), `text`, `tool` (folded to one
-line by `toolSummary`: the command, the file, the skill, or an MCP tool's arguments cut to 160 characters),
+line by `toolSummary`: the command, the file, the skill; for ezapply's form tools what a person reads (`fill_fields`:
+"3 fields", `upload_file`: the file's name, `page_action`: the action, `ask_user`: the card's title); any other MCP
+tool's arguments cut to 160 characters),
 `toolDone` (with the start of its error), `card`, `turnEnd` (cost, duration, `interrupted`, error) and `notice`.
 `agent.test.ts` pins the fields on lines shaped as recorded, with the values replaced.
 
@@ -117,7 +123,35 @@ ask in chat, and `permission_ask` denies. A panel conversation's question always
 recorded in their conversation as a `card` event (answered, replied in the chat, allowed, denied, timed out,
 withdrawn).
 
+## The panel's side (`panel.ts`)
+`PanelService` is what the side panel reaches, only through the paired extension: the bridge methods `panel.*`
+(`PanelMethods` in the protocol; [extension](extension.md#the-side-panel) relays them), so it needs no token of its
+own and no web page can reach it.
+
+| Method | Does |
+|---|---|
+| `panel.watch { open }` | How many panels are open, sent by the extension on every change and on connecting. While more than none, cards are shown (`NeedsYou.watch`) and updates pushed; the extension disconnecting ends it |
+| `panel.state` | `PanelState`: the agent's status, the active posting, the 20 newest postings, the open cards, and setup (`workspace_check`'s required steps left; kept 30 s, as it runs TeX and GitHub checks) |
+| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for a posting its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes, `attached` from an upload in the form log), and a review waiting on the user |
+| `panel.tab { tabId, url, title, site }` | What the tab is to the active posting: its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page |
+| `panel.send { key, text }` | The user's message; a posting's conversation makes its posting active first, since the skills work on the active one |
+| `panel.stop`, `panel.reset { key }` | Stop the turn; a new conversation for the posting |
+| `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
+| `panel.activate { postingId }` | Make a posting active (the panel's picker) |
+| `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |
+
+**Updates** (`panel.update`, the companion calling the extension): each agent event with its conversation, and
+`changed` when the panel's state may have changed (the agent's state, a card, the active posting, a review),
+coalesced over 50 ms; both only while a panel watches, and only while the extension is connected (an update is
+never waited for). The number of open cards (`cards`) is pushed on every change of the cards even while no panel
+is open: the toolbar badge shows it.
+
+**Setup tasks** go to the agent as messages to the general conversation ([ui](ui.md#the-agents-side-tasks)).
+
 ## Open questions
-- Interrupting drops a running form call's result: whether to hold Stop until a running form call ends, as
-  `ezapply chat`'s restart waits.
+- Chrome's side panel is per window: two windows show the same conversations and cards, and either can answer a
+  card. The first answer settles it; the other gets "No open approval" (or question), and its panel drops the card
+  with the next update. Whether a second window should say more than that.
 - Cost is Claude Code's estimate; whether to warn before a turn of a long-resumed session.
+- `ezapply chat` stays for now, as a way to see everything Claude does in a terminal: keep it for debugging
+  ezapply, or drop it so there's one way to run ezapply and less to keep current?

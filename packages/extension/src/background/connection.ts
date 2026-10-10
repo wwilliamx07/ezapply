@@ -163,7 +163,7 @@ export class CompanionConnection {
       // The companion runs inside `ezapply chat`: not reachable, or closed, means no chat is open.
       await this.setState({
         state: "disconnected",
-        reason: "ezapply isn't running: start ezapply chat (Set posting still works)",
+        reason: "ezapply isn't running: start it with ./ezapply in your workspace (Set posting still works)",
       });
       this.scheduleRetry();
     };

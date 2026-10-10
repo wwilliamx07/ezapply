@@ -8,14 +8,38 @@ const openedUrl = () => ((chromeStub.windows.create.mock.calls[0]?.[0] ?? { url:
 const grantListeners = new Set<() => void>();
 /** The toolbar button's click listener, kept outside the mock (mock calls are cleared between tests). */
 let clickListener: ((tab: unknown) => void) | undefined;
+/** The listener for ports (the side panel's). */
+let connectListener: ((port: unknown) => void) | undefined;
+/** What the background asked of Chrome's side panel when it loaded. */
+let panelBehavior: unknown;
+/** The keyboard shortcut's listener (Set posting). */
+let commandListener: ((command: string, tab: unknown) => void) | undefined;
 const chromeStub = {
   runtime: {
     getManifest: () => ({ version: "1.0.0" }),
     getURL: (p: string) => `chrome-extension://abcdefghijklmnopabcdefghijklmnop/${p}`,
     onInstalled: event(),
     onStartup: event(),
+    onConnect: {
+      addListener: (l: (port: unknown) => void) => {
+        connectListener = l;
+      },
+    },
     openOptionsPage: vi.fn(async () => {}),
   },
+  commands: {
+    onCommand: {
+      addListener: (l: (command: string, tab: unknown) => void) => {
+        commandListener = l;
+      },
+    },
+  },
+  sidePanel: {
+    setPanelBehavior: async (o: unknown) => {
+      panelBehavior = o;
+    },
+  },
+  sidebarAction: { toggle: vi.fn(async () => {}) },
   action: {
     onClicked: {
       addListener: (l: (tab: unknown) => void) => {
@@ -41,6 +65,8 @@ const chromeStub = {
     get: vi.fn(async (_id: number): Promise<unknown> => undefined),
     update: vi.fn(async (_id: number, _props: unknown) => ({})),
     create: vi.fn(async (_props: unknown) => ({})),
+    onActivated: event(),
+    onUpdated: event(),
   },
   webNavigation: {
     getAllFrames: vi.fn(async (_d: { tabId: number }): Promise<unknown[] | null> => []),
@@ -88,14 +114,26 @@ describe("background lifecycle", () => {
   });
 });
 
+describe("the toolbar button", () => {
+  it("opens the side panel: Chrome's by itself, Firefox's sidebar toggled in the click", async () => {
+    await import("../src/background/index.js");
+    expect(panelBehavior).toEqual({ openPanelOnActionClick: true });
+    clickListener?.({ id: 3, url: "https://example.com/", index: 0, windowId: 1 });
+    expect(chromeStub.sidebarAction.toggle).toHaveBeenCalledTimes(1);
+    // A click captures nothing: Set posting is the panel's button, or the shortcut.
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+  });
+});
+
 describe("Set posting", () => {
+  /** The keyboard shortcut on a page. */
   const click = async (url: string) => {
     await import("../src/background/index.js");
     chromeStub.permissions.request.mockClear();
-    clickListener?.({ id: 3, url, index: 0, windowId: 1 });
+    commandListener?.("set-posting", { id: 3, url, index: 0, windowId: 1 });
   };
 
-  it("asks for every site in the click itself, while it counts as the user's gesture", async () => {
+  it("asks for every site in the shortcut's handler itself, while it counts as the user's gesture", async () => {
     await click("https://jobs.umbrella.example/en/sites/CX_1/job/10001");
     // Called synchronously: Firefox refuses permissions.request once the handler has awaited anything. Already
     // granted (Chrome, from the install), it resolves without asking.
@@ -223,7 +261,7 @@ describe("telling a page's site", () => {
       frames: [],
     };
     pagesShow({ 0: "phenom" }, [{ frameId: 0, result: page }]);
-    clickListener?.({ id: 3, url: POSTING, index: 0, windowId: 1 });
+    commandListener?.("set-posting", { id: 3, url: POSTING, index: 0, windowId: 1 });
     // The companion isn't connected here: the capture waits in storage, as it's sent.
     await vi.waitFor(() =>
       expect(chromeStub.storage.local.set).toHaveBeenCalledWith({
@@ -350,7 +388,7 @@ describe("embedded application forms", () => {
         },
       },
     ]);
-    clickListener?.({ id: 3, url: HOST, index: 0, windowId: 1 });
+    commandListener?.("set-posting", { id: 3, url: HOST, index: 0, windowId: 1 });
     expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
     await vi.waitFor(() =>
       expect(chromeStub.tabs.create).toHaveBeenCalledWith(expect.objectContaining({ url: EMBED })),
@@ -567,5 +605,68 @@ describe("tab.show", () => {
   it("reports a tab still hidden after switching (a minimized window), without forcing it", async () => {
     expect(await show({ active: false }, [true])).toEqual({ tabId: 5, activated: true, hidden: true, focused: false });
     expect(chromeStub.windows.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("the side panel's port", () => {
+  /** A panel's port: what it was sent, and a way to send it a request. */
+  function panelPort() {
+    const sent: unknown[] = [];
+    let onMessage: ((m: unknown) => void) | undefined;
+    const port = {
+      name: "ezapply-panel",
+      postMessage: (m: unknown) => sent.push(m),
+      onMessage: { addListener: (l: (m: unknown) => void) => (onMessage = l) },
+      onDisconnect: { addListener: () => {} },
+    };
+    connectListener?.(port);
+    const ask = async (m: Record<string, unknown>) => {
+      onMessage?.(m);
+      await vi.waitFor(() => expect(sent.some((r) => (r as { id?: unknown }).id === m.id)).toBe(true));
+      return sent.find((r) => (r as { id?: unknown }).id === m.id) as { ok: boolean; result?: unknown; error?: string };
+    };
+    return { sent, ask };
+  }
+
+  it("relays only the panel's methods, and answers what the background knows itself", async () => {
+    await import("../src/background/index.js");
+    const { ask } = panelPort();
+    // Not a panel method: a panel can't capture or fill through the relay.
+    expect(await ask({ type: "call", id: 1, method: "posting.capture", params: {} })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Not a panel method"),
+    });
+    expect(await ask({ type: "connection", id: 2 })).toMatchObject({ ok: true, result: { state: "unconfigured" } });
+    expect(await ask({ type: "openTab", id: 3, windowId: 1, url: "javascript:alert(1)" })).toMatchObject({ ok: false });
+    expect(await ask({ type: "openTab", id: 4, windowId: 1, url: "https://example.com/apply" })).toMatchObject({
+      ok: true,
+    });
+    expect(chromeStub.tabs.create).toHaveBeenCalledWith({
+      url: "https://example.com/apply",
+      windowId: 1,
+      active: true,
+    });
+    chromeStub.tabs.query.mockResolvedValueOnce([]);
+    expect(await ask({ type: "capture", id: 5, windowId: 1 })).toMatchObject({ ok: true, result: { ok: false } });
+    // Without a connection there's no "this tab" to tell.
+    chromeStub.tabs.query.mockResolvedValueOnce([{ id: 3, url: "https://example.com/", windowId: 1 }]);
+    expect(await ask({ type: "tab", id: 6, windowId: 1 })).toMatchObject({ ok: true, result: null });
+  });
+
+  it("shows the companion's card count on the badge", async () => {
+    const { panelUpdate } = await import("../src/background/panel.js");
+    chromeStub.storage.local.get.mockResolvedValue({
+      connState: { state: "connected", companionVersion: "x" },
+    } as never);
+    // The tooltip always says it; the badge's text too, unless an earlier capture's ✓ or ! is still flashing.
+    await panelUpdate({ cards: 2 });
+    expect(chromeStub.action.setTitle).toHaveBeenLastCalledWith({
+      title: expect.stringContaining("2 waiting for you in the panel."),
+    });
+    await panelUpdate({ cards: 0 });
+    expect(chromeStub.action.setTitle).toHaveBeenLastCalledWith({
+      title: expect.not.stringContaining("waiting for you"),
+    });
+    chromeStub.storage.local.get.mockResolvedValue({} as never);
   });
 });

@@ -22,7 +22,8 @@ export function TexStep() {
           <p>No LaTeX engine is installed. Claude can install it for you with this command:</p>
           <Copyable value={state.tex.installCommand} label="Install command" />
           <p className="ez-help">
-            Claude runs it in the terminal, where you approve it. It takes a few minutes and several hundred MB.
+            Claude runs it once you approve it{state.agentIn === "panel" ? " in the ezapply panel" : " in the terminal"}
+            . It takes a few minutes and several hundred MB.
           </p>
           <div className="ob-actions">
             <Button

@@ -176,8 +176,18 @@ export function toolSummary(name: string, input: unknown): string {
       return clip(s("query") ?? "", 120);
     case "ToolSearch":
       return clip(s("query") ?? "", 120);
+    case "mcp__ezapply__fill_fields": {
+      const fills = Array.isArray(i.fills) ? i.fills.length : 0;
+      return `${fills} ${fills === 1 ? "field" : "fields"}`;
+    }
+    case "mcp__ezapply__upload_file":
+      return s("path")?.split(/[\\/]/).pop() ?? "";
+    case "mcp__ezapply__page_action":
+      return s("action") ?? "";
+    case "mcp__ezapply__ask_user":
+      return s("title") ?? "";
     default: {
-      // MCP tools (`mcp__ezapply__fill_fields`): their arguments, compact, cut short.
+      // Other MCP tools: their arguments, compact, cut short.
       const json = JSON.stringify(i);
       return json === "{}" ? "" : clip(json, 160);
     }

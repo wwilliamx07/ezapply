@@ -2,6 +2,11 @@
 
 ## The parts
 
+The drawing shows `ezapply chat`, with Claude Code in the terminal. Under `ezapply` (how the user works, in the
+browser's side panel) the same companion starts Claude Code itself, headless, one process per conversation, with
+the same relay to the same tools; the extension's side panel talks to the companion over the extension's bridge
+([agent](components/agent.md)).
+
 ```
  ezapply chat = one Node process: the companion runs inside it, and Claude Code is its child
  ┌───────────────────────────┐  stdio (MCP)   ┌──────────────┐  HTTP, 127.0.0.1   ┌───────────────────────────────┐
@@ -27,17 +32,24 @@
 | Part | Package | Runs as | Role |
 |---|---|---|---|
 | Protocol | `packages/protocol` | library | zod schemas and types shared by everything: bridge messages, RPC, forms, postings, errors |
-| Companion | `packages/companion` | library, run inside `ezapply chat` | Serves the MCP tools, talks to the extension, owns all file and network work |
-| CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), hosts the companion and runs Claude Code (`chat`), relays MCP for Claude Code (`mcp`) |
-| UI | `packages/ui` | static files the companion serves | The browser pages: document review and onboarding (React, pdf.js), and the stylesheet of the companion's own pages ([ui](components/ui.md)) |
-| Extension | `packages/extension` | browser extension | Captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors) on the companion's behalf |
+| Companion | `packages/companion` | library, run inside `ezapply` or `ezapply chat` | Serves the MCP tools, talks to the extension, owns all file and network work; under `ezapply`, runs Claude Code headless for the side panel ([agent](components/agent.md)) |
+| CLI | `packages/cli` | `ezapply` command | Creates the workspace (`init`), hosts the companion for the side panel (`ezapply`) or with Claude Code in the terminal (`chat`), relays MCP for Claude Code (`mcp`) |
+| UI | `packages/ui` | static files the companion serves; components the extension bundles | The browser pages: document review and onboarding (React, pdf.js), the side panel's components, and the stylesheet of the companion's own pages ([ui](components/ui.md)) |
+| Extension | `packages/extension` | browser extension | The side panel (opened by the toolbar button), where the user works; captures postings; reads and fills the registry sites' forms (Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors) on the companion's behalf |
 | Workspace | created by `ezapply init` | folder of files | The user's data, the agent file `EZAPPLY.md`, skills, and Claude Code config |
 
 ## Processes and lifecycle
 
-There is no background process. ezapply runs while the user has an `ezapply chat` open, and not otherwise.
+There is no background process. ezapply runs while the user has `ezapply` (or `ezapply chat`) running in a
+terminal, and not otherwise.
 
-- **`ezapply chat`** is how the user runs ezapply (the workspace's `ezapply` launcher). It starts the
+- **`ezapply`** is how the user runs ezapply (the workspace's `ezapply` launcher, with no command): the companion
+  in its own process, with no Claude in the terminal, which only says where to go and stops on Ctrl+C
+  ([cli](components/cli.md#ezapply-panelts)). It opens the setup page while setup isn't finished. The user works in
+  the extension's side panel; the companion starts Claude Code headless when a conversation needs it, one process
+  at a time, and ends it when the companion stops ([agent](components/agent.md)). No conversation carries one
+  posting into the next: each posting has its own.
+- **`ezapply chat`** runs ezapply with Claude Code in the terminal instead. It starts the
   companion in its own process, listening on `127.0.0.1:<port>` (default 17373), then starts Claude Code in
   the workspace as a child with a session id in its environment. When Claude exits it closes the companion
   and exits too. If the companion can't start (the port is taken), Claude isn't started, since it would have
@@ -96,7 +108,9 @@ that a chat doesn't is stay up between chats, which matters to nobody: the tools
 | Browser → companion | `GET /github/*` pages (`POST /github/reuse`) | one-time state values | GitHub App creation, reuse and login callbacks |
 | Browser → companion | `GET/POST /review/*`, `/onboard/*` | random token in the link, traded for a cookie on the page's path; POSTs from the companion's own origin only | The review and onboarding pages, their state, events (Server-Sent Events), actions and PDFs ([ui](components/ui.md#how-a-page-talks-to-the-companion)) |
 | Browser → companion | `GET /ui/*` | none (the same for everyone) | The UI package's scripts, styles and pdf.js's files |
-| Extension ↔ companion | WebSocket `ws://127.0.0.1:<port>/bridge`, JSON text frames | Origin pinning + pairing code | Versioned handshake, then symmetric RPC ([protocol](components/protocol.md)) |
+| Extension ↔ companion | WebSocket `ws://127.0.0.1:<port>/bridge`, JSON text frames | Origin pinning + pairing code | Versioned handshake, then symmetric RPC ([protocol](components/protocol.md)), the side panel's `panel.*` methods and `panel.update` pushes among them |
+| Side panel ↔ extension background | `runtime.connect` port | the extension's own page | The panel's requests, relayed to the companion; capture, a tab's site and opening a tab done by the background ([extension](components/extension.md#the-side-panel)) |
+| Companion → Claude Code (headless) | stdin and stdout of the process it starts, stream-json | a child process | The user's messages in, what Claude does out ([agent](components/agent.md)); Claude's tool calls come back through the relay like any session's |
 | Companion → GitHub | HTTPS REST API and `git` over HTTPS | user access token (per command, never stored in git config) | Read-only App permissions |
 
 Every HTTP request must be addressed to the bound loopback host (`Host` check against DNS rebinding).
@@ -128,7 +142,7 @@ Formats of every file: [data-formats.md](data-formats.md).
   line plus its hint; only unexpected errors show a stack.
 - **Finding installed tools.** `which()` caches hits only, and on Windows first appends the folders where
   winget installs MiKTeX and Git, so a tool installed mid-session works without a restart.
-- **Versioning.** `PROTOCOL_VERSION` (currently 7) is checked at the bridge handshake; a mismatch is
+- **Versioning.** `PROTOCOL_VERSION` (currently 8) is checked at the bridge handshake; a mismatch is
   refused with which side to update. Every stored format has a `schemaVersion`. `COMPANION_VERSION`
   matches the package version (tested).
 - **Wiring.** Services are constructed once in `companion/src/main.ts` and passed explicitly (the

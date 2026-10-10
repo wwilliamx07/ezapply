@@ -178,6 +178,11 @@ describe("reading Claude Code's stream-json", () => {
     expect(toolSummary("mcp__ezapply__tex_compile", { path: "postings/x/resume.tex" })).toBe(
       '{"path":"postings/x/resume.tex"}',
     );
+    expect(toolSummary("mcp__ezapply__fill_fields", { fills: [{}, {}, {}], tabId: 4 })).toBe("3 fields");
+    expect(toolSummary("mcp__ezapply__upload_file", { fieldId: "f", path: "postings/x/resume.pdf" })).toBe(
+      "resume.pdf",
+    );
+    expect(toolSummary("mcp__ezapply__ask_user", { title: "Step 2: screening" })).toBe("Step 2: screening");
     expect(toolSummary("Bash", { command: "x".repeat(300) })).toHaveLength(200);
   });
 

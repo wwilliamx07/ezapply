@@ -1,6 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { NeedsYou } from "./agent/needs.js";
+import { PanelService } from "./agent/panel.js";
 import type { ClaudeCommand } from "./agent/process.js";
 import { AgentService } from "./agent/service.js";
 import { ExtensionBridge } from "./bridge/server.js";
@@ -113,6 +114,43 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     onForgotten: (pairingToken) => persist(({ pairedExtensionId: _, ...rest }) => ({ ...rest, pairingToken })),
     handlers: {
       "posting.capture": (payload) => postings.capture(payload),
+      // The side panel, relayed by the paired extension (agent/panel.ts).
+      "panel.watch": async ({ open }) => {
+        panel.watch(open);
+        return {};
+      },
+      "panel.state": () => panel.state(),
+      "panel.conversation": ({ key }) => panel.conversation(key),
+      "panel.tab": (t) => panel.tab(t),
+      "panel.send": ({ key, text }) => panel.send(key, text),
+      "panel.stop": async () => ({ stopped: agent.stop() }),
+      "panel.reset": async ({ key }) => {
+        await agent.reset(key);
+        return {};
+      },
+      "panel.answer": async ({ cardId, answers }) => {
+        panel.answer(cardId, answers);
+        return {};
+      },
+      "panel.reply": async ({ cardId, message }) => {
+        panel.reply(cardId, message);
+        return {};
+      },
+      "panel.permission": async ({ cardId, allow, reason }) => {
+        panel.permission(cardId, allow, reason);
+        return {};
+      },
+      "panel.activate": async ({ postingId }) => {
+        await postings.activate(postingId);
+        return {};
+      },
+      "panel.open": async (what) => {
+        await panel.open(what);
+        return {};
+      },
+    },
+    onConnectionChange: (connected) => {
+      if (!connected) panel.watch(0);
     },
     log: log.child({ svc: "bridge" }),
     ...(opts.reconnectGraceMs !== undefined ? { reconnectGraceMs: opts.reconnectGraceMs } : {}),
@@ -132,6 +170,11 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   const onboarding = new OnboardingService(
     () => services,
     () => `http://${config.host}:${port}`,
+  );
+  // Pushes go only to a connected extension: a panel update is worth nothing late, so it never waits for one.
+  const panel = new PanelService(
+    () => services,
+    (update) => (bridge.status().connected ? bridge.call("panel.update", update, 5_000) : Promise.resolve()),
   );
   const services: Services = {
     version: COMPANION_VERSION,
@@ -175,6 +218,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   // What's out of date in the workspace, for `workspace_changes`: the repos need the network, so they're
   // checked once per chat, in the background, never in the way of the first call or the extension's handshake.
   freshness.start();
+  panel.start();
 
   return {
     port,

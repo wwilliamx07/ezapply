@@ -7,6 +7,15 @@ const AMBER = "#d97706";
 const RED = "#dc2626";
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
+/** Cards waiting on the user in the panel (the companion pushes the count). */
+let cardsWaiting = 0;
+
+/** The number of cards waiting on the user, shown on the badge until they're answered. */
+export async function setCardsWaiting(n: number): Promise<void> {
+  if (n === cardsWaiting) return;
+  cardsWaiting = n;
+  await renderBadge();
+}
 
 /** Resting badge: a small coloured pill for the connection state; tooltip names the active posting. */
 export async function renderBadge(conn?: ConnState): Promise<void> {
@@ -37,10 +46,12 @@ export async function renderBadge(conn?: ConnState): Promise<void> {
       break;
   }
   if (flashTimer === undefined) {
-    await ext.action.setBadgeText({ text: pending ? "…" : " " });
-    await ext.action.setBadgeBackgroundColor({ color: pending ? AMBER : color });
+    const waiting = cardsWaiting > 0 && state.state === "connected";
+    await ext.action.setBadgeText({ text: waiting ? String(cardsWaiting) : pending ? "…" : " " });
+    await ext.action.setBadgeBackgroundColor({ color: waiting || pending ? AMBER : color });
   }
-  const lines = ["ezapply: Set posting", status];
+  const lines = ["ezapply: open the panel", status];
+  if (cardsWaiting > 0) lines.push(`${cardsWaiting} waiting for you in the panel.`);
   if (pending) lines.push("A capture is waiting to be sent.");
   if (active) lines.push(`Active: ${active}`);
   await ext.action.setTitle({ title: lines.join("\n") });

@@ -26,6 +26,7 @@ import { runDebug } from "./debug.js";
 import { runDoctor } from "./doctor.js";
 import { fetchHealth } from "./health.js";
 import { runMcpRelay } from "./mcp-relay.js";
+import { hostPanel } from "./panel.js";
 import { guardProcess, quietProcess } from "./quiet.js";
 import { type InitReport, initWorkspace } from "./workspace-init.js";
 
@@ -35,8 +36,11 @@ const EXTENSION_DIR = resolve(dirname(CLI_MAIN), "..", "..", "extension");
 const USAGE = `ezapply ${COMPANION_VERSION}
 
 Usage:
-  ezapply chat [claude args…]                        Run ezapply and Claude Code in the workspace (how you use
-                                                     ezapply); a newly captured posting starts a fresh session
+  ezapply                                            Run ezapply for the browser's side panel (how you use
+                                                     ezapply); Ctrl+C stops it
+  ezapply chat [claude args…]                        Run ezapply with Claude Code in this terminal instead; a
+                                                     newly captured posting starts a fresh session
+  ezapply help                                       This list
   ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
   ezapply status                                     Check whether ezapply is running
   ezapply doctor                                     Diagnose the whole setup
@@ -60,6 +64,7 @@ async function main(argv: string[]): Promise<number> {
     case "mcp":
       return cmdMcp();
     case undefined:
+      return cmdPanel();
     case "help":
     case "--help":
     case "-h":
@@ -122,15 +127,31 @@ async function cmdInit(args: string[]): Promise<number> {
     "",
     "Next:",
     `  cd "${config.workspace}"`,
-    `  ${process.platform === "win32" ? ".\\ezapply" : "./ezapply"} chat`,
-    'Then say "set me up". A setup page opens in your browser for what\'s missing (TeX, the browser extension,',
-    "GitHub, your resume), and Claude does the parts that need it. Always start ezapply this way: ezapply runs",
-    "only while that chat is open, and capturing another posting starts a fresh Claude session by itself. If a",
-    "chat is open now, exit it and start it again to use this build.",
+    `  ${process.platform === "win32" ? ".\\ezapply" : "./ezapply"}`,
+    "A setup page opens in your browser for what's missing (TeX, the browser extension, GitHub, your resume), and",
+    "Claude does the parts that need it. From then on you work in the ezapply panel (the toolbar button in your",
+    "browser); ezapply runs while that command does. To use Claude in a terminal instead, add `chat` to it.",
+    "If ezapply is running now, stop it and start it again to use this build.",
     "",
   ];
   process.stdout.write(out.join("\n"));
   return 0;
+}
+
+/** ezapply for the side panel: the companion in this process, Claude Code started headless by it when needed. */
+async function cmdPanel(): Promise<number> {
+  const config = await requireConfig();
+  const claude = findClaude();
+  if (!claude) {
+    process.stderr.write(
+      "Claude Code isn't on PATH. Install it (https://code.claude.com/docs), or point EZAPPLY_CLAUDE at it.\n",
+    );
+    return 1;
+  }
+  const log = createLogger();
+  guardProcess(log);
+  // Libraries print (pdfjs through console.log); the terminal shows only ezapply's own lines (on stdout).
+  return hostPanel({ config, claude, extensionDir: EXTENSION_DIR, log, onStarted: () => quietProcess(log) });
 }
 
 /**
@@ -190,7 +211,7 @@ async function cmdStatus(): Promise<number> {
   const config = await requireConfig();
   const health = await fetchHealth(config);
   if (!health) {
-    process.stdout.write("ezapply isn't running. It runs while `ezapply chat` is open.\n");
+    process.stdout.write("ezapply isn't running. It runs while `ezapply` (or `ezapply chat`) is open.\n");
     return 1;
   }
   if (health.mode !== HEALTH_MODE) {
@@ -201,7 +222,7 @@ async function cmdStatus(): Promise<number> {
     return 1;
   }
   process.stdout.write(
-    `ezapply ${health.version} is running in an \`ezapply chat\` on ${config.host}:${config.port}; ` +
+    `ezapply ${health.version} is running on ${config.host}:${config.port}; ` +
       `extension ${health.extensionConnected ? "connected" : "not connected"}.\n`,
   );
   return 0;

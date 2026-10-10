@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./panel": "./src/panel/index.ts",
+    "./panel.css": "./src/panel/panel.css",
+    "./base.css": "./src/styles/base.css"
   },
   "scripts": {
     "build": "node build.mjs",

@@ -290,8 +290,8 @@ export function AnswersStep() {
   const [saving, setSaving] = useState(false);
   const group = unanswered.slice(0, 8);
   const done = state.steps.find((s) => s.id === "answers")?.done ?? false;
-  const answerOf = (id: string, suggested?: string, sensitive?: boolean) =>
-    values[id] ?? (sensitive ? "" : (suggested ?? ""));
+  // Sensitive questions get their suggestion too: Claude still asks about them every time, offering what's saved.
+  const answerOf = (id: string, suggested?: string) => values[id] ?? suggested ?? "";
   return (
     <>
       <StepHead title="Screening questions" done={done}>
@@ -314,12 +314,15 @@ export function AnswersStep() {
                 <input
                   id={`ob-q-${q.id}`}
                   className="ez-input"
-                  value={answerOf(q.id, q.suggested, q.sensitive)}
+                  value={answerOf(q.id, q.suggested)}
                   placeholder={q.sensitive ? "Leave empty to be asked every time" : ""}
                   onChange={(e) => setValues((v) => ({ ...v, [q.id]: e.target.value }))}
                 />
                 {q.sensitive ? (
-                  <span className="ez-help">Sensitive: left empty, Claude asks you each time.</span>
+                  <span className="ez-help">
+                    Sensitive: Claude asks you each time, suggesting what you save here (leave it empty for no
+                    suggestion).
+                  </span>
                 ) : q.suggested ? (
                   <span className="ez-help">Suggested; change it if it isn't right for you.</span>
                 ) : q.source ? (
@@ -340,7 +343,7 @@ export function AnswersStep() {
                 try {
                   const answers: Record<string, string | null> = {};
                   for (const q of group) {
-                    const v = answerOf(q.id, q.suggested, q.sensitive).trim();
+                    const v = answerOf(q.id, q.suggested).trim();
                     answers[q.id] = v || null;
                   }
                   await act("answers", { answers });

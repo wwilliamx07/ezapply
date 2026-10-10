@@ -1,4 +1,5 @@
 import { type CapturePayload, EzError, HOST_PERMISSIONS, type SiteId } from "@ezapply/protocol";
+import type { CaptureOutcome } from "@ezapply/ui/panel";
 import { z } from "zod";
 import { capturePage, type PageCapture } from "../capture/capture.js";
 import { chooseFrame, type FrameCapture, unreadableBoard } from "../capture/frames.js";
@@ -7,6 +8,7 @@ import { flashBadge, renderBadge } from "./badge.js";
 import { CompanionConnection } from "./connection.js";
 import { formHandlers } from "./forms.js";
 import { frameSite, tabSites } from "./frames.js";
+import { panelUpdate, servePanels } from "./panel.js";
 import { store } from "./settings.js";
 
 // MV3 forbids eval; stop zod from probing for it.
@@ -41,22 +43,40 @@ const connection = new CompanionConnection(
       };
     },
     ...formHandlers,
+    "panel.update": panelUpdate,
   },
   ext.runtime.getManifest().version,
 );
+
+servePanels(connection, (tab) => setPosting(tab));
 
 connection.onState((s) => {
   void renderBadge(s);
   if (s.state === "connected") void flushPendingCapture();
 });
 
-// ---- Set posting -----------------------------------------------------------------------------
+// ---- The panel and Set posting ---------------------------------------------------------------
 
-ext.action.onClicked.addListener((tab) => {
+/** The keyboard shortcut's command (the manifest's `commands`). */
+export const SET_POSTING_COMMAND = "set-posting";
+
+// The toolbar button opens the side panel, where everything else happens. Chrome opens it by itself; Firefox's
+// sidebar is toggled here, inside the click, the only place it may be opened from.
+const sidePanel = (
+  ext as unknown as { sidePanel?: { setPanelBehavior(o: { openPanelOnActionClick: boolean }): Promise<void> } }
+).sidePanel;
+void sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
+ext.action.onClicked.addListener(() => {
+  (ext as unknown as { sidebarAction?: { toggle(): Promise<void> } }).sidebarAction?.toggle().catch(() => undefined);
+});
+
+// Alt+Shift+P captures the page without opening the panel.
+ext.commands.onCommand.addListener((command, tab) => {
+  if (command !== SET_POSTING_COMMAND || !tab) return;
   // The extension holds every site from the install, but Firefox lets the user withhold that and Chrome lets them
-  // limit it. Asked here, while the click still counts as the user's gesture: Firefox accepts permissions.request
-  // only synchronously inside the handler. Already granted, it resolves without asking. Declined, the capture still
-  // reads the page itself (the click grants activeTab), not the frames of other sites in it.
+  // limit it. Asked here, while the shortcut still counts as the user's gesture: Firefox accepts
+  // permissions.request only synchronously inside the handler. Already granted, it resolves without asking.
+  // Declined, the capture still reads the page itself (the shortcut grants activeTab), not other sites' frames.
   const access =
     tab.url && /^https?:/i.test(tab.url) ? ext.permissions.request({ origins: [...HOST_PERMISSIONS] }) : undefined;
   void setPosting(
@@ -65,11 +85,17 @@ ext.action.onClicked.addListener((tab) => {
   );
 });
 
-/** `access`: the request for every site this click made, settled before the page is read. */
-async function setPosting(tab: chrome.tabs.Tab, access?: Promise<boolean>): Promise<void> {
+/**
+ * Capture the tab as the posting. `access`: the request for every site the shortcut made, settled before the page
+ * is read (the panel asks in its own click before calling this). The outcome goes to the panel; the badge shows it.
+ */
+async function setPosting(tab: chrome.tabs.Tab, access?: Promise<boolean>): Promise<CaptureOutcome> {
+  const failed = async (error: string): Promise<CaptureOutcome> => {
+    await flashBadge("error", error);
+    return { ok: false, error };
+  };
   if (tab.id === undefined || !tab.url || !/^https?:/i.test(tab.url)) {
-    await flashBadge("error", "This page can't be captured. Open the job posting itself.");
-    return;
+    return failed("This page can't be captured. Open the job posting itself.");
   }
   await access;
   let payload: CapturePayload;
@@ -82,27 +108,22 @@ async function setPosting(tab: chrome.tabs.Tab, access?: Promise<boolean>): Prom
       // The job sits in a frame from another site that the extension may not read (access to websites withheld):
       // open it on its own.
       await ext.tabs.create({ url: board, index: tab.index + 1, openerTabId: tab.id });
-      await flashBadge(
-        "error",
-        "This job is embedded from a job board. It opened in a new tab: click Set posting there.",
-      );
-      return;
+      return failed("This job is embedded from a job board. It opened in a new tab: Set posting there.");
     }
     const top = frames.find((f) => f.frameId === 0)?.page ?? chosen.page;
     const site = await frameSite(tab.id, chosen.frameId, chosen.page.url);
     payload = toPayload(top, chosen, tab.id, site);
   } catch (err) {
-    await flashBadge("error", `Capture failed: ${(err as Error).message}`);
-    return;
+    return failed(`Capture failed: ${(err as Error).message}`);
   }
 
   await connection.ensureConnected();
   if (!connection.connected) {
     await store.setPendingCapture(payload);
     await renderBadge();
-    return;
+    return { ok: false, error: "ezapply isn't running: the posting is saved and goes to ezapply when it starts." };
   }
-  await sendCapture(payload);
+  return sendCapture(payload);
 }
 
 /**
@@ -137,16 +158,18 @@ function toPayload(top: PageCapture, chosen: FrameCapture, tabId: number, site: 
   };
 }
 
-async function sendCapture(payload: CapturePayload): Promise<void> {
+async function sendCapture(payload: CapturePayload): Promise<CaptureOutcome> {
   try {
     const res = await connection.request("posting.capture", payload, 60_000);
     await store.setPendingCapture(null);
     const label = [res.company, res.role].filter(Boolean).join(": ") || res.postingId;
     await store.setActiveLabel(label);
     await flashBadge("ok", `Active posting: ${label}`);
+    return { ok: true, postingId: res.postingId, label };
   } catch (err) {
     const e = EzError.from(err);
     await flashBadge("error", `Capture not saved: ${e.message}`);
+    return { ok: false, error: `Capture not saved: ${e.message}` };
   }
 }
 

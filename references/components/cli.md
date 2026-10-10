@@ -1,7 +1,8 @@
 # CLI (`packages/cli`)
 
-The `ezapply` command. It runs ezapply for the user (`chat`: the companion in its own process, Claude Code as
-its child), creates and refreshes the workspace, and is the MCP server Claude Code launches. Run it through the
+The `ezapply` command. It runs ezapply for the user (with no command: the companion in its own process for the
+browser's side panel, which starts Claude Code headless; or `chat`: Claude Code in the terminal as its child),
+creates and refreshes the workspace, and is the MCP server Claude Code launches. Run it through the
 workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), as
 `npm run ezapply -- <command>`, or as `node packages/cli/dist/main.js <command>`.
 
@@ -9,18 +10,20 @@ workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), 
 
 | Command | Does |
 |---|---|
-| `chat [claude args…]` | How ezapply is used: the companion runs in this process and Claude Code in the workspace as its child, restarted with a fresh session when the user captures another posting ([below](#chat-chatts)). The arguments go to the first `claude` only |
+| (none) | How ezapply is used: the companion runs in this process for the side panel, with Claude Code started headless by it; opens the setup page while setup isn't finished; Ctrl+C stops it ([below](#ezapply-panelts)) |
+| `chat [claude args…]` | ezapply with Claude Code in the terminal instead: the companion runs in this process and Claude Code in the workspace as its child, restarted with a fresh session when the user captures another posting ([below](#chat-chatts)). The arguments go to the first `claude` only |
+| `help` | The commands |
 | `init [--workspace <dir>] [--port <n>]` | Write `~/.ezapply/config.json` and create or refresh the workspace; print the next steps |
-| `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply chat`. Nothing else may write to stdout |
-| `status` | Whether an `ezapply chat` is running (its `/health`), and whether the extension is connected |
+| `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply` or `ezapply chat`. Nothing else may write to stdout |
+| `status` | Whether ezapply is running (its `/health`), and whether the extension is connected |
 | `debug on\|off\|report [dir]\|clean\|export` | Debug mode (`debug.ts`). `on` and `off` set `debug.enabled` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, and from the adapter's trace the slowest fields and waits, waits that ran to their maximum, slow paths taken (named branches, React handlers called directly), the page's errors and failed requests, what was saved at failures, and calls with no trace (an extension built before it). `export <session\|latest> <NNNN> [before\|after\|fail-<fieldId>]` writes a test fixture candidate from a saved page (`debugExport`, [below](#debug-export)). `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
 | `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension, whether the browser pages are built, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
 
-`npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. A chat that's open keeps
-running the build it started with; `init` says to exit it and start it again.
+`npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. An ezapply that's running keeps
+the build it started with; `init` says to stop it and start it again.
 
 There are no `start`, `stop`, `restart`, `daemon` or `pair` commands: there is no background process to
-control (see [architecture](../architecture.md#processes-and-lifecycle) for why). Pairing, and forgetting a
+control (`ezapply` runs in the foreground of its terminal) (see [architecture](../architecture.md#processes-and-lifecycle) for why). Pairing, and forgetting a
 paired extension (what `pair --reset` did), are `extension_pair` and `extension_pair replace: true`, which
 onboarding calls from inside the chat.
 
@@ -63,9 +66,10 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    `ezapply chat` runs from the workspace without the CLI on PATH: a global `npm link` needs write access to
    npm's global folder, which many installs (a system Node on macOS, for one) don't give.
 
-Prints the workspace, what was created/updated/kept, and "cd there, run `./ezapply chat` (`.\ezapply chat` on
-Windows), say 'set me up'" (a setup page opens in the browser for what's missing, and Claude does the parts that
-need it), plus that an open chat must be restarted to use the new build.
+Prints the workspace, what was created/updated/kept, and "cd there, run `./ezapply` (`.\ezapply` on Windows)":
+a setup page opens in the browser for what's missing, Claude does the parts that need it, and from then on the
+user works in the ezapply panel (`chat` for Claude in a terminal instead); plus that a running ezapply must be
+restarted to use the new build.
 
 ## The MCP relay (`mcp-relay.ts`)
 Claude Code talks to MCP servers over stdio, and the companion serves MCP over HTTP inside `ezapply chat`, so
@@ -76,10 +80,10 @@ tools wait up to 15 minutes.)
 2. Relay: read newline-delimited JSON-RPC from stdin; for each message `POST /mcp` with the bearer token and
    `Accept: application/json, text/event-stream`; write the JSON body back as one line. Notifications
    (202, empty body) produce no output. Messages are handled concurrently.
-3. **It never starts anything.** A refused connection (`ECONNREFUSED`: no `ezapply chat` is running, for
-   example Claude Code started directly in the workspace) answers the request with `NOT_RUNNING`: "ezapply
-   isn't running. It runs inside `ezapply chat`: ask the user to exit this Claude session and start it again
-   with `ezapply chat`". Nothing is sent twice. A connection that breaks after the request went out (the chat
+3. **It never starts anything.** A refused connection (`ECONNREFUSED`: ezapply isn't running, for example
+   Claude Code started directly in the workspace) answers the request with `NOT_RUNNING`: "ezapply isn't
+   running. It runs inside `ezapply` (the browser's side panel) or `ezapply chat`: ask the user to start it
+   (`./ezapply` in the workspace), or to exit this Claude session and start it again with `ezapply chat`". Nothing is sent twice. A connection that breaks after the request went out (the chat
    ended mid-call) is reported as such, because the tool may already have run and a second `upload_file` or
    `remove_repeatable` would act twice; the error tells Claude to check the effect before calling again.
 4. **No timeout.** Requests go through `node:http` without an agent, which has no response timeout. Node's
@@ -92,8 +96,25 @@ tools wait up to 15 minutes.)
    tell the wrapper whether the session has used a tool and whether one is running
    ([companion](companion.md#chat-sessions-chatts)).
 
+## `ezapply` (`panel.ts`)
+How the user runs ezapply: `hostPanel`, with no command.
+
+1. Needs `config.json` and Claude Code (`findClaude`, as `chat` does).
+2. The crash guard (`guardProcess`), then the companion through `startHosted` (shared with `chat`: the same
+   handling of a taken port), with Claude Code passed as `CompanionOptions.claude` for the panel's agent
+   ([agent](agent.md)). The arguments `chat` passes to Claude don't exist here: the agent's are fixed.
+3. Prints `ezapply is running (port N).`; while `workspace_check` isn't ready, opens the setup page (`onboarding`'s
+   link, through the `Opener`: there may be no extension yet, so no panel) and says so, or prints its link; then
+   "Open the ezapply panel from your browser's toolbar. Press Ctrl+C here to stop ezapply." From then on
+   `quietProcess`: libraries' console output and stderr go to the log, so the terminal shows only these lines.
+4. Waits for SIGINT, SIGTERM or SIGHUP (the terminal closing), then closes the companion, which ends the agent's
+   Claude Code process, and exits 0.
+
+The terminal is ezapply's here, not Claude's: Ctrl+C stops ezapply, unlike under `chat`. No restart on capture:
+the panel keeps a conversation per posting.
+
 ## `chat` (`chat.ts`)
-How the user runs ezapply, and the only process the companion runs in.
+ezapply with Claude Code in the terminal. It and `ezapply` are the only processes the companion runs in.
 
 ### Hosting the companion (`hostChat`)
 1. Needs `config.json` (else "run `ezapply init`") and Claude Code: `EZAPPLY_CLAUDE` if set, else the first
@@ -161,7 +182,7 @@ events restart at once and cost nothing while idle).
 
 ## `status` and `health.ts`
 `fetchHealth`: `/health` with a 2 s timeout; only counts if it answers `name: "ezapply"`. `status` prints
-whether an `ezapply chat` is running (exit 0) or not (exit 1: "It runs while `ezapply chat` is open"), and
+whether ezapply is running (exit 0) or not (exit 1: "It runs while `ezapply` (or `ezapply chat`) is open"), and
 names an earlier build's background daemon if one answers without `mode`.
 
 ## `doctor` (`doctor.ts`)

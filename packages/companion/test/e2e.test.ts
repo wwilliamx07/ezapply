@@ -212,7 +212,7 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
     return p.api;
   };
   const calls: { method: string; params: Record<string, unknown> }[] = [];
-  const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status"> = {
+  const handlers: Omit<Handlers<typeof ExtensionApi>, "browser.status" | "panel.update"> = {
     "tab.show": async ({ tabId, activate, focusWindow }) => {
       const p = page(tabId);
       const windowFocused = Boolean(activate && focusWindow && (p.windowInBackground || p.minimized));
@@ -308,7 +308,7 @@ function fakeExtension(
     send,
     remote: CompanionApi,
     local: ExtensionApi,
-    handlers: { "browser.status": browser.status, ...browser.handlers },
+    handlers: { "browser.status": browser.status, "panel.update": async () => ({}), ...browser.handlers },
   });
   const outcome = new Promise<{ welcomed: boolean; pairingToken?: string; closeCode?: number; error?: string }>(
     (resolve) => {

@@ -20,16 +20,16 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site, and applications embedded in other pages as tabs of their own: `formTabs`, with every call on one naming its frame: `framed`; [embedded applications](../mcp-tools.md#forms)), one call per tab at a time, `tab.show` before each call (the tab brought to the front, and the browser window before a call that changes the page when `forms.focusBrowser` is on; `tabHidden` when the tab stays hidden, `browserBehind` when the window stays behind another app: [the tab in front](../mcp-tools.md#forms)), crediting form activity to the posting the tab may belong to and binding the tab to it on the first change (`decide`, `claim`, `bindTab`: [which posting](../mcp-tools.md#forms)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (debug mode: a record per form call when `debug.enabled` is on, with the adapter's trace of each bridge call and its markup and screenshots as files of their own: `extractFiles`), `debugRequest` (what each adapter call asks for, by `debug.markup`), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/debug-export.ts`: `debugExport`, `scrub`, `profileStrings` (`ezapply debug export`: [cli](cli.md#debug-export)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, for the checklist; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
 | `forms/sites/` | `SITE_NOTES`: each site's notes for the agent, one module per site, given once per chat session as `siteNotes` ([site notes](../mcp-tools.md#site-notes)) |
 | `forms/match.ts` | Which posting an application tab belongs to: `postingFacts`, `matchPosting` (evidence: site, job, binding, the page's requisition, tenant, title), `compareTitles` ([which posting](../mcp-tools.md#forms)) |
-| `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension |
+| `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension; `onConnectionChange` (the side panel's watch ends with the connection) |
 | `bridge/pairing.ts` | `startPairing` (open the pairing window, optionally forgetting the paired extension) and `extensionFolders` (what to load, and whether it's built): shared by `extension_pair` and the onboarding page |
 | `onboarding/service.ts` | `OnboardingService`: the onboarding page's session, routes and actions, its state (from `workspace_check` and the services), the agent's task queue behind `onboarding`, and the watch that tells an open page what changed elsewhere; `skipReason` (repos not suggested) → [ui](ui.md#the-onboarding-page-onboard) |
-| `agent/` | `AgentService` (the panel's conversations, one Claude Code process at a time), `AgentProcess` and `findClaude`, `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user) → [agent](agent.md) |
+| `agent/` | `AgentService` (the panel's conversations, one Claude Code process at a time), `AgentProcess` and `findClaude`, `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user), `PanelService` (the side panel's `panel.*` methods and the updates pushed to it) → [agent](agent.md) |
 | `ui/assets.ts` | `UiAssets`: the UI package's files at `/ui/`, each page's HTML shell, `UI_CSP`, the base stylesheet's address → [ui](ui.md#serving-companionsrcuiassetsts) |
 | `ui/session.ts` | What the pages share: the token traded for a cookie (`presentedToken`, `pageCookie`, `tokenOk`), `sameOrigin`, `readJsonBody`, `sendJson`, `EventStreams` (Server-Sent Events) → [ui](ui.md#how-a-page-talks-to-the-companion) |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
 | `freshness/service.ts` | `FreshnessService`: what in the workspace is behind its source, behind `workspace_changes` and `workspace_change_mark` ([below](#keeping-the-workspace-current-workspace_changes)) |
 | `postings/` | Capture ingest and extraction, the application a posting is tied to (`application.ts`) → [postings.md](postings.md) |
-| `documents/` | `service.ts`, `review.ts` (the review page's API, approvals, `reviewed.json`, the attach mode), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
+| `documents/` | `service.ts`, `review.ts` (the review page's API, approvals, `reviewed.json`, the attach mode; for the side panel `onChange`, `openFor`, `urlOf`, `documentStates`), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
 | `profile/` | `service.ts` (profile, answers, repo selection, preferences, library; the onboarding page's in-place writes: `saveProfile`, `saveAnswers`, `savePreferences`, `parsePreferences`, `formatPreferences`), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
 | `templates/service.ts` | `TemplateService`: template import, example letters, the main file and its content files, the engine a template needs → [profile-and-templates.md](profile-and-templates.md#templates-templatesresume-templatescover) |
 | `github/` | `service.ts` (App, login, tokens, repo listing), `secrets.ts` (`SecretStore`: OS keychain, or memory in tests) → [github-and-repos.md](github-and-repos.md) |
@@ -54,13 +54,17 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 1. Read and validate the workspace config (fails fast on an invalid `ezapply.config.json`).
 2. Build services, with `UiAssets` (the `ui` option overrides it) whose stylesheet the companion's own pages take,
    and `OnboardingService`; seed `profile/answers.yaml` if it doesn't exist.
-3. Build the bridge with the pairing code, the pinned id, and `onPaired` / `onForgotten`, which persist the
-   pairing.
+3. Build the bridge with the pairing code, the pinned id, `onPaired` / `onForgotten`, which persist the pairing,
+   the handlers for `posting.capture` and the side panel's `panel.*` methods, and `onConnectionChange`. Build
+   `NeedsYou` and `AgentService` (with Claude Code when the `claude` option gives it), and `PanelService`, whose
+   pushes go to the extension only while it's connected.
 4. Build `FormsService` over postings and the bridge, `ChatSessions`, and the HTTP server; listen on
    `config.host:config.port` (port 0 picks a free one, for tests). A taken port rejects with `EADDRINUSE`,
    which `ezapply chat` turns into a message.
 5. Start the workspace check's repo check in the background (`FreshnessService.start`): it never delays
    `/health`, the extension's handshake or the first tool call ([below](#keeping-the-workspace-current-workspace_changes)).
+6. Start relaying to the side panel (`PanelService.start`): the agent's events and state, the cards, the active
+   posting and reviews.
 
 **Persisting pairing** changes only the pairing fields of `config.json` as it is on disk at that moment
 (`updateAppConfig`), not the copy read at start. Otherwise an `ezapply init --port` made while a chat ran
@@ -68,13 +72,14 @@ would be undone the next time an extension paired.
 
 Options: `config`, `log`, `saveConfig` (tests: receives the whole new config instead of the file update),
 `appDataDir`, `secrets` (keychain by default), `opener` (by default `createDesktopOpener` with the browser
-the bridge reports; tests stub it),
+the bridge reports; tests stub it), `claude` (Claude Code for the side panel's agent: `ezapply` passes it, `ezapply
+chat` doesn't),
 `extensionDir` (so `extension_pair` can name the build folders), `reconnectGraceMs` (tests), and GitHub test
 hooks.
 
 The handle: `port`, `services`, `chat` (the `ChatHost`), `onServerError(fn)` (an error on the server after it
 listens; `ezapply chat` logs it), and `close()` (extension socket closed with 1001, server connections
-dropped, server closed).
+dropped, server closed); it ends the agent's Claude Code process first.
 
 **Nothing reaches the terminal.** The companion runs in the same process as the wrapper whose terminal Claude
 Code owns, so it never writes to stdout or stderr: the logger writes to the log file only, jsdom gets a silent

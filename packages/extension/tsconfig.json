@@ -8,7 +8,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["es2023", "dom", "dom.iterable"],
-    "types": ["chrome"]
+    "types": ["chrome"],
+    "jsx": "react-jsx"
   },
   "include": ["src"]
 }

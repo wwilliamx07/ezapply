@@ -124,6 +124,7 @@ interface Session {
  */
 export class ReviewService {
   private readonly sessions = new Map<string, Session>();
+  private readonly listeners = new Set<() => void>();
 
   constructor(
     private readonly ws: Workspace,
@@ -197,6 +198,7 @@ export class ReviewService {
     }
     this.prune();
     this.sessions.set(id, session);
+    this.notify();
     // A page left open past the review's life hears that it expired.
     setTimeout(() => this.changed(session), REVIEW_TTL_MS + 1000).unref();
     this.log.info({ id, posting: session.postingId, files: files.length }, "review opened");
@@ -236,6 +238,53 @@ export class ReviewService {
       url: this.url(s),
       hint: "The user hasn't answered yet. Ask whether they saw the page (give the URL again if not), then wait again with review_documents { reviewId }.",
     };
+  }
+
+  /** Called when a review opens, is answered, replaced or expires (the side panel shows it). */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  /** The posting's review waiting on the user, if one is. */
+  openFor(postingId: string): { reviewId: string; files: string[] } | undefined {
+    const s = this.openSession(postingId);
+    return s ? { reviewId: s.id, files: s.files.map((f) => f.name) } : undefined;
+  }
+
+  /** An open review's address (with its token), to show its tab again. */
+  urlOf(reviewId: string): string | undefined {
+    const s = this.sessions.get(reviewId);
+    return s && !s.answer && !s.supersededBy && s.expires > Date.now() ? this.url(s) : undefined;
+  }
+
+  /**
+   * Where each of a posting's documents stands, by its current bytes: in an open review, approved, changes asked
+   * (the last review of these bytes wasn't an approval), else a draft.
+   */
+  async documentStates(
+    postingId: string,
+    files: string[],
+  ): Promise<Record<string, "draft" | "review" | "approved" | "changes">> {
+    const [approvals, reviewed] = await Promise.all([this.approvals(postingId), this.reviewed(postingId)]);
+    const inReview = new Set(this.openSession(postingId)?.files.map((f) => f.name) ?? []);
+    const out: Record<string, "draft" | "review" | "approved" | "changes"> = {};
+    for (const name of files) {
+      const bytes = await readFile(this.ws.path("postings", postingId, name)).catch(() => null);
+      const hash = bytes ? sha256(bytes) : null;
+      if (inReview.has(name)) out[name] = "review";
+      else if (hash && approvals.approvals[name]?.sha256 === hash) out[name] = "approved";
+      else if (hash && reviewed.documents[name]?.sha256 === hash && !reviewed.documents[name]?.approved)
+        out[name] = "changes";
+      else out[name] = "draft";
+    }
+    return out;
+  }
+
+  private openSession(postingId: string): Session | undefined {
+    return [...this.sessions.values()].find(
+      (s) => s.postingId === postingId && !s.answer && !s.supersededBy && s.expires > Date.now(),
+    );
   }
 
   /** True while a review waits for the user. */
@@ -421,6 +470,11 @@ export class ReviewService {
   private changed(s: Session): void {
     for (const w of s.waiters) w();
     s.events.send("state");
+    this.notify();
+  }
+
+  private notify(): void {
+    for (const fn of [...this.listeners]) fn();
   }
 
   // ---- internals ---------------------------------------------------------------------------------

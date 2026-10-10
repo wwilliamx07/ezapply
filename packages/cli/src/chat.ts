@@ -9,6 +9,7 @@ import {
   findClaude,
   HEALTH_MODE,
   type Logger,
+  type Opener,
   type PostingRef,
   startCompanion,
   waitFor,
@@ -35,7 +36,16 @@ export interface HostChatOptions {
   /** Test hooks for runChat. */
   chat?: Pick<ChatOptions, "say" | "newSession" | "resetTerminal" | "env" | "stdio">;
   /** Test hooks for the companion. */
-  companion?: { appDataDir?: string; saveConfig?: (config: AppConfig) => Promise<void> };
+  companion?: { appDataDir?: string; saveConfig?: (config: AppConfig) => Promise<void>; opener?: Opener };
+}
+
+/** What starting the companion needs, in `ezapply chat` and `ezapply` (the panel). */
+export interface HostOptions {
+  config: AppConfig;
+  extensionDir?: string;
+  /** Claude Code for the panel's agent (`ezapply`); `ezapply chat` runs Claude in the terminal instead. */
+  agentClaude?: ClaudeCommand;
+  companion?: HostChatOptions["companion"];
 }
 
 /**
@@ -70,7 +80,7 @@ export async function hostChat(opts: HostChatOptions): Promise<number> {
 }
 
 /** The started companion, or what to tell the user when the port is taken. */
-async function startHosted(opts: HostChatOptions, log: Logger): Promise<CompanionHandle | string> {
+export async function startHosted(opts: HostOptions, log: Logger): Promise<CompanionHandle | string> {
   const { config } = opts;
   const start = async () => {
     try {
@@ -78,8 +88,10 @@ async function startHosted(opts: HostChatOptions, log: Logger): Promise<Companio
         config,
         log,
         ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
+        ...(opts.agentClaude ? { claude: opts.agentClaude } : {}),
         ...(opts.companion?.appDataDir ? { appDataDir: opts.companion.appDataDir } : {}),
         ...(opts.companion?.saveConfig ? { saveConfig: opts.companion.saveConfig } : {}),
+        ...(opts.companion?.opener ? { opener: opts.companion.opener } : {}),
       });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") return null;
@@ -91,7 +103,7 @@ async function startHosted(opts: HostChatOptions, log: Logger): Promise<Companio
 
   const health = await fetchHealth(config);
   if (health?.mode === HEALTH_MODE) {
-    return `ezapply is already running in another terminal (port ${config.port}). Use that one, or exit it first.`;
+    return `ezapply is already running in another terminal (port ${config.port}). Use that one, or stop it first.`;
   }
   if (health && (await stopLegacyDaemon(config))) {
     log.info("chat: stopped a background daemon from an earlier build");

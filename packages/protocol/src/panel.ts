@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PostingStatus, SiteId } from "./postings.js";
 
 /**
  * The extension's side panel and the agent behind it: the companion runs Claude Code headless and relays what it
@@ -110,7 +111,11 @@ export function askAnswerProblems(spec: AskSpec, answers: AskAnswers): string[] 
       if (required) out.push(`${q.id}: an answer is needed`);
       continue;
     }
-    const values = Array.isArray(a.value) ? a.value : [a.value];
+    const values = (Array.isArray(a.value) ? a.value : [a.value]).filter((v) => v.trim() !== "");
+    if (q.type !== "text" && values.length === 0) {
+      if (required || q.type === "single") out.push(`${q.id}: an answer is needed`);
+      continue;
+    }
     if (q.type === "text") {
       if (Array.isArray(a.value)) out.push(`${q.id}: a text answer is one string`);
       else if (required && !a.value.trim()) out.push(`${q.id}: an answer is needed`);
@@ -202,3 +207,95 @@ export type AgentEvent = z.infer<typeof AgentEvent>;
 
 export const AgentStatus = z.enum(["idle", "starting", "working", "unavailable"]);
 export type AgentStatus = z.infer<typeof AgentStatus>;
+
+// ---- the panel's methods over the bridge (the extension relays them from its side panel) ----
+
+export const PanelPosting = z.object({
+  id: z.string(),
+  company: z.string().optional(),
+  role: z.string().optional(),
+  site: SiteId,
+  status: PostingStatus,
+  deadline: z.string().optional(),
+  url: z.string(),
+  active: z.boolean(),
+});
+export type PanelPosting = z.infer<typeof PanelPosting>;
+
+export const PanelState = z.object({
+  agent: z.object({ status: AgentStatus, conversation: z.string().optional(), queued: z.number() }),
+  activePostingId: z.string().nullable(),
+  /** The newest postings, for the picker. */
+  postings: z.array(PanelPosting),
+  cards: z.array(Card),
+  /** Setup: whether the required steps are done, and the ones left. */
+  setup: z.object({ ready: z.boolean(), left: z.array(z.string()) }),
+});
+export type PanelState = z.infer<typeof PanelState>;
+
+export const DocumentState = z.enum(["draft", "review", "approved", "changes", "attached"]);
+export type DocumentState = z.infer<typeof DocumentState>;
+
+export const PanelConversation = z.object({
+  key: z.string(),
+  posting: PanelPosting.extend({
+    /** The posting's application requirements (notes.md), a few short lines. */
+    requirements: z.array(z.string()),
+    /** The application's address, when the posting knows it. */
+    application: z.string().optional(),
+  }).optional(),
+  documents: z.array(z.object({ file: z.string(), state: DocumentState })),
+  /** A review waiting on the user, in its own tab. */
+  review: z.object({ reviewId: z.string(), files: z.array(z.string()) }).optional(),
+  events: z.array(AgentEvent),
+  totalCostUsd: z.number().optional(),
+});
+export type PanelConversation = z.infer<typeof PanelConversation>;
+
+export const PanelTabParams = z.object({ tabId: z.number().int(), url: z.string(), title: z.string(), site: SiteId });
+export const PanelTab = z.object({
+  kind: z.enum(["application", "other-application", "unconfirmed-application", "posting", "page", "none"]),
+  text: z.string(),
+});
+export type PanelTab = z.infer<typeof PanelTab>;
+
+const Empty = z.object({});
+/** Methods the companion serves for the panel (`CompanionApi`). */
+export const PanelMethods = {
+  /** How many panels are open (sent on every change and on connecting): cards are shown while one is. */
+  "panel.watch": { params: z.object({ open: z.number().int().min(0) }), result: Empty },
+  "panel.state": { params: Empty, result: PanelState },
+  "panel.conversation": { params: z.object({ key: z.string() }), result: PanelConversation },
+  "panel.tab": { params: PanelTabParams, result: PanelTab },
+  "panel.send": {
+    params: z.object({ key: z.string(), text: z.string().max(20_000) }),
+    result: z.object({ id: z.string() }),
+  },
+  "panel.stop": { params: Empty, result: z.object({ stopped: z.boolean() }) },
+  "panel.reset": { params: z.object({ key: z.string() }), result: Empty },
+  "panel.answer": { params: z.object({ cardId: z.string(), answers: AskAnswers }), result: Empty },
+  "panel.reply": { params: z.object({ cardId: z.string(), message: z.string().min(1).max(20_000) }), result: Empty },
+  "panel.permission": {
+    params: z.object({ cardId: z.string(), allow: z.boolean(), reason: z.string().max(2000).optional() }),
+    result: Empty,
+  },
+  "panel.activate": { params: z.object({ postingId: z.string() }), result: Empty },
+  /** Open, for the user: a review's tab again, a posting's file, or the setup page. */
+  "panel.open": {
+    params: z.discriminatedUnion("what", [
+      z.object({ what: z.literal("review"), reviewId: z.string() }),
+      z.object({ what: z.literal("file"), postingId: z.string(), file: z.string() }),
+      z.object({ what: z.literal("setup") }),
+    ]),
+    result: Empty,
+  },
+};
+
+/** What the companion pushes to the panel (`ExtensionApi`): an agent event, or that its state changed. */
+export const PanelUpdate = z.object({
+  event: z.object({ conversation: z.string(), event: AgentEvent }).optional(),
+  changed: z.boolean().optional(),
+  /** How many cards wait on the user: sent even while no panel is open, for the toolbar badge. */
+  cards: z.number().int().min(0).optional(),
+});
+export type PanelUpdate = z.infer<typeof PanelUpdate>;

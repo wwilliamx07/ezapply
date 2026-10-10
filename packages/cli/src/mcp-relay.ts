@@ -14,8 +14,8 @@ export interface RelayOptions {
 
 /** What every request gets while no `ezapply chat` is running: the relay never starts anything itself. */
 export const NOT_RUNNING =
-  "ezapply isn't running. It runs inside `ezapply chat`: ask the user to exit this Claude session and start " +
-  "it again with `ezapply chat` (`./ezapply chat` in the workspace).";
+  "ezapply isn't running. It runs inside `ezapply` (the browser's side panel) or `ezapply chat`: ask the user to " +
+  "start it (`./ezapply` in the workspace), or to exit this Claude session and start it again with `ezapply chat`.";
 
 /**
  * Claude Code talks MCP over stdio to `ezapply mcp`; this relays each JSON-RPC message to the companion's

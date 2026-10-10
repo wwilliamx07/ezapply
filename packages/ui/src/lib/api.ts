@@ -29,7 +29,7 @@ export class ApiError extends Error {
 /** Thrown when the companion can't be reached: `ezapply chat` was closed. */
 export class OfflineError extends Error {
   constructor() {
-    super("ezapply isn't reachable. Is ezapply chat still running?");
+    super("ezapply isn't reachable. Is ezapply still running?");
   }
 }
 

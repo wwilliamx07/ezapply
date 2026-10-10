@@ -2,6 +2,7 @@ import { z } from "zod";
 import { BrowserInfo, BrowserStatus } from "./browser.js";
 import { ErrorPayload } from "./errors.js";
 import { FormMethods } from "./forms.js";
+import { PanelMethods, PanelUpdate } from "./panel.js";
 import { CapturePayload, CaptureResult } from "./postings.js";
 
 /**
@@ -10,7 +11,7 @@ import { CapturePayload, CaptureResult } from "./postings.js";
  * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema.
  * Both sides refuse to talk across versions and tell the user which side to update.
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 /** WebSocket close codes used by the companion. */
 export const CloseCode = {
@@ -106,10 +107,13 @@ export function parseBridgeMessage(raw: string): BridgeMessage | null {
 /** Methods served by the companion, called by the extension. */
 export const CompanionApi = {
   "posting.capture": { params: CapturePayload, result: CaptureResult },
+  ...PanelMethods,
 };
 
 /** Methods served by the extension, called by the companion. */
 export const ExtensionApi = {
   "browser.status": { params: z.object({}), result: BrowserStatus },
+  /** Relayed to the open side panels. */
+  "panel.update": { params: PanelUpdate, result: z.object({}) },
   ...FormMethods,
 };

@@ -25,6 +25,10 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
           })
           .optional(),
         timeoutSeconds: z.number().int().min(5).max(900).default(600),
+        wait: z
+          .boolean()
+          .default(true)
+          .describe("false: only report the task and return (a task given to you as a message in the panel)."),
       },
     },
     tool(
@@ -34,12 +38,24 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
         taskId,
         result,
         timeoutSeconds,
+        wait,
       }: {
         taskId?: string;
         result?: { ok: boolean; note?: string };
         timeoutSeconds: number;
+        wait: boolean;
       }) => {
         if (taskId) s.onboarding.report(taskId, result ?? { ok: true });
+        if (!wait) {
+          // The panel's agent: tasks come as messages, so it reports, or opens the page, and goes on.
+          if (taskId) return { reported: true };
+          const { url, pageOpen } = s.onboarding.open();
+          if (pageOpen) return { url, pageOpen: true };
+          const openedIn = await s.opener.url(url).catch(() => null);
+          return openedIn
+            ? { url, openedIn }
+            : { url, openedBrowser: false, tell: `Ask the user to open ${url} to set ezapply up.` };
+        }
         const { url, pageOpen } = s.onboarding.open();
         if (!pageOpen) {
           const openedIn = await s.opener.url(url).catch(() => null);

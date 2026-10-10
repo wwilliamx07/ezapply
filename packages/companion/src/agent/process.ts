@@ -71,9 +71,22 @@ export function agentArgs(sessionId: string, resume: boolean): string[] {
     PERMISSION_TOOL,
     "--disallowedTools",
     "AskUserQuestion",
+    "--append-system-prompt",
+    PANEL_PROMPT,
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
   ];
 }
+
+/**
+ * Appended to Claude Code's system prompt: where its words go. The skills already say what to do; this says that
+ * the user reads it in a narrow panel and answers questions on cards there, and that no terminal is watched.
+ */
+export const PANEL_PROMPT =
+  "You are running headless behind ezapply's side panel in the user's browser: the user reads your messages there " +
+  "and never sees a terminal. Put questions you need answered on a card with ask_user (a whole step's questions in " +
+  "one call); a plain question in your message is fine when an open-ended reply is wanted, since the user can answer " +
+  "in the panel's chat. Commands that need approval are approved on the panel. Keep messages short: the panel is " +
+  "narrow.";
 
 /** One conversation's Claude Code process: messages in, stream items out. */
 export class AgentProcess {

@@ -1,16 +1,17 @@
 # The browser pages (`packages/ui`)
 
-The pages ezapply shows in the user's browser: the **document review** page and the **onboarding** page. Both are
-React apps, built into static files the companion serves on its loopback server while an `ezapply chat` is open.
-The companion's own small pages (GitHub setup, a review that's gone) stay server-rendered HTML and only take the
-package's stylesheet.
+What ezapply shows in the user's browser: the **side panel**, where the user works ([below](#the-side-panel-srcpanel)),
+and the **document review** and **onboarding** pages. All are React. The panel's components are bundled into the
+extension; the two pages are built into static files the companion serves on its loopback server while ezapply
+runs. The companion's own small pages (GitHub setup, a review that's gone) stay server-rendered HTML and only take
+the package's stylesheet.
 
 **Why pages for these two.** Review happens on every application, and a PDF is read, not chatted about: the page
 shows the documents, marks what changed since the last review, and takes comments on the passages the user
 selects. Onboarding is mostly form-filling the agent would only relay (a path, a choice of repositories, an
 address, screening answers): on a page the user types into the files directly, nothing is transcribed, and no
 chat turn is spent on it. What needs judgment stays the agent's ([onboarding](#the-onboarding-page-onboard)).
-Everything else happens in chat ([philosophy](../philosophy.md)).
+Everything else happens in the side panel ([philosophy](../philosophy.md)).
 
 **Why React.** The earlier review page was a template string with one inline script, enough for a form and a
 Send button. The viewer (pages, highlights, comments, a diff) and onboarding (eleven steps, forms, the agent's
@@ -27,7 +28,8 @@ extension already builds with it; no dev server or framework build is needed.
 | `src/lib/text.ts` | `joinItems` (a page's text as the companion's `pdf_text` builds it), `itemsOf` (a stretch of that text → the parts of the text items it covers) |
 | `src/review/` | The review page: `App.tsx`, `Viewer.tsx` (the PDF viewer, shared with onboarding), `Panel.tsx`, `changes.ts`, `draft.ts`, `selection.ts`, `review.css`, `viewer.css`, `textlayer.css` |
 | `src/onboard/` | The onboarding page: `App.tsx`, `state.ts`, `parts.tsx`, `steps-setup.tsx`, `steps-documents.tsx`, `ProfileStep.tsx`, `onboard.css` |
-| `test/review.test.tsx` | Unit and component tests ([development](../development.md#tests)) |
+| `src/panel/` | The side panel: `App.tsx` (`PanelApp`, `Conversation`, `REQUESTS`, `withEvent`), `cards.tsx` (question and approval cards: `AskCardView`, `PermissionCardView`, `initialDraft`, `answerOf`, `permissionBody`), `markdown.tsx`, `transport.ts` (`PanelTransport`), `panel.css`, `index.ts`. Exported as `@ezapply/ui/panel` (with `@ezapply/ui/base.css` and `@ezapply/ui/panel.css`) for the extension to bundle |
+| `test/review.test.tsx`, `test/panel.test.tsx` | Unit and component tests ([development](../development.md#tests)) |
 
 ## The build (`npm run build -w @ezapply/ui`)
 - **Bundles:** `review` and `onboard` (`src/<page>/main.tsx`) and `base` (`src/styles/base.css`), as ES modules with
@@ -76,8 +78,59 @@ extension already builds with it; no dev server or framework build is needed.
   companion sends `event: state` when something changed and the page reads its state again. A comment line every
   25 s keeps the stream alive, and `EventSource` reconnects by itself (`retry: 2000`). The types both sides use are
   in `protocol/src/pages.ts`, types only, so the pages import them without bundling anything.
-- **Offline:** a request that can't reach the companion says "ezapply isn't reachable. Is ezapply chat still
+- **Offline:** a request that can't reach the companion says "ezapply isn't reachable. Is ezapply still
   running?"
+
+## The side panel (`src/panel/`)
+Everything the user does with ezapply after setup ("Everything in the browser"): the extension shows it as Chrome's
+side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It reaches ezapply through a
+`PanelTransport`, which the extension implements over its background and tests fake: `call` (the companion's
+`panel.*` methods: [agent](agent.md#the-panels-side-panelts)), `capture`, `tab`, `openTab`, `connection`,
+`subscribe` (pushes: the connection's state, "the tab changed", the companion's updates). Top to bottom:
+
+1. **Header:** ezapply's mark; a status dot (connected, not paired, an error, not running); the posting picker (the
+   20 newest postings and "No posting (general)"; choosing a posting makes it active); a menu with Setup (opens the
+   setup page) and Extension settings (the extension's options page: its port and pairing, opened by the panel
+   itself). No log view: the conversation shows every tool call, and the form log is in the posting's folder.
+2. **When it can't work:** not running ("Start it in your workspace: `./ezapply`"), not paired, or the
+   connection's error, as a banner; the rest is shown but disabled. Setup not finished is a banner of its own with
+   **Continue setup** (the steps left are named); the rest stays usable, since setup's own tasks go to the agent.
+3. **Posting card:** role, company, site, deadline, its status and the requirement chips from `notes.md`, and
+   **Reset** (asks first: a new conversation for the posting; the documents stay). For the general conversation, a
+   line saying there's no posting.
+4. **This tab:** what the window's current tab is to the active posting (its page, its application on a site,
+   another posting's application, another page), read again when the tab changes.
+5. **Action buttons:** **Set posting** ("Capture again" on the posting's own page; captures the current tab and
+   follows the new active posting); **Tailor documents** (the resume, and the cover letter when the posting or the
+   preferences call for one), with a menu for the resume only, the cover letter only, or one PDF; **Fill form** on
+   the application's tab, or **Open the application** when the tab isn't it and the posting knows its address.
+   Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it up either way;
+   Fill form names the tab (`tabId`). They're disabled, with why in their title, without a posting or while
+   Claude works.
+6. **Documents:** the posting's PDFs and where each stands (draft, waiting for your review, approved, changes
+   asked, attached); the name opens the PDF; **Review** brings a waiting review's tab back.
+7. **Needs you** (while anything waits): every open card, oldest first, a card from another conversation labelled
+   with it (or "From a terminal chat"). The panel scrolls them into view when one arrives, and the conversation
+   doesn't scroll past them meanwhile. A **question card**: title, intro, each question by its type (radios,
+   checkboxes with Other, a text field or box), the suggestion filled in and marked ("suggested"; a sensitive
+   question is flagged and may have one too), `why` under it, "(optional)" ones skippable, **Save for next time**
+   where offered; **Send answers** checks the answers first (`askAnswerProblems`, each problem under its
+   question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
+   wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
+   the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
+8. **Conversation:** the user's messages ("waiting for Claude" until taken); Claude's text as Markdown built as
+   elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics; links stay text);
+   each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary), unfolding to its
+   error or arguments, red when it failed, "…" while it runs; settled cards; each turn's end with its cost (the
+   session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest event.
+9. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
+   this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
+   what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
+   waiting), or that the agent runs only under `ezapply`.
+10. **Footer:** the conversation's cost so far.
+
+Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
+end or a turn's end, and every "changed", reads the state and the conversation again.
 
 ## The review page (`/review/<id>`)
 What it's for and how approvals work: [documents](documents.md#review-before-attaching). Its routes, all under
@@ -184,7 +237,7 @@ window gets focus. The comparison stops when no page listens.
 | Your resume | A folder or one `.tex` file, typed or chosen with **Browse…**; **Import and build**; the build's outcome (pages, over the limit, its first error) and a preview; a build that fails offers **Ask Claude to fix the build** | `browse`, `import` (`template_import`, then `tex_compile`), task `fix-template-build` |
 | Your profile | None yet: **Have Claude draft it from my resume**. Then a form of every field the schema has, the often-asked ones marked when empty, the schema's errors under their fields; a draft that arrives replaces the form unless the user has started editing | task `draft-profile`, `profile` |
 | Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview and "Anything to change in how it looks?" | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`; `compile`, `import` |
-| Screening questions | The unanswered ones, eight at a time, the suggestion filled in (never for a sensitive one), the profile path an answer usually comes from; **Save these** | `answers` |
+| Screening questions | The unanswered ones, eight at a time, the suggestion filled in (a sensitive one's too: Claude still asks about it every time, suggesting what's saved; left empty, there's no suggestion), the profile path an answer usually comes from; **Save these** | `answers` |
 | Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters | `preferences` (`attach_mode`'s setting and `profile/preferences.md`) |
 | Library | A drop zone (or the browser's picker: here only contents are needed), the files there | `library` |
 
@@ -200,19 +253,27 @@ neverMention, targets, coverLetters }`, `finish`.
 
 ### The agent's side: tasks
 What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,
-`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `question`. The
-agent sits in a blocking [`onboarding`](../mcp-tools.md#onboarding) call; a task the page queues wakes it, and it
-gets `{ id, kind, params, how }`, `how` being what to do (`HOW` in the service), so the skill needs no copy of
-it. Its report (`onboarding { taskId, result: { ok, note? } }`) marks the task done or failed with the note, and
-waits for the next in the same call. Tasks are taken in the order asked, one at a time; a task taken and never
-reported is given again, in case the agent lost track of it. The page shows each task (queued, running, done
-with Claude's note, failed), and in Claude's panel whether the agent is listening; a queued task while it isn't
-says to tell Claude in the terminal to continue.
+`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `question`, each
+with `how`, what to do (`HOW` in the service), so the skill needs no copy of it. Where the agent is decides how it
+gets one (`agentIn` in the page's state):
+- **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
+  ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:
+  `onboarding { taskId, result: { ok, note? }, wait: false }`, which marks it done or failed with the note and
+  returns. The task is running from then; Claude busy in another conversation fails it with why, and the page
+  offers it again. The page shows Claude as listening while the agent is available, and says to follow it in the
+  ezapply panel, where its commands are approved.
+- **Under `ezapply chat` (`terminal`):** the agent sits in a blocking [`onboarding`](../mcp-tools.md#onboarding)
+  call; a task the page queues wakes it, and it gets `{ id, kind, params, how }`. Its report
+  (`onboarding { taskId, result }`) marks the task done or failed and waits for the next in the same call. Tasks
+  are taken in the order asked, one at a time; a task taken and never reported is given again, in case the agent
+  lost track of it. The page shows whether the agent is listening; a queued task while it isn't says to tell
+  Claude in the terminal to continue.
 
-**Why a blocking tool, not a headless `claude -p` started by the companion:** Claude Code stays the only agent,
-in the user's chat, with the workspace's skills and permissions, and the user sees and approves its commands in
-the terminal. **Why the agent installs TeX, not the page:** Claude Code's permission prompt is where the user
-approves a command, and a loopback page able to start installers would widen what a stolen token could do.
+The page shows each task (queued, running, done with Claude's note, failed).
+
+**Why the agent installs TeX, not the page:** Claude Code's permission prompt (in the terminal, or an approval card
+in the panel) is where the user approves a command, and a loopback page able to start installers would widen what a
+stolen token could do.
 
 ### Writing the user's files
 - **The profile** (`ProfileService.saveProfile`): only the top-level keys the schema models are written, each

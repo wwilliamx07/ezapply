@@ -127,8 +127,10 @@ export interface OnboardState {
   agentFile: { done: boolean; detail: string };
   steps: OnboardStep[];
   tasks: OnboardTask[];
-  /** The agent is in its `onboarding` call, waiting for a task. */
+  /** The agent can take a task: the panel's agent is available, or Claude in the terminal waits in `onboarding`. */
   agentListening: boolean;
+  /** Where the agent works: the side panel's (`ezapply`), or Claude in a terminal (`ezapply chat`). */
+  agentIn: "panel" | "terminal";
   tex: { done: boolean; detail: string; installCommand: string };
   extension: {
     connected: boolean;

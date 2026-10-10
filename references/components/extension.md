@@ -1,24 +1,28 @@
 # Browser extension (`packages/extension`)
 
-A Manifest V3 extension for Chrome and Firefox 128+. It has one button, **Set posting**, and otherwise
-quietly carries out the form reads, fills and uploads the companion asks for, on the application pages of
-every site in the [registry](protocol.md#the-site-registry-sitests): Workday, Oracle Recruiting Cloud,
-Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP SuccessFactors, each told by what its pages show. It has no popup and no
-review UI: that happens in Claude Code and the PDF viewer.
+A Manifest V3 extension for Chrome and Firefox 128+. Its toolbar button opens the **side panel**, where the user
+works with ezapply ([below](#the-side-panel)); Alt+Shift+P sets the posting without it. Otherwise it quietly
+carries out the form reads, fills and uploads the companion asks for, on the application pages of every site in
+the [registry](protocol.md#the-site-registry-sitests): Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby,
+Phenom, Dayforce and SAP SuccessFactors, each told by what its pages show. It has no popup; documents are reviewed
+on the companion's review page.
 
 ## Source layout
 
 | Path | Role |
 |---|---|
 | `src/ext.ts` | `ext`: Firefox's promise-based `browser`, else Chrome's `chrome` (typed as Chrome's API); `isFirefox` |
-| `src/background/index.ts` | Entry: wiring, Set posting, lifecycle listeners and the reconnect alarm, `browser.status` handler |
+| `src/background/index.ts` | Entry: wiring, the toolbar button (opens the panel), Set posting (the panel's button and the shortcut), lifecycle listeners and the reconnect alarm, `browser.status` and `panel.update` handlers |
+| `src/background/panel.ts` | `servePanels`: the side panels' ports, their requests relayed to the companion, what only the background can do, the companion's updates passed on; `panelUpdate` ([the side panel](#the-side-panel)) |
+| `src/panel/main.tsx`, `src/panel/transport.ts`, `static/panel.html` | The side panel's page: the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with `portTransport`, a runtime port to the background |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
 | `src/background/forms.ts` | Handlers for the form methods: choose the tab (and the frame, for an embedded application), check access to it, tell its site, pick the site's adapter, inject and call it |
 | `src/background/frames.ts` | [Telling a page's site](#telling-a-pages-site-framests): `pageSite` (runs in the page: the first site whose signature its document matches), `tabSite` (a tab's own page), `tabSites` (a tab and its frames on a form site), `frameSite`, and `frameUrl` |
 | `src/background/access.ts` | `askForAccess`: a form call that finds its page's origin withheld opens `grant.html` (or brings it forward) and waits for the grant ([access](#access-to-websites)) |
 | `src/grant/grant.ts`, `static/grant.html` | The access window: names the host that needed it, and its **Allow access** click makes the `permissions.request` (`originsFrom`: `<all_urls>` or host patterns only, from its URL) |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
-| `src/background/badge.ts` | Toolbar badge and tooltip |
+| `src/background/badge.ts` | Toolbar badge and tooltip, with the number of cards waiting in the panel (`setCardsWaiting`) |
+| `src/env.d.ts` | Stylesheet imports (the panel's) for TypeScript |
 | `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. Firefox from `runtime.getBrowserInfo()`; Chromium browsers from `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
@@ -27,10 +31,10 @@ review UI: that happens in Claude Code and the PDF viewer.
 | `src/adapters/widgets/` | Shared widget drivers → [adapters.md](adapters.md#shared-drivers-widgets) |
 | `src/adapters/sites/<site>/` | A definition per site: [Workday](workday-adapter.md), [Oracle Recruiting Cloud](oracle-adapter.md), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
 | `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
-| `build.mjs` | esbuild bundles (one adapter per registry site) and both output folders |
+| `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and both output folders |
 
 ## Manifest
-- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`. `webNavigation` lists a
+- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, and in Chrome `sidePanel`. `webNavigation` lists a
   tab's frames ([embedded applications](#embedded-applications)); in Chrome it adds no install warning beside
   `tabs` (both are "Read your browsing history"). In Firefox it's a warning of its own ("Access browser activity
   during navigation").
@@ -39,11 +43,15 @@ review UI: that happens in Claude Code and the PDF viewer.
   its pages show, on whatever host (Phenom and Oracle run on employers' own domains), and reading a page needs
   access to it ([why](protocol.md#the-site-registry-sitests)). It also covers `tabs.captureVisibleTab`
   (`tab.screenshot`). Chrome warns "Read and change all your data on all websites" at install.
-- `commands._execute_action`: Alt+Shift+P runs Set posting.
+- `side_panel.default_path: panel.html` (Chrome); Firefox's build has `sidebar_action` with the same page
+  instead (`default_title: ezapply`, not opened at install). The action's title is "ezapply".
+- `commands.set-posting`: Alt+Shift+P runs Set posting. Not `_execute_action`, which now opens the panel.
 - Options page embedded (`open_in_tab: false`).
 
 ## Builds (`npm run build -w @ezapply/extension`)
-esbuild bundles `background.js` (ESM), `options.js`, and one adapter per registry site, `<site>-main.js` from
+esbuild bundles `background.js` (ESM), `options.js`, `panel.js` and `panel.css` (ESM, minified, JSX: the UI
+package's panel and React, with the base and panel stylesheets; about 700 KB, most of it React and the protocol's
+schemas, which the panel's answer checks use), and one adapter per registry site, `<site>-main.js` from
 `src/adapters/sites/<site>/main.ts` (IIFE, 50–80 KB each and without zod: they import only the protocol's
 import-free subpaths) for
 `chrome120` and `firefox128`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
@@ -53,7 +61,7 @@ with no version number to remember to bump.
 | Folder | For | Manifest differences |
 |---|---|---|
 | `dist/` | Chrome (Load unpacked) | `background.service_worker`, `minimum_chrome_version: 120` |
-| `dist-firefox/` | Firefox (Load Temporary Add-on → `manifest.json`) | `background.scripts` (event page); `browser_specific_settings.gecko`: id `ezapply@ezapply.local`, `strict_min_version: 128.0`, `data_collection_permissions: none`; `content_security_policy.extension_pages`: `script-src 'self'; connect-src ws://127.0.0.1:*` |
+| `dist-firefox/` | Firefox (Load Temporary Add-on → `manifest.json`) | `background.scripts` (event page); `sidebar_action` for `side_panel`, without the `sidePanel` permission; `browser_specific_settings.gecko`: id `ezapply@ezapply.local`, `strict_min_version: 128.0`, `data_collection_permissions: none`; `content_security_policy.extension_pages`: `script-src 'self'; connect-src ws://127.0.0.1:*` |
 
 `dist/` stays at the same path because Chrome derives an unpacked extension's id from its folder, and the
 companion pins that id. Firefox's fixed gecko id keeps its per-profile install UUID (the pinned value) stable
@@ -69,8 +77,9 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
   `welcome`, start RPC and the 20 s ping. On close: `Unauthorized`/`ProtocolMismatch` → error state
   showing the companion's message and hint (no backoff retries); `Replaced` → nothing; otherwise
-  "disconnected" with the reason "ezapply isn't running: start ezapply chat (Set posting still works)",
-  and retry with backoff from 1 s up to 30 s. The companion lives only while an `ezapply chat` is open, so a
+  "disconnected" with the reason "ezapply isn't running: start it with ./ezapply in your workspace (Set posting
+  still works)",
+  and retry with backoff from 1 s up to 30 s. The companion lives only while `ezapply` (or `ezapply chat`) runs, so a
   refused or closed connection means no chat is running.
 - `hello` carries `browser` (`detectBrowser`), so the companion opens pages and PDFs in this browser, and
   `pendingCapture: true` when a capture is queued, so a freshly started companion waits
@@ -92,9 +101,30 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 - Connection states: `unconfigured`, `connecting`, `connected { companionVersion }`,
   `disconnected { reason }`, `error { message, hint? }`, stored for the badge and options page.
 
+## The side panel
+The toolbar button opens it: Chrome by itself (`sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` at
+every background start), Firefox's sidebar by `sidebarAction.toggle()` in the click, the only place Firefox lets it
+open. The page (`panel.html`) is the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with a transport
+over a runtime port (`ezapply-panel`) to the background:
+- **`call`**: a `panel.*` method relayed to the companion over the bridge (60 s timeout); anything else is refused,
+  so the panel can't capture or fill through the relay. It needs the companion connected.
+- **`capture`**: Set posting on the current tab of the panel's window. The panel calls
+  `permissions.request({ origins: <all_urls> })` inside its own click first (Firefox asks only during the user's
+  gesture), then the background captures as below and answers with the outcome (the posting, or why not).
+- **`tab`**: the window's current tab, its site told as for a form call, and what it is to the active posting
+  (`panel.tab`); none without a connection or a web page.
+- **`openTab`**: an `http(s)` address in a new tab of the panel's window (the posting's application).
+- **`connection`**: the connection's state, as the badge shows it.
+
+The background pushes to every open panel: the connection's state when it changes, "the tab changed" when a tab is
+activated or navigates, and the companion's `panel.update`s. It tells the companion how many panels are open
+(`panel.watch`) when one opens or closes and on every connection. The panel's port is opened again if the
+background restarts (Chrome ends an idle service worker); calls made meanwhile fail with "try again".
+
 ## Set posting
-Click (or Alt+Shift+P) on an `http(s)` page → ask for access to every site, synchronously in the click handler
-(Firefox allows `permissions.request` only there; already granted, it resolves without asking; [access](#access-to-websites))
+The panel's **Set posting**, or Alt+Shift+P, on an `http(s)` page → ask for access to every site, synchronously in
+the click or the shortcut's handler (Firefox allows `permissions.request` only there; already granted, it resolves
+without asking; [access](#access-to-websites))
 → once that's settled, inject `capturePage` into every frame the extension may read → pick the frame that holds
 the posting → tell that frame's site ([telling a page's site](#telling-a-pages-site-framests)), sent as `site`
 unless it's none → send `posting.capture` (60 s timeout) → save the "Company: Role" label and flash ✓. Not
@@ -219,7 +249,8 @@ and `frames` (embedded applications, when there are any). The companion picks fo
 
 ## Badge and options
 - Badge: green = connected, grey = connecting or disconnected, amber = not paired or a capture is pending
-  (`…`), red = error; briefly ✓ or `!` after a capture. The tooltip shows the status, any pending capture,
+  (`…`), red = error; briefly ✓ or `!` after a capture; the number of cards waiting in the panel (amber), pushed by
+  the companion even while no panel is open. The tooltip shows the status, the cards waiting, any pending capture,
   and the active posting.
 - Options page: connection status (live), a **Grant access** row while access to websites is missing ("No access
   to websites, so ezapply can't read or fill application forms"), the extension id the companion pins (Chrome's

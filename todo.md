@@ -19,15 +19,14 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 | 6 | Auto mode (application manager) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
 | 7 | Agents that try to break a new adapter (adapter building) | Medium | M–L | — |
 | 8 | One directory per adapter (adapter building) | Medium | M–L | — |
-| 9 | Everything in the browser | High | L–XL | a change to `philosophy.md` |
+| 9 | The side panel's later parts | Medium | M–L | — |
 
 Suggested order: the live runs in `references/status.md` ("Not yet verified for real"): a Workday run with debug
 mode off whose timings match the earlier runs' (the adapter trace's no-op path), which also presses a row's Delete
 and binds a job-board posting's tab; then runs with debug on, the two comparing the browser behind and in front
 among them; a Greenhouse application embedded in a careers page; then an Oracle run.
 
-Everything in the browser (item 9) before the application manager: the tracker's page and auto mode's runner are
-built on it. Item 8 before the next new site, and before item 1, so neither is built in the old layout and then moved. Item 1
+Item 8 before the next new site, and before item 1, so neither is built in the old layout and then moved. Item 1
 waits for a saved careers page whose application is its own form, with no frame. The application manager (items 3
 to 6) is built in that order, each on the one before; auto mode last, and only once the rest has shown the quality
 holds without the user watching.
@@ -391,116 +390,18 @@ e2e tests. They move with the sites, and the e2e tests import them from there.
 
 ## The browser as the only interface
 
-### 9. Everything in the browser (High, L–XL)
+### 9. The side panel's later parts (Medium, M–L)
 
-**Why.** After setup the user works in two places: the browser (capture, sign in, review, Submit) and the
-terminal, where they type every request to Claude, answer its questions, approve its commands and read its
-reports. The terminal half is the friction: switching windows mid-application, a chat that has to be read to know
-what's happening, questions that sit unanswered while the user looks at the form. All of it fits in a panel beside
-the page the user is already on.
+**Why.** The side panel ([ui](references/components/ui.md#the-side-panel-srcpanel)) works only while the user
+has started `./ezapply` in a terminal, and two things still leave it for a tab: the review and the form.
 
-**What.** The extension's toolbar button opens a side panel, and everything happens there: setting the posting,
-tailoring the documents, filling the form, a chat with the agent as in the Claude Code terminal, and the agent's
-questions and requests for approval. Claude Code is still the agent, with the same skills, tools and workspace;
-the companion runs it headless ([agent](references/components/agent.md)) and relays everything between it and the panel. The review page and the setup page
-stay tabs (a PDF and an eleven-step form don't fit a panel), opened from it.
-
-**What used to need the terminal, in the panel.**
-- **Skills ask through `ask_user`** ([the panel](references/mcp-tools.md#the-panel)) wherever they ask the user in
-  chat today: a step's screening questions (one card per step), gaps in the evidence, "is this tab Acme's
-  application?" (`postingMismatch`), "sign in, then Continue", a date the page didn't take. With that, today's rule
-  that a sensitive question gets no suggestion goes (the onboarding page's screening step, the `ezapply-apply` and
-  `ezapply-answers` skills): it gets one, flagged as sensitive.
-- **Reports:** the agent's text, in the conversation.
-- **Review:** `review_documents` opens the review tab as today; the panel shows the review as waiting, with a button
-  to bring its tab back, and its outcome when answered.
-- **Onboarding tasks:** a task is a message to the general conversation, with its `how`. The blocking `onboarding`
-  tool, "whether the agent is listening" and "tell Claude in the terminal to continue" go away.
-
-**The side panel** (`extension/src/panel/`, Chrome's `side_panel`, Firefox's `sidebar_action`).
-- **Opening:** the toolbar button opens the panel (Chrome: `setPanelBehavior({ openPanelOnActionClick: true })`;
-  Firefox: `sidebarAction.toggle()` in the click). Set posting moves into the panel. Firefox allows
-  `permissions.request` only in a user's click; a click on the panel's button is one. Alt+Shift+P still captures
-  without opening the panel.
-- **Data over the bridge**, not a page of the companion's: the panel is an extension page, and the extension is
-  already paired and pinned, so the panel needs no token of its own. New bridge methods, companion side:
-  `panel.state`, `panel.send { text }`, `panel.stop`, `panel.answer { askId, answers }`, `panel.permission { id,
-  allow, message? }`, `panel.switchPosting { id }`; and events from it, `panel.event` (an agent event) and
-  `panel.changed`. Built with React and the UI package's components, bundled into the extension. *Rejected:* framing
-  the companion's `/app` page in the panel: the page's `SameSite=Strict` cookie isn't sent in a frame under an
-  extension page, so it would need another token scheme, and a panel open while ezapply isn't running would show
-  nothing.
-- **Elements**, top to bottom:
-  1. **Header:** ezapply's mark; a status dot (connected, not running, not paired); the posting picker (the active
-     posting, the recent ones, "No posting"); a menu with Setup (opens the setup tab), Settings, and Open log.
-  2. **When it can't work:** not running ("Start ezapply: run `ezapply` in your workspace", copyable); not paired
-     (the pairing steps); setup not finished (the required steps left, Continue setup). The rest of the panel is
-     disabled, not hidden.
-  3. **Posting card:** company, role, site badge, status (`new`, `drafting`, `filled`, `submitted`), deadline,
-     requirement chips from `notes.md` (one PDF, cover letter required, two-page limit…), and **Reset**: a new
-     conversation for this posting (asks first; stops the agent if it's working and withdraws open cards).
-  4. **This tab:** what the current tab is, from `browser.status` and the posting match: "Acme's application on
-     Workday, step 2 of 5", "Another posting's application", "A job page", "Not a job page".
-  5. **Action buttons:** **Set posting** (captures the current tab; "Capture again" when it's already this
-     posting); **Tailor documents** (the resume and, when the requirements ask for one or the preferences say so, a
-     cover letter; a menu beside it for one of them, or for putting them in one PDF); **Fill form** (on the
-     application tab: fill it; elsewhere: "Open the application" when the posting knows its link, else disabled
-     with why). Each sends a message to the conversation naming the skill (`/ezapply-resume`…), so the button and
-     typing the same request do the same thing. Disabled while the agent works, with the reason.
-  6. **Documents:** each file the posting has (resume, cover letter, bundle) with pages and its state (draft,
-     waiting for your review, approved, changes asked, attached); Review opens the review tab, the name opens the
-     PDF.
-  7. **Needs you** (pinned above the conversation while anything waits): question cards and approval cards, oldest
-     first, a count on the toolbar badge, and the panel scrolled to the first. A question card: title, intro, each
-     question by type (radios, checkboxes, a text field or box), the suggestion filled in and marked, `why` under it,
-     Skip on optional ones, Save for next time where offered, Send, and "Reply in chat instead". An approval card:
-     the tool, the description, the exact command or file and change in monospace (scrollable, never cut),
-     Allow, Deny, and Deny with a reason.
-  8. **Conversation:** the user's messages; the agent's text (Markdown, rendered as text, no HTML); tool calls
-     folded to one line each ("Compiled resume.tex: 1 page", "Filled 12 fields on step 2"), unfolding to their
-     input and result; answered cards, kept as a record; a line at each turn's end with its cost; progress of a
-     fill ("Step 3 of 5, 14 filled, 2 waiting on you"); the hand-off at the end of a fill (the answers to check, and
-     Submit is yours).
-  9. **Chat bar:** a text box ("Ask or tell ezapply anything"), Enter sends and Shift+Enter is a new line; Send,
-     which becomes Stop while the agent works (typing still sends, queued); a line above it saying what the agent
-     is doing.
-  10. **Footer:** the conversation's cost so far.
-- **Starting ezapply:** `ezapply` (or `ezapply start`) hosts the companion with no Claude in the terminal, and
-  prints "Open the ezapply panel from the toolbar; Ctrl+C stops ezapply". `ezapply chat` stays while the panel is
-  unproven live (open question below).
-
-**Later parts, each on its own once the panel works.**
+**How, each on its own.**
 - **Starting without a terminal:** a native messaging host (`ezapply native-host`, registered by `init`) the panel
   asks to start the companion when it isn't running. A process the user didn't start in a terminal, which the "no
-  daemon" choice in `architecture.md` argued against; weigh it then.
-- **The review in the panel**, if a narrow PDF viewer turns out usable.
-- **Pointing at a field:** a hand-off item that scrolls the form to its field and outlines it (an adapter call).
+  daemon" choice in `references/architecture.md` argued against; weigh it then.
+- **The review in the panel,** if a narrow PDF viewer turns out usable.
+- **Pointing at a field:** an item of the fill's hand-off that scrolls the form to its field and outlines it (an
+  adapter call).
 
-**Philosophy and security.**
-- `philosophy.md` first: Principle 1 becomes "Claude Code is the only agent, run by ezapply headless; the user
-  works with it in the extension's panel", the non-goal "screens of ezapply's own beyond the review and setup
-  pages" goes, Principle 8 counts the terminal out of everyday use, and Principle 9 reads "asks, with a suggestion
-  where it has one, rather than filling sensitive answers itself". "The user always submits" and no fabrication
-  don't change.
-- `security.md`: approvals now come from the panel. The panel is an extension page talking over the paired bridge,
-  so a web page can't reach it; the companion takes `panel.permission` only from the pinned extension, only for a
-  request it raised and that's still open, and never stores an Allow. What the panel shows (posting text, the
-  agent's words, a form's labels) is text, never HTML. The extension gains the `sidePanel` permission (Chrome).
-
-**Tests.** The onboarding task path without the blocking tool; the bridge's panel methods refused from anything but
-the pinned extension; the start command passing Claude Code to the companion; the skills' `ask_user` call shapes
-(`skill-calls.test.ts`); the panel's components in the UI tests.
-
-**References when built:** `philosophy.md`, `architecture.md` (processes, transports, the panel), `flows.md` (every
-flow's "in chat" steps, capture from the panel), `components/companion.md`, `components/cli.md` (the new start,
-`runChat`'s restart gone), `components/extension.md` (the panel, the toolbar button, the bridge methods),
-`components/ui.md` (shared components, the onboarding page's tasks), `components/workspace.md` (skills),
-`components/protocol.md` (bridge methods), `components/agent.md` (what starts it, the panel's side),
-`mcp-tools.md` (`onboarding` gone), `security.md` (approvals from the panel; sensitive questions suggested, never
-filled without the user), `development.md`, `status.md`.
-
-**Challenges and open questions.**
-- `ezapply chat` after this: keep it for debugging ezapply (the full terminal view of what Claude does), or drop it
-  so there's one way to run ezapply and less to keep current?
-- The panel is per window in Chrome. Two windows show the same conversation; both can answer a card, and the first
-  answer wins.
+**References when built:** `architecture.md`, `components/extension.md`, `components/ui.md`, `components/cli.md`,
+`security.md`, `status.md`.

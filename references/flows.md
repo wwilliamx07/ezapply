@@ -10,19 +10,23 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    workspace: folders, `EZAPPLY.md`, `CLAUDE.md` stub, `.mcp.json`, `.claude/settings.json`, skills, and the
    default cover letter template if `templates/cover/` is empty.
 3. It also writes the `ezapply` launcher into the workspace, and prints: `cd` into the workspace, run
-   `./ezapply chat` (`.\ezapply chat` on Windows), say "set me up". `ezapply chat` is how ezapply is run from
-   then on ([cli](components/cli.md#chat-chatts)): it hosts the companion and runs Claude Code, and ezapply
-   runs only while it's open. After an update, a chat that was open must be exited and started again.
+   `./ezapply` (`.\ezapply` on Windows). That's how ezapply is run from then on ([cli](components/cli.md#ezapply-panelts)):
+   it hosts the companion, which starts Claude Code headless for the side panel, and ezapply runs only while it
+   does. It opens the setup page while setup isn't finished. `./ezapply chat` runs Claude Code in the terminal
+   instead (say "set me up" there). After an update, a running ezapply must be stopped and started again.
 
 **On the setup page** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, steps in any order;
 [ui](components/ui.md#the-onboarding-page-onboard)):
-1. Claude calls `onboarding {}`. The companion opens the setup page in the user's browser (or Claude gives the
-   link) and the call waits for work from it.
+1. Under `ezapply`, the setup page opens when ezapply starts while setup isn't finished, or from the panel's
+   Setup; what needs Claude goes to the panel's agent as messages. Under `ezapply chat`, Claude calls
+   `onboarding {}`: the companion opens the setup page in the user's browser (or Claude gives the link) and the call
+   waits for work from it ([tasks](components/ui.md#the-agents-side-tasks)).
 2. The page shows the `workspace_check` items as steps, done ones ticked: `tex`, `extension`, `github_login`,
    `repos_selected`, `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank`
    (required), and `preferences`, `library` (optional). It opens on the first required step not done.
 3. **TeX:** if missing, the page shows the install command for this OS and hands Claude an `install-tex` task;
-   Claude runs it in the terminal, where the user approves it. No restart is needed.
+   Claude runs it once the user approves it (an approval card in the panel, or the terminal under `ezapply
+   chat`). No restart is needed.
 4. **Extension:** the page gives the steps and folder for the user's browser and opens the pairing window
    ([flow 2](#2-pairing-the-extension)); it turns green when the extension connects.
 5. **GitHub:** a new app or an existing one, then the `/github/` flow in a new tab, as `github_login` runs it:
@@ -78,8 +82,8 @@ copy (for example in another browser) can't reconnect. A code typed on the optio
 non-default ports.
 
 ## 3. Capturing a posting ("Set posting")
-1. The user clicks the toolbar button (or Alt+Shift+P) on any `http(s)` page. The extension holds every site
-   from the install; where the user withheld that (Firefox) or limited it (Chrome), the click asks for it again
+1. The user presses **Set posting** in the side panel (or Alt+Shift+P) on any `http(s)` page. The extension holds
+   every site from the install; where the user withheld that (Firefox) or limited it (Chrome), the click asks for it again
    ([access](components/extension.md#access-to-websites)).
 2. The extension injects `capturePage` into the tab's frames it may read (every frame; with access withheld,
    the tab's own origin by the click's `activeTab` grant). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
@@ -88,20 +92,28 @@ non-default ports.
    data or more text. A large embedded board it couldn't read opens in a new tab instead, for the user to
    capture there ([extension](components/extension.md#set-posting)). The chosen frame's site, as its body shows
    it ([telling a page's site](components/extension.md#telling-a-pages-site-framests)), goes with the capture.
-3. If ezapply isn't connected (no `ezapply chat` is open), the capture is stored as pending (badge `…`) and
-   sent on the next connection. Only the latest pending capture is kept. When the user next starts
-   `ezapply chat`, `posting_active` waits for the extension to reconnect and deliver it.
+3. If ezapply isn't connected (it isn't running), the capture is stored as pending (badge `…`) and sent on the
+   next connection. Only the latest pending capture is kept. When the user next starts ezapply, `posting_active`
+   waits for the extension to reconnect and deliver it.
 4. The companion ([postings](components/postings.md)) canonicalizes the URL (for Workday, without the locale
    segment; for Oracle, without the language or the application pages after the job id); a posting already captured at that URL reuses its folder. Otherwise it makes `postings/<date>_<company>_<role>/`. It writes the raw
    and visible captures, runs extraction to `posting.md`, writes `meta.json` (keeping fields Claude
    corrected earlier), and makes it the active posting.
-5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>".
-6. **A fresh Claude session.** The companion tells `ezapply chat` that the active posting changed. If the
+5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>". The side panel shows the posting and its
+   conversation (a new one, or the one it had).
+6. **Under `ezapply`, nothing restarts:** each posting has its own conversation with the agent
+   ([agent](components/agent.md)), so the next application starts clean and the earlier one can be picked up
+   again. **Under `ezapply chat`, a fresh Claude session.** The companion tells `ezapply chat` that the active posting changed. If the
    running session has used a tool (and none is running, or as soon as the running one ends), it ends that Claude and starts a new one in the
    same terminal, with one line saying so; the user types their next request there. So the earlier
    application (or the onboarding, at the first capture) isn't re-sent with every turn of the next one. A
    session that hasn't done anything, or a re-capture of the same posting, keeps going. Off with
    `context.restartOnCapture: false` in `ezapply.config.json`.
+
+**Requests (flows 4 to 7)** come from the side panel: its buttons send them in words (Tailor documents, Fill
+form), or the user types them in its chat bar; under `ezapply chat`, in the terminal. The skills run the same
+either way. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
+cards, and its reports in the panel's conversation ([ui](components/ui.md#the-side-panel-srcpanel)).
 
 ## 4. Tailoring the resume ("tailor my resume")
 The `ezapply-resume` skill:
@@ -153,7 +165,7 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    the page carry `browserBehind`, which Claude passes on when a field (a date) isn't taken.
 2. `get_form`. The first read of a site's page in the session carries that site's `siteNotes`, which Claude
    follows for the application ([site notes](mcp-tools.md#site-notes)). Then by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
-   email step and its emailed code) and says when done; `start-choice` → `page_action apply_manually` (on
+   email step and its emailed code) and answers Claude's card ("Signed in") when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
    `confirmation` → done; `unknown` → `get_form` again and `browser_status`, then the user is asked what the
    page shows, and only if neither explains it a `screenshot` (the last-resort escape hatch; a widget that
@@ -165,7 +177,7 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
 3. Each step: `get_form` (or the step `go_next` returned), then Claude decides every field (profile facts via
    hints and labels, read as written: a level on a numeric scale takes a number; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
-   in one message per step, and a resolved miss or a new answer offered for saving to the answer bank; the
+   on one `ask_user` card per step, with Claude's suggestion where it has one (in chat without a panel), and a resolved miss or a new answer offered for saving to the answer bank; the
    skills that fit the role, not necessarily all), `add_repeatable` until each list's rows or items match the
    profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one

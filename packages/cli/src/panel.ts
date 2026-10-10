@@ -1,0 +1,53 @@
+import { type ClaudeCommand, type CompanionHandle, type Logger, workspaceStatus } from "@ezapply/companion";
+import { type HostOptions, startHosted } from "./chat.js";
+
+export interface HostPanelOptions extends HostOptions {
+  claude: ClaudeCommand;
+  log: Logger;
+  /** Where the lines for the user go (stdout). */
+  say?: (line: string) => void;
+  /** Where a failure to start is reported (stderr). */
+  fail?: (line: string) => void;
+  /** Resolves when ezapply should stop (Ctrl+C, the terminal closing); tests resolve it themselves. */
+  stopped?: Promise<void>;
+  onStarted?: (handle: CompanionHandle) => void;
+}
+
+/**
+ * `ezapply`: the companion in this process, for the extension's side panel, with Claude Code run headless by the
+ * companion when the panel needs it ([agent](../../../references/components/agent.md)). Nothing runs in the
+ * terminal but this: it prints where to go and stops on Ctrl+C. Like `ezapply chat`, it is the only process the
+ * companion runs in, and the port closes when it stops.
+ */
+export async function hostPanel(opts: HostPanelOptions): Promise<number> {
+  const say = opts.say ?? ((line: string) => process.stdout.write(`${line}\n`));
+  const fail = opts.fail ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const started = await startHosted({ ...opts, agentClaude: opts.claude }, opts.log);
+  if (typeof started === "string") {
+    fail(started);
+    return 1;
+  }
+  started.onServerError((err) => opts.log.error({ err: err.message }, "panel: companion server error"));
+  opts.onStarted?.(started);
+  say(`ezapply is running (port ${started.port}).`);
+  // Until setup is done there may be no extension, and so no panel: setup is a page of its own.
+  const ready = (await workspaceStatus(started.services).catch(() => null))?.ready ?? true;
+  if (!ready) {
+    const { url } = started.services.onboarding.open();
+    const openedIn = await started.services.opener.url(url).catch(() => null);
+    say(
+      openedIn ? "Setup isn't finished: the setup page opened in your browser." : `Setup isn't finished: open ${url}`,
+    );
+  }
+  say("Open the ezapply panel from your browser's toolbar. Press Ctrl+C here to stop ezapply.");
+  await (opts.stopped ?? stopSignal());
+  await started.close();
+  return 0;
+}
+
+/** Ctrl+C, or the terminal closing. */
+function stopSignal(): Promise<void> {
+  return new Promise((resolve) => {
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.once(signal, () => resolve());
+  });
+}

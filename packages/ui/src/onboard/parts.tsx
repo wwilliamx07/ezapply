@@ -93,22 +93,37 @@ export function TaskStatus({ kinds }: { kinds: OnboardTaskKind[] }) {
   const { state } = useOnboard();
   const task = [...state.tasks].reverse().find((t) => kinds.includes(t.kind));
   if (!task) return null;
-  return <TaskLine task={task} listening={state.agentListening} />;
+  return <TaskLine task={task} listening={state.agentListening} agentIn={state.agentIn} />;
 }
 
-export function TaskLine({ task, listening }: { task: OnboardTask; listening: boolean }) {
+/** Where the user sees Claude: the ezapply panel (`ezapply`), or the terminal (`ezapply chat`). */
+export function TaskLine({
+  task,
+  listening,
+  agentIn,
+}: {
+  task: OnboardTask;
+  listening: boolean;
+  agentIn: "panel" | "terminal";
+}) {
   if (task.status === "queued") {
     return (
       <Banner icon={<Spinner />}>
         {listening
           ? "Claude is picking this up…"
-          : "Waiting for Claude. If nothing happens, tell Claude in the terminal: “continue setting me up”."}
+          : agentIn === "panel"
+            ? "Waiting for Claude. Open the ezapply panel from your browser's toolbar to see what it's doing."
+            : "Waiting for Claude. If nothing happens, tell Claude in the terminal: “continue setting me up”."}
       </Banner>
     );
   }
   if (task.status === "running") {
     return (
-      <Banner icon={<Spinner />}>Claude is working on it. It may ask you to approve something in the terminal.</Banner>
+      <Banner icon={<Spinner />}>
+        {agentIn === "panel"
+          ? "Claude is working on it. It may ask you to approve something in the ezapply panel."
+          : "Claude is working on it. It may ask you to approve something in the terminal."}
+      </Banner>
     );
   }
   return (

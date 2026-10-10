@@ -86,7 +86,11 @@ describe("ask_user's questions", () => {
     ]);
     expect(askAnswerProblems(spec, { many: { value: [] } })).toEqual([
       "one: an answer is needed",
-      "many: choose at least 1",
+      "many: an answer is needed",
+    ]);
+    // An empty choice is no answer, not a value off the list.
+    expect(askAnswerProblems(spec, { one: { value: "" }, many: { value: ["No"] } })).toEqual([
+      "one: an answer is needed",
     ]);
   });
 });

@@ -56,10 +56,10 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
       "ezapply",
       !legacy,
       !health
-        ? "not running (it runs while `ezapply chat` is open)"
+        ? "not running (it runs while `ezapply` or `ezapply chat` is open)"
         : legacy
           ? `a background daemon from an earlier build holds port ${config.port}; \`ezapply chat\` stops it`
-          : `v${health.version} running in an \`ezapply chat\` on port ${config.port}`,
+          : `v${health.version} running on port ${config.port}`,
     );
     if (health && !legacy) {
       add(
@@ -76,7 +76,7 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
     add(
       "extension paired",
       Boolean(config.pairedExtensionId),
-      config.pairedExtensionId ?? 'not yet (in `ezapply chat`, say "set me up")',
+      config.pairedExtensionId ?? "not yet (run `ezapply`: the setup page shows how)",
     );
   } else if (!checks.some((c) => c.name === "config")) {
     add("config", false, "missing (run ezapply init)");
