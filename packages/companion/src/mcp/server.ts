@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Services } from "../services.js";
+import { registerAgentTools } from "./tools/agent.js";
 import { registerBrowserTools } from "./tools/browser.js";
 import { registerDocumentTools } from "./tools/documents.js";
 import { registerFormTools } from "./tools/forms.js";
@@ -39,5 +40,6 @@ export function createMcpServer(services: Services, session?: string): McpServer
   registerTemplateTools(server, services);
   registerGitHubTools(server, services);
   registerFormTools(server, services, session);
+  registerAgentTools(server, services, session);
   return server;
 }

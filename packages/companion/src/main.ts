@@ -1,5 +1,8 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { NeedsYou } from "./agent/needs.js";
+import type { ClaudeCommand } from "./agent/process.js";
+import { AgentService } from "./agent/service.js";
 import { ExtensionBridge } from "./bridge/server.js";
 import { type ChatHost, ChatSessions, chatHost } from "./chat.js";
 import { type AppConfig, appDir, updateAppConfig } from "./config/app.js";
@@ -43,6 +46,8 @@ export interface CompanionOptions {
   ui?: UiAssets;
   /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
+  /** Claude Code, for the panel's agent; without it the agent is unavailable (tests, `ezapply chat`). */
+  claude?: ClaudeCommand;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
 }
@@ -116,6 +121,14 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   const freshness = new FreshnessService(workspace, profile, templates, repos, log.child({ svc: "freshness" }));
   const forms = new FormsService(workspace, postings, bridge, reviews, profile, log.child({ svc: "forms" }));
 
+  const needs = new NeedsYou();
+  const agent = new AgentService({
+    workspace,
+    needs,
+    log: log.child({ svc: "agent" }),
+    ...(opts.claude ? { claude: opts.claude } : {}),
+  });
+
   const onboarding = new OnboardingService(
     () => services,
     () => `http://${config.host}:${port}`,
@@ -134,6 +147,8 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     freshness,
     forms,
     onboarding,
+    agent,
+    needs,
     bridge,
     opener,
     ui,
@@ -167,6 +182,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     chat: chatHost(postings, workspace, sessions),
     onServerError: (fn) => server.on("error", fn),
     close: async () => {
+      await agent.close();
       bridge.close();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

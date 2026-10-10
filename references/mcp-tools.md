@@ -246,6 +246,16 @@ method"; the tools turn that into "rebuild and reload the extension".
 
 There is deliberately no general click, navigate or script tool, and no submit.
 
+## The panel
+How the agent behind the extension's side panel asks the user ([agent](components/agent.md#cards-needsts)). Both
+know which conversation a call comes from by the relay's session header: a panel conversation's always gets a card;
+a terminal chat's only while a panel is open.
+
+| Tool | Input | Does |
+|---|---|---|
+| `ask_user` | `title`, `intro?`, `questions[]` (1–25: `id`, `prompt`, `type` `single` \| `multi` \| `text`, `options[] { value, label?, description? }`, `allowOther?`, `min?`, `max?`, `multiline?`, `placeholder?`, `maxLength?`, `proposed?`, `why?`, `sensitive?`, `required?`, `remember? { answerId }`), or `askId`; `timeoutSeconds` (5–900, default 600) | Shows the questions on a card and waits: `{ done: true, answers: { <id>: { value, other?, remember? } \| { skipped: true } }, savedToAnswerBank?, toSave?, hint? }` (answers marked to save go into the answer bank when it has the entry, else come back in `toSave` for the agent to add), `{ replied, message }` when the user wrote in the chat instead, `{ done: false, askId, hint }` on timeout (`ask_user { askId }` waits again; a late answer is kept), `{ noPanel, hint }` for a terminal chat's question with no panel open. A suggestion may go on any question, sensitive ones too. A suggestion that isn't an option (without `allowOther`), a choice question without options, an id twice or min over max are `bad_request` |
+| `permission_ask` | `tool_name`, `input`, `tool_use_id?` | Claude Code's permission prompt for the panel's agent (`--permission-prompt-tool`), not for the agent to call: a card with the tool and its input. Returns Claude Code's result as JSON text: `{ behavior: "allow", updatedInput }`, or `{ behavior: "deny", message }` (the user's reason; no answer in 10 minutes; the conversation reset; no panel for a terminal chat) |
+
 ## Decision tools (not registered)
 `suggest_answers` and `decide` are reserved for a future `DecisionProvider` (e.g. Jev). With the only
 provider being `none`, they don't exist. See [status.md](status.md#deferred).

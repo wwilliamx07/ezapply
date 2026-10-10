@@ -402,98 +402,20 @@ the page the user is already on.
 **What.** The extension's toolbar button opens a side panel, and everything happens there: setting the posting,
 tailoring the documents, filling the form, a chat with the agent as in the Claude Code terminal, and the agent's
 questions and requests for approval. Claude Code is still the agent, with the same skills, tools and workspace;
-the companion runs it headless and relays everything between it and the panel. The review page and the setup page
+the companion runs it headless ([agent](references/components/agent.md)) and relays everything between it and the panel. The review page and the setup page
 stay tabs (a PDF and an eleven-step form don't fit a panel), opened from it.
 
-**The agent, headless** (`companion/src/agent/`).
-- **One Claude Code process per conversation:** `claude -p --input-format stream-json --output-format stream-json
-  --verbose --permission-prompt-tool mcp__ezapply__permission_ask --disallowedTools AskUserQuestion` in the
-  workspace, started with `findClaude`'s command. It loads the workspace as an interactive session does
-  (`EZAPPLY.md`, skills, `.mcp.json`, `.claude/settings.json`) and uses the same login and billing. Not `--bare`:
-  bare mode skips all of that and doesn't use a subscription login. The process takes user messages on stdin as
-  JSON lines and stays up between turns while stdin is open, so a conversation is one process, not one per
-  message. Closing stdin ends it.
-- **A conversation per posting:** a posting's first message starts its session with `--session-id <uuid>`, kept in
-  `meta.json` (`agentSession`, optional, no `schemaVersion` bump); coming back to it later `--resume`s that session.
-  The posting card's **Reset** ends it, and the next message starts a new one for the same posting; the old id
-  moves to `agentSessionsEarlier[]` (still open with `claude --resume`). What's on disk carries over (documents,
-  `notes.md`, approvals, `form-log.jsonl`); the conversation doesn't.
-  With no posting active, a general conversation (setup tasks, "what's in flight?") has its own, in `state.json`.
-  This replaces `runChat`'s restart on capture: no conversation carries one application into the next, and nothing
-  is killed for it. One process runs at a time; switching postings while the agent works asks to stop it or wait.
-- **Its output, parsed:** each stream-json line becomes an event for the panel: the agent's text, a tool call
-  (name, a one-line summary of its input), a tool error, a subagent's work (by `parent_tool_use_id`), API retries
-  (`system/api_retry`), the turn's `result` with cost. Events also go to `postings/<id>/agent.jsonl`, so reopening
-  the panel shows the conversation. The `system/init` event says whether the `ezapply` MCP server connected; if not,
-  the panel says so instead of letting the agent run without its tools.
-- **Stop:** ends the turn, not the process: the interrupt that stream-json input accepts (what the Agent SDK's
-  `interrupt()` sends), not SIGTERM, which leaves the turn unfinished with no result. A form call already running
-  finishes, since it can't be cut in half safely.
-- **Messages mid-turn:** the user can type while the agent works ("the school field is wrong"); the message goes to
-  stdin at once and the panel marks it queued until the stream shows Claude took it.
-- *Rejected:* the Claude Agent SDK (the same harness as a library, and a dependency; its `canUseTool` callback is
-  the same host protocol `--permission-prompt-tool` gives the CLI). An agent loop of ezapply's own over the API (the
-  "only agent" principle, the skills, subagents and permissions lost). Channels (`notifications/claude/channel`),
-  which push into an interactive session: a research preview, stdio servers only, a custom channel needs
-  `--dangerously-load-development-channels` with a warning dialog at every start, and `-p` ignores it.
-
 **What used to need the terminal, in the panel.**
-- **Questions: `ask_user`**, a new tool that blocks until the panel answers, as `review_documents` waits for the
-  review page. Claude Code's own `AskUserQuestion` reaches a `-p` host too, but holds 1 to 4 questions of 2 to 4
-  options and no text entry, and a step of an application can have a dozen questions, so it's disallowed and the
-  skills use `ask_user` for every question they put to the user today ("ask the user in chat").
-  ```
-  ask_user {
-    title: string,                       // "Acme, step 3: Application questions"
-    intro?: string,
-    questions: [{                        // 1–25
-      id: string,
-      prompt: string,
-      type: "single" | "multi" | "text",
-      options?: [{ value, label?, description? }],   // single and multi: 2–50
-      allowOther?: boolean,              // single and multi: a free-text "Other"
-      min?: number, max?: number,        // multi
-      multiline?: boolean, placeholder?: string, maxLength?: number,  // text
-      proposed?: string | string[],      // filled in, marked as the agent's suggestion
-      why?: string,                      // where the suggestion came from, or why it's asked
-      sensitive?: boolean,               // flagged on the card; may still carry a suggestion
-      required?: boolean,                // default true; optional ones can be skipped
-      remember?: { answerId: string }    // offers "Save for next time" into the answer bank
-    }],
-    timeoutSeconds?: number              // 5–900, default 600
-  }
-  → { done: true, answers: { [id]: { value: string | string[], other?: true, remember?: true } | { skipped: true } } }
-  → { done: false, askId, hint }         // timed out: ask_user { askId } waits again; a late answer is kept
-  → { replied: true, message }           // the user dismissed the card and wrote in the chat instead
-  ```
-  Checked in code: options for single and multi, and a `proposed` that's one of them unless `allowOther`
-  (`bad_request`). A sensitive question (EEO, salary, disability, anything marked `sensitive` in the answer bank)
-  may carry a suggestion like any other, from the profile or the agent's judgment; the card flags the question as
-  sensitive and shows where the suggestion came from (`why`), and nothing is filled until the user sends the card,
-  so the user still decides. This replaces today's rule that a sensitive question is never given a suggestion (the
-  onboarding page's screening step, the `ezapply-apply` and `ezapply-answers` skills).
-  Uses: a step's screening questions (one card per step), gaps in the evidence, "is this tab Acme's application?"
-  (`postingMismatch`), "sign in, then Continue", a date the page didn't take. Saved answers go to
-  `profile/answers.yaml` through the existing answer bank code.
-- **Approvals:** `--permission-prompt-tool mcp__ezapply__permission_ask`, a tool the companion serves, gets every
-  call that would prompt in the terminal (the workspace's allow and deny rules decide the rest first). The panel
-  shows the tool, Claude's description of it and the exact command or file and change, with Allow and Deny, and
-  Deny with a reason, which reaches Claude as the deny message. No "always allow": the workspace's rules are the
-  only standing approvals. No answer in 10 minutes is a deny.
+- **Skills ask through `ask_user`** ([the panel](references/mcp-tools.md#the-panel)) wherever they ask the user in
+  chat today: a step's screening questions (one card per step), gaps in the evidence, "is this tab Acme's
+  application?" (`postingMismatch`), "sign in, then Continue", a date the page didn't take. With that, today's rule
+  that a sensitive question gets no suggestion goes (the onboarding page's screening step, the `ezapply-apply` and
+  `ezapply-answers` skills): it gets one, flagged as sensitive.
 - **Reports:** the agent's text, in the conversation.
 - **Review:** `review_documents` opens the review tab as today; the panel shows the review as waiting, with a button
   to bring its tab back, and its outcome when answered.
 - **Onboarding tasks:** a task is a message to the general conversation, with its `how`. The blocking `onboarding`
   tool, "whether the agent is listening" and "tell Claude in the terminal to continue" go away.
-
-**Long waits in `-p`** (what was the open question). An interactive session moves an MCP call still running after
-2 minutes into a background task; `-p` doesn't (unless `CLAUDE_AUTO_BACKGROUND_TASKS=1`), so `ask_user`,
-`permission_ask` and `review_documents` hold the turn until answered, which is what's wanted. The limits that do
-apply: a call with no response and no progress for 30 minutes is aborted (the idle window for a stdio server, as
-the relay is to Claude; `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` changes it), and `MCP_TOOL_TIMEOUT` caps the total
-(about 28 hours by default). The waiting tools return after at most 15 minutes with `done: false` and are called
-again, as `review_documents` already is, so neither is reached. The companion sets `CLAUDE_AUTO_BACKGROUND_TASKS`
-off in the process's environment so a user's own setting can't change this.
 
 **The side panel** (`extension/src/panel/`, Chrome's `side_panel`, Firefox's `sidebar_action`).
 - **Opening:** the toolbar button opens the panel (Chrome: `setPanelBehavior({ openPanelOnActionClick: true })`;
@@ -565,30 +487,20 @@ off in the process's environment so a user's own setting can't change this.
   request it raised and that's still open, and never stores an Allow. What the panel shows (posting text, the
   agent's words, a form's labels) is text, never HTML. The extension gains the `sidePanel` permission (Chrome).
 
-**Tests.** A stub `claude` (tests already run one through node) that prints recorded stream-json and calls the MCP
-tools: events parsed and stored; a session per posting, resumed; Stop mid-turn and after a running form call; a
-message queued mid-turn; `ask_user` answered, skipped, timed out and answered late, dismissed for chat, and its
-schema checks (a proposal that isn't an option refused, one on a sensitive question allowed and flagged); Reset
-starting a new session for the posting and withdrawing open cards; `permission_ask` allowed, denied with a reason and timed
-out; the onboarding task path without the blocking tool; the bridge's panel methods refused from anything but the
-pinned extension; the panel's components in the UI tests. Pin the stream-json shapes the parser reads in a fixture
-recorded from the installed Claude Code.
+**Tests.** The onboarding task path without the blocking tool; the bridge's panel methods refused from anything but
+the pinned extension; the start command passing Claude Code to the companion; the skills' `ask_user` call shapes
+(`skill-calls.test.ts`); the panel's components in the UI tests.
 
 **References when built:** `philosophy.md`, `architecture.md` (processes, transports, the panel), `flows.md` (every
 flow's "in chat" steps, capture from the panel), `components/companion.md`, `components/cli.md` (the new start,
 `runChat`'s restart gone), `components/extension.md` (the panel, the toolbar button, the bridge methods),
 `components/ui.md` (shared components, the onboarding page's tasks), `components/workspace.md` (skills),
-`components/protocol.md` (bridge methods), `mcp-tools.md` (`ask_user`, `permission_ask`, `onboarding` gone),
-`data-formats.md` (`agentSession`, `agentSessionsEarlier`, `agent.jsonl`, `state.json`), `security.md`
-(sensitive questions suggested, never filled without the user), `development.md`, `status.md`.
+`components/protocol.md` (bridge methods), `components/agent.md` (what starts it, the panel's side),
+`mcp-tools.md` (`onboarding` gone), `security.md` (approvals from the panel; sensitive questions suggested, never
+filled without the user), `development.md`, `status.md`.
 
 **Challenges and open questions.**
-- The stream-json input's interrupt and its handling of a message sent mid-turn (taken at the next tool boundary,
-  or after the turn?) are the Agent SDK's protocol more than documented CLI behaviour: check both against the
-  installed Claude Code before building on them, and on Windows, where there's no SIGINT to fall back on.
 - `ezapply chat` after this: keep it for debugging ezapply (the full terminal view of what Claude does), or drop it
   so there's one way to run ezapply and less to keep current?
-- A long-resumed conversation re-sends its whole history every turn. Show the conversation's size beside its cost,
-  and suggest Reset past a threshold?
 - The panel is per window in Chrome. Two windows show the same conversation; both can answer a card, and the first
   answer wins.

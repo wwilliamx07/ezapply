@@ -1,0 +1,123 @@
+# The agent behind the panel (`companion/src/agent/`)
+
+The companion runs Claude Code headless and relays what it does, so the user can work with it from the
+extension's side panel instead of a terminal ("Everything in the browser" in `todo.md`). Claude Code is still the
+only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as `ezapply
+chat`; the companion only starts it, writes the user's messages to it and reads what it does.
+
+**Built so far:** the runner, the conversations, the cards and their two tools (`ask_user`, `permission_ask`).
+Nothing starts the runner yet: it needs `CompanionOptions.claude`, which no caller passes until the panel and its
+bridge methods exist, so `AgentService.state()` is `unavailable` in every build today.
+
+| Path | Role |
+|---|---|
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `findClaude` (also used by `ezapply chat`); `PERMISSION_TOOL`, `SESSION_ENV` |
+| `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
+| `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset |
+| `agent/needs.ts` | `NeedsYou`: the cards (questions and approvals) waiting on the user |
+| `mcp/tools/agent.ts` | `ask_user` and `permission_ask` ([mcp-tools](../mcp-tools.md#the-panel)) |
+| `protocol/src/panel.ts` | The shared types: `AgentEvent`, `AskSpec` and its checks (`askSpecProblems`, `askAnswerProblems`), `Card`, `AgentStatus`, `GENERAL_CONVERSATION` |
+
+**Why headless Claude Code, and why this way.** *Rejected:* the Claude Agent SDK (the same harness as a library and
+a dependency; its `canUseTool` callback is the host protocol `--permission-prompt-tool` gives the CLI); an agent
+loop of ezapply's own over the API (the "only agent" principle lost, with the skills, subagents and permissions);
+channels (`notifications/claude/channel`), which push messages into an interactive session: a research preview,
+stdio servers only, a custom channel needs `--dangerously-load-development-channels` with a warning dialog at every
+start, and `-p` ignores it; keeping the interactive session and waiting on a blocking tool, as onboarding did:
+permission prompts and Claude's questions would still be in the terminal.
+
+**Long waits.** An interactive session moves an MCP call still running after 2 minutes into a background task;
+`-p` doesn't, so `ask_user`, `permission_ask` and `review_documents` hold the turn until answered. What still
+applies: a call with no response and no progress for 30 minutes is aborted (the idle window for a stdio server,
+which the relay is to Claude; `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` changes it), and `MCP_TOOL_TIMEOUT` caps any call
+(about 28 hours by default). The waiting tools return after at most 15 minutes and are called again, so neither is
+reached.
+
+## The process (`process.ts`)
+`claude` with these arguments (`agentArgs`), in the workspace:
+
+| Argument | Why |
+|---|---|
+| `-p --input-format stream-json --output-format stream-json --verbose` | Messages go in on stdin as JSON lines (`{ type: "user", message: { role, content } }`) and the process stays up between turns while stdin is open, so a conversation is one process, not one per message. `--verbose` is required for stream-json output |
+| `--replay-user-messages` | Each message is echoed (`isReplay: true`) when Claude takes it, so the panel can show it as taken |
+| `--permission-mode default` | Without it a `-p` run may start in auto mode, and no approval would reach the panel |
+| `--permission-prompt-tool mcp__ezapply__permission_ask` | What would prompt in the terminal asks the panel instead ([cards](#cards-needsts)) |
+| `--disallowedTools AskUserQuestion` | Questions go through `ask_user`: Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen questions |
+| `--session-id <uuid>` / `--resume <uuid>` | A new conversation's session, or the one it had |
+
+Not `--bare`: bare mode skips the workspace's skills, `.mcp.json`, settings and `CLAUDE.md`, and doesn't use a
+subscription login. The environment gets `EZAPPLY_CHAT_SESSION=<session id>`, which the MCP relay sends as
+`x-ezapply-chat-session`, so the companion knows which conversation a tool call (an `ask_user`) comes from, and
+loses `CLAUDE_AUTO_BACKGROUND_TASKS`: in `-p` a long MCP call holds the turn, as `ask_user` and `review_documents`
+need, unless that variable is set, which would end the turn with the question open.
+
+**Stop** writes `{ type: "control_request", request_id, request: { subtype: "interrupt" } }`; Claude Code answers
+with a `control_response` and ends the turn (`terminal_reason: "aborted_tools"`). A tool call running then gets a
+"rejected" result: a form call already sent still finishes in the companion and on the page, but Claude doesn't
+see its result (the next `get_form` shows the page as it is). Not SIGTERM, which leaves the turn unfinished with no
+result. **Closing** ends stdin (the process exits once idle) and kills the tree after a grace period (`taskkill /T
+/F` on Windows, as `ezapply chat` does). A message written while a tool call runs is taken when the call ends, in
+the same turn.
+
+All of this was checked against Claude Code 2.1 in a scratch folder with a throwaway MCP server: a message sent
+mid-call was answered in the same turn, an interrupt ended the turn and the process went on to the next message,
+the permission tool got `{ tool_name, input, tool_use_id }` for a command that needed approval and its deny message
+reached Claude word for word, `AskUserQuestion` disallowed left Claude asking in text, and `total_cost_usd` in each
+`result` is the session's total so far.
+
+## The stream (`stream.ts`)
+Only these fields are read, so a line of a kind it doesn't know is skipped rather than failing the conversation:
+`system/init` (`session_id`, `mcp_servers[] { name, status }`, at the start of every turn), `assistant` blocks
+(`text`, `tool_use { id, name, input }`, `parent_tool_use_id` for a subagent's), `user` (a replayed message, or
+`tool_result { tool_use_id, is_error, content }`), `result` (`is_error`, `total_cost_usd`, `duration_ms`,
+`terminal_reason`, `queued_turn_count`, `result`), `system/api_retry` and `control_response`. Thinking, rate-limit
+and summary lines are skipped. They become `AgentEvent`s: `user` (with `taken`), `text`, `tool` (folded to one
+line by `toolSummary`: the command, the file, the skill, or an MCP tool's arguments cut to 160 characters),
+`toolDone` (with the start of its error), `card`, `turnEnd` (cost, duration, `interrupted`, error) and `notice`.
+`agent.test.ts` pins the fields on lines shaped as recorded, with the values replaced.
+
+## Conversations (`service.ts`)
+One per posting (its id) and one `general`. One process runs at a time: sending to another conversation closes an
+idle process, and is refused while it works ("Claude is still working in another conversation"), since two agents
+filling forms or editing one posting's files would collide. Sending:
+- starts the conversation's process when none runs, with `--resume` once Claude Code has had its session (it
+  answered once: `started`), else `--session-id`;
+- **while a card of that conversation is open, answers the card instead.** Claude is then inside the tool call
+  that asked and would take the message only when that call ends (up to 10 minutes later). So a typed message is a
+  question's reply (`ask_user` returns `{ replied, message }`) or an approval's deny, with the message as its
+  reason, as typing does at Claude Code's own prompts.
+
+**Reset** (`reset(key)`) ends the conversation's process, withdraws its open cards, and gives it a new session;
+the old one goes to `earlier` (kept for `claude --resume`; the newest 50). What's on disk carries over (documents,
+`notes.md`, approvals, the form log); the conversation doesn't. **A session that can't be resumed** (Claude Code
+exits before answering, its transcript gone) is replaced by a new one once, with the waiting messages sent again
+and a notice. Claude Code stopping mid-turn is a notice with the first line it wrote to stderr. The first `init`
+of a process is checked for the `ezapply` MCP server: anything but `connected` is an error notice ("Run `ezapply
+init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
+
+**On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json` and each
+session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest
+state winning (it's written again when taken).
+
+## Cards (`needs.ts`)
+What waits on the user. **Questions** (`ask_user`): a card holds an `AskSpec` (title, intro, 1 to 25 questions,
+each `single`, `multi` or `text`, with options, a free-text Other, a suggestion and where it came from,
+`sensitive`, `required`, an offer to save the answer). `askSpecProblems` refuses what the schema can't (options for
+choice questions, a suggestion that isn't one of them unless Other is allowed, an id twice, min over max);
+`askAnswerProblems` checks the answers (required ones, values on the list unless Other, how many, only questions
+asked). A **sensitive question may carry a suggestion** like any other: the card flags it and shows where the
+suggestion came from, and nothing is filled until the user sends the card. An answer given while nothing waits is
+kept and read once by the next wait. **Approvals** (`permission_ask`): a card with the tool, its input and Claude's
+description; the decision resolves the waiting call, allow with the input unchanged, deny with "The user denied
+this in the ezapply panel: <reason>"; no answer in 10 minutes is a deny. There's no "always allow": the workspace's
+permission rules are the only standing approvals.
+
+A terminal chat's question gets a card only when a panel watches the cards (`watch()`); otherwise `ask_user` says to
+ask in chat, and `permission_ask` denies. A panel conversation's question always gets a card. Settled cards are
+recorded in their conversation as a `card` event (answered, replied in the chat, allowed, denied, timed out,
+withdrawn).
+
+## Open questions
+- Interrupting drops a running form call's result: whether to hold Stop until a running form call ends, as
+  `ezapply chat`'s restart waits.
+- Cost is Claude Code's estimate; whether to warn before a turn of a long-resumed session.

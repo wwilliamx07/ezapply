@@ -1,3 +1,5 @@
+import type { NeedsYou } from "./agent/needs.js";
+import type { AgentService } from "./agent/service.js";
 import type { ExtensionBridge } from "./bridge/server.js";
 import type { ReviewService } from "./documents/review.js";
 import type { DocumentsService } from "./documents/service.js";
@@ -32,6 +34,10 @@ export interface Services {
   forms: FormsService;
   /** Onboarding on a page, and the agent's tasks from it (`onboarding`). */
   onboarding: OnboardingService;
+  /** The agent behind the panel: Claude Code run headless, one process per conversation. */
+  agent: AgentService;
+  /** What waits on the user in the panel: the agent's questions and approvals. */
+  needs: NeedsYou;
   bridge: ExtensionBridge;
   /** Opens files and the companion's own pages for the user (a stub in tests). */
   opener: Opener;

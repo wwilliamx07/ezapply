@@ -1,3 +1,4 @@
+export { type ClaudeCommand, findClaude } from "./agent/process.js";
 export { CHAT_SESSION_HEADER, type ChatHost, type ChatSessionState, type PostingRef } from "./chat.js";
 export {
   AppConfig,

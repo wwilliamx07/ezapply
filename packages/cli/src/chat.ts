@@ -1,12 +1,12 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import {
   type AppConfig,
   type ChatHost,
+  type ClaudeCommand,
   type CompanionHandle,
   createLogger,
+  findClaude,
   HEALTH_MODE,
   type Logger,
   type PostingRef,
@@ -18,27 +18,7 @@ import { fetchHealth } from "./health.js";
 /** Set for Claude and everything it starts; the MCP relay passes it to the companion as a header. */
 export const CHAT_SESSION_ENV = "EZAPPLY_CHAT_SESSION";
 
-export interface ClaudeCommand {
-  file: string;
-  /** Arguments that always come first (tests run a stub script through node). */
-  args: string[];
-  /** A .cmd/.bat launcher on Windows, which only runs through the shell. */
-  shell: boolean;
-}
-
-/** Claude Code on PATH (or EZAPPLY_CLAUDE): the native `claude.exe`, or the npm install's `claude.cmd` on Windows. */
-export function findClaude(env: NodeJS.ProcessEnv = process.env, platform = process.platform): ClaudeCommand | null {
-  const isScript = (p: string) => platform === "win32" && /\.(cmd|bat)$/i.test(p);
-  if (env.EZAPPLY_CLAUDE) return { file: env.EZAPPLY_CLAUDE, args: [], shell: isScript(env.EZAPPLY_CLAUDE) };
-  const names = platform === "win32" ? ["claude.exe", "claude.cmd", "claude.bat"] : ["claude"];
-  for (const dir of (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean)) {
-    for (const name of names) {
-      const file = join(dir, name);
-      if (existsSync(file)) return { file, args: [], shell: isScript(file) };
-    }
-  }
-  return null;
-}
+export { type ClaudeCommand, findClaude };
 
 export interface HostChatOptions {
   config: AppConfig;

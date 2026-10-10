@@ -97,7 +97,7 @@ How the user runs ezapply, and the only process the companion runs in.
 
 ### Hosting the companion (`hostChat`)
 1. Needs `config.json` (else "run `ezapply init`") and Claude Code: `EZAPPLY_CLAUDE` if set, else the first
-   `claude.exe`, `claude.cmd` or `claude.bat` on PATH (Windows) or `claude` (elsewhere) (`findClaude`). A
+   `claude.exe`, `claude.cmd` or `claude.bat` on PATH (Windows) or `claude` (elsewhere) (`findClaude`, the companion's, which the panel's agent uses too). A
    `.cmd`/`.bat` launcher (an npm install on Windows) runs through the shell with cmd quoting.
 2. Install the crash guard (`guardProcess` in `quiet.ts`): `uncaughtException` and `unhandledRejection` are
    logged and the process carries on. Otherwise a bug in companion code would end the chat and take the

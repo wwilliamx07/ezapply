@@ -28,6 +28,7 @@ ezapply-home/
   postings/<id>/           one folder per captured posting
   repo-cache/<owner>__<name>/  read-only repo mirrors
   debug/<date>-<postingId>/    debug mode records (only while it's on; see data-formats)
+  agent/                   the side panel's conversations: conversations.json, <conversation>/<session>.jsonl
 ```
 
 Every file's format: [data-formats.md](../data-formats.md).

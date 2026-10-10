@@ -174,6 +174,18 @@ that changes). All are 12 hex characters of SHA-256 and written
 by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`). Writes to `state.json`
 run one at a time.
 
+### `agent/`
+The side panel's conversations ([agent](components/agent.md)), written by the companion only.
+- `conversations.json`: `{ schemaVersion: 1, conversations: { "<posting id> | general": { sessionId, startedAt,
+  started, totalCostUsd?, earlier[] { sessionId, startedAt, endedAt? } } } }`. `sessionId` is the Claude Code
+  session the conversation's process starts (`--session-id`) or, once `started` (Claude Code answered once),
+  resumes. `totalCostUsd` is the session's spend so far, Claude Code's estimate. Reset moves the session to
+  `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
+  empty.
+- `<conversation>/<sessionId>.jsonl`: the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
+  the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
+  error, settled cards, each turn's end with its cost, notices. A line cut short by a crash is skipped.
+
 ### `.mcp.json`, `.claude/settings.json`
 Claude Code's own formats; ezapply's entries are described in [workspace.md](components/workspace.md#claude-code-settings).
 

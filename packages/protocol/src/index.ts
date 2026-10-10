@@ -8,6 +8,7 @@ export * from "./greenhouse.js";
 export * from "./lever.js";
 export * from "./oracle.js";
 export type * from "./pages.js";
+export * from "./panel.js";
 export * from "./phenom.js";
 export * from "./postings.js";
 export * from "./rpc.js";
