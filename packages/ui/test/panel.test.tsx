@@ -22,7 +22,7 @@ const POSTING = {
 
 function state(over: Partial<PanelState> = {}): PanelState {
   return {
-    agent: { status: "idle", queued: 0, settings: { permissionMode: "default", model: "default" } },
+    agent: { status: "idle", queued: 0, settings: { permissionMode: "auto", model: "sonnet", effort: "medium" } },
     activePostingId: POSTING.id,
     postings: [POSTING],
     cards: [],
@@ -122,20 +122,26 @@ describe("the side panel", () => {
     expect(t.transport.openSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the permission mode and model, and changes them through ezapply", async () => {
+  it("shows the permission mode, model and effort, and changes them through ezapply", async () => {
     const t = fakeTransport({});
     render(<PanelApp transport={t.transport} />);
     const mode = (await screen.findByRole("combobox", { name: "Permission mode" })) as HTMLSelectElement;
     const model = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
-    expect(mode.value).toBe("default");
-    expect(model.value).toBe("default");
+    const effort = screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement;
+    expect([mode.value, model.value, effort.value]).toEqual(["auto", "sonnet", "medium"]);
     expect([...mode.options].map((o) => o.value)).not.toContain("bypassPermissions");
-    t.setState(state({ agent: { ...state().agent, settings: { permissionMode: "acceptEdits", model: "default" } } }));
-    fireEvent.change(mode, { target: { value: "acceptEdits" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "acceptEdits" }]));
-    await waitFor(() => expect(mode.value).toBe("acceptEdits"));
-    fireEvent.change(model, { target: { value: "sonnet" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { model: "sonnet" }]));
+    t.setState(
+      state({
+        agent: { ...state().agent, settings: { permissionMode: "default", model: "sonnet", effort: "medium" } },
+      }),
+    );
+    fireEvent.change(mode, { target: { value: "default" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "default" }]));
+    await waitFor(() => expect(mode.value).toBe("default"));
+    fireEvent.change(model, { target: { value: "opus" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { model: "opus" }]));
+    fireEvent.change(effort, { target: { value: "max" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { effort: "max" }]));
   });
 
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {

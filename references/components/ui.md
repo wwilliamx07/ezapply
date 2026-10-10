@@ -128,8 +128,9 @@ side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It r
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
    waiting), or that the agent runs only under `ezapply`.
 10. **Footer:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in its
-    title) and the model (Default model, Fable, Opus, Sonnet, Haiku), which ezapply keeps and applies to the running
-    conversation at once ([agent](agent.md#permission-mode-and-model)); and the conversation's cost so far.
+    title), the model (Fable, Opus, Sonnet, Haiku) and the effort (Low to Max), which ezapply keeps and applies to
+    the running conversation, the effort from its next message ([agent](agent.md#permission-mode-model-and-effort));
+    and the conversation's cost so far.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

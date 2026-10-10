@@ -1,4 +1,5 @@
 import {
+  AgentEffort,
   type AgentEvent,
   AgentModel,
   AgentPermissionMode,
@@ -40,11 +41,17 @@ export const MODES: Record<AgentPermissionMode, { label: string; what: string }>
   dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
 };
 export const MODELS: Record<AgentModel, string> = {
-  default: "Default model",
   fable: "Fable",
   opus: "Opus",
   sonnet: "Sonnet",
   haiku: "Haiku",
+};
+export const EFFORTS: Record<AgentEffort, string> = {
+  low: "Low effort",
+  medium: "Medium effort",
+  high: "High effort",
+  xhigh: "Extra high effort",
+  max: "Max effort",
 };
 
 /**
@@ -665,7 +672,10 @@ function AgentLine({
   ) : null;
 }
 
-/** The permission mode and model, kept by ezapply and applied to the running conversation at once. */
+/**
+ * The permission mode, model and effort, kept by ezapply and applied to the running conversation: the mode and model
+ * at once, the effort from its next message.
+ */
 function AgentSettingsBar({
   settings,
   disabled,
@@ -701,6 +711,20 @@ function AgentSettingsBar({
         {AgentModel.options.map((m) => (
           <option key={m} value={m}>
             {MODELS[m]}
+          </option>
+        ))}
+      </select>
+      <select
+        className="ez-select ez-select-sm"
+        aria-label="Effort"
+        title="How hard Claude thinks: more effort is slower and costs more. Applies from the next message."
+        value={settings.effort}
+        disabled={disabled}
+        onChange={(e) => onChange({ effort: AgentEffort.parse(e.target.value) })}
+      >
+        {AgentEffort.options.map((m) => (
+          <option key={m} value={m}>
+            {EFFORTS[m]}
           </option>
         ))}
       </select>

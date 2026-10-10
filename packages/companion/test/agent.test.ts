@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@ezapply/protocol";
@@ -190,15 +190,15 @@ describe("reading Claude Code's stream-json", () => {
     const fresh = agentArgs("abc", false);
     expect(fresh).toEqual(expect.arrayContaining(["-p", "--verbose", "--replay-user-messages", "--session-id", "abc"]));
     expect(fresh.join(" ")).toContain("--input-format stream-json --output-format stream-json");
+    // The defaults: auto mode, Sonnet, medium effort.
     expect(fresh.join(" ")).toContain(
-      "--permission-mode default --permission-prompt-tool mcp__ezapply__permission_ask",
+      "--permission-mode auto --model sonnet --effort medium --permission-prompt-tool mcp__ezapply__permission_ask",
     );
     expect(fresh.join(" ")).toContain("--disallowedTools AskUserQuestion");
     expect(fresh).not.toContain("--bare");
     expect(agentArgs("abc", true).slice(-2)).toEqual(["--resume", "abc"]);
-    expect(fresh).not.toContain("--model");
-    const chosen = agentArgs("abc", false, { permissionMode: "acceptEdits", model: "sonnet" }).join(" ");
-    expect(chosen).toContain("--permission-mode acceptEdits --model sonnet --permission-prompt-tool");
+    const chosen = agentArgs("abc", false, { permissionMode: "default", model: "opus", effort: "max" }).join(" ");
+    expect(chosen).toContain("--permission-mode default --model opus --effort max --permission-prompt-tool");
   });
 });
 
@@ -304,10 +304,14 @@ describe("the agent service", () => {
 
   it("keeps the permission mode and model, starts with them, and switches a running conversation at once", async () => {
     make();
-    expect(await agent.settings()).toEqual({ permissionMode: "default", model: "default" });
+    expect(await agent.settings()).toEqual({ permissionMode: "auto", model: "sonnet", effort: "medium" });
     await agent.send("p1", "one");
     await after("p1", 1);
-    expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({ permissionMode: "plan", model: "default" });
+    expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({
+      permissionMode: "plan",
+      model: "sonnet",
+      effort: "medium",
+    });
     await agent.setSettings({ model: "haiku" });
     await waitFor(async () => ((await switches()).length === 2 ? true : null), 5000);
     expect(await switches()).toEqual([
@@ -321,30 +325,68 @@ describe("the agent service", () => {
       schemaVersion: 1,
       permissionMode: "plan",
       model: "haiku",
+      effort: "medium",
     });
 
     // ezapply started again: the settings are read back, and the next process starts with them.
     await agent.close();
     events = [];
     make();
-    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "haiku" });
+    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "haiku", effort: "medium" });
     await agent.send("p1", "two");
     await after("p1", 1);
-    expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku");
+    expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku --effort medium");
     expect(await switches()).toHaveLength(2);
+  });
+
+  it("restarts the conversation's process for a new effort: at once when idle, after the turn while working", async () => {
+    make();
+    await agent.send("p1", "one");
+    await after("p1", 1);
+    await agent.setSettings({ effort: "high" });
+    expect(agent.state()).toEqual({ status: "idle", queued: 0 });
+    await agent.send("p1", "two");
+    await after("p1", 2);
+    const session = (await starts())[0]?.at(-1) as string;
+    expect((await starts()).at(-1)?.join(" ")).toContain(`--effort high`);
+    expect((await starts()).at(-1)?.slice(-2)).toEqual(["--resume", session]);
+
+    // While it works, the process stays until the turn ends.
+    await agent.send("p1", "slow");
+    await waitFor(async () => (agent.state().status === "working" ? true : null), 5000);
+    await agent.setSettings({ effort: "low" });
+    expect(agent.state().status).toBe("working");
+    agent.stop();
+    await after("p1", 3);
+    await waitFor(async () => (agent.state().conversation === undefined ? true : null), 5000);
+    await agent.send("p1", "three");
+    await after("p1", 4);
+    expect(await starts()).toHaveLength(3);
+    expect((await starts()).at(-1)?.join(" ")).toContain(`--effort low`);
+    expect(await switches()).toEqual([]);
+  });
+
+  it("reads each setting on its own, so one an older build kept falls back alone", async () => {
+    await mkdir(join(dir, "agent"), { recursive: true });
+    await writeFile(
+      join(dir, "agent", "settings.json"),
+      JSON.stringify({ schemaVersion: 1, permissionMode: "plan", model: "default" }),
+    );
+    make();
+    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "sonnet", effort: "medium" });
   });
 
   it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {
     make({ STUB_REFUSE_SWITCH: "1" });
     await agent.send("p1", "one");
     await after("p1", 1);
-    await agent.setSettings({ permissionMode: "auto" });
+    await agent.setSettings({ permissionMode: "plan" });
     await waitFor(async () => (events.some(([, e]) => e.kind === "notice") ? true : null), 5000);
     expect(events.find(([, e]) => e.kind === "notice")?.[1]).toMatchObject({
       level: "warn",
-      text: expect.stringContaining("didn't switch the permission mode to auto: not allowed here"),
+      text: expect.stringContaining("didn't switch the permission mode to plan: not allowed here"),
     });
-    expect(await agent.settings()).toMatchObject({ permissionMode: "auto" });
+    expect(await agent.settings()).toMatchObject({ permissionMode: "plan" });
   });
 
   it("starts afresh when a session can't be resumed, and says so", async () => {

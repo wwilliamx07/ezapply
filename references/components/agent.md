@@ -41,8 +41,7 @@ reached.
 |---|---|
 | `-p --input-format stream-json --output-format stream-json --verbose` | Messages go in on stdin as JSON lines (`{ type: "user", message: { role, content } }`) and the process stays up between turns while stdin is open, so a conversation is one process, not one per message. `--verbose` is required for stream-json output |
 | `--replay-user-messages` | Each message is echoed (`isReplay: true`) when Claude takes it, so the panel can show it as taken |
-| `--permission-mode <mode>` | Always given, `default` unless the panel chose another ([below](#permission-mode-and-model)): without it a `-p` run may start in auto mode, and no approval would reach the panel |
-| `--model <alias>` | Only when the panel chose one; otherwise Claude Code's own default (the user's setting) applies |
+| `--permission-mode <mode>` `--model <alias>` `--effort <level>` | The panel's settings ([below](#permission-mode-model-and-effort)), always given, so the user's own Claude Code defaults don't decide them behind the panel |
 | `--permission-prompt-tool mcp__ezapply__permission_ask` | What would prompt in the terminal asks the panel instead ([cards](#cards-needsts)) |
 | `--disallowedTools AskUserQuestion` | Questions go through `ask_user`: Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen questions |
 | `--append-system-prompt <PANEL_PROMPT>` | Where its words go: the user reads them in a narrow panel and never sees a terminal; questions go on `ask_user` cards, commands are approved in the panel. The skills say the rest |
@@ -102,29 +101,36 @@ and a notice. Claude Code stopping mid-turn is a notice with the first line it w
 of a process is checked for the `ezapply` MCP server: anything but `connected` is an error notice ("Run `ezapply
 init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
 
-## Permission mode and model
-Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { permissionMode, model }`, kept in
-the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply.
+## Permission mode, model and effort
+Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { permissionMode, model, effort }`,
+kept in the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply. The defaults
+(`DEFAULT_AGENT_SETTINGS`) are Auto, Sonnet and medium effort.
 
 | Mode | The panel says | Does |
 |---|---|---|
 | `default` | Ask first | Claude asks on the panel before commands and edits the workspace's permission rules don't allow |
 | `acceptEdits` | Accept edits | File edits go ahead without asking; commands still ask |
-| `auto` | Auto | Claude Code decides what's safe to run without asking, and asks for the rest |
+| `auto` (default) | Auto | Claude Code's classifier decides what runs without asking, so few approval cards come up |
 | `plan` | Plan only | Claude reads and plans, and changes nothing |
 | `dontAsk` | Don't ask | Only what the rules allow runs; anything else is denied without asking |
 
-Models: `default` (no `--model`), or the aliases `fable`, `opus`, `sonnet`, `haiku` (the latest of each family).
+Models: the aliases `fable`, `opus`, `sonnet` (default), `haiku`, each the latest of its family (`sonnet` is
+Sonnet 5.5 with Claude Code 2.1). Effort: `low`, `medium` (default), `high`, `xhigh`, `max` (Claude Code's
+`--effort`). Each setting is read on its own, so one an older build kept that's no longer offered (`model:
+"default"`) falls back to its default alone.
 *Not offered:* `bypassPermissions`. Postings are untrusted text, and the approval cards are what stands between
 a prompt injected into one and a command run on the user's machine; Claude Code also refuses to switch a session to
 it unless it was launched with `--dangerously-skip-permissions`. A model's full name isn't offered either: the
 aliases follow new releases, and a fixed list can't be mistyped.
 
-**A change applies at once** (`setSettings`): it's written, and the running process gets Claude Code's control
-requests `{ subtype: "set_permission_mode", mode }` and `{ subtype: "set_model", model }` (`"default"` goes back to
-Claude Code's default), which Claude Code 2.1 takes mid-session, between tool calls. A refusal (`control_response`
+**A change applies to the running conversation** (`setSettings`), after it's written. The mode and model at once:
+the process gets Claude Code's control requests `{ subtype: "set_permission_mode", mode }` and `{ subtype:
+"set_model", model }`, which Claude Code 2.1 takes mid-session, between tool calls. A refusal (`control_response`
 with `subtype: "error"`) is a notice in that conversation ("Claude Code didn't switch the …"); the setting stays
-kept and applies when the conversation next starts. Processes start with the settings as flags.
+kept and applies when the conversation next starts. **Effort from the next message:** Claude Code has no
+`set_effort`, and its `apply_flag_settings { effortLevel }` is accepted but wasn't seen to change how much a turn
+thinks, so the process ends (at once when idle, after its turn while it works) and the next message resumes the
+session with the new `--effort`. Processes start with the settings as flags.
 
 **On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json`, `settings.json`
 and each session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest
@@ -161,7 +167,7 @@ own and no web page can reach it.
 | `panel.tab { tabId, url, title, site }` | What the tab is to the active posting: its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page |
 | `panel.send { key, text }` | The user's message; a posting's conversation makes its posting active first, since the skills work on the active one |
 | `panel.stop`, `panel.reset { key }` | Stop the turn; a new conversation for the posting |
-| `panel.settings { permissionMode?, model? }` | Change the agent's settings ([above](#permission-mode-and-model)); returns them. `panel.state` carries them as `agent.settings` |
+| `panel.settings { permissionMode?, model?, effort? }` | Change the agent's settings ([above](#permission-mode-model-and-effort)); returns them. `panel.state` carries them as `agent.settings` |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
 | `panel.activate { postingId }` | Make a posting active (the panel's picker) |
 | `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |

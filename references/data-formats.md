@@ -182,8 +182,9 @@ The side panel's conversations ([agent](components/agent.md)), written by the co
   resumes. `totalCostUsd` is the session's spend so far, Claude Code's estimate. Reset moves the session to
   `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
   empty.
-- `settings.json`: `{ schemaVersion: 1, permissionMode, model }`, the agent's settings chosen in the panel
-  ([agent](components/agent.md#permission-mode-and-model)). Missing or not parsing, the defaults (`default`, `default`).
+- `settings.json`: `{ schemaVersion: 1, permissionMode, model, effort }`, the agent's settings chosen in the panel
+  ([agent](components/agent.md#permission-mode-model-and-effort)). Each field missing or not offered any more takes
+  its default on its own (`auto`, `sonnet`, `medium`).
 - `<conversation>/<sessionId>.jsonl`: the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
   the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
   error, settled cards, each turn's end with its cost, notices. A line cut short by a crash is skipped.

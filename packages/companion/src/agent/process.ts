@@ -45,7 +45,7 @@ export interface AgentProcessOptions {
   sessionId: string;
   /** Continue an existing session rather than start one with this id. */
   resume: boolean;
-  /** The permission mode and model it starts with (the panel's settings). */
+  /** The permission mode, model and effort it starts with (the panel's settings). */
   settings?: AgentSettings;
   env?: NodeJS.ProcessEnv;
   onItem: (item: StreamItem) => void;
@@ -58,9 +58,8 @@ export interface AgentProcessOptions {
  *   turns while stdin is open, so a conversation is one process; `--verbose` is required for stream-json output.
  * - `--replay-user-messages`: each message is echoed when Claude takes it, so the panel can mark it taken (a
  *   message sent while a tool runs waits for the tool to end).
- * - `--permission-mode` always (`default` unless the panel chose another): without it a `-p` run may start in
- *   auto mode, and nothing would reach the panel. `--model` only when the panel chose one, so Claude Code's own
- *   default (the user's setting) applies otherwise.
+ * - `--permission-mode`, `--model` and `--effort` from the panel's settings, always, so the user's own Claude Code
+ *   defaults don't decide them behind the panel.
  * - `--permission-prompt-tool`: what would prompt in the terminal asks the panel instead.
  * - `--disallowedTools AskUserQuestion`: questions go through `ask_user`, which holds a whole step's questions
  *   and text answers; Claude Code's own tool holds four questions of four options.
@@ -81,7 +80,10 @@ export function agentArgs(
     "--replay-user-messages",
     "--permission-mode",
     settings.permissionMode,
-    ...(settings.model === "default" ? [] : ["--model", settings.model]),
+    "--model",
+    settings.model,
+    "--effort",
+    settings.effort,
     "--permission-prompt-tool",
     PERMISSION_TOOL,
     "--disallowedTools",
@@ -160,7 +162,7 @@ export class AgentProcess {
     return id;
   }
 
-  /** Switch the model mid-session (`set_model`; "default" goes back to Claude Code's default). Returns its id. */
+  /** Switch the model mid-session (`set_model`). Returns the request's id. */
   setModel(model: AgentModel): string {
     const id = `model-${++this.controlSeq}`;
     this.write({ type: "control_request", request_id: id, request: { subtype: "set_model", model } });

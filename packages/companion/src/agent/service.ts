@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
+  AgentEffort,
   type AgentEvent,
+  AgentModel,
+  AgentPermissionMode,
   AgentSettings,
   type AgentStatus,
   DEFAULT_AGENT_SETTINGS,
@@ -37,7 +40,6 @@ const ConversationsFile = z.object({
 });
 type ConversationsFile = z.infer<typeof ConversationsFile>;
 type Conversation = z.infer<typeof Conversation>;
-const SettingsFile = AgentSettings.partial().extend({ schemaVersion: z.literal(1) });
 
 /** What the panel shows about the agent. */
 export interface AgentState {
@@ -71,6 +73,8 @@ interface Live {
   stopping: boolean;
   /** Settings switches sent and not yet answered: what each was, for a notice if Claude Code refuses it. */
   switching: Map<string, string>;
+  /** The effort changed while it worked: end the process after this turn, so the next message starts it anew. */
+  restartAfterTurn: boolean;
 }
 
 /**
@@ -232,18 +236,28 @@ export class AgentService {
     return (await this.readFile()).conversations[key]?.totalCostUsd;
   }
 
-  /** The permission mode and model conversations run with (`agent/settings.json`, else the defaults). */
+  /**
+   * The permission mode, model and effort conversations run with (`agent/settings.json`). Each is read on its own:
+   * one missing or no longer offered (an older build's `model: "default"`) falls back to its default alone.
+   */
   async settings(): Promise<AgentSettings> {
     if (this.current) return this.current;
     const raw = await readJson(this.settingsPath()).catch(() => null);
-    const parsed = SettingsFile.safeParse(raw);
-    this.current = { ...DEFAULT_AGENT_SETTINGS, ...(parsed.success ? stripVersion(parsed.data) : {}) };
+    const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const d = DEFAULT_AGENT_SETTINGS;
+    this.current = {
+      permissionMode: AgentPermissionMode.catch(d.permissionMode).parse(o.permissionMode),
+      model: AgentModel.catch(d.model).parse(o.model),
+      effort: AgentEffort.catch(d.effort).parse(o.effort),
+    };
     return this.current;
   }
 
   /**
-   * Change the settings: kept for every conversation from now on, and switched in the running process at once
-   * (Claude Code takes a mode or model change mid-session, between tool calls). A refusal comes back as a notice.
+   * Change the settings: kept for every conversation from now on. The mode and model are switched in the running
+   * process at once (Claude Code takes them mid-session, between tool calls); a refusal comes back as a notice.
+   * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, else after its turn) and
+   * the next message resumes the session with the new `--effort`.
    */
   async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
     const before = await this.settings();
@@ -255,6 +269,10 @@ export class AgentService {
       if (next.permissionMode !== before.permissionMode)
         l.switching.set(l.process.setPermissionMode(next.permissionMode), `permission mode to ${next.permissionMode}`);
       if (next.model !== before.model) l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
+      if (next.effort !== before.effort) {
+        if (l.busy) l.restartAfterTurn = true;
+        else await this.closeLive();
+      }
     }
     this.opts.log.info({ ...next }, "agent: settings changed");
     this.stateChanged();
@@ -285,6 +303,7 @@ export class AgentService {
       mcpChecked: false,
       stopping: false,
       switching: new Map(),
+      restartAfterTurn: false,
     };
     live.process = new AgentProcess({
       claude,
@@ -342,6 +361,11 @@ export class AgentService {
         if (event.totalCostUsd !== undefined) {
           const cost = event.totalCostUsd;
           void this.updateFile((f) => withCost(f, l.key, l.sessionId, cost));
+        }
+        if (l.restartAfterTurn && !l.busy && this.live === l) {
+          l.restartAfterTurn = false;
+          void this.closeLive();
+          return;
         }
         this.stateChanged();
         return;
@@ -480,10 +504,6 @@ function withCost(f: ConversationsFile, key: string, sessionId: string, cost: nu
   const c = f.conversations[key];
   if (!c || c.sessionId !== sessionId) return f;
   return { ...f, conversations: { ...f.conversations, [key]: { ...c, totalCostUsd: cost } } };
-}
-
-function stripVersion({ schemaVersion: _, ...rest }: z.infer<typeof SettingsFile>): Partial<AgentSettings> {
-  return rest;
 }
 
 /** A posting id (a plain folder name) or the general conversation. */

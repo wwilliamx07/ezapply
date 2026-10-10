@@ -151,10 +151,11 @@ describe("the side panel over the bridge", () => {
     const state = await peer.request("panel.state", {});
     expect(state).toMatchObject({ agent: { status: "idle" }, activePostingId: id, cards: [] });
     expect(state.postings[0]).toMatchObject({ id, site: "workday", active: true });
-    expect(state.agent.settings).toEqual({ permissionMode: "default", model: "default" });
+    expect(state.agent.settings).toEqual({ permissionMode: "auto", model: "sonnet", effort: "medium" });
     expect(await peer.request("panel.settings", { model: "opus" })).toEqual({
-      permissionMode: "default",
+      permissionMode: "auto",
       model: "opus",
+      effort: "medium",
     });
     expect((await peer.request("panel.state", {})).agent.settings.model).toBe("opus");
     await expect(peer.request("panel.settings", { permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
