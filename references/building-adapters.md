@@ -95,7 +95,8 @@ real run.
   the path for one job (a locale, the application's own path). `tenant` and `job` tie a posting to its application
   and a tab to its posting ([which posting](mcp-tools.md#forms)), so read them from the application's URL as well
   as the posting's. `hostPageJob` if companies' careers pages name the site's jobs in their own URLs (Greenhouse's
-  `?gh_jid=`).
+  `?gh_jid=`)). `sameJob` if the application's job id differs from the one the posting shows (Phenom's
+  `jobSeqNo` embeds the requisition): without it the tab is refused as another job's.
 - **Signature:** the provider's own markup on every page of the site (its hooks, class names, script host), never a
   link to it or its embed script, which an employer's careers page has too.
 - **Waits:** `STANDARD_WAITS` unless the site needs longer ones; say why beside each.

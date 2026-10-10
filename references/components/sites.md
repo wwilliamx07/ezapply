@@ -160,6 +160,16 @@ generic to count. A posting captured on the job page is tied to its application 
 on any step is the same posting. Tenant: the careers host, on any of its pages. Job: `jobSeqNo`, lowercased, which
 only the apply pages name (the job page's own `…/job/<id>/` is another id).
 
+**One job, two ids.** `jobSeqNo` embeds the requisition the job page and the application show
+(`EXAMGLOBAL1000001EXTERNALENGLOBAL` holds `1000001`, `GLOBA0001R0000000001EXTERNALENCA` holds `R-0000000001`), so
+Phenom's registry entry has its own `sameJob` (`phenomSameJob`): the two are one job when one holds the other's
+letters and digits, the shorter has a digit and four characters, and a digit at either end doesn't run on into a
+digit of the longer. Verified against a live tenant, where it mattered twice: a job page lists similar jobs with
+their own Apply links, so the capture found several applications and, comparing the posting's `reqId` exactly,
+chose none; then the apply tab's `jobSeqNo` was compared with that `reqId` and the tab refused as another job's
+(`postingMismatch`) until the user bound it. The rule is Phenom's alone: on other sites a loose comparison could
+take `jr123` for `r123`.
+
 **Steps.** A step bar of `li[atm-id]`, the current one `aria-current="step"`; seen live: `personalInformation`
 (My information), `workAndEducation` (My experience), `jobSpecificQuestions` (Application questions),
 `applicationQuestionnaire` (Additional application questions), `applicantAcknowledgment` (Terms & Conditions),
@@ -186,9 +196,23 @@ driver goes by the control:
 - native selects: the select driver, `settled`. Phenom's lists put the old value back at once and take the new one a
   moment later (seen live), so the driver waits for the read-back rather than calling React's handler, which by then
   reads the old value;
-- a native `date` input (the questionnaire's start date), checkboxes, text;
+- a native `date` input (the questionnaire's start date), a lone checkbox (an agreement, "I currently work here"),
+  text;
+- a question with options, radios or several checkboxes: one field, `radioDriver` or `checkboxGroupDriver`, whose
+  container is the options' own box (react-jsonschema-form's `.field-radio-group` or `.checkboxes`, else a
+  `role=radiogroup` or `role=group`, else the `.form-group` holding them) and whose label is the question (the
+  box's `label[for]`, else the group's label that wraps no option, else the fieldset's legend). Its key is the box's
+  id when that reads as a name, else the question's slug. Why: read one input at a time, each option was a field
+  whose container was the whole `.form-group`, so the checkbox driver read and ticked the first option whatever was
+  asked (on a live tenant, an education question answered "High School Diploma/GED" ticked "Doctorate", and every
+  option read as ticked), radios fell to the text driver (required text fields labelled "Yes" and "No"), and the
+  question was never read. No saved Phenom page has such a question: the markup is react-jsonschema-form's, tested
+  on it added to step 3, plus radios straight in the group with ids ending in their option, as the live step 1 read;
 - the resume, above the form on every step (`.resume-section`: a hidden file input behind "Upload resume", the file's
-  name in `.has-resume a.downloadFile`), and "Additional attachments" on step 2.
+  name from its download link `.has-resume a.downloadFile`), and "Additional attachments" on step 2. The name is the
+  link's `download` attribute, else the `fileName` in its URL, else its `aria-label` after "Download", else its
+  text: a live tenant's link read only "Download", so every upload looked missing (though the page had parsed the
+  resume into the fields) and the checklist offered "Download" for removal.
 
 **Ids and sections.** A row's fields are a section of their own, named from the list's description ("Work
 experience :", else its "Add …" legend) and the row's place: `work-experience-1`, `education-1`, `languages-1`,

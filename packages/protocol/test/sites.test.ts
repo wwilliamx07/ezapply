@@ -65,6 +65,22 @@ describe("Phenom", () => {
     expect([phenom?.tenant(posting), phenom?.job(posting)]).toEqual(["jobs.globex.example", undefined]);
     expect(phenom?.tenant("http://jobs.globex.example/")).toBeUndefined();
   });
+
+  it("takes a jobSeqNo and the requisition it embeds for one job, and only with the site named", async () => {
+    const { sameJob } = await import("../src/index.js");
+    const seq = "exampglobal1000001externalenglobal";
+    expect(sameJob(seq, "1000001", "phenom")).toBe(true);
+    expect(sameJob("globa0001r0000000001externalenca", "R-0000000001", "phenom")).toBe(true);
+    expect(sameJob(seq, "exampglobal1000002externalenglobal", "phenom")).toBe(false);
+    // Digits running on are another number; too short or no digit says nothing.
+    expect(sameJob("exampglobal11000001externalenglobal", "1000001", "phenom")).toBe(false);
+    expect(sameJob("exampglobal10000012externalenglobal", "1000001", "phenom")).toBe(false);
+    expect(sameJob(seq, "001", "phenom")).toBe(false);
+    expect(sameJob(seq, "global", "phenom")).toBe(false);
+    // Other sites keep the strict rule.
+    expect(sameJob(seq, "1000001")).toBe(false);
+    expect(sameJob(seq, "1000001", "workday")).toBe(false);
+  });
 });
 
 describe("Dayforce", () => {

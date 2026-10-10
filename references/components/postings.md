@@ -71,7 +71,7 @@ Which application a posting is tied to, so the form tools can tell its tab from 
   (`applicationFromUrl`, `from: "posting-url"`); nothing is stored.
 - **Otherwise the captured page** (`findApplication` over the body's `href`s, resolved against the page):
   links whose site reads a job from them. One distinct site, tenant and job → it (`apply-link`). Several → the one
-  matching `reqId`, else none: a careers page often lists other jobs. Links without a job (Workday's `…/login`)
+  matching `reqId` (`sameJob` with the link's site, so a Phenom `jobSeqNo` matches the requisition it embeds), else none: a careers page often lists other jobs. Links without a job (Workday's `…/login`)
   never count.
 - **Else a job the page's URL names for an embedded board** (`hostPageJob`: Greenhouse's `gh_jid` on a
   company's careers page), `host-page-job`, with no tenant.

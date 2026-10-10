@@ -6,7 +6,14 @@ import type { AddButtonSpot, FieldSpot, RowSpot, SiteDefinition, WidgetDriver } 
 import { comboboxDriver } from "../../widgets/combobox.js";
 import { monthPickerDriver } from "../../widgets/datepicker.js";
 import { fileDriver } from "../../widgets/file.js";
-import { checkboxDriver, dateInputDriver, selectDriver, textDriver } from "../../widgets/native.js";
+import {
+  checkboxDriver,
+  checkboxGroupDriver,
+  dateInputDriver,
+  radioDriver,
+  selectDriver,
+  textDriver,
+} from "../../widgets/native.js";
 
 /**
  * Phenom People's apply flow, on an employer's own careers domain (`…/apply?jobSeqNo=…&step=<n>&stepname=<id>`):
@@ -40,7 +47,8 @@ const SEL = {
 const WIDGETS = {
   resume: fileDriver({
     input: (c) => c.querySelector<HTMLInputElement>(".resume-upload-wrapper input[type='file']"),
-    names: (c) => [...c.querySelectorAll<HTMLElement>(".has-resume a.downloadFile")].map(text).filter(Boolean),
+    names: (c) =>
+      [...c.querySelectorAll<HTMLAnchorElement>(".has-resume a.downloadFile")].map(fileName).filter(Boolean),
   }),
   attachments: fileDriver({
     names: (c) => [...c.querySelectorAll<HTMLElement>(".additional-attachment-list li a")].map(text).filter(Boolean),
@@ -50,6 +58,8 @@ const WIDGETS = {
   school: comboboxDriver(),
   select: selectDriver({ settled: true }),
   checkbox: checkboxDriver(),
+  checkboxes: checkboxGroupDriver(),
+  radio: radioDriver(),
   textarea: textDriver("textarea"),
   text: textDriver("text"),
 };
@@ -70,6 +80,28 @@ const HINTS: Record<string, string> = {
   phonenumber: "contact.phone.number",
   devicetype: "contact.phone.type",
 };
+
+/**
+ * An uploaded resume's name, from its download link: the link's `download` attribute, else the `fileName` in its
+ * URL, else its `aria-label` ("Download resume.pdf"), else its text. Some tenants show only "Download" as the
+ * link's text, which read as the file's name made every upload look missing (the page had parsed the resume into
+ * the fields) and offered "Download" for removal.
+ */
+function fileName(a: HTMLAnchorElement): string {
+  const attr = a.getAttribute("download")?.trim();
+  if (attr) return attr;
+  try {
+    const param = new URL(a.getAttribute("href") ?? "", a.ownerDocument.baseURI).searchParams.get("fileName")?.trim();
+    if (param) return param;
+  } catch {
+    // No URL: the label or the text.
+  }
+  const label = a
+    .getAttribute("aria-label")
+    ?.replace(/^\s*download\b\s*/i, "")
+    .trim();
+  return label || text(a);
+}
 
 /** A heading without its trailing colon, and an array's "Add …" legend as the list's name. */
 const title = (s: string) =>
@@ -129,6 +161,34 @@ function driverOf(control: Element): WidgetDriver {
   return WIDGETS.text;
 }
 
+/**
+ * The options of one question, for a radio or checkbox: react-jsonschema-form puts them in `.field-radio-group` or
+ * `.checkboxes` (id: the field's path) under the question's `label[for]`, each option a wrapping label. Else the
+ * `.form-group` holding them all. A lone checkbox (an agreement, "I currently work here") is no group. Why: read one
+ * by one, every option was a field of its own whose container was the whole `.form-group`, so the checkbox driver
+ * read and ticked the first option whichever was asked for (a live tenant's education question got "Doctorate", and
+ * every option read as ticked), radios fell to the text driver ("Yes" and "No" as text fields), and the question
+ * itself was never read.
+ */
+function choiceGroup(control: HTMLElement, group: HTMLElement): HTMLElement | undefined {
+  const type = control.getAttribute("type");
+  if (type !== "radio" && type !== "checkbox") return undefined;
+  const own = control.closest<HTMLElement>(".field-radio-group, .checkboxes, [role='radiogroup'], [role='group']");
+  const box = own && group.contains(own) ? own : group;
+  return type === "radio" || box.querySelectorAll("input[type='checkbox']").length > 1 ? box : undefined;
+}
+
+/** A group's question: its `label[for]`, the group's own label (one around no option), or its fieldset's legend. */
+function groupPrompt(box: HTMLElement, group: HTMLElement): string {
+  const byFor = box.id ? promptOf(box) : "";
+  if (byFor) return byFor;
+  const label = [...group.querySelectorAll("label")].find(
+    (l) => !l.querySelector("input") && (box === group || !box.contains(l)),
+  );
+  const legend = box.closest("fieldset")?.querySelector(":scope > legend");
+  return cleanLabel(text(label) || text(legend)).replace(/\s*[✱*]\s*$/, "");
+}
+
 function currentStep(doc: Document): { li: Element; index: number; total: number } | undefined {
   const seen = new Map<string, Element>();
   for (const li of doc.querySelectorAll(SEL.steps)) {
@@ -150,6 +210,8 @@ function fields(doc: Document): FieldSpot[] {
   if (!form) return [];
   const step = stepTitle(doc);
   const out: FieldSpot[] = [];
+  // Each question with options is one field, however many inputs it has.
+  const grouped = new Set<HTMLElement>();
   // The resume, above the form on step 1.
   const resume = doc.querySelector<HTMLElement>(`${SEL.box} ${SEL.resume}`);
   if (resume && WIDGETS.resume.is(resume)) {
@@ -180,6 +242,29 @@ function fields(doc: Document): FieldSpot[] {
     }
     const group = control.closest<HTMLElement>(SEL.group);
     if (!group || !isVisible(group)) continue;
+    const choices = choiceGroup(control, group);
+    if (choices) {
+      if (grouped.has(choices)) continue;
+      grouped.add(choices);
+      const inputs = [...choices.querySelectorAll<HTMLInputElement>("input[type='radio'], input[type='checkbox']")];
+      const prompt = groupPrompt(choices, group) || choices.id || inputs[0]?.name || "";
+      const section = sectionOf(choices, step);
+      const error =
+        text(choices.id ? doc.getElementById(`${choices.id}-errorMsg`) : null) ||
+        text(group.querySelector(".error-detail li"));
+      out.push({
+        container: choices,
+        driver: control.getAttribute("type") === "radio" ? WIDGETS.radio : WIDGETS.checkboxes,
+        key: idKey(choices.id) ?? (slug(prompt).slice(0, 40) || slug(inputs[0]?.name ?? "choice")),
+        label: prompt,
+        section,
+        required:
+          inputs.some((i) => i.hasAttribute("required") || i.getAttribute("aria-required") === "true") ||
+          Boolean(group.querySelector(":scope > label .required, label[for] .required")),
+        ...(error ? { error: error.slice(0, 300) } : {}),
+      });
+      continue;
+    }
     const driver = driverOf(control);
     // Drivers that look inside their container need one holding just this control; the others take the control.
     const container = [WIDGETS.checkbox, WIDGETS.month, WIDGETS.school, WIDGETS.date].includes(driver)

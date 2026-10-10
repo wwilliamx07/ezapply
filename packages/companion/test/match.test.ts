@@ -68,6 +68,16 @@ describe("finding a posting's application from its capture", () => {
     expect(matchPosting(facts, { url: step })).toEqual({ verdict: "same", by: ["job"] });
   });
 
+  it("picks a Phenom posting's own Apply among similar jobs' by the requisition its jobSeqNo embeds", () => {
+    const posting = "https://careers.example.com/global/en/job/1000001/Software-Developer-Co-op";
+    const apply = (req: string) =>
+      `https://careers.example.com/global/en/hvhapply?jobSeqNo=EXAMGLOBAL${req}EXTERNALENGLOBAL`;
+    const html = [apply("1000001"), apply("1000036"), apply("1000208")].map((h) => `<a href="${h}">Apply</a>`).join("");
+    const app = findApplication({ html, url: posting, reqId: "1000001", at: AT });
+    expect(app?.job).toBe("examglobal1000001externalenglobal");
+    expect(findApplication({ html, url: posting, reqId: "1000002", at: AT })).toBeUndefined();
+  });
+
   it("finds nothing on a page that leads to no form site (a school's job board)", () => {
     const html = `<a href="https://example-csm.symplicity.com/students/app/jobs">Back</a><a href="mailto:x@y.z">Mail</a>`;
     expect(
@@ -133,6 +143,13 @@ describe("which posting a tab belongs to", () => {
     const apply = "https://careers.example.com/global/en/apply?jobSeqNo=EXAMA0001R1EXTERNALENGLOBAL&step=1";
     const q = facts({ site: "phenom", tenant: "careers.example.com", job: "exama0001r1externalenglobal" });
     expect(matchPosting(q, { url: apply, site: "phenom" })).toEqual({ verdict: "same", by: ["job"] });
+    // A posting that knows only its requisition (no Apply link captured) matches the jobSeqNo that embeds it.
+    const seq = "https://careers.example.com/global/en/apply?jobSeqNo=EXAMGLOBAL1000001EXTERNALENGLOBAL&step=1";
+    const byReq = postingFacts(meta({ url: page, reqId: "1000001" }), undefined);
+    expect(byReq.job).toBe("1000001");
+    expect(matchPosting(byReq, { url: seq, site: "phenom" })).toEqual({ verdict: "same", by: ["job"] });
+    const otherReq = postingFacts(meta({ url: page, reqId: "1000002" }), undefined);
+    expect(matchPosting(otherReq, { url: seq, site: "phenom" })).toEqual({ verdict: "other", by: ["job"] });
   });
 
   it("refuses a tab on another site than the posting's application", () => {

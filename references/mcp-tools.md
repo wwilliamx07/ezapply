@@ -137,7 +137,8 @@ context was compacted may have lost them: the notes are short, and the generic s
   - **The posting's side:** its `application` (`meta.json`): its own URL when that's a form site's page, else
     found in its capture (`postings/application.ts`: the page's link to the application, or an embedded board's
     job in its URL), else bound later. Its job is the application's, else its URL's, else a `reqId` without
-    spaces. `sameJob` takes Workday's `-1` posting suffix as the same job.
+    spaces. `sameJob` takes Workday's `-1` posting suffix as the same job, and on a site with its own rule (the tab's
+    site's registry entry) that rule too: a Phenom `jobSeqNo` and the requisition it embeds are one job.
   - **The tab's side:** its site as the extension found it on the page (else its URL's), whose registry entry
     reads the tenant and job from the tab's URL (`tabSite`): a Phenom job page, whose URL names no site, is still
     Phenom's, with the careers host as tenant.

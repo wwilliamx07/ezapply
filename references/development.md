@@ -181,6 +181,12 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   time with debug on and off. So the next live run goes with debug **off** first, and its timings must match the
   earlier runs' before the trace is trusted; a run slower than them points at the trace's calls before the
   Delete. Only then a run with debug on.
+  Phenom has two changes since its first live run, against the rule, because that run couldn't go on without both:
+  how the resume's name is read (from the download link's `download` attribute or URL, not its text), and a
+  question's radios or checkboxes read and filled as one field ([Phenom](components/sites.md#phenom-sitesphenom)).
+  Neither adds a wait: the first is extraction only, and the second uses the shared radio and checkbox-group
+  drivers in place of the checkbox and text drivers, so a slower run points at those drivers' `setChecked`. Matching
+  a `jobSeqNo` to the requisition it embeds is the companion's, not the adapter's.
 
 ## Debugging a live run (debug mode)
 `ezapply debug on` before the run (in the user's workspace), `ezapply debug report` after it, then open the

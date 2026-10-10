@@ -39,7 +39,9 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
 2. **Folders**: `WORKSPACE_DIRS` (`profile`, `templates/resume`, `templates/cover`, `library`, `knowledge`,
    `postings`, `repo-cache`, `.claude/skills`).
 3. **`ezapply.config.json`** if missing, then config migrations for untouched old defaults (e.g. the 0.1
-   `latexmk` engine default → `auto`). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
+   `latexmk` engine default → `auto`), and renamed settings: debug mode's old switch `debug.autofill` becomes
+   `debug.enabled` (the schema drops keys it doesn't know, so the old one left in place turned debug mode off
+   silently; a `debug.enabled` already set wins). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
    commented out at its default, so a default changed in a later build still applies to an untouched line.
 4. **`EZAPPLY.md`** (managed, always rewritten) from `templates/workspace/EZAPPLY.md`, with `{{EZAPPLY}}`
    replaced by `node "<absolute path of dist/main.js>"` so Claude can run the commands.

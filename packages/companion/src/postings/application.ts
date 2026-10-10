@@ -50,7 +50,7 @@ export function findApplication(input: {
   if (all.length === 1) return all[0];
   const req = input.reqId?.trim().toLowerCase();
   if (all.length > 1 && req) {
-    const matching = all.filter((a) => a.job && sameJob(a.job, req));
+    const matching = all.filter((a) => a.job && sameJob(a.job, req, a.site));
     if (matching.length === 1) return matching[0];
   }
   if (all.length > 0) return undefined;

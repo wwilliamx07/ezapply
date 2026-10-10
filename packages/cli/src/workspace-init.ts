@@ -176,14 +176,28 @@ async function installDefaultCoverTemplate(dest: string, report: InitReport): Pr
 
 /** Upgrade untouched defaults written by older versions. Anything the user changed is left alone. */
 async function migrateWorkspaceConfig(path: string, report: InitReport): Promise<void> {
-  const raw = JSON.parse(await readFile(path, "utf8")) as { tex?: Record<string, unknown> };
+  const raw = JSON.parse(await readFile(path, "utf8")) as {
+    tex?: Record<string, unknown>;
+    debug?: Record<string, unknown>;
+  };
+  const changes: string[] = [];
   const tex = raw.tex;
   // 0.1 defaulted to latexmk, which fails on MiKTeX without Perl; "auto" falls back to xelatex.
   if (tex && tex.engine === "latexmk" && tex.timeoutSeconds === undefined) {
     tex.engine = "auto";
-    await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, "utf8");
-    report.updated.push(`${path} (tex.engine: latexmk → auto)`);
+    changes.push("tex.engine: latexmk → auto");
   }
+  // Debug mode's switch was debug.autofill until it became debug.enabled. The config schema drops keys it
+  // doesn't know, so an old switch left in place turns debug mode off without a word.
+  const debug = raw.debug;
+  if (debug && "autofill" in debug) {
+    if (debug.enabled === undefined && typeof debug.autofill === "boolean") debug.enabled = debug.autofill;
+    delete debug.autofill;
+    changes.push(`debug.autofill → debug.enabled (${debug.enabled === true ? "on" : "off"})`);
+  }
+  if (changes.length === 0) return;
+  await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, "utf8");
+  report.updated.push(`${path} (${changes.join("; ")})`);
 }
 
 function union(a: string[] | undefined, b: string[]): string[] {

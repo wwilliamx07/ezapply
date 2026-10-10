@@ -69,8 +69,21 @@ As of 2026-10-06.
   posting's request for every site when already granted, the access window asking for every site, a capture
   sending its `site`, and a Phenom apply flow under `/global/en/` filled through the form tools.
 - **Phenom** (2026-10-04): built from saved steps 1 to 3 of a live flow and tested on them in jsdom; its drivers'
-  behaviour (the month picker, the late selects) was seen live but is tested on minimal models of it. The
-  definition hasn't run on a live page. Check in one real application, with debug mode on: the job and apply
+  behaviour (the month picker, the late selects) was seen live but is tested on minimal models of it. One live run
+  so far, with debug mode off (its old `debug.autofill` switch was being ignored; `init` now moves it), stopped on
+  step 1: the job page read as a posting with Apply, step 1 read, and a text field and two lists filled. Three things
+  went wrong. Two are fixed and tested, not yet run live again: the apply tab was refused as another job's, and the
+  capture tied no application, because a `jobSeqNo` was compared exactly with the requisition it embeds ([one job,
+  two ids](components/sites.md#phenom-sitesphenom)); and the uploaded resume read back as "Download" (the link's
+  text), so the upload looked missing though the page had parsed it. The third was the same fault as on
+  step 3, where the run went on: a question's options were read one input at a time, so radios became text fields
+  labelled "Yes" and "No", a checkbox question became one checkbox per option, ticking one ticked the first
+  ("Doctorate"), and the questions themselves weren't read. Now each question is one radio or checkbox-group field
+  ([fields](components/sites.md#phenom-sitesphenom)), tested on react-jsonschema-form's markup, not on a saved
+  Phenom page: save step 1 and the questionnaire with debug on. Also unexplained: step 2's degree list read back
+  the degree filled, then read empty when the run came back to the step. Also
+  unknown: whether uploading a resume of the same name over one already there reads as done (the file driver waits
+  for one more file of that name, and Phenom's resume replaces). Check in one real application, with debug mode on: the job and apply
   pages listed `phenom` in `browser_status`, the resume uploaded first and the parsed fields corrected, the month picker and the
   school typeahead, adding and removing a row, Next taking up to 30 s, and steps 4 to 6 (additional questions,
   terms, review), whose markup isn't known: save each of them if anything there is missed.

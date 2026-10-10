@@ -48,3 +48,25 @@ export function phenomJob(url: string): string | undefined {
 export function phenomCanonicalPath(pathname: string): string {
   return pathname.replace(/\/hvhapply\/?$/i, "/apply");
 }
+
+/**
+ * Whether two job ids name one job on a Phenom site: `jobSeqNo` embeds the requisition the posting page and the
+ * application show (`EXAMGLOBAL1000001EXTERNALENGLOBAL` holds `1000001`, `GLOBA0001R0000000001EXTERNALENCA` holds
+ * `R-0000000001`), and a posting captured off its apply page knows only that requisition. Compared on letters and
+ * digits; the shorter must hold a digit and four characters, and a digit at either end of it must not run on into
+ * a digit of the longer (`1000001` is not in `…11000001…`).
+ */
+export function phenomSameJob(a: string, b: string): boolean {
+  const x = a.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const y = b.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (x === y) return x.length > 0;
+  const [short, long] = x.length < y.length ? [x, y] : [y, x];
+  if (short.length < 4 || !/\d/.test(short)) return false;
+  const digit = (c: string | undefined) => c !== undefined && c >= "0" && c <= "9";
+  for (let i = long.indexOf(short); i >= 0; i = long.indexOf(short, i + 1)) {
+    const before = digit(short[0]) && digit(long[i - 1]);
+    const after = digit(short[short.length - 1]) && digit(long[i + short.length]);
+    if (!before && !after) return true;
+  }
+  return false;
+}

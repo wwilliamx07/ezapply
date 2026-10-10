@@ -83,13 +83,13 @@ export function matchPosting(p: PostingFacts, tab: TabFacts, binding?: Binding):
   const other = (by: Evidence): PostingMatch => ({ verdict: "other", by: [by] });
 
   if (p.site && t.site && p.site !== t.site && (p.tenant || p.job)) return other("site");
-  if (p.job && t.job) return sameJob(p.job, t.job) ? same("job") : other("job");
+  if (p.job && t.job) return sameJob(p.job, t.job, t.site) ? same("job") : other("job");
   // A binding holds while the tab stays on the employer it was bound on.
   if (binding && (!binding.tenant || !t.tenant || binding.tenant === t.tenant)) {
     return binding.postingId === p.id ? same("binding") : other("binding");
   }
   const pageReq = tab.reqId?.trim().toLowerCase();
-  if (p.job && pageReq) return sameJob(p.job, pageReq) ? same("page-reqid") : other("page-reqid");
+  if (p.job && pageReq) return sameJob(p.job, pageReq, t.site ?? p.site) ? same("page-reqid") : other("page-reqid");
   if (p.tenant && t.tenant) return p.tenant === t.tenant ? same("tenant") : other("tenant");
   if (!p.job && p.role && tab.title) {
     const titles = compareTitles(p.role, tab.title);

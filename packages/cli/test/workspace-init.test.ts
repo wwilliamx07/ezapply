@@ -154,3 +154,20 @@ describe("autofill-timing.yaml", () => {
     expect(await readFile(path, "utf8")).toBe("scale: 0.5\n");
   });
 });
+
+describe("ezapply.config.json", () => {
+  it("carries debug mode's old switch (debug.autofill) over to debug.enabled, keeping the rest", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, "ezapply.config.json");
+    const cur = JSON.parse(await readFile(path, "utf8"));
+    await writeFile(path, JSON.stringify({ ...cur, debug: { autofill: true, markup: "always" } }));
+    const report = await initWorkspace(config);
+    expect(report.updated).toContain(`${path} (debug.autofill → debug.enabled (on))`);
+    expect(JSON.parse(await readFile(path, "utf8")).debug).toEqual({ enabled: true, markup: "always" });
+    // Once moved, nothing more to do; a debug.enabled already set wins over a stale old switch.
+    expect((await initWorkspace(config)).updated).not.toContain(expect.stringContaining("debug.autofill"));
+    await writeFile(path, JSON.stringify({ ...cur, debug: { autofill: true, enabled: false } }));
+    await initWorkspace(config);
+    expect(JSON.parse(await readFile(path, "utf8")).debug).toEqual({ enabled: false });
+  });
+});

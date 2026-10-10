@@ -9,7 +9,7 @@ import { dayforceCanonicalPath, dayforceJob, dayforceTenant, isDayforceUrl } fro
 import { greenhouseHostPageJob, greenhouseJob, greenhouseTenant, isGreenhouseUrl } from "./greenhouse.js";
 import { isLeverUrl, leverCanonicalPath, leverJob, leverTenant } from "./lever.js";
 import { isOracleUrl, oracleJob, oracleJobPath, oracleTenant } from "./oracle.js";
-import { isPhenomUrl, phenomCanonicalPath, phenomJob, phenomTenant } from "./phenom.js";
+import { isPhenomUrl, phenomCanonicalPath, phenomJob, phenomSameJob, phenomTenant } from "./phenom.js";
 import { isSuccessFactorsUrl, successFactorsJob, successFactorsTenant } from "./successfactors.js";
 import { STANDARD_WAITS, type Timing } from "./timing.js";
 import { isWorkdayUrl, workdayCanonicalPath, workdayJob, workdayTenant } from "./workday.js";
@@ -59,6 +59,11 @@ export interface SiteInfo {
    * site's board (Greenhouse's `?gh_jid=`). Lets a posting captured there be tied to its application.
    */
   hostPageJob?(url: string): string | undefined;
+  /**
+   * Whether two of this site's job ids name one job, where its ids differ by page beyond Workday's posting suffix
+   * (Phenom's `jobSeqNo` embeds the requisition the posting shows). Used through `sameJob` with the site.
+   */
+  sameJob?(a: string, b: string): boolean;
   /** A posting's identifying path, when the site varies it for the same job (a locale segment). */
   canonicalPath?(pathname: string): string;
   /** The site's waits: how long its adapter waits for each thing (see timing.ts). */
@@ -133,6 +138,7 @@ export const SITES: readonly SiteInfo[] = [
     isUrl: isPhenomUrl,
     tenant: phenomTenant,
     job: phenomJob,
+    sameJob: phenomSameJob,
     canonicalPath: phenomCanonicalPath,
     // Its Next saves the step to the employer's system before the next one shows: 5 to 15 s live.
     waits: { ...STANDARD_WAITS, stepMs: 30_000 },

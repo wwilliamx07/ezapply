@@ -206,6 +206,18 @@ describe("live Phenom apply flow (an employer's careers domain, …/apply?jobSeq
     expect(s.backLabel).toBeUndefined();
     const f = fieldsOf(s);
     expect(f["my-information.resume"]).toMatchObject({ kind: "file", currentValue: ["test-resume.pdf"] });
+    // A tenant whose download link reads only "Download": the name comes from the link, not its text.
+    const link = document.querySelector<HTMLAnchorElement>(".has-resume a.downloadFile");
+    if (!link) throw new Error("no resume link in the fixture");
+    link.textContent = "Download";
+    const read = () => fieldsOf(extractPage(phenom, document, URL).schema)["my-information.resume"]?.currentValue;
+    expect(read()).toEqual(["test-resume.pdf"]);
+    link.removeAttribute("download");
+    expect(read()).toEqual(["test-resume.pdf"]);
+    link.setAttribute("href", "#");
+    expect(read()).toEqual(["test-resume.pdf"]);
+    link.removeAttribute("aria-label");
+    expect(read()).toEqual(["Download"]);
     expect(f["my-information.firstName"]).toMatchObject({
       kind: "text",
       label: "First Name",
@@ -274,6 +286,62 @@ describe("live Phenom apply flow (an employer's careers domain, …/apply?jobSeq
       kind: "date",
       required: true,
     });
+  });
+
+  it("reads a question's options as one field under its question, and ticks only the option asked for", async () => {
+    page("phenom-step3");
+    const q = "jsqData.Primary_External_Applicant_Questionnaire_Global";
+    const option = (type: string, id: string, name: string, label: string) =>
+      `<div class="${type}"><label><span><input type="${type}" id="${id}" name="${name}"><span>${label}</span></span></label></div>`;
+    // react-jsonschema-form's checkboxes and radios (markup assumed from the library; no Phenom page with them saved),
+    // and radios straight in the field's group, ids ending in their option, as a live step 1 showed.
+    const fieldset = document.getElementById(q);
+    if (!fieldset) throw new Error("no questionnaire in the fixture");
+    fieldset.insertAdjacentHTML(
+      "beforeend",
+      `<div class="row form-group field field-array">
+        <label class="control-label" for="${q}.x">Which have you completed?<span class="required">*</span></label>
+        <div class="checkboxes" id="${q}.x">${["Doctorate", "High School Diploma/GED", "Bachelor's Degree (BA/BS /etc)"]
+          .map((l, i) => option("checkbox", `${q}.x-${i}`, `${q}.x`, l))
+          .join("")}</div>
+      </div>
+      <div class="row form-group field field-string">
+        <label class="control-label" for="${q}.y">Are you over 18?<span class="required">*</span></label>
+        <div class="field-radio-group" id="${q}.y">${option("radio", `${q}.y-0`, `${q}.y`, "Yes")}${option("radio", `${q}.y-1`, `${q}.y`, "No")}</div>
+      </div>
+      <div class="row form-group field field-string">
+        <label class="control-label">Can we text you?</label>
+        ${option("radio", "cntryFields.sms.Yes", "sms", "Yes")}${option("radio", "cntryFields.sms.no", "sms", "No")}
+      </div>`,
+    );
+    const f = fieldsOf(extractPage(phenom, document, URL).schema);
+    expect(f["application-questions.which-have-you-completed"]).toMatchObject({
+      kind: "checkbox-group",
+      label: "Which have you completed?",
+      required: true,
+      options: ["Doctorate", "High School Diploma/GED", "Bachelor's Degree (BA/BS /etc)"],
+      currentValue: [],
+    });
+    expect(f["application-questions.are-you-over-18"]).toMatchObject({
+      kind: "radio",
+      label: "Are you over 18?",
+      options: ["Yes", "No"],
+    });
+    expect(f["application-questions.can-we-text-you"]).toMatchObject({ kind: "radio", options: ["Yes", "No"] });
+    expect(Object.keys(f).filter((k) => /doctorate|yes$|no$/i.test(k))).toEqual([]);
+
+    const adapter = createAdapter(phenom, document, () => URL);
+    const results = await adapter.fill([
+      { fieldId: "application-questions.which-have-you-completed", value: "High School Diploma/GED" },
+      { fieldId: "application-questions.are-you-over-18", value: "Yes" },
+    ]);
+    expect(results.map((r) => r.ok)).toEqual([true, true]);
+    const ticked = [...document.querySelectorAll<HTMLInputElement>(`[name="${q}.x"]`)].map((b) => b.checked);
+    expect(ticked).toEqual([false, true, false]);
+    expect(
+      fieldsOf(extractPage(phenom, document, URL).schema)["application-questions.which-have-you-completed"]
+        ?.currentValue,
+    ).toEqual(["High School Diploma/GED"]);
   });
 
   it("refuses Next on step 1 without a resume, rather than raise the page's blocking alert", async () => {

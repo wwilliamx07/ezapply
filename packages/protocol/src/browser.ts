@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SiteId } from "./postings.js";
-import { FORM_SITE_IDS, siteOfUrl } from "./sites.js";
+import { FORM_SITE_IDS, siteInfo, siteOfUrl } from "./sites.js";
 
 /**
  * Browsers the companion can open pages and files in. The extension reports which one it runs in, so what
@@ -80,10 +80,12 @@ export function siteJob(url: string): string | undefined {
 
 /**
  * Whether two job ids name the same job: equal, or one is the other with Workday's posting suffix (`jr1000001`
- * and `jr1000001-1`: the requisition, and its first posting).
+ * and `jr1000001-1`: the requisition, and its first posting), or by the site's own rule when `site` names one with
+ * one (`SiteInfo.sameJob`).
  */
-export function sameJob(a: string, b: string): boolean {
+export function sameJob(a: string, b: string, site?: string): boolean {
   const x = a.toLowerCase();
   const y = b.toLowerCase();
-  return x === y || x.startsWith(`${y}-`) || y.startsWith(`${x}-`);
+  if (x === y || x.startsWith(`${y}-`) || y.startsWith(`${x}-`)) return true;
+  return Boolean(site && siteInfo(site)?.sameJob?.(x, y));
 }

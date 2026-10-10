@@ -68,7 +68,9 @@ Every field has a default; a missing file means all defaults. `forms.focusBrowse
 call, so a change applies to the next one, and a bad value falls back to `"on"` instead of failing every form
 call. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
 markup debug mode saves: `"failures"` before each call and at every field that fails, `"always"` after each call
-too, `"none"` never (the adapter's trace is still recorded). On is the default because the window is usually in front during a fill anyway (the user is waiting on
+too, `"none"` never (the adapter's trace is still recorded). Builds before 2026-10-07 named the switch
+`debug.autofill`; `ezapply init` moves it to `debug.enabled`, since unknown keys are dropped and the old one alone
+leaves debug mode off. On is the default because the window is usually in front during a fill anyway (the user is waiting on
 it), and Workday's split dates weren't taken with the window behind another app; off keeps the terminal in front
 and its keyboard focus mid-fill ([the tab in front](mcp-tools.md#forms)). `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
