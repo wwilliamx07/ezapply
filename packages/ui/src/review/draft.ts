@@ -13,6 +13,8 @@ export interface DraftComment {
 export interface DocDraft {
   request: string;
   comments: DraftComment[];
+  /** The user pressed Approve. Asking for changes takes it back. */
+  approved?: boolean;
 }
 
 export type Drafts = Record<number, DocDraft>;
@@ -57,12 +59,22 @@ export function useDrafts(reviewId: string | null) {
   return { drafts, draftOf: (i: number) => drafts[i] ?? EMPTY, update, forget };
 }
 
-/** Whether a document's draft asks for changes (a request or a comment); otherwise it's approved as shown. */
+/** Whether a document's draft asks for changes (a request or a comment). */
 export function asksChanges(d: DocDraft): boolean {
   return !!d.request.trim() || d.comments.length > 0;
 }
 
-/** The answer the companion takes: each document's request and comments, by its index. */
+/** Where the user stands on a document: approved, changes asked for, or not decided yet. */
+export type Decision = "approved" | "changes" | "open";
+
+export function decisionOf(d: DocDraft): Decision {
+  return asksChanges(d) ? "changes" : d.approved ? "approved" : "open";
+}
+
+/**
+ * The answer the companion takes: each document's request and comments, by its index. A document with neither is
+ * approved, so the page sends only once every document is approved or asks for changes.
+ */
 export function answerOf(count: number, draftOf: (i: number) => DocDraft): ReviewAnswerBody {
   return {
     documents: Array.from({ length: count }, (_, index) => {

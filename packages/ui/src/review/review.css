@@ -106,6 +106,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ez-approve {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.ez-approve .ez-btn-primary {
+  width: 100%;
+  justify-content: center;
+}
 .ez-section {
   padding: 14px 0;
   border-top: 1px solid var(--border);

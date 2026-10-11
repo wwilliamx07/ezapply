@@ -98,7 +98,8 @@ the page shows beside each document: its page count, page size, text layer and e
 bytes; a file that isn't a readable PDF has none), its text per page (`pdfText` on the bytes), and the version the
 user last answered a review of, by its name in the posting folder (`reviewed.json`). The page shows each PDF in
 pdf.js, takes comments on selected passages and a request for the whole document, and marks what changed since
-the last review. The files are served from the bytes read when the review opened, so the user approves exactly
+the last review. Each document is approved on its own (its Approve button) or sent back with changes; nothing is
+approved by default, and the answer goes only once every document is one or the other. The files are served from the bytes read when the review opened, so the user approves exactly
 what they saw even if Claude rebuilds meanwhile. Answering records each document with no request and no comment as
 approved, and returns the others with the user's request and comments (`{ page, quote, note }`: the agent gets the
 quoted words, not where they sit on the page).

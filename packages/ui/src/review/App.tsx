@@ -4,14 +4,14 @@ import { Badge, Banner, Brand, Button, Icon, MessagePage, Spinner } from "../com
 import { ApiError, getJson, OfflineError, pageBase, postJson, subscribe } from "../lib/api.js";
 import { type LoadedPdf, loadPdf } from "../lib/pdf.js";
 import { changesSince } from "./changes.js";
-import { answerOf, asksChanges, useDrafts } from "./draft.js";
+import { answerOf, type Decision, type DocDraft, decisionOf, useDrafts } from "./draft.js";
 import { Panel } from "./Panel.js";
 import { type Jump, type Selected, Viewer } from "./Viewer.js";
 
 /**
  * The review page: the documents Claude prepared for one application, each to approve as shown or to send back
- * with comments on passages and a request for the whole. The companion keeps the bytes shown here, and approving
- * records exactly those.
+ * with comments on passages and a request for the whole. Each is approved on its own, and the answer goes once
+ * every document is decided. The companion keeps the bytes shown here, and approving records exactly those.
  */
 export function ReviewApp() {
   const base = useMemo(pageBase, []);
@@ -110,8 +110,25 @@ export function ReviewApp() {
   }
 
   const draft = file ? draftOf(file.index) : { request: "", comments: [] };
-  const changed = state.files.filter((f) => asksChanges(draftOf(f.index))).length;
-  const approved = state.files.length - changed;
+  const decisions = state.files.map((f) => decisionOf(draftOf(f.index)));
+  const approved = decisions.filter((d) => d === "approved").length;
+  const changed = decisions.filter((d) => d === "changes").length;
+  const open = decisions.filter((d) => d === "open").length;
+  // Asking for changes takes back an approval, so removing them later leaves the document undecided, not approved.
+  const edit = (index: number, change: (d: DocDraft) => DocDraft) =>
+    update(index, (d) => ({ ...change(d), approved: false }));
+  const approve = (index: number, yes: boolean) => {
+    update(index, (d) => ({ ...d, approved: yes }));
+    if (!yes) return;
+    // On to the next document still to decide, after this one and then from the top.
+    const next = [...decisions.keys()]
+      .map((k) => (index + 1 + k) % decisions.length)
+      .find((k) => k !== index && decisions[k] === "open");
+    if (next !== undefined) {
+      setSelected(next);
+      setActive(null);
+    }
+  };
 
   const send = async () => {
     setSending(true);
@@ -155,7 +172,7 @@ export function ReviewApp() {
               <DocButton
                 file={f}
                 selected={f.index === selected}
-                changes={asksChanges(draftOf(f.index))}
+                decision={decisions[f.index] ?? "open"}
                 onSelect={() => {
                   setSelected(f.index);
                   setActive(null);
@@ -198,7 +215,7 @@ export function ReviewApp() {
             onActivate={setActive}
             onComment={(sel: Selected, note: string) => {
               const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-              update(file.index, (d) => ({
+              edit(file.index, (d) => ({
                 ...d,
                 comments: [...d.comments, { id, page: sel.page + 1, quote: sel.quote, note, rects: sel.rects }],
               }));
@@ -215,14 +232,14 @@ export function ReviewApp() {
           changes={changes}
           comments={draft.comments}
           request={draft.request}
+          decision={decisions[file.index] ?? "open"}
           active={active}
-          onRequest={(request) => update(file.index, (d) => ({ ...d, request }))}
+          onApprove={(yes) => approve(file.index, yes)}
+          onRequest={(request) => edit(file.index, (d) => ({ ...d, request }))}
           onEditComment={(id, note) =>
-            update(file.index, (d) => ({ ...d, comments: d.comments.map((c) => (c.id === id ? { ...c, note } : c)) }))
+            edit(file.index, (d) => ({ ...d, comments: d.comments.map((c) => (c.id === id ? { ...c, note } : c)) }))
           }
-          onRemoveComment={(id) =>
-            update(file.index, (d) => ({ ...d, comments: d.comments.filter((c) => c.id !== id) }))
-          }
+          onRemoveComment={(id) => edit(file.index, (d) => ({ ...d, comments: d.comments.filter((c) => c.id !== id) }))}
           onShow={(id, page) => {
             setShowChanges(true);
             show(id, page);
@@ -232,13 +249,20 @@ export function ReviewApp() {
 
       <footer className="ez-footer">
         <div className="ez-footer-summary" aria-live="polite">
-          {approved > 0 ? <Badge tone="ok">{approved} to approve</Badge> : null}
+          {approved > 0 ? <Badge tone="ok">{approved} approved</Badge> : null}
           {changed > 0 ? <Badge tone="warn">{changed} with changes</Badge> : null}
+          {open > 0 ? <Badge>{open} to decide</Badge> : null}
           {sendError ? <span className="ez-footer-error">{sendError}</span> : null}
         </div>
-        <Button variant="primary" size="lg" onClick={send} disabled={sending}>
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={send}
+          disabled={sending || open > 0}
+          title={open > 0 ? "Approve each document, or say what should change, first" : undefined}
+        >
           {sending ? <Spinner /> : <Icon name="send" size={17} />}
-          {changed === 0 ? (state.files.length === 1 ? "Approve and send" : "Approve all and send") : "Send to Claude"}
+          Send to Claude
         </Button>
       </footer>
     </div>
@@ -248,12 +272,12 @@ export function ReviewApp() {
 function DocButton({
   file,
   selected,
-  changes,
+  decision,
   onSelect,
 }: {
   file: ReviewPageFile;
   selected: boolean;
-  changes: boolean;
+  decision: Decision;
   onSelect(): void;
 }) {
   const prev = file.previous;
@@ -273,7 +297,13 @@ function DocButton({
           {prev && !prev.same ? " · changed since last review" : ""}
         </span>
       </span>
-      {changes ? <Badge tone="warn">Changes</Badge> : <Badge tone="ok">Approve</Badge>}
+      {decision === "changes" ? (
+        <Badge tone="warn">Changes</Badge>
+      ) : decision === "approved" ? (
+        <Badge tone="ok">Approved</Badge>
+      ) : (
+        <Badge>To decide</Badge>
+      )}
     </button>
   );
 }

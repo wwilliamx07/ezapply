@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { itemsOf, joinItems } from "../src/lib/text.js";
 import { changesSince } from "../src/review/changes.js";
-import { answerOf, asksChanges, type DocDraft } from "../src/review/draft.js";
+import { answerOf, type DocDraft, decisionOf } from "../src/review/draft.js";
 import { Panel } from "../src/review/Panel.js";
 import { expandToWords, mergeRects } from "../src/review/selection.js";
 
@@ -96,14 +96,20 @@ describe("a selection", () => {
 });
 
 describe("the answer", () => {
-  const draft = (request: string, notes: string[] = []): DocDraft => ({
+  const draft = (request: string, notes: string[] = [], approved?: boolean): DocDraft => ({
     request,
     comments: notes.map((note, i) => ({ id: `m${i}`, page: 1, quote: "q", note, rects: [] })),
+    ...(approved === undefined ? {} : { approved }),
+  });
+
+  it("leaves a document undecided until it's approved, and a request or comment asks for changes over an approval", () => {
+    expect(
+      [draft("  "), draft("", [], true), draft("Shorter.", [], true), draft("", ["Name it."])].map(decisionOf),
+    ).toEqual(["open", "approved", "changes", "changes"]);
   });
 
   it("approves a document with no request and no comment, and sends the others' with their places", () => {
-    const drafts = [draft("  "), draft("Shorter.", ["Name the manager."])];
-    expect(drafts.map(asksChanges)).toEqual([false, true]);
+    const drafts = [draft("  ", [], true), draft("Shorter.", ["Name the manager."])];
     expect(answerOf(3, (i) => drafts[i] ?? draft(""))).toEqual({
       documents: [
         { index: 0 },
@@ -126,7 +132,9 @@ describe("the panel", () => {
     changes: null,
     comments: [],
     request: "",
+    decision: "open" as const,
     active: null,
+    onApprove: vi.fn(),
     onRequest: vi.fn(),
     onEditComment: vi.fn(),
     onRemoveComment: vi.fn(),
@@ -137,7 +145,7 @@ describe("the panel", () => {
     render(<Panel {...props} file={base} />);
     expect(screen.getByText(/2 pages, over the 1-page limit for a resume/)).toBeTruthy();
     expect(screen.getByText(/can be read by applicant-tracking systems/)).toBeTruthy();
-    expect(screen.getByText("Will be approved")).toBeTruthy();
+    expect(screen.getByText("Not decided")).toBeTruthy();
     expect(screen.getByText(/first time you're reviewing it/)).toBeTruthy();
   });
 
@@ -176,6 +184,18 @@ describe("the panel", () => {
     expect(onShow).toHaveBeenCalledWith("c0", 0);
   });
 
+  it("approves the document, and undoes it", () => {
+    const onApprove = vi.fn();
+    const { unmount } = render(<Panel {...props} file={base} onApprove={onApprove} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve as shown" }));
+    expect(onApprove).toHaveBeenCalledWith(true);
+    unmount();
+    render(<Panel {...props} file={base} decision="approved" onApprove={onApprove} />);
+    expect(screen.getByText("Approved")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Undo approval" }));
+    expect(onApprove).toHaveBeenCalledWith(false);
+  });
+
   it("asks for changes once there's a comment, which can be edited and removed", () => {
     const onEditComment = vi.fn();
     const onRemoveComment = vi.fn();
@@ -185,11 +205,13 @@ describe("the panel", () => {
         {...props}
         file={base}
         comments={[comment]}
+        decision="changes"
         onEditComment={onEditComment}
         onRemoveComment={onRemoveComment}
       />,
     );
     expect(screen.getByText("Changes requested")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Approve as shown" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Edit comment 1" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Comment 1" }), {
       target: { value: "Say invoicing, twice." },

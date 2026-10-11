@@ -173,19 +173,23 @@ What it's for and how approvals work: [documents](documents.md#review-before-att
 | `GET events` | Server-Sent Events: `state` when the review is answered, replaced or expires |
 | `POST answer` | `{ documents: [{ index, request?, comments?: [{ page, quote, note, rects? }] }] }` → 204; 409 `{ status }` when it isn't open any more; 400 for a body that isn't one |
 
-**Layout.** The documents on the left (name, pages, whether it changed since the last review, approve or
-changes), the selected one in the viewer, its panel on the right, and a bar along the bottom with the count to
-approve and with changes, and Send ("Approve all and send" when nothing asks for changes). Below 900 px the
+**Layout.** The documents on the left (name, pages, whether it changed since the last review, and Approved,
+Changes or To decide), the selected one in the viewer, its panel on the right, and a bar along the bottom with the
+count approved, with changes and still to decide, and Send to Claude, disabled while any document is undecided.
+**Why no "Approve all":** what's attached goes to an employer, so each document is approved by a press of its
+own rather than by leaving it untouched. Below 900 px the
 documents become a row of tabs and the panel goes under the viewer. Every grid item has `min-width: 0`, so a row
 that scrolls sideways never widens the page.
 
-**The panel:** the checks (pages, over the resume page limit, the text layer an applicant-tracking system reads,
+**The panel:** Approve as shown (Undo approval once approved; disabled while the document asks for changes), which
+also moves to the next document still to decide; the checks (pages, over the resume page limit, the text layer an applicant-tracking system reads,
 encryption); since the last review (first time, unchanged since you approved it or asked for changes, or the list
 of changes, each pressed to show it on the page); the comments (each with its number, the quoted words, the note,
-edit and remove); and "Anything else to change?" for the whole document. A document with no comment and nothing
-written is approved as shown, as before.
+edit and remove); and "Anything else to change?" for the whole document. A comment or a request asks for changes
+and takes back an approval, so removing them afterwards leaves the document to decide again rather than approved.
+The answer sent is unchanged: a document with no comment and no request is the approved one.
 
-**Drafts** (`draft.ts`) are kept in the tab's `sessionStorage` under the review's id, so a reload doesn't lose
+**Drafts** (`draft.ts`: each document's request, comments and approval) are kept in the tab's `sessionStorage` under the review's id, so a reload doesn't lose
 what the user wrote; unavailable storage only means they aren't kept. Sending clears them.
 
 **Sending** closes the tab on the 204 (a tab the companion opened has one page in its history, so the browser

@@ -2,7 +2,7 @@ import type { ReviewPageFile } from "@ezapply/protocol";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Icon } from "../components/ui.js";
 import type { ChangeMark } from "./changes.js";
-import type { DraftComment } from "./draft.js";
+import type { Decision, DraftComment } from "./draft.js";
 
 interface Props {
   file: ReviewPageFile;
@@ -10,7 +10,9 @@ interface Props {
   changes: ChangeMark[] | null;
   comments: DraftComment[];
   request: string;
+  decision: Decision;
   active: string | null;
+  onApprove(approved: boolean): void;
   onRequest(text: string): void;
   onEditComment(id: string, note: string): void;
   onRemoveComment(id: string): void;
@@ -18,13 +20,35 @@ interface Props {
 }
 
 export function Panel(props: Props) {
-  const { file, changes, comments } = props;
-  const asksChanges = !!props.request.trim() || comments.length > 0;
+  const { file, changes, comments, decision } = props;
   return (
     <aside className="ez-panel" aria-label={`About ${file.name}`}>
       <div className="ez-panel-head">
         <h2 title={file.name}>{file.name}</h2>
-        {asksChanges ? <Badge tone="warn">Changes requested</Badge> : <Badge tone="ok">Will be approved</Badge>}
+        {decision === "changes" ? (
+          <Badge tone="warn">Changes requested</Badge>
+        ) : decision === "approved" ? (
+          <Badge tone="ok">Approved</Badge>
+        ) : (
+          <Badge>Not decided</Badge>
+        )}
+      </div>
+
+      <div className="ez-approve">
+        {decision === "approved" ? (
+          <Button variant="ghost" size="sm" onClick={() => props.onApprove(false)}>
+            Undo approval
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => props.onApprove(true)}
+            disabled={decision === "changes"}
+            title={decision === "changes" ? "Remove the comments and the request to approve it as shown" : undefined}
+          >
+            <Icon name="check" size={17} /> Approve as shown
+          </Button>
+        )}
       </div>
 
       <Checks file={file} />
@@ -69,7 +93,7 @@ export function Panel(props: Props) {
           placeholder="A change to the whole document: tone, length, what to stress."
           onChange={(e) => props.onRequest(e.target.value)}
         />
-        <p className="ez-help">With no comments and nothing written here, this document is approved as shown.</p>
+        <p className="ez-help">A comment or anything written here sends the document back to Claude to revise.</p>
       </section>
     </aside>
   );
