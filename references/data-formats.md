@@ -60,7 +60,6 @@ dropped.
     "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
   },
   "debug": { "enabled": false, "maxMB": 500, "markup": "failures" },   // debug mode: record every form call under debug/
-  "decisions": { "provider": "none" },   // the only value; nothing reads it
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
 ```

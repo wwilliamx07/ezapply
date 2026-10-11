@@ -67,7 +67,7 @@ updates the profile from the diff, updates the cover fields and re-indexes, mark
 for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## 2. Pairing the extension
-How it works, and re-pairing: [extension](components/extension.md#pairing). On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
+On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
 1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
    the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
    `dist-firefox` for Firefox), plus a hint if the extension isn't built.

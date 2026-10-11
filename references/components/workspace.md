@@ -12,7 +12,7 @@ ezapply-home/
   EZAPPLY.md               agent file (managed by ezapply; rewritten by init)
   CLAUDE.md                the user's own notes; imports @EZAPPLY.md
   ezapply.config.json      settings: resume page limit and size, TeX engine, PDF size limit, attach mode,
-                           bringing the browser to the front, debug mode, decisions provider
+                           bringing the browser to the front, debug mode, chat context
   autofill-timing.yaml     how long the form adapters wait (the user's to tune)
   state.json               the active posting id, what the profile and cover fields last matched, repos put off
   .mcp.json                Claude Code → `node <cli>/main.js mcp`

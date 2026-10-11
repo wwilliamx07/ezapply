@@ -64,7 +64,6 @@ export const WorkspaceConfig = z.object({
       markup: z.enum(["failures", "always", "none"]).default("failures").catch("failures"),
     })
     .default({ enabled: false, maxMB: 500, markup: "failures" }),
-  decisions: z.object({ provider: z.enum(["none"]).default("none") }).default({ provider: "none" }),
   context: z
     .object({
       /**

@@ -20,7 +20,7 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [components/profile-and-templates.md](components/profile-and-templates.md) | Profile, answer bank, preferences, resume and cover letter templates |
 | [components/github-and-repos.md](components/github-and-repos.md) | GitHub App, login, tokens, the read-only repo cache |
 | [components/knowledge-base.md](components/knowledge-base.md) | Project knowledge base, claims, indexing |
-| [components/extension.md](components/extension.md) | `packages/extension`: background, pairing, the connection, the side panel, capture, telling a page's site, access to websites, options, builds |
+| [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, the side panel, capture, telling a page's site, access to websites, options, builds |
 | [components/adapters.md](components/adapters.md) | The adapter engine and site definitions: extraction, the API, widget drivers, waits owned by each site, the submit guard, conformance tests, checking a site live |
 | [components/workday-adapter.md](components/workday-adapter.md) | Workday's definition and widgets: extraction, filling, rows, moving between steps, the waits (`autofill-timing.yaml`) |
 | [components/oracle-adapter.md](components/oracle-adapter.md) | Oracle Recruiting Cloud's definition and widgets, which pages are Oracle's, site access, what was verified |

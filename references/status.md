@@ -11,7 +11,7 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   ([architecture](architecture.md#processes-and-lifecycle)).
 - **Pairing without a code.** The extension pairs during a 15-minute window opened from the setup page or by
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
-  `config.json` that opening a window needs ([extension](components/extension.md#pairing)).
+  `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension)).
 - **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation;
   `ezapply chat` stays for the terminal ([agent](components/agent.md)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
