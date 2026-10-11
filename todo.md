@@ -5,11 +5,11 @@
 - everything happens in browser, no need to directly interact with the agent
 - all agent flows have minimal reliance on agent performance
 - compatibility with various agents
-- approval page: approval should be per item
 - run multiple applications in parallel
 - work on minimized tabs
-- get rid of status.md
 - for claims/repo documentation, maybe follow some technical writing spec, tailored and humanized before use in application documents
+- remove the upgrade shims once no older install is left: moving `~/.ezapply/daemon.json` to `config.json` (and `init` deleting `daemon-state.json`), and `ezapply chat` stopping an earlier build's daemon on its port
+- move posting extraction's own Workday code (`extractWorkday`, `WORKDAY_POSTING` in `postings/extract.ts`) behind a site-registry hook
 
 Proposals, as of 2026-10-10: only work that isn't built. Whatever is built, in whole or in part, is described in
 `references/` (what still needs a live run is in `references/status.md`) and in git history.

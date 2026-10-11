@@ -67,7 +67,7 @@ updates the profile from the diff, updates the cover fields and re-indexes, mark
 for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## 2. Pairing the extension
-On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
+How it works, and re-pairing: [extension](components/extension.md#pairing). On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
 1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
    the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
    `dist-firefox` for Firefox), plus a hint if the extension isn't built.
@@ -91,7 +91,7 @@ non-default ports.
    the live DOM with `checkVisibility`), `innerText` (empty for a frame that isn't rendered), JSON-LD blocks, URL, title and its visible iframes. The
    frame holding the posting is chosen: the top one, unless an embedded job board frame has the `JobPosting`
    data or more text. A large embedded board it couldn't read opens in a new tab instead, for the user to
-   capture there ([extension](components/extension.md#set-posting)). The chosen frame's site, as its body shows
+   capture there ([extension](components/extension.md#capture)). The chosen frame's site, as its body shows
    it ([telling a page's site](components/extension.md#telling-a-pages-site-framests)), goes with the capture.
 3. If ezapply isn't connected (it isn't running), the capture is stored as pending (badge `…`) and sent on the
    next connection. Only the latest pending capture is kept. When the user next starts ezapply, `posting_active`

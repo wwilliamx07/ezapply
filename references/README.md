@@ -1,9 +1,9 @@
 # ezapply reference
 
 The complete, current description of ezapply: what it's for, how it's built, and how every part works.
-**This folder is the source of truth**, including the reasons behind the design (there is no separate
-decision log). The original design plan was removed once built; what changed from it is in
-[status.md](status.md#where-the-build-departs-from-the-original-plan). Planned work is in `todo.md`. The
+**This folder is the source of truth**, including the reasons behind the design (the lean decisions log is
+[status.md](status.md#decisions)). The original design plan was removed once
+built; what changed from it is in [status.md](status.md#where-the-build-departs-from-the-original-plan). Planned work is in `todo.md`. The
 repo's `CLAUDE.md` requires every change to keep this folder accurate and complete.
 
 ## Contents
@@ -20,7 +20,7 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [components/profile-and-templates.md](components/profile-and-templates.md) | Profile, answer bank, preferences, resume and cover letter templates |
 | [components/github-and-repos.md](components/github-and-repos.md) | GitHub App, login, tokens, the read-only repo cache |
 | [components/knowledge-base.md](components/knowledge-base.md) | Project knowledge base, claims, indexing |
-| [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, the side panel, capture, telling a page's site, access to websites, options, builds |
+| [components/extension.md](components/extension.md) | `packages/extension`: background, pairing, the connection, the side panel, capture, telling a page's site, access to websites, options, builds |
 | [components/adapters.md](components/adapters.md) | The adapter engine and site definitions: extraction, the API, widget drivers, waits owned by each site, the submit guard, conformance tests, checking a site live |
 | [components/workday-adapter.md](components/workday-adapter.md) | Workday's definition and widgets: extraction, filling, rows, moving between steps, the waits (`autofill-timing.yaml`) |
 | [components/oracle-adapter.md](components/oracle-adapter.md) | Oracle Recruiting Cloud's definition and widgets, which pages are Oracle's, site access, what was verified |
@@ -34,7 +34,7 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [security.md](security.md) | Threat model and the controls against each threat |
 | [development.md](development.md) | Repo layout, build, tests, CI, conventions, how to extend |
 | [building-adapters.md](building-adapters.md) | Adding a job site: the process, what goes where (registry, definition, site notes), drivers, tests, checking it live |
-| [status.md](status.md) | What's done, what's unverified, what's deferred, open questions, where the build departs from the original plan |
+| [status.md](status.md) | The decisions log, what still needs a live run, known issues, open questions, where the build departs from the original plan |
 
 ## Reading order
 New to the project: philosophy → architecture → flows. Then the component page for whatever you're

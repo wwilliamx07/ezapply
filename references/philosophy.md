@@ -55,7 +55,6 @@ user decides and submits.
 - Guided onboarding on a page: tools, extension, GitHub and repos, knowledge base, profile, templates, answers.
 - Review on a page: each document as it will be attached, comments on its passages, what changed since the last
   review.
-- A decision model (e.g. Jev) can be added later without changing tools or skills.
 
 ## Non-goals (v1)
 - Submitting, or applying in bulk.

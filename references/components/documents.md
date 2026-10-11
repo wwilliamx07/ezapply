@@ -105,7 +105,7 @@ approved, and returns the others with the user's request and comments (`{ page, 
 quoted words, not where they sit on the page).
 
 **What changed since the last review.** When a review is answered, each of its documents is recorded in
-`postings/<id>/reviewed.json` ([format](../data-formats.md#postingsidreviewedjson)) with its hash, whether it was
+`postings/<id>/reviewed.json` ([format](../data-formats.md#postingsidreviewedjson-companionsrcdocumentsreviewts)) with its hash, whether it was
 approved, and its text per page. The next review of a document by the same name gets that as `previous`: the
 same bytes ("unchanged since you approved it"), or the text to compare, which the page diffs word by word and
 marks on the PDF ([how](ui.md#what-changed-since-the-last-review-changests-protocolsrctextdiffts)). The agent gets the

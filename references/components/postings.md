@@ -41,7 +41,7 @@ reaches `posting.md`.
 - **Embedded boards:** when the extension captured an embedded job board frame (`frameUrl`), the content's
   own site decides how it's read (a Workday board is read as Workday, with its tenant), while the company
   still comes from the page the user was on; `posting.md` notes "Embedded from: <frameUrl>". See
-  [extension](extension.md#set-posting).
+  [extension](extension.md#capture).
 - **A site's own reader** (`postings/readers/`, `POSTING_READERS` by site id), only for a site whose posting pages
   the generic reading gets wrong: today Workday's (its description, role, location and requisition by the hooks
   shared with the adapter, `WORKDAY_POSTING`; its titles are only the role). `extract.ts` names no site: a new site

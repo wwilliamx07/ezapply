@@ -73,6 +73,39 @@ could never connect ("can't establish a connection to wss://127.0.0.1:17373/brid
 drops that directive and allows connections only to loopback. Chrome's default policy doesn't upgrade, so
 the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 
+## Pairing
+Pairing decides which extension the companion talks to. Two things identify it: its **id**, which the browser
+puts in the WebSocket's `Origin` (`chrome-extension://<32 letters a–p>`, or `moz-extension://<install UUID>`),
+and the **pairing code** (`XXXX-XXXX-XXXX-XXXX`, made by `ezapply init`, kept in `~/.ezapply/config.json` as
+`pairingToken` and, once paired, in the extension's `storage.local`). The user never types the code:
+
+1. **A window opens.** The setup page's extension step, or Claude's `extension_pair`, calls `startPairing`
+   (`companion/src/bridge/pairing.ts`), which opens a 15-minute pairing window on the bridge and returns the
+   folder or manifest to load. Nothing else opens one: there's no control route, so it takes an MCP session or
+   the onboarding page's token.
+2. **The extension asks.** With no code stored, `ensureConnected` connects to the default port (17373) and sends
+   `hello` with an empty code, on every wake-up (the 30 s alarm, install, browser start, the open panel's 5 s
+   poll). Outside a window the companion rejects it, and the extension quietly stays "not paired".
+3. **The companion admits it once.** At the upgrade the origin must be an extension's, and the pinned id if one
+   is pinned. In the handshake an empty code is accepted only while the window is open; the window then closes,
+   the id is pinned (`onPaired` writes `pairedExtensionId`), and `welcome` carries the real code.
+4. **The extension keeps the code** (`saveSettings`) and sends it in every `hello` from then on; the companion
+   compares it in constant time. `extension_pair_wait`, or the setup step turning green, sees the connection.
+
+**Re-pairing** (`extension_pair { replace: true }`; the setup page's action takes `replace` but its step never sends it): `forgetPaired` unpins the id,
+rotates the code, persists both and drops the live connection, then a window opens. The old extension still holds
+the old code, so it's refused with "This extension is no longer paired" and waits in the error state; it never
+falls back to asking without a code. The extension that should pair needs no code stored: a fresh install (another
+browser, or the extension removed and loaded again), or the code field cleared on the options page.
+
+**Other ports.** Code-less pairing only asks on 17373. For a companion on another port, enter the port and the
+code from `config.json` on the options page; the code alone admits it, and the first one pins its id.
+
+**Why the id must stay put:** Chrome derives an unpacked extension's id from its folder, so `dist/` keeps its
+path, and Firefox's fixed gecko id keeps the install UUID stable across reloads ([builds](#builds-npm-run-build--w-ezapplyextension)).
+Moving the folder makes a new id, which the pin refuses until the user re-pairs. Why pairing without a code is
+no weaker than typing it: [security](../security.md#accepted-limits).
+
 ## Connection (`CompanionConnection`)
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
   `welcome`, start RPC and the 20 s ping. On close: `Unauthorized`/`ProtocolMismatch` → error state
@@ -222,7 +255,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    captures a second. A capture that fails is left out; it never fails the call.
 5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
    switch to it). It needs `<all_urls>` or `activeTab`; the extension holds `<all_urls>` (not yet run live
-   with it: [status](../status.md)).
+   with it: [status](../status.md#not-yet-verified-for-real)).
 6. `tab.show` (sent by the companion before every form call): with `activate` and `focusWindow`, and the
    tab's window not the focused one (or minimized), `windows.update(windowId, { focused: true })`, with
    `state: "normal"` when it's minimized, and `windowFocused: true` in the result. Then, with `activate` and the

@@ -42,12 +42,11 @@ Stored answers to screening questions.
   answer the user tells it to save gets `sensitive: false` unless they want to keep being asked. Edits go
   through the Edit tool, then `answers_check`.
 
-  *Why:* `how_heard` ("School job board") matched nothing on two forms at one employer ("College/University")
-  and on another's (a list of schools), and each time nothing was saved, so it missed again. Once
-  the user told the agent to save three answers from an employer's form; it appended new entries with a shell
-  `cat >>`, marked `sensitive: true` (which means "always ask"), and added an employer-named `how_heard` entry
-  beside the existing `how_heard`. That employer's next application asked the same questions again, and the user had to point
-  out they'd already saved them.
+  *Why:* a `how_heard` answer worded one way ("School job board") matched nothing on forms that worded the
+  option differently ("College/University", or a list of schools), and nothing was saved, so it missed again.
+  Asked to save answers from a form, the agent once appended new entries with a shell `cat >>`, marked them
+  `sensitive: true` (which means "always ask"), and added an employer-named `how_heard` beside the existing one,
+  so the next form at that employer asked the same questions again.
 
 ## Preferences (`profile/preferences.md`)
 Free text: tone for cover letters, what to emphasize, what never to mention, target roles and locations,

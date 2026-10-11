@@ -60,7 +60,7 @@ dropped.
     "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
   },
   "debug": { "enabled": false, "maxMB": 500, "markup": "failures" },   // debug mode: record every form call under debug/
-  "decisions": { "provider": "none" },
+  "decisions": { "provider": "none" },   // the only value; nothing reads it
   "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
 }
 ```
@@ -214,7 +214,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `resume.tex/.pdf`, `cover.tex/.pdf`, `<Last>_<First>_<Company>_Application.pdf` | Claude, companion | tailored documents and bundles |
 | `form-log.jsonl` | companion | the application's audit trail (below) |
 | `approvals.json` | companion | `{ schemaVersion: 1, approvals: { "<file>": { sha256, approvedAt, reviewId } } }`: the version of each document the user approved on the review page; `upload_file` checks it in the `after-approval` attach mode |
-| `reviewed.json` | companion | The version of each document the user last answered a review of, with its text ([below](#postingsidreviewedjson)) |
+| `reviewed.json` | companion | The version of each document the user last answered a review of, with its text ([below](#postingsidreviewedjson-companionsrcdocumentsreviewts)) |
 | `.build/<name>/` | companion | TeX aux files and logs |
 | `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
 | `.previews/<name>-p<n>.png` | companion | rendered pages |

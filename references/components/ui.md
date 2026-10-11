@@ -221,7 +221,7 @@ from the start. **Why pdf.js, not the browser's viewer:** the same in every brow
 
 ### What changed since the last review (`changes.ts`, `protocol/src/textdiff.ts`)
 The companion keeps the text of each document when the user answers a review
-([`reviewed.json`](../data-formats.md#postingsidreviewedjson)) and gives it to the next review as
+([`reviewed.json`](../data-formats.md#postingsidreviewedjson-companionsrcdocumentsreviewts)) and gives it to the next review as
 `previous.pages`. The page reads the new version's text from pdf.js, as the companion's `pdf_text` does (each
 item, a line break after a line's last), so both sides compare the same text, and diffs the two with the shared
 module the companion's `pdf_text { sinceReviewed }` uses:
@@ -296,7 +296,7 @@ gets one (`agentIn` in the page's state):
   returns. The task is running from then; Claude busy in another conversation fails it with why, and the page
   offers it again. The page shows Claude as listening while the agent is available, and says to follow it in the
   ezapply panel, where its commands are approved.
-- **Under `ezapply chat` (`terminal`):** the agent sits in a blocking [`onboarding`](../mcp-tools.md#onboarding)
+- **Under `ezapply chat` (`terminal`):** the agent sits in a blocking [`onboarding`](../mcp-tools.md#setup-and-status)
   call; a task the page queues wakes it, and it gets `{ id, kind, params, how }`. Its report
   (`onboarding { taskId, result }`) marks the task done or failed and waits for the next in the same call. Tasks
   are taken in the order asked, one at a time; a task taken and never reported is given again, in case the agent

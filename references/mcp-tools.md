@@ -170,9 +170,9 @@ context was compacted may have lost them: the notes are short, and the generic s
     tab is the posting's, `posting_activate { id, tabId }`).
   - *Why:* without the check, two open applications or an old confirmation page on screen would credit the wrong
     posting, up to marking it `submitted`. At first a mismatch only skipped the logging. Later
-    only tenants and URL jobs were compared, and most of the user's postings were captured off the form
-    sites (a school's job board, employers' careers pages) with neither, so nothing was checked for them: the two
-    applications at one employer filled one evening could each have taken the other's fills.
+    only tenants and URL jobs were compared, and postings captured off the form sites (a school's job board,
+    employers' careers pages) have neither, so nothing was checked for them: two open applications at one
+    employer could each have taken the other's fills.
 - **The hand-off checklist** (`forms/checklist.ts`): the list the `ezapply-apply` skill gives at the hand-off,
   kept by the companion instead of the model's memory. Live runs missed parts of it: the cover letter twice
   (now `notAttached`), and sections that start empty are easy to miss.
@@ -256,7 +256,3 @@ a terminal chat's only while a panel is open.
 |---|---|---|
 | `ask_user` | `title`, `intro?`, `questions[]` (1–25: `id`, `prompt`, `type` `single` \| `multi` \| `text`, `options[] { value, label?, description? }`, `allowOther?`, `min?`, `max?`, `multiline?`, `placeholder?`, `maxLength?`, `proposed?`, `why?`, `sensitive?`, `required?`, `remember? { answerId }`), or `askId`; `timeoutSeconds` (5–900, default 600) | Shows the questions on a card and waits: `{ done: true, answers: { <id>: { value, other?, remember? } \| { skipped: true } }, savedToAnswerBank?, toSave?, hint? }` (answers marked to save go into the answer bank when it has the entry, else come back in `toSave` for the agent to add), `{ replied, message }` when the user wrote in the chat instead, `{ done: false, askId, hint }` on timeout (`ask_user { askId }` waits again; a late answer is kept), `{ noPanel, hint }` for a terminal chat's question with no panel open. A suggestion may go on any question, sensitive ones too. A suggestion that isn't an option (without `allowOther`), a choice question without options, an id twice or min over max are `bad_request` |
 | `permission_ask` | `tool_name`, `input`, `tool_use_id?` | Claude Code's permission prompt for the panel's agent (`--permission-prompt-tool`), not for the agent to call: a card with the tool and its input. Returns Claude Code's result as JSON text: `{ behavior: "allow", updatedInput }`, or `{ behavior: "deny", message }` (the user's reason; no answer in 10 minutes; the conversation reset; no panel for a terminal chat) |
-
-## Decision tools (not registered)
-`suggest_answers` and `decide` are reserved for a future `DecisionProvider` (e.g. Jev). With the only
-provider being `none`, they don't exist. See [status.md](status.md#deferred).

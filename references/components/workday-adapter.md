@@ -20,7 +20,7 @@ loop, next and back, the submit guard, the waits, and the DOM helpers (`dom.ts`:
 `hidden`, `aria-hidden` or an inline `display: none` up the tree; pointer and keyboard sequences; `typeChar`;
 `settle`; `waitFor`; `matchOption`; `parseDate`) ([adapters](adapters.md)). When the adapter moved onto it,
 its fillers and readers moved unchanged and the golden schemas stayed equal. It has run live twice since
-([status](../status.md#the-first-workday-run-on-the-engine)).
+([status](../status.md#not-yet-verified-for-real)).
 
 The extension knows a Workday page by its body ([telling a page's site](extension.md#telling-a-pages-site-framests)):
 the registry's signature is Workday's UI widgets (`[data-uxi-widget-type]`) and the chrome every candidate page has
@@ -189,7 +189,7 @@ without the second attempt.
 
 ### Dates typed into Workday's split widget
 In the second live run, every multi-part date (work From/To as MM/YYYY, a graduation date as MM/DD/YYYY)
-read back right while Workday still called it empty, however often it was filled: the user typed five dates
+read back right while Workday still called it empty, however often it was filled, and five dates were typed
 by hand. The adapter used to set each part's input value (native setter plus `input`/`change`); Workday's
 parts keep their value in their own state, which that didn't reach. A one-part `YYYY` date worked.
 
@@ -213,19 +213,18 @@ works; the old setter didn't), and `"stuck"` parts that ignore synthetic keys (t
 
 **Failing again, cause unknown** (the first Workday run on the engine). All five multi-part dates (four `MM/YYYY` work
 dates, one `MM/DD/YYYY` graduation date) read back the digits while Workday called them required, however often
-they were filled, and the user retyped them. Two `YYYY` dates were taken. The date code is the one that worked in
-the third and fourth runs. The browser was in front, by the user's account. A change was tried and dropped the
-same day: date parts sent focus events by hand when the page has no focus (Chrome holds them back while the
+they were filled, and they were typed by hand. Two `YYYY` dates were taken. The date code is the one that worked in
+the third and fourth runs, and nothing recorded whether the browser was in front. A change was tried and dropped: date parts sent focus events by hand when the page has no focus (Chrome holds them back while the
 window is behind another app). With the browser in front it would have done nothing. `tab.show` now reports
 `focused` and debug mode records it, so focus can be ruled in or out from the records rather than from
 memory. Which path each part took (typed, or set directly as a last resort) is in the adapter trace now: a
 `date part set directly` or `date entered again` branch ([adapters](adapters.md#debug-mode-the-adapter-trace)),
 not yet seen on a live run.
 
-The next run (another posting at the same employer, the same day) kept the browser in front, and every call recorded
+The next run, on the same tenant, kept the browser in front, and every call recorded
 `focused: true`. Every date was taken the first time: four `MM/YYYY`, two `YYYY` and the `MM/DD/YYYY`
 graduation date, and each step advanced on the first Save and Continue. So focus is the leading suspect after
-all: the first run has no `focused` record to compare, and the user's account of it was "pretty sure".
+all: the first run has no `focused` record to compare.
 So calls that change the page now bring the browser window to the front (`forms.focusBrowser`, on by
 default; [the tab in front](../mcp-tools.md#forms)). Not yet proven: a run with the option off and the terminal in
 front, compared with one with it on ([status](../status.md)).

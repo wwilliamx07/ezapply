@@ -73,7 +73,7 @@ them). A port mismatch doesn't stop `github_login` when an app is chosen, since 
   parallel subagents whose `repo_sync` calls all ask for a token. Concurrent callers share one refresh in
   flight; the refresh re-reads the stored token first (another call may just have refreshed it), and if
   GitHub rejects the refresh token after someone else replaced it, the new stored token is used. Without
-  this the second caller got `bad_refresh_token` and the user had to log in again mid-onboarding.
+  this the second caller got `bad_refresh_token` and onboarding needed a fresh login midway.
 - A stored token that can't be parsed reads as logged out (and is logged), never as a crash.
 - `github_logout` revokes the token with GitHub (best effort) and deletes it locally. The app and cached
   repos stay.
