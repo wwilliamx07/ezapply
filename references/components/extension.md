@@ -29,7 +29,7 @@ on the companion's review page.
 | `src/options/options.ts`, `static/options.html` | Options page: status, access to websites when it's withheld, manual pairing |
 | `src/adapters/engine/` | The adapter engine every site runs on → [adapters.md](adapters.md) |
 | `src/adapters/widgets/` | Shared widget drivers → [adapters.md](adapters.md#shared-drivers-widgets) |
-| `src/adapters/sites/<site>/` | A definition per site: [Workday](workday-adapter.md), [Oracle Recruiting Cloud](oracle-adapter.md), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
+| `src/adapters/sites/<site>/` | A definition per site: [Workday](sites.md#workday-sitesworkday), [Oracle Recruiting Cloud](sites.md#oracle-recruiting-cloud-sitesoracle), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
 | `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
 | `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and both output folders |
 
@@ -180,6 +180,12 @@ lets them limit it to some sites or to a click. Where it's missing:
   memory: a background that restarts may open a second).
 - **The options page** shows a **Grant access** row while it's missing.
 
+**Why every site.** A job site's application can be on any host: Oracle's and Phenom's on the employer's own
+domain, an embedded board inside a careers page. A tab on a host the extension doesn't hold can't be read, so its site
+could only be guessed from the URL, and asking for one origin at a time meant a prompt before every new employer. A
+host list (`*.oraclecloud.com`) was rejected too: it misses employers' own domains, and it would reach every Oracle
+Cloud customer's own staff applications on those hosts.
+
 ## Embedded applications
 A company's careers page often shows its Greenhouse (or Ashby, or Lever) application in an iframe, and the form
 tools then act on that frame ([which tab](../mcp-tools.md#forms)).
@@ -232,7 +238,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    background, whose timers aren't throttled. Without access to the page it falls back to the tab's active
    state, and `focused` is left out. `focused` says whether a raise worked, and debug mode records it: a page in
    a window behind another app gets no focus events from Chrome, which widgets that track focus depend on
-   (Workday's split dates weren't taken there; [workday adapter](workday-adapter.md)).
+   (Workday's split dates weren't taken there; [Workday's dates](sites.md#dates-typed-into-workdays-split-widget)).
    - **Window focus only when asked.** Raising the window pulls the browser in front of the terminal the user
      may be typing in, and takes keyboard focus. The companion asks for it (`focusWindow`) only on calls that
      change the page, only when `forms.focusBrowser` is on, and never while a review page waits. A failed

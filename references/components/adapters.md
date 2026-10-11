@@ -21,10 +21,10 @@ skills treat them all alike.
 | `sites/<site>/site.ts` | The site's definition; `main.ts` is its bundle entry (`install(site)`) |
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
 
-Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (`page.ts`, `selectors.ts`, `widgets.ts` and
-a file per widget of their own beside `site.ts`, the plain controls and files on shared drivers), [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
-`site.ts` each, on shared drivers), and [SAP SuccessFactors](sites.md#sap-successfactors-sitessuccessfactors) (a
-`site.ts`, with its picklist and attachment drivers in `widgets.ts`).
+Every site, and what it does differently, is in [sites](sites.md): [Workday](sites.md#workday-sitesworkday) and
+[Oracle](sites.md#oracle-recruiting-cloud-sitesoracle) (`page.ts`, `selectors.ts`, `widgets.ts` and a file per widget of
+their own beside `site.ts`), Greenhouse, Lever, Ashby, Phenom and Dayforce (a `site.ts` each, on shared drivers), and
+SAP SuccessFactors (a `site.ts`, with its picklist and attachment drivers in `widgets.ts`).
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
 other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
@@ -213,8 +213,20 @@ these, and for their conditions as long as `T` says.
 the tab's site ([format](../data-formats.md#autofill-timingyaml-companionsrcformstimingts)): a top-level key changes a wait on every site,
 a key under the site's name (`workday:`) on that site only. It resolves them against the same site's waits and
 sends the result with every call; `setTiming` applies it before the method runs, and `null` or none restores the
-site's own. What each wait is for: [Workday's waits](workday-adapter.md#waits-autofill-timingyaml) and
-`TIMING_DOCS` in `protocol/src/timing.ts`.
+site's own, since `T` lives on in the page between calls. `scale` multiplies the waits the file leaves unset; a wait
+it sets is used as written.
+
+Every wait (about 50: after each field, a dropdown's open and close, a search, a date's parts, uploads, rows, steps)
+is a named value in `T` (`engine/timing.ts`), and `TIMING_DOCS` (`protocol/src/timing.ts`) says what each is for. Of
+the poll intervals only `waitFor`'s default is configurable (`pollMs`); waits with their own interval (search
+results 100 ms, uploads 200 and 250 ms, a step's fields 150 ms) keep it.
+
+**Why every wait is tunable.** Live Workday fills once ran slowly (dropdowns about 2.5 to 3 s each, a 15-dropdown
+step in 49 s). Most waits end as soon as their condition holds, but some cost their full length on every field when
+the page never goes quiet or a check never matches, and which ones wasn't measured. The file lets a wait be shortened
+without a rebuild, to see what breaks. Six dropdown waits set to 200 ms (from 1 to 2 s) then ran four live
+applications in one day, on Workday and Oracle, with 128 fills and no dropdown failing to open, so those are the
+defaults now.
 
 ## Debug mode: the adapter trace
 With [debug mode](../development.md#debugging-a-live-run-debug-mode) on, every adapter call records what

@@ -22,9 +22,7 @@ repo's `CLAUDE.md` requires every change to keep this folder accurate and comple
 | [components/knowledge-base.md](components/knowledge-base.md) | Project knowledge base, claims, indexing |
 | [components/extension.md](components/extension.md) | `packages/extension`: background, connection and pairing, the side panel, capture, telling a page's site, access to websites, options, builds |
 | [components/adapters.md](components/adapters.md) | The adapter engine and site definitions: extraction, the API, widget drivers, waits owned by each site, the submit guard, conformance tests, checking a site live |
-| [components/workday-adapter.md](components/workday-adapter.md) | Workday's definition and widgets: extraction, filling, rows, moving between steps, the waits (`autofill-timing.yaml`) |
-| [components/oracle-adapter.md](components/oracle-adapter.md) | Oracle Recruiting Cloud's definition and widgets, which pages are Oracle's, site access, what was verified |
-| [components/sites.md](components/sites.md) | Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP SuccessFactors: why these sites, their definitions, what was verified live, the providers still to build |
+| [components/sites.md](components/sites.md) | Every site's definition, only what it does differently: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP SuccessFactors; why these sites, what was verified live, the providers still to build |
 | [components/ui.md](components/ui.md) | `packages/ui`: the side panel's components, the review and onboarding pages, the PDF viewer, what changed since the last review, how the pages talk to the companion, the build |
 | [components/agent.md](components/agent.md) | `companion/src/agent/`: Claude Code run headless for the side panel, its conversations, the agent's questions and approvals (cards), the panel's methods and updates |
 | [components/cli.md](components/cli.md) | `packages/cli`: the `ezapply` command (the panel's mode), init, the MCP relay, `chat` (hosting the companion, restarting Claude) |

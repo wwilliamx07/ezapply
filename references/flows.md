@@ -149,7 +149,7 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 
 ## 7. Filling the application ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
-([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md),
+([Workday](components/sites.md#workday-sitesworkday), [Oracle](components/sites.md#oracle-recruiting-cloud-sitesoracle),
 [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](components/sites.md)):
 1. `posting_active`; read the profile and answer bank. The form tools act on this posting's application tab
    (by its job, the tab it was bound to, its tenant, or its title: [which posting](mcp-tools.md#forms)) and

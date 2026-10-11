@@ -3,7 +3,7 @@
 How to add a job site to ezapply: the whole process, from saving its pages to its first real application, and the
 rules every adapter follows. What the parts are and how they work is in [adapters](components/adapters.md) (the
 engine, the drivers), [protocol](components/protocol.md#the-site-registry-sitests) (the registry) and the site pages
-([Workday](components/workday-adapter.md), [Oracle](components/oracle-adapter.md), [the others](components/sites.md)).
+([sites](components/sites.md)).
 This page says how to build one and what goes where.
 
 ## Principles

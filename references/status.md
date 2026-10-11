@@ -66,14 +66,14 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Fixed since and not re-run:
   the row Delete (found on a saved step), multi-selects that unticked Workday's own tick, a hierarchical prompt's
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school
-  lists' late search ([workday](components/workday-adapter.md), [oracle](components/oracle-adapter.md#what-was-verified-and-how)).
+  lists' late search ([workday](components/sites.md#workday-sitesworkday), [oracle](components/sites.md#oracle-what-was-verified)).
   Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted.
 - **Workday's and Oracle's drivers on the shared ones** (2026-10-11): equal golden schemas and behaviour tests.
   What changed is small: the shared text driver's reformatted-phone and read-only checks on Workday, a checkbox
   group's `multiple` and `remove_items` there, an uploaded file's name matched regardless of case, and Oracle's
   native checkbox groups, which couldn't be filled before ([adapters](components/adapters.md#a-sites-own-drivers)).
 - **Multi-part Workday dates:** focus is the suspect. Compare a run with `forms.focusBrowser` off and the terminal
-  in front against one with it on ([dates](components/workday-adapter.md#dates-typed-into-workdays-split-widget)).
+  in front against one with it on ([dates](components/sites.md#dates-typed-into-workdays-split-widget)).
 - **Fills slower in debug mode's first live run** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the
   adapter trace will show which waits ran to their maximum; one guess is `afterFieldMaxMs`.
 - **Greenhouse, Lever, Ashby:** fixes after one real Greenhouse and one Ashby application (multi-select ids, lists
@@ -102,7 +102,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 ## Known issues
 - **"Could not open the dropdown"** on Workday after its own list was read without a choice; the adapter retries
-  once, and nothing records whether the retry ran ([details](components/workday-adapter.md#finding-a-dropdowns-listbox)).
+  once, and nothing records whether the retry ran ([details](components/sites.md#workdays-dropdown-finding-its-listbox)).
 - **Unexplained on Workday:** a "Field of Study" search returning only its top level in a step's fill but taken
   when filled alone; language rows (and their levels) empty on coming back to a step.
 - **A `go_next` after the user advanced the step themselves** presses the next step's button.
