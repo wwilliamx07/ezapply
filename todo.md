@@ -5,6 +5,7 @@
 - everything happens in browser, no need to directly interact with the agent
 - all agent flows have minimal reliance on agent performance
 - compatibility with various agents
+- get rid of ezapply chat, other redundant cli tools
 - run multiple applications in parallel
 - work on minimized tabs
 - for claims/repo documentation, maybe follow some technical writing spec, tailored and humanized before use in application documents
