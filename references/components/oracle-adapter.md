@@ -11,15 +11,17 @@ events that reach React's own root listener, which the MAIN world dispatches lik
 |---|---|
 | `site.ts` | The definition: page rules, the step key (URL and step), repeat rules (a timeline entry's delete button revealed by hovering, an inline form's errors), fill rules (page order, stale errors, scroll before upload, new errors only), the waits, messages |
 | `main.ts` | Bundle entry: `install(oracle)`, which defines `window.__ezapply_oracle` ([engine](adapters.md#the-api-apits)) |
-| `page.ts` | Page detection, fields (`oracleFields`), saved items and rows (`oracleRows`), add and Save buttons (`oracleAddButtons`), step, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton`, and the value readers the drivers use |
-| `fill.ts` | One filler per widget, option listing and search, uploads, removals |
-| `widgets.ts` | `ORACLE_WIDGETS`: the fillers and readers of `fill.ts` and `page.ts` as drivers |
+| `page.ts` | Page detection, fields (`oracleFields`, each row's widget by `rowWidget`), saved items and rows (`oracleRows`), add and Save buttons (`oracleAddButtons`), step, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton` |
+| `widgets.ts` | `ORACLE_WIDGETS`, by the widget name `rowWidget` gives: the date and list drivers, pills (the shared `toggleButtonsDriver`, single or multiple), and the shared radio, checkbox, checkbox-group, text, number, textarea, password and file drivers with Oracle's labels, leaving and removal; widgets it can't drive; `confirmRemoval` |
+| `combo.ts` | `comboDriver`: the cx-select list ([searching](#searching-a-list)), also used by the date |
+| `date.ts` | `dateDriver`: the month, day and year lists |
 | `selectors.ts` | **Every Oracle-specific string of the adapter**: class hooks, button texts, `PROFILE_HINTS`. URL detection and the tenant come from `@ezapply/protocol/oracle` ([protocol](protocol.md)) |
 
 The engine (`adapters/engine/`) does the rest, as for every site: the API, ids and sections, the fill loop,
 next and back, the submit guard, the waits ([adapters](adapters.md)). When the adapter moved onto it
-(2026-10-03), its fillers and readers moved unchanged and the golden schemas stayed equal. It hasn't run live
-since.
+(2026-10-03), its fillers and readers moved unchanged and the golden schemas stayed equal; its drivers were then
+reworked onto the shared ones ([why](adapters.md#a-sites-own-drivers)), with the golden schemas equal again. It
+hasn't run live since either.
 
 ## Which pages
 
@@ -127,6 +129,7 @@ date's month, day and year lists are matched by values the adapter builds itself
 | radio (pills) | Press the matching pill unless already pressed: a pressed single-choice pill unselects itself when pressed again |
 | radio (native) | Press the input (Knockout's `checked` binding reads it on click), else its label |
 | checkbox-group (pills) | Press each pill whose state must change |
+| checkbox-group (native) | Tick exactly the boxes named (each by its label), pressing only those that must change |
 | checkbox | Press the input |
 | date | Each part is a list: month by name ("April", "Apr") or number, day with or without a leading zero, year |
 | file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`, else a drop on the upload button; confirmed only by a **newly shown** file of that name |
@@ -167,7 +170,8 @@ is gone, so an upload fails with "remove it with remove_items first" (a resume f
 is the usual case). Additional documents take several, listed below their button.
 
 **Removing** (`remove`): files by their Remove button (confirming a delete/remove dialog if one appears);
-multi-choice pills by unpressing them. Other kinds say to use `fill_fields`.
+multi-choice pills by unpressing them, and native checkbox groups by unticking. Other kinds say to use
+`fill_fields`.
 
 ## Repeatable items
 Work and education (a timeline), languages and licenses (tiles) are added through an inline form:

@@ -11,7 +11,7 @@ import {
   waitFor,
   win,
 } from "../engine/dom.js";
-import { choiceLabel } from "../engine/standard.js";
+import { choiceLabel as defaultLabel } from "../engine/standard.js";
 import { T } from "../engine/timing.js";
 import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.js";
 
@@ -19,6 +19,8 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../engine/types.j
  * Drivers for plain HTML controls: text inputs and textareas, `<select>`, radio and checkbox groups, a single
  * checkbox, date inputs, and passwords (recognised, never filled). Each works on a field container holding the
  * control; React-controlled inputs are set past React's value tracker, with React's own handler as a fallback.
+ * A site whose controls differ passes options (how a choice is labelled, what's tried when a press doesn't take)
+ * rather than keeping its own copy.
  */
 
 const fail = (error: string, extra: Partial<FillOutcome> = {}): FillOutcome => ({ ok: false, error, ...extra });
@@ -33,14 +35,25 @@ const sameDigits = (a: string, b: string) => {
   return d(a).length >= 7 && d(a) === d(b);
 };
 
-async function setText(input: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<FillOutcome> {
+type TextInput = HTMLInputElement | HTMLTextAreaElement;
+
+export interface TextOptions {
+  /** The control in the field container (default: by kind). */
+  selector?: string;
+  /** How the control is left after typing, so the page validates it (default: `blur`'s focus events). */
+  leave?: (input: TextInput) => void;
+  /** When the value didn't take, set it and call React's onChange and onBlur (default: true). */
+  react?: boolean;
+}
+
+async function setText(input: TextInput, value: string, opts: TextOptions = {}): Promise<FillOutcome> {
   if (input.readOnly) return fail("This field is read-only on the page.", { readBack: input.value });
   input.focus();
   setNativeValue(input, value);
-  blur(input);
+  (opts.leave ?? blur)(input);
   await sleep(T.textCheckMs);
   const took = () => input.value === value || (input.type === "tel" && sameDigits(input.value, value));
-  if (!took()) {
+  if (!took() && opts.react !== false) {
     // Fallback: drive React's handlers directly.
     input.value = value;
     callReact(input, "onChange", { target: input });
@@ -52,18 +65,22 @@ async function setText(input: HTMLInputElement | HTMLTextAreaElement, value: str
     : fail("The page did not accept the value.", { readBack: input.value });
 }
 
-/** A text, email, tel, url or number input, or a textarea, found by `selector` in the container. */
-export function textDriver(kind: "text" | "number" | "textarea", selector?: string): WidgetDriver {
-  const sel = selector ?? (kind === "textarea" ? "textarea" : kind === "number" ? "input[type='number']" : TEXT_INPUT);
-  const control = (c: HTMLElement) =>
-    c.matches(sel) ? (c as HTMLInputElement) : c.querySelector<HTMLInputElement | HTMLTextAreaElement>(sel);
+/**
+ * A text, email, tel, url or number input, or a textarea, found in the container by `selector` (a string is the
+ * selector alone).
+ */
+export function textDriver(kind: "text" | "number" | "textarea", options: string | TextOptions = {}): WidgetDriver {
+  const opts = typeof options === "string" ? { selector: options } : options;
+  const sel =
+    opts.selector ?? (kind === "textarea" ? "textarea" : kind === "number" ? "input[type='number']" : TEXT_INPUT);
+  const control = (c: HTMLElement) => (c.matches(sel) ? (c as TextInput) : c.querySelector<TextInput>(sel));
   return {
     kind,
     is: (c) => Boolean(control(c)),
     value: (c) => control(c)?.value ?? "",
     fill: async (c, value) => {
       const input = control(c);
-      return input ? setText(input, asString(value)) : fail("No input found in the field.");
+      return input ? setText(input, asString(value), opts) : fail("No input found in the field.");
     },
   };
 }
@@ -130,19 +147,36 @@ export function selectDriver(opts: { settled?: boolean } = {}): WidgetDriver {
 
 const checked = (i: HTMLInputElement) => i.checked || i.getAttribute("aria-checked") === "true";
 
-async function setChecked(box: HTMLInputElement, want: boolean): Promise<boolean> {
+export interface ChoiceOptions {
+  /** An option's label (default: its `<label for>`, the label around it, or its value). */
+  label?: (input: HTMLInputElement) => string;
+  /**
+   * What's tried when pressing the input didn't change it: press its label (a visually hidden input; the
+   * default), call React's onChange (and a radio's onClick) with the state wanted, or nothing.
+   */
+  fallback?: "label" | "react" | "none";
+}
+
+async function setChecked(box: HTMLInputElement, want: boolean, fallback: ChoiceOptions["fallback"]): Promise<boolean> {
   if (checked(box) === want) return true;
   press(box);
   if (await waitFor(() => checked(box) === want, T.checkMs)) return true;
-  // A visually hidden input: its label takes the click.
-  const label =
-    box.closest("label") ?? (box.id ? box.ownerDocument.querySelector(`label[for="${cssEscape(box.id)}"]`) : null);
-  if (label) press(label);
+  if (fallback === "none") return false;
+  if (fallback === "react") {
+    callReact(box, "onChange", { target: { ...box, checked: want, value: box.value } });
+    if (box.type === "radio") callReact(box, "onClick", {});
+  } else {
+    // A visually hidden input: its label takes the click.
+    const label =
+      box.closest("label") ?? (box.id ? box.ownerDocument.querySelector(`label[for="${cssEscape(box.id)}"]`) : null);
+    if (label) press(label);
+  }
   return Boolean(await waitFor(() => checked(box) === want, T.checkMs));
 }
 
 /** Radio buttons: one choice among options labelled by their own labels. */
-export function radioDriver(): WidgetDriver {
+export function radioDriver(opts: ChoiceOptions = {}): WidgetDriver {
+  const choiceLabel = opts.label ?? defaultLabel;
   const radios = (c: HTMLElement) => [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
   return {
     kind: "radio",
@@ -157,7 +191,7 @@ export function radioDriver(): WidgetDriver {
       const labels = all.map(choiceLabel);
       const idx = matchOption(asString(value), labels);
       if (idx < 0) return fail(`No option matches "${asString(value)}".`, { availableOptions: labels });
-      return (await setChecked(all[idx] as HTMLInputElement, true))
+      return (await setChecked(all[idx] as HTMLInputElement, true, opts.fallback))
         ? { ok: true, readBack: labels[idx] as string }
         : fail("Selection did not stick.");
     },
@@ -165,7 +199,7 @@ export function radioDriver(): WidgetDriver {
 }
 
 /** A single checkbox (an agreement): true ticks it, false unticks it. */
-export function checkboxDriver(): WidgetDriver {
+export function checkboxDriver(opts: Pick<ChoiceOptions, "fallback"> = {}): WidgetDriver {
   const box = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="checkbox"]');
   return {
     kind: "checkbox",
@@ -178,13 +212,16 @@ export function checkboxDriver(): WidgetDriver {
       const b = box(c);
       if (!b) return fail("No checkbox found.");
       const want = value === true || /^(true|yes|checked)$/i.test(String(value));
-      return (await setChecked(b, want)) ? { ok: true, readBack: want } : fail("Checkbox did not change.");
+      return (await setChecked(b, want, opts.fallback))
+        ? { ok: true, readBack: want }
+        : fail("Checkbox did not change.");
     },
   };
 }
 
 /** Several checkboxes, each an option: filling ticks exactly the options named. */
-export function checkboxGroupDriver(): WidgetDriver {
+export function checkboxGroupDriver(opts: ChoiceOptions = {}): WidgetDriver {
+  const choiceLabel = opts.label ?? defaultLabel;
   const boxes = (c: HTMLElement) => [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
   return {
     kind: "checkbox-group",
@@ -201,7 +238,7 @@ export function checkboxGroupDriver(): WidgetDriver {
         if (idx < 0) return fail(`No option matches "${w}".`, { availableOptions: labels });
         targets.add(idx);
       }
-      for (const [i, b] of all.entries()) await setChecked(b, targets.has(i));
+      for (const [i, b] of all.entries()) await setChecked(b, targets.has(i), opts.fallback);
       const readBack = all.filter(checked).map(choiceLabel);
       return readBack.length === targets.size
         ? { ok: true, readBack }
@@ -214,7 +251,7 @@ export function checkboxGroupDriver(): WidgetDriver {
       const targets = (values ?? current).map((v) => matchOption(v, current)).filter((i) => i >= 0);
       const removed: string[] = [];
       for (const i of targets)
-        if (await setChecked(on[i] as HTMLInputElement, false)) removed.push(current[i] as string);
+        if (await setChecked(on[i] as HTMLInputElement, false, opts.fallback)) removed.push(current[i] as string);
       const remaining = boxes(c).filter(checked).map(choiceLabel);
       const ok = removed.length === targets.length && !notFound.length;
       return {

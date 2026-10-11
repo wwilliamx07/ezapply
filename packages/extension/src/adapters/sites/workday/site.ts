@@ -3,7 +3,6 @@ import { settle, text, waitFor } from "../../engine/dom.js";
 import { titledJob } from "../../engine/standard.js";
 import { T } from "../../engine/timing.js";
 import type { SiteDefinition } from "../../engine/types.js";
-import { confirmRemoval } from "./fill.js";
 import {
   backButton,
   detectPage,
@@ -18,6 +17,7 @@ import {
   workdayFields,
   workdayRows,
 } from "./page.js";
+import { confirmRemoval } from "./remove.js";
 import { SEL } from "./selectors.js";
 import { WORKDAY_WIDGETS } from "./widgets.js";
 

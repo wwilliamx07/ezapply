@@ -2,7 +2,6 @@ import { siteInfo } from "@ezapply/protocol/sites";
 import { isVisible, settle, waitFor, win } from "../../engine/dom.js";
 import { T } from "../../engine/timing.js";
 import type { SiteDefinition } from "../../engine/types.js";
-import { confirmRemoval } from "./fill.js";
 import {
   actionButton,
   backButton,
@@ -22,7 +21,7 @@ import {
   visibleRowCount,
 } from "./page.js";
 import { SEL } from "./selectors.js";
-import { ORACLE_WIDGETS } from "./widgets.js";
+import { confirmRemoval, ORACLE_WIDGETS } from "./widgets.js";
 
 /**
  * Oracle Recruiting Cloud (Candidate Experience, on Oracle Cloud hosts and employers' own domains): one page with

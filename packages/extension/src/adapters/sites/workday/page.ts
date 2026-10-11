@@ -9,12 +9,6 @@ import { hintKey, PROFILE_HINTS, SEL } from "./selectors.js";
  * says how each kind of field reads and fills.
  */
 
-/** A field as the fillers need it: its kind and its container. */
-export interface FieldRef {
-  field: Pick<Field, "kind">;
-  container: HTMLElement;
-}
-
 const SUBMIT_TEXT = /^\s*submit(\s+application)?\s*$/i;
 
 // ---- page level ---------------------------------------------------------------------------------
@@ -255,27 +249,6 @@ function rowOf(
   return undefined;
 }
 
-export function fieldKind(c: HTMLElement): FieldKind | null {
-  if (c.querySelector(SEL.fileDropZone) || c.querySelector('input[type="file"]')) return "file";
-  const labels = [...c.querySelectorAll("input")].map((i) => (i.getAttribute("aria-label") ?? "").toLowerCase());
-  if (labels.includes("year") || labels.includes("month")) return "date";
-  if (c.querySelector(SEL.multiSelect)) return "typeahead";
-  if (c.querySelector('button[aria-haspopup="listbox"]')) return "dropdown";
-  const radios = c.querySelectorAll('input[type="radio"]');
-  if (radios.length > 0) return "radio";
-  const boxes = c.querySelectorAll('input[type="checkbox"]');
-  if (boxes.length > 1) return "checkbox-group";
-  if (boxes.length === 1) return "checkbox";
-  if (c.querySelector("textarea")) return "textarea";
-  if (c.querySelector('input[type="password"]')) return "password";
-  if (c.querySelector('input[type="number"]')) return "number";
-  if (
-    c.querySelector("input:not([type]), input[type='text'], input[type='email'], input[type='tel'], input[type='url']")
-  )
-    return "text";
-  return null;
-}
-
 function fieldLabel(c: HTMLElement, kind: FieldKind): string {
   const legend = c.querySelector("legend");
   if (legend && (kind === "radio" || kind === "checkbox-group" || kind === "date")) return cleanLabel(text(legend));
@@ -317,125 +290,6 @@ function sectionTitleOf(c: HTMLElement): string {
     el = el.parentElement;
   }
   return "Main";
-}
-
-export function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
-  switch (kind) {
-    case "text":
-    case "number":
-    case "textarea":
-      return (c.querySelector("input, textarea") as HTMLInputElement | null)?.value ?? "";
-    case "password":
-      return (c.querySelector("input") as HTMLInputElement | null)?.value ? "••••" : "";
-    case "dropdown": {
-      const t = text(c.querySelector('button[aria-haspopup="listbox"]'));
-      return /^select one$|^select$|^$/i.test(t) ? null : t;
-    }
-    case "typeahead": {
-      const items = [...c.querySelectorAll(SEL.selectedChips)].map(text).filter(Boolean);
-      return [...new Set(items)];
-    }
-    case "radio": {
-      const checked = [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find(
-        (r) => r.checked || r.getAttribute("aria-checked") === "true",
-      );
-      return checked ? optionLabel(checked) : null;
-    }
-    case "checkbox": {
-      const box = c.querySelector<HTMLInputElement>('input[type="checkbox"]');
-      return Boolean(box && (box.checked || box.getAttribute("aria-checked") === "true"));
-    }
-    case "checkbox-group":
-      return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
-        .filter((b) => b.checked || b.getAttribute("aria-checked") === "true")
-        .map(optionLabel);
-    case "date":
-      return dateValue(c);
-    case "file":
-      return attachedFiles(c).map((f) => f.name);
-  }
-}
-
-/**
- * The files attached to a file field, once each: `name` from the file-name element, `row` the element
- * holding it and its delete button. A row and the name inside it both match the file hooks, so rows are
- * used only when a tenant shows no separate name element.
- */
-export function attachedFiles(c: Element): { name: string; row: HTMLElement; nameEl: HTMLElement }[] {
-  const names = [...c.querySelectorAll<HTMLElement>(SEL.fileName)];
-  const found = names.length
-    ? names.map((n) => ({ nameEl: n, row: n.closest<HTMLElement>(SEL.fileRow) ?? n.parentElement ?? n }))
-    : [...c.querySelectorAll<HTMLElement>(SEL.fileItem)]
-        .filter((el, _, all) => !all.some((o) => o !== el && o.contains(el)))
-        .map((el) => ({ nameEl: el, row: el }));
-  return found.map((f) => ({ ...f, name: text(f.nameEl) })).filter((f) => f.name);
-}
-
-export function optionLabel(input: HTMLInputElement): string {
-  const id = input.id;
-  const byFor = id ? input.ownerDocument.querySelector(`label[for="${cssEscape(id)}"]`) : null;
-  const wrap = input.closest("label");
-  return cleanLabel(text(byFor ?? wrap) || input.getAttribute("aria-label") || input.value);
-}
-
-export function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
-  if (kind === "radio") return [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(optionLabel);
-  if (kind === "checkbox-group")
-    return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(optionLabel);
-  return undefined;
-}
-
-/**
- * What one part of a split date holds as far as the page is concerned. Live Workday keeps the part's value in
- * its own state and shows it in a display element next to the input; setting the input's value changes the
- * input but not that state (seen live: the input read "12" while Workday said the field was empty). So the
- * display counts when there is one, then `aria-valuenow`, then the input's value.
- */
-export function datePartValue(input: HTMLInputElement): string {
-  const display = input.parentElement?.querySelector(SEL.datePartDisplay);
-  if (display) {
-    const t = text(display);
-    return /^\d+$/.test(t) ? t : "";
-  }
-  const now = input.getAttribute("aria-valuenow");
-  if (now !== null) return /^\d+$/.test(now.trim()) ? now.trim() : "";
-  return input.value.trim();
-}
-
-export function datePartInput(c: HTMLElement, part: "Month" | "Day" | "Year"): HTMLInputElement | null {
-  return c.querySelector<HTMLInputElement>(`input[aria-label="${part}" i]`);
-}
-
-/** The date as YYYY, YYYY-MM or YYYY-MM-DD from the parts the field has; null when all are empty. */
-export function dateValue(c: HTMLElement): string | null {
-  const part = (p: "Month" | "Day" | "Year") => {
-    const input = datePartInput(c, p);
-    return input ? datePartValue(input) : "";
-  };
-  const [y, m, d] = [part("Year"), part("Month"), part("Day")];
-  if (!y && !m && !d) return null;
-  return [y, m, d]
-    .filter(Boolean)
-    .map((v, i) => (i === 0 ? v : v.padStart(2, "0")))
-    .join("-");
-}
-
-export function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
-  const has = (l: string) => Boolean(c.querySelector(`input[aria-label="${l}" i]`));
-  return [
-    ...(has("Month") ? (["MM"] as const) : []),
-    ...(has("Day") ? (["DD"] as const) : []),
-    ...(has("Year") ? (["YYYY"] as const) : []),
-  ];
-}
-
-export function isMultiple(c: HTMLElement, kind: FieldKind): boolean {
-  if (kind === "file") return Boolean((c.querySelector('input[type="file"]') as HTMLInputElement | null)?.multiple);
-  const ms = c.querySelector(SEL.multiSelect);
-  return (
-    ms?.getAttribute("data-uxi-multiselect-singleselect") === "false" ||
-    ms?.getAttribute("aria-multiselectable") === "true"
-  );
 }
 
 export function fieldError(c: HTMLElement): string | undefined {

@@ -82,6 +82,48 @@ describe("native controls", () => {
     expect(g.value(group)).toEqual(["She/her"]);
   });
 
+  it("choices a press doesn't change: their label by default, React's onChange, or nothing, as the site says", async () => {
+    // A checkbox whose clicks are cancelled, as a page that handles them elsewhere does.
+    const stuck = (html: string) => {
+      const c = field(html);
+      const box = c.querySelector("input") as HTMLInputElement;
+      box.addEventListener("click", (e) => e.preventDefault());
+      return { c, box };
+    };
+    const byLabel = stuck('<input type="checkbox" id="t"><label for="t">I agree</label>');
+    (byLabel.c.querySelector("label") as HTMLElement).addEventListener("click", (e) => {
+      e.preventDefault();
+      byLabel.box.checked = true;
+    });
+    expect(await checkboxDriver().fill(byLabel.c, true)).toEqual({ ok: true, readBack: true });
+
+    const byReact = stuck('<label><input type="checkbox"><span>I agree</span></label>');
+    let sent: unknown;
+    (byReact.box as unknown as Record<string, unknown>).__reactProps$x = {
+      onChange: (e: { target: { checked: boolean } }) => {
+        sent = e.target.checked;
+        byReact.box.checked = e.target.checked;
+      },
+    };
+    expect(await checkboxDriver({ fallback: "react" }).fill(byReact.c, true)).toEqual({ ok: true, readBack: true });
+    expect(sent).toBe(true);
+
+    const none = stuck('<input type="checkbox" id="n"><label for="n">I agree</label>');
+    let labelPressed = false;
+    (none.c.querySelector("label") as HTMLElement).addEventListener("click", () => {
+      labelPressed = true;
+    });
+    expect(await checkboxDriver({ fallback: "none" }).fill(none.c, true)).toMatchObject({ ok: false });
+    expect(labelPressed).toBe(false);
+
+    const radios = field(
+      '<input type="radio" name="r" aria-label="Yes" value="y"><input type="radio" name="r" aria-label="No" value="n">',
+    );
+    const named = radioDriver({ label: (i) => `${i.getAttribute("aria-label")}!` });
+    expect(named.options?.(radios)).toEqual(["Yes!", "No!"]);
+    expect(await named.fill(radios, "No!")).toEqual({ ok: true, readBack: "No!" });
+  });
+
   it("date inputs take the format their type wants; passwords are never filled", async () => {
     const c = field('<input type="month">');
     expect(dateInputDriver().dateParts?.(c)).toEqual(["MM", "YYYY"]);
@@ -321,6 +363,26 @@ describe("toggle buttons, a search field, a file field", () => {
     expect(await d.fill(c, "No")).toEqual({ ok: true, readBack: "No" });
   });
 
+  it("toggle buttons with several pressed: their own label and pressed state, filled exactly, unpressed by remove", async () => {
+    const c = field(
+      ["English", "French", "Spanish"]
+        .map((l) => `<button class="pill"><span class="name">${l}</span><i>+</i></button>`)
+        .join(""),
+    );
+    for (const b of c.querySelectorAll("button")) b.addEventListener("click", () => b.classList.toggle("on"));
+    const d = toggleButtonsDriver({
+      buttons: "button.pill",
+      label: (b) => b.querySelector(".name")?.textContent ?? "",
+      pressed: (b) => b.classList.contains("on"),
+      multiple: true,
+    });
+    expect(d.kind).toBe("checkbox-group");
+    expect(d.multiple?.(c)).toBe(true);
+    expect(await d.fill(c, ["French", "English"])).toEqual({ ok: true, readBack: ["English", "French"] });
+    expect(await d.fill(c, ["Spanish"])).toEqual({ ok: true, readBack: ["Spanish"] });
+    expect(await d.remove?.(c, null, {} as never)).toMatchObject({ ok: true, removed: ["Spanish"], remaining: [] });
+  });
+
   it("a search field: types, waits for suggestions that come on a key event, chooses one, or lists them on a miss", async () => {
     const c = field('<input class="loc"><div class="results"></div>');
     const input = c.querySelector("input") as HTMLInputElement;
@@ -367,6 +429,44 @@ describe("toggle buttons, a search field, a file field", () => {
     const file = new File(["%PDF"], "resume.pdf", { type: "application/pdf" });
     expect(await d.upload?.(c, file)).toEqual({ ok: true, readBack: ["resume.pdf"] });
     expect(await d.remove?.(c, null, {} as never)).toMatchObject({ ok: true, removed: ["resume.pdf"], remaining: [] });
+  });
+
+  it("a file field by its entries: a same-named file the page replaces counts; dropped where the site says", async () => {
+    const c = field('<div class="zone"></div><div class="names"><p class="n">Resume.pdf</p></div>');
+    const zone = c.querySelector(".zone") as HTMLElement;
+    const names = c.querySelector(".names") as HTMLElement;
+    // No input: the zone takes a drop, and the page replaces the file it held.
+    zone.addEventListener("drop", (e) => {
+      const name = (e as DragEvent).dataTransfer?.files[0]?.name ?? "";
+      names.innerHTML = `<p class="n">${name}</p>`;
+    });
+    const shown = (x: HTMLElement) => [...x.querySelectorAll<HTMLElement>(".n")];
+    const d = fileDriver({
+      input: () => null,
+      names: (x) => shown(x).map((p) => p.textContent ?? ""),
+      entries: (x) => shown(x).map((p) => ({ name: p.textContent ?? "", el: p })),
+      dropZone: (x) => x.querySelector(".zone"),
+    });
+    const file = new File(["%PDF"], "resume.pdf", { type: "application/pdf" });
+    expect(await d.upload?.(c, file)).toEqual({ ok: true, readBack: ["resume.pdf"] });
+
+    const held = fileDriver({ input: () => null, names: () => ["cv.pdf"] });
+    expect(await held.upload?.(c, file)).toMatchObject({ ok: false, error: /already holds cv\.pdf/ });
+  });
+
+  it("a file field's removal confirmed in a dialog when it didn't take at once", async () => {
+    const c = field('<p class="n">resume.pdf<button>Remove</button></p>');
+    let confirmed = false;
+    const d = fileDriver({
+      names: (x) => [...x.querySelectorAll<HTMLElement>(".n")].map((p) => p.firstChild?.textContent ?? ""),
+      removeButton: (x) => x.querySelector("button"),
+      confirmRemoval: async (doc) => {
+        confirmed = true;
+        doc.querySelector(".n")?.remove();
+      },
+    });
+    expect(await d.remove?.(c, ["resume.pdf"], {} as never)).toMatchObject({ ok: true, removed: ["resume.pdf"] });
+    expect(confirmed).toBe(true);
   });
 });
 

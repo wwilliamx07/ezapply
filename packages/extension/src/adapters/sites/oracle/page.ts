@@ -1,20 +1,15 @@
-import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
+import type { FormSchema, PageAction, PageKind } from "@ezapply/protocol";
 import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../../engine/dom.js";
 import type { AddButtonSpot, FieldSpot, RowSpot, SectionSpot, WidgetDriver } from "../../engine/types.js";
 import { hintFor, SEL, TEXT } from "./selectors.js";
+import type { OracleWidget } from "./widgets.js";
 
 /**
  * Where things are on an Oracle Recruiting Cloud page: its fields and their prompts (form rows, the phone's two
  * halves, agreements, attachments), blocks, saved items, add and Save buttons, the page kind, the step, errors,
- * and the buttons. The engine (`adapters/engine/`) reads the page through these; `widgets.ts` says how each kind
- * of field reads and fills.
+ * and the buttons. The engine (`adapters/engine/`) reads the page through these; `widgets.ts` says how each widget
+ * reads and fills.
  */
-
-/** A field as the fillers need it: its kind and its container. */
-export interface FieldRef {
-  field: Pick<Field, "kind">;
-  container: HTMLElement;
-}
 
 /** A saved repeatable item (a language tile, a work or education entry on the timeline). */
 export interface ItemRef {
@@ -178,7 +173,8 @@ export function detectPage(doc: Document, url: string, fieldCount: number): Page
 
 interface Candidate {
   container: HTMLElement;
-  kind: FieldKind;
+  /** Which of Oracle's widgets it is. */
+  widget: OracleWidget;
   /** Where the id comes from: the control's id without its render counter, or the label. */
   key: string;
   label: string;
@@ -214,16 +210,17 @@ function rowRequired(row: HTMLElement): boolean {
   return Boolean(row.querySelector('input[aria-required="true"], textarea[aria-required="true"], [required]'));
 }
 
-function rowKind(row: HTMLElement): FieldKind | null {
+/** The widget a form row holds, by what's in it. */
+function rowWidget(row: HTMLElement): OracleWidget | null {
   if (row.matches(SEL.dateRow) || row.querySelector(SEL.datePart)) return "date";
   const pills = row.querySelector(SEL.pills);
-  if (pills) return pills.querySelector(SEL.pillMultiIcon) ? "checkbox-group" : "radio";
+  if (pills) return pills.querySelector(SEL.pillMultiIcon) ? "pillsMulti" : "pills";
   if (row.querySelector('input[type="radio"]')) return "radio";
-  if (row.querySelector(SEL.comboInput)) return "dropdown";
+  if (row.querySelector(SEL.comboInput)) return "list";
   // Before the text check: these hold text inputs that typing alone doesn't fill.
-  if (row.querySelector(SEL.unsupported)) return "typeahead";
+  if (row.querySelector(SEL.unsupported)) return "unsupported";
   const boxes = row.querySelectorAll('input[type="checkbox"]');
-  if (boxes.length > 1) return "checkbox-group";
+  if (boxes.length > 1) return "checkboxes";
   if (boxes.length === 1) return "checkbox";
   if (row.querySelector("textarea:not([tabindex='-1'])")) return "textarea";
   if (row.querySelector('input[type="password"]')) return "password";
@@ -238,7 +235,8 @@ function rowKind(row: HTMLElement): FieldKind | null {
   return null;
 }
 
-function checkboxLabel(input: HTMLInputElement): string {
+/** An agreement's or a checkbox option's label. */
+export function checkboxLabel(input: HTMLInputElement): string {
   const doc = input.ownerDocument;
   const label =
     (input.id ? doc.querySelector(`label[for="${cssEscape(input.id)}"]`) : null) ??
@@ -279,23 +277,23 @@ function candidates(doc: Document): Candidate[] {
       if (prefix)
         out.push({
           container: prefix,
-          kind: "dropdown",
+          widget: "list",
           key: "phoneCountryCode",
           label: `${label}: country code`,
           required,
           row,
         });
-      if (number) out.push({ container: number, kind: "text", key: "phoneNumber", label, required, row });
+      if (number) out.push({ container: number, widget: "text", key: "phoneNumber", label, required, row });
       continue;
     }
-    const kind = rowKind(row);
-    if (!kind) continue;
-    if (kind === "checkbox") {
+    const widget = rowWidget(row);
+    if (!widget) continue;
+    if (widget === "checkbox") {
       const box = row.querySelector<HTMLInputElement>('input[type="checkbox"]') as HTMLInputElement;
       const boxLabel = checkboxLabel(box);
       out.push({
         container: row,
-        kind,
+        widget,
         key: stripCounter(box.id) || slug(boxLabel),
         label: boxLabel || label,
         required,
@@ -303,7 +301,7 @@ function candidates(doc: Document): Candidate[] {
       });
       continue;
     }
-    out.push({ container: row, kind, key: rowKey(row), label, required, row });
+    out.push({ container: row, widget, key: rowKey(row), label, required, row });
   }
   // Agreement checkboxes that sit in no form row (job alerts).
   for (const box of doc.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
@@ -315,7 +313,7 @@ function candidates(doc: Document): Candidate[] {
     const required = Boolean(box.required || box.getAttribute("aria-required") === "true");
     out.push({
       container,
-      kind: "checkbox",
+      widget: "checkbox",
       key: stripCounter(box.id) || slug(label),
       label,
       required,
@@ -334,7 +332,7 @@ function candidates(doc: Document): Candidate[] {
     const required = Boolean(
       upload.querySelector(SEL.uploadRequired) || input?.getAttribute("aria-required") === "true",
     );
-    out.push({ container, kind: "file", key: slug(label), label, required, row: container });
+    out.push({ container, widget: "file", key: slug(label), label, required, row: container });
   }
   return out.sort((a, b) => (a.container.compareDocumentPosition(b.container) & 4 ? -1 : 1));
 }
@@ -374,16 +372,15 @@ export function fieldError(row: HTMLElement): string | undefined {
   return undefined;
 }
 
-/** Every field on the page, in page order, each with the driver for its kind. */
-export function oracleFields(doc: Document, widgets: Partial<Record<FieldKind, WidgetDriver>>): FieldSpot[] {
+/** Every field on the page, in page order, each with the driver for its widget. */
+export function oracleFields(doc: Document, widgets: Record<OracleWidget, WidgetDriver>): FieldSpot[] {
   const out: FieldSpot[] = [];
   for (const c of candidates(doc)) {
-    const driver = widgets[c.kind];
-    if (!driver) continue;
+    const driver = widgets[c.widget];
     // Screening questions are keyed by long numbers; their label reads better and is as stable.
     const key = !c.key || /^\d/.test(c.key) ? slug(c.label).slice(0, 40) : c.key;
     const help = helpText(c.row, c.label);
-    const readOnly = c.kind === "text" && c.container.querySelector("input[readonly]");
+    const readOnly = c.widget === "text" && c.container.querySelector("input[readonly]");
     const helpShown = readOnly ? [help, "Read-only on this page."].filter(Boolean).join(" ") : help;
     const error = fieldError(c.row);
     const hint = hintFor(c.key);
@@ -473,143 +470,4 @@ export function savedItems(doc: Document): ItemRef[] {
       .slice(0, 120),
   }));
   return [...tiles, ...timeline];
-}
-
-// ---- values -------------------------------------------------------------------------------------
-
-export const pillButtons = (c: HTMLElement) => [...c.querySelectorAll<HTMLElement>(SEL.pill)];
-export const pillLabel = (b: HTMLElement) => text(b.querySelector(SEL.pillName) ?? b);
-export const pillPressed = (b: HTMLElement) =>
-  b.getAttribute("aria-pressed") === "true" || b.classList.contains("cx-select-pill-section--selected");
-
-export function radioLabel(input: HTMLInputElement): string {
-  const doc = input.ownerDocument;
-  const byLabelledBy = input
-    .getAttribute("aria-labelledby")
-    ?.split(/\s+/)
-    .map((id) => text(doc.getElementById(id)))
-    .find(Boolean);
-  const byFor = input.id ? text(doc.querySelector(`label[for="${cssEscape(input.id)}"]`)) : "";
-  return cleanLabel(byLabelledBy || byFor || input.getAttribute("aria-label") || input.value);
-}
-
-export const isChecked = (i: HTMLInputElement) => i.checked || i.getAttribute("aria-checked") === "true";
-
-export function comboInput(c: HTMLElement): HTMLInputElement | null {
-  return c.querySelector<HTMLInputElement>(SEL.comboInput);
-}
-
-/** The files a file field holds, once each. */
-export function attachedFiles(c: HTMLElement): { name: string; row: HTMLElement }[] {
-  return [...c.querySelectorAll<HTMLElement>(SEL.fileName)]
-    .map((n) => ({ name: text(n), row: n.closest<HTMLElement>(SEL.fileRow) ?? n }))
-    .filter((f) => f.name);
-}
-
-/** The date parts a date row has, in its own order (month, day, year). */
-export function datePartInputs(c: HTMLElement): { part: "MM" | "DD" | "YYYY"; input: HTMLInputElement }[] {
-  const out: { part: "MM" | "DD" | "YYYY"; input: HTMLInputElement }[] = [];
-  for (const el of c.querySelectorAll<HTMLElement>(SEL.datePart)) {
-    const input = comboInput(el) ?? el.querySelector<HTMLInputElement>("input");
-    if (!input) continue;
-    const cls = el.className;
-    const part = /--month/.test(cls) ? "MM" : /--day/.test(cls) ? "DD" : /--year/.test(cls) ? "YYYY" : null;
-    if (part) out.push({ part, input });
-  }
-  return out;
-}
-
-export function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
-  return datePartInputs(c).map((p) => p.part);
-}
-
-const MONTHS = [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
-];
-
-/** A month as the page shows it ("March", "Mar", "3", "03") → 1–12, or 0 when it isn't one. */
-export function monthNumber(s: string): number {
-  const v = norm(s).toLowerCase();
-  if (/^\d{1,2}$/.test(v)) return Number(v) >= 1 && Number(v) <= 12 ? Number(v) : 0;
-  const i = MONTHS.findIndex((m) => v.length >= 3 && m.startsWith(v.replace(/\.$/, "")));
-  return i + 1;
-}
-
-export function monthNames(m: number): string[] {
-  const name = MONTHS[m - 1] ?? "";
-  const cap = name.charAt(0).toUpperCase() + name.slice(1);
-  return [cap, cap.slice(0, 3), String(m).padStart(2, "0"), String(m)];
-}
-
-/** The date as YYYY, YYYY-MM or YYYY-MM-DD from what its parts show; null when all are empty. */
-export function dateValue(c: HTMLElement): string | null {
-  const parts = datePartInputs(c);
-  const get = (p: "MM" | "DD" | "YYYY") => norm(parts.find((x) => x.part === p)?.input.value);
-  const [y, mRaw, d] = [get("YYYY"), get("MM"), get("DD")];
-  if (!y && !mRaw && !d) return null;
-  const m = mRaw ? String(monthNumber(mRaw) || mRaw) : "";
-  return [y, m, d]
-    .filter(Boolean)
-    .map((v, i) => (i === 0 ? v : v.padStart(2, "0")))
-    .join("-");
-}
-
-export function currentValue(c: HTMLElement, kind: FieldKind): Field["currentValue"] {
-  switch (kind) {
-    case "text":
-    case "number":
-    case "textarea":
-      return (
-        c.querySelector<HTMLInputElement | HTMLTextAreaElement>("textarea:not([tabindex='-1']), input")?.value ?? ""
-      );
-    case "password":
-      return c.querySelector<HTMLInputElement>("input")?.value ? "••••" : "";
-    case "dropdown": {
-      const v = norm(comboInput(c)?.value);
-      return v || null;
-    }
-    case "radio": {
-      const pills = pillButtons(c);
-      if (pills.length) {
-        const on = pills.find(pillPressed);
-        return on ? pillLabel(on) : null;
-      }
-      const checked = [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find(isChecked);
-      return checked ? radioLabel(checked) : null;
-    }
-    case "checkbox-group": {
-      const pills = pillButtons(c);
-      if (pills.length) return pills.filter(pillPressed).map(pillLabel);
-      return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].filter(isChecked).map(checkboxLabel);
-    }
-    case "checkbox": {
-      const box = c.querySelector<HTMLInputElement>('input[type="checkbox"]');
-      return Boolean(box && isChecked(box));
-    }
-    case "date":
-      return dateValue(c);
-    case "file":
-      return attachedFiles(c).map((f) => f.name);
-    case "typeahead":
-      return [];
-  }
-}
-
-export function knownOptions(c: HTMLElement, kind: FieldKind): string[] | undefined {
-  if (kind !== "radio" && kind !== "checkbox-group") return undefined;
-  const pills = pillButtons(c);
-  if (pills.length) return pills.map(pillLabel);
-  if (kind === "radio") return [...c.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(radioLabel);
-  return [...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(checkboxLabel);
 }

@@ -21,8 +21,8 @@ skills treat them all alike.
 | `sites/<site>/site.ts` | The site's definition; `main.ts` is its bundle entry (`install(site)`) |
 | `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
 
-Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (their own drivers, `page.ts`, `fill.ts`,
-`selectors.ts` and `widgets.ts` beside `site.ts`), [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
+Sites: [Workday](workday-adapter.md) and [Oracle](oracle-adapter.md) (`page.ts`, `selectors.ts`, `widgets.ts` and
+a file per widget of their own beside `site.ts`, the plain controls and files on shared drivers), [Greenhouse, Lever, Ashby, Phenom and Dayforce](sites.md) (a
 `site.ts` each, on shared drivers), and [SAP SuccessFactors](sites.md#sap-successfactors-sitessuccessfactors) (a
 `site.ts`, with its picklist and attachment drivers in `widgets.ts`).
 
@@ -123,18 +123,18 @@ stricter mode that took only exact wordings served deterministic autofill and we
 ### Shared drivers (`widgets/`)
 | Driver | For |
 |---|---|
-| `textDriver(kind, selector?)` (`native.ts`) | Text, email, tel, url, number inputs and textareas: native setter past React's value tracker, blur, React's own handlers as a fallback. A phone number the page reformats counts when the digits match; a read-only input is refused |
+| `textDriver(kind, selector \| { selector?, leave?, react? })` (`native.ts`) | Text, email, tel, url, number inputs and textareas: native setter past React's value tracker, blur (or the site's `leave`), React's own handlers as a fallback unless `react: false` (Oracle's Knockout inputs). A phone number the page reformats counts when the digits match; a read-only input is refused |
 | `passwordDriver` | Recognised so it's never taken for text; never filled |
 | `selectDriver({ settled? })` | A native `<select>`; an option with an empty value ("Select...") is the placeholder, not a choice. `settled` (Phenom): for a React list that puts the old value back at once and takes the new one a moment later, set it past React's tracker and wait for the read-back, without calling React's handler (which by then reads the old value) |
-| `radioDriver()`, `checkboxDriver()`, `checkboxGroupDriver()` | By their own labels (`choiceLabel`). A hidden input's label takes the click. The group fills exactly the options named and removes some |
+| `radioDriver({ label?, fallback? })`, `checkboxDriver({ fallback? })`, `checkboxGroupDriver({ label?, fallback? })` | By their own labels (`choiceLabel`, or the site's `label`). When pressing the input didn't change it, `fallback` says what's next: its label takes the click (a hidden input; the default), React's `onChange` gets the state wanted (`"react"`, Workday), or nothing (`"none"`, Oracle's checkboxes). The group fills exactly the options named and removes some |
 | `dateInputDriver()` | Native `date` and `month` inputs, `YYYY-MM-DD` or `YYYY-MM` |
 | `monthPickerDriver()` (`datepicker.ts`) | A react-datepicker that picks a month (`MM/YYYY`; date parts `MM`, `YYYY`), driven through its calendar because its input takes no typing: opened from the input, the year chosen from the header's list (else stepped to with its arrows), the month pressed. A year the list lacks is refused with the years on offer, a disabled month as outside the dates the page allows |
 | `reactSelectDriver()` (`react-select.ts`) | react-select, through its own props ([below](#react-select-through-its-props)) |
 | `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
-| `toggleButtonsDriver(selector)` (`buttons.ts`) | A choice of `aria-pressed` buttons (Ashby's Yes / No), as a radio |
+| `toggleButtonsDriver(selector \| { buttons?, label?, pressed?, multiple? })` (`buttons.ts`) | A choice of toggle buttons (Ashby's Yes / No; Oracle's pills, by their own label and pressed class), as a radio; with `multiple`, a checkbox group that `remove_items` unpresses. A button is pressed only when it must change (a pressed toggle may unpress itself), with React's `onClick` as the fallback |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
 | `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites.md#sap-successfactors-sitessuccessfactors)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
-| `fileDriver({ input?, names, removeButton?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field. Done only when the page shows a **new** file of that name; removed by its own button |
+| `fileDriver({ input?, names, entries?, dropZone?, reactDrop?, removeButton?, confirmRemoval?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field (or the site's `dropZone`, through its React `onDrop` first with `reactDrop`). Done only when the page shows a **new** file of that name: one more of that name, or, with `entries`, an element that wasn't there before, so a same-named file the page replaces counts. A field without an input that already holds a file says to remove it first. Removed by its own button, confirming a dialog when the site gives `confirmRemoval` |
 
 **The combobox types a key too.** Lever's location field searches on keyup, not on input (seen live): setting
 the value found nothing. The driver sets the value, then sends the last character as a key event. When a search
@@ -188,8 +188,18 @@ A widget no shared driver handles gets a driver in the site's folder: Workday's 
 (typeahead with nested menus), split date and drop zone; Oracle's cx-select, date lists, pills and attachment
 buttons; SuccessFactors' paginated picklist and attachment fields, both components of its own framework (juic), driven
 through juic's component registry and the attachment view's upload popup
-([sites](sites.md#the-paginated-picklist-through-its-component)). Workday and Oracle wrap their existing fillers and
-readers as drivers (`sites/<site>/widgets.ts`), so none of their logic changed in the move.
+([sites](sites.md#the-paginated-picklist-through-its-component)). Each such driver holds everything about its
+widget: how it's recognised, read, listed, searched, filled and cleared.
+
+**Why Workday and Oracle were reworked (2026-10-11).** When they moved onto the engine, their fillers and readers
+moved unchanged: each "driver" handed its kind back to one `fillField` switch and to `currentValue` and
+`knownOptions` switches, the kind was decided twice (the drivers' `is` and `fieldKind` / `rowKind`), and their
+text, radio, checkbox, checkbox-group and file code were copies of the shared drivers, which had drifted apart (the
+shared ones took a reformatted phone number and refused read-only inputs; Workday's tried React's handlers where
+the shared ones press the label). Now each widget of their own is a real driver in a file of its own, the plain
+controls and files use the shared drivers with options for what really differs, and the switches are gone. The
+golden schemas and every behaviour test stayed equal. One fix came with it: an Oracle checkbox group of native
+checkboxes (not pills) was filled as pills, so no option ever matched; it now uses the shared checkbox group.
 
 ## Waits, owned by the site
 Each site owns its waits. Its registry entry (`SiteInfo.waits`, in `protocol/src/sites.ts`) gives every named wait

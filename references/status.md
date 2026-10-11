@@ -68,6 +68,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school
   lists' late search ([workday](components/workday-adapter.md), [oracle](components/oracle-adapter.md#what-was-verified-and-how)).
   Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted.
+- **Workday's and Oracle's drivers on the shared ones** (2026-10-11): equal golden schemas and behaviour tests.
+  What changed is small: the shared text driver's reformatted-phone and read-only checks on Workday, a checkbox
+  group's `multiple` and `remove_items` there, an uploaded file's name matched regardless of case, and Oracle's
+  native checkbox groups, which couldn't be filled before ([adapters](components/adapters.md#a-sites-own-drivers)).
 - **Multi-part Workday dates:** focus is the suspect. Compare a run with `forms.focusBrowser` off and the terminal
   in front against one with it on ([dates](components/workday-adapter.md#dates-typed-into-workdays-split-widget)).
 - **Fills slower in debug mode's first live run** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the

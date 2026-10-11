@@ -10,17 +10,21 @@ content scripts can't reach.
 |---|---|
 | `site.ts` | The definition: page rules, the step key (index and title), repeat rules, the waits (with the wait for a new step's fields), messages |
 | `main.ts` | Bundle entry: `install(workday)`, which defines `window.__ezapply_workday` ([engine](adapters.md#the-api-apits)) |
-| `page.ts` | Page detection, fields (`workdayFields`), rows (`workdayRows`), add buttons (`workdayAddButtons`), step info, errors and notices, page actions, `isSubmitControl`, `nextButton`, `backButton`, and the value readers the drivers use |
-| `fill.ts` | One filler per field kind, option listing and search, uploads, removals |
-| `widgets.ts` | `WORKDAY_WIDGETS`: the fillers and readers of `fill.ts` and `page.ts` as drivers, in the order a field's kind is decided |
+| `page.ts` | Page detection, fields (`workdayFields`), rows (`workdayRows`), add buttons (`workdayAddButtons`), step info, errors and notices (`fieldError`), page actions, `isSubmitControl`, `nextButton`, `backButton` |
+| `widgets.ts` | `WORKDAY_WIDGETS`, in the order a field's kind is decided: the file field (the shared `fileDriver` with Workday's drop zone, attached files and removal), the split date, the prompt, the dropdown, and the shared radio, checkbox, checkbox-group, text, number, textarea and password drivers (labels by `optionLabel`, React's handlers as the fallback) |
+| `dropdown.ts` | `dropdownDriver`: the listbox dropdown ([finding its listbox](#finding-a-dropdowns-listbox)) |
+| `typeahead.ts` | `typeaheadDriver`: the prompt, its searches, nested menus and chips ([searching](#typeahead-searches-and-lists)) |
+| `date.ts` | `dateDriver`: the split date ([dates](#dates-typed-into-workdays-split-widget)) |
+| `remove.ts` | Removing chips and attached files (`removeItems`), and confirming a delete dialog (`confirmRemoval`, also the rows') |
 | `selectors.ts` | **Every Workday-specific string of the adapter**: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS`. The posting-page hooks the companion reads too, the Workday hosts and tenant parsing come from `@ezapply/protocol/workday` ([protocol](protocol.md)) |
 
 The engine (`adapters/engine/`) does the rest, the same for every site: the API, ids and sections, the fill
 loop, next and back, the submit guard, the waits, and the DOM helpers (`dom.ts`: visibility, which in jsdom means
 `hidden`, `aria-hidden` or an inline `display: none` up the tree; pointer and keyboard sequences; `typeChar`;
 `settle`; `waitFor`; `matchOption`; `parseDate`) ([adapters](adapters.md)). When the adapter moved onto it,
-its fillers and readers moved unchanged and the golden schemas stayed equal. It has run live twice since
-([status](../status.md#not-yet-verified-for-real)).
+its fillers and readers moved unchanged and the golden schemas stayed equal; it ran live twice like that. Its
+drivers were then reworked onto the shared ones ([why](adapters.md#a-sites-own-drivers)), with the golden schemas
+equal again, not yet run live ([status](../status.md#not-yet-verified-for-real)).
 
 The extension knows a Workday page by its body ([telling a page's site](extension.md#telling-a-pages-site-framests)):
 the registry's signature is Workday's UI widgets (`[data-uxi-widget-type]`) and the chrome every candidate page has
@@ -99,7 +103,7 @@ the DOM listeners the submit guard relies on.
 | password | Refused: the user types passwords |
 | dropdown | Open the listbox (a portal under `body`; [finding it](#finding-a-dropdowns-listbox)), pick the best match, check the button label; fallback: React `onClick` on the option. No match → `availableOptions`. Closing waits until the listbox has gone |
 | typeahead | Per value: type the query, wait for its results ([searching](#typeahead-searches-and-lists)) and pick the match; a value like `"Job Board > LinkedIn"` walks nested menus; already-selected values are skipped; chips are read back. Each value is matched on its own: one that matches nothing goes to `unmatched` with the options its search showed and the rest are still selected; one where Workday selected an option itself (single-select prompts select on Enter) goes to `inexact`; one whose option was chosen but didn't stay selected is named in the error ("Chosen, but the page didn't keep: …"), not in `unmatched`, so the agent doesn't go looking for other wordings of an option it found. An option already selected when its search's results show (a checkbox list ticks a search's only result on Enter) isn't pressed ([checkbox lists](#typeahead-searches-and-lists)). `ok` is false while anything is unmatched or unkept |
-| radio, checkbox, checkbox-group | Click the label or input; check `checked`/`aria-checked` |
+| radio, checkbox, checkbox-group | Press the input; check `checked`/`aria-checked`; fallback: React `onChange` with the state wanted (and a radio's `onClick`) |
 | date | `YYYY`, `YYYY-MM` or `YYYY-MM-DD` (also `MM/YYYY`, `MM/DD/YYYY`), typed into the Month/Day/Year parts present ([dates](#dates-typed-into-workdays-split-widget)); errors if the form needs a part not given. Read back from what the parts hold for the page; a mismatch fails with "the page didn't take the date … ask the user to type it" |
 | file | Only via `upload`: a `File` in a `DataTransfer` set on the input + `input`/`change`; else a drop on the drop zone; confirmed only by a **newly shown** file whose name matches, so a same-named file left from a previous application doesn't pass |
 
@@ -271,7 +275,7 @@ element may be re-rendered, so its disappearance alone proves nothing). Returns
 Workday renumbers the rows after it, so their field ids change. The delete button is found as on the live page
 (above); whether pressing it asks for confirmation live isn't known, and a dialog is confirmed if one appears.
 
-**Attached files** (`attachedFiles` in `page.ts`) are listed once each: the `file-upload-item-name` elements
+**Attached files** (`attachedFiles` in `widgets.ts`) are listed once each: the `file-upload-item-name` elements
 with their row (`file-upload-item` / `file-upload-successful`), or the rows themselves when a tenant has no
 name element. A row and its name both match the file hooks, so reading them naively listed every file twice.
 
