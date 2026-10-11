@@ -104,9 +104,16 @@ anonymously.
 
 - **Sync** (`repo_sync`): first time, `git clone --filter=blob:none --no-tags --single-branch` (history is
   kept for contributions, blobs are fetched on demand); later, `fetch` + `reset --hard FETCH_HEAD` +
-  `clean -fdx`. Syncs of the same repo run one after another (they'd collide on git's `index.lock`). Returns `{ repo, path, headSha, indexedSha, changedSince, fileCount }`, where
-  `changedSince` is `null` (never indexed: index everything), `[]` (current), or the files changed since
-  the indexed commit.
+  `clean -fdx`. Syncs of the same repo run one after another (they'd collide on git's `index.lock`). Returns `{ repo, path, headSha, indexedSha, changedSince, affectedClaims, fileCount }`, where
+  `changedSince` is `null` (never indexed, or the indexed commit is gone after a force-push), `[]` (current),
+  or each file changed since the indexed commit with its line counts (`git diff --numstat --no-renames`), and
+  `affectedClaims` names the claims whose `files` include a changed path. The numstat runs before the cache is
+  made read-only again, with the same hardening and token as the fetch: the clone is blobless, so it also
+  fetches the old side's blobs, which `repo_diff` needs and couldn't fetch itself into a read-only `.git`.
+- **Diff** (`repo_diff`): `git diff --no-ext-diff --no-textconv --no-renames <indexedSha> HEAD -- <paths>`, with
+  hooks and every transport off, so it never touches the network and the repo's `.gitattributes` can't make
+  git run a diff driver. Paths that leave the repo, are absolute or start with `-` are refused. Output past
+  60k characters is cut, with a note to ask for fewer paths.
 - **Hardening on every git command:** HTTPS only for real remotes (`protocol.allow=never`,
   `protocol.https.allow=always`, so no `file://`, ssh, `ext::` or submodule transports), symlinks off, hooks
   off, credential helpers off, and the token passed per command, never written to `.git/config`.

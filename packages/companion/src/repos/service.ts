@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
@@ -25,42 +24,53 @@ export const KnowledgeMeta = z.object({
 export type KnowledgeMeta = z.infer<typeof KnowledgeMeta>;
 
 /** knowledge/<key>/claims.yaml */
-export const Claim = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
-  claim: z.string().min(10),
-  skills: z.array(z.string()).default([]),
-  impact: z.string().nullable().default(null),
-  evidence: z
-    .array(
-      z.object({
-        path: z.string().min(1),
-        lines: z
-          .string()
-          .regex(/^\d+(-\d+)?$/, 'like "12" or "12-40"')
-          .optional(),
-        sha: z.string().min(7).optional(),
-        /** Short hash of the cited lines, stamped by knowledge_mark_indexed; claims_check flags a change. */
-        hash: z
-          .string()
-          .regex(/^[0-9a-f]{12}$/, "12 hex characters, written by ezapply")
-          .optional(),
-      }),
-    )
-    .min(1),
-  confidence: z.enum(["high", "medium"]),
-  user_edited: z.boolean().default(false),
-});
+export const Claim = z.preprocess(
+  // Claims used to cite `evidence: [{ path, lines?, sha?, hash? }]`; read that as its paths.
+  (raw) => {
+    if (!raw || typeof raw !== "object" || "files" in raw || !("evidence" in raw)) return raw;
+    const { evidence, ...rest } = raw as { evidence: unknown };
+    return {
+      ...rest,
+      files: Array.isArray(evidence) ? evidence.map((e) => (e as { path?: unknown })?.path) : evidence,
+    };
+  },
+  z.object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
+    claim: z.string().min(10),
+    skills: z.array(z.string()).default([]),
+    impact: z.string().nullable().default(null),
+    /** Repo paths (files or folders) that show the claim: what a re-index checks when they change. */
+    files: z.array(z.string().min(1)).min(1),
+    confidence: z.enum(["high", "medium"]),
+    user_edited: z.boolean().default(false),
+  }),
+);
 export const ClaimsFile = z.object({ schemaVersion: z.literal(1), repo: z.string(), claims: z.array(Claim) });
+
+/** One file changed since the last index; `added`/`removed` are null for a binary file. */
+export interface ChangedFile {
+  path: string;
+  added: number | null;
+  removed: number | null;
+}
 
 export interface SyncResult {
   repo: string;
   path: string;
   headSha: string;
   indexedSha: string | null;
-  /** Files changed since the last index; null when there is no usable previous index (index everything). */
-  changedSince: string[] | null;
+  /**
+   * Files changed since the last index, with line counts; `[]` when current; null when there is no usable
+   * previous index (never indexed, or the indexed commit is gone from the history).
+   */
+  changedSince: ChangedFile[] | null;
+  /** Ids of claims whose `files` include a changed path (or a folder holding one): the claims to re-check. */
+  affectedClaims: string[];
   fileCount: number;
 }
+
+/** What `repo_diff` returns at most, so one call can't flood the context. */
+export const DIFF_MAX_CHARS = 60_000;
 
 type RepoSource = "app" | "public-url";
 
@@ -68,8 +78,6 @@ export interface ClaimsCheck {
   valid: boolean;
   claims: number;
   errors: { path: string; message: string }[];
-  /** Evidence with a line range but no hash yet; knowledge_mark_indexed stamps them. */
-  unstamped: number;
 }
 
 /**
@@ -150,20 +158,24 @@ export class RepoService {
       await this.git(safe, ["-C", dir, "reset", "--hard", "FETCH_HEAD"]);
       await this.git(safe, ["-C", dir, "clean", "-fdx"]);
     }
-    await setReadOnly(dir, true);
-
     const headSha = (await this.git([], ["-C", dir, "rev-parse", "HEAD"])).trim();
     const meta = await this.knowledgeMeta(fullName);
-    let changedSince: string[] | null = null;
+    let changedSince: ChangedFile[] | null = null;
     if (meta && meta.indexedSha !== headSha) {
-      requireGit();
-      const diff = await run("git", ["-C", dir, "diff", "--name-only", meta.indexedSha, headSha], {
-        timeoutMs: 60_000,
-      });
-      changedSince = diff.exitCode === 0 ? diff.stdout.split(/\r?\n/).filter(Boolean) : null;
+      // While the cache is still writable: the clone is blobless, so this also fetches the old side's blobs
+      // that repo_diff needs later. A failure means the indexed commit is gone (a force-push): index anew.
+      const numstat = await this.git(
+        safe,
+        ["-C", dir, "diff", "--numstat", "--no-renames", "--no-ext-diff", "--no-textconv", meta.indexedSha, headSha],
+        authEnv,
+        120_000,
+      ).catch(() => null);
+      changedSince = numstat === null ? null : parseNumstat(numstat);
     } else if (meta) {
       changedSince = [];
     }
+    await setReadOnly(dir, true);
+
     const files = (await this.git([], ["-C", dir, "ls-files"])).split(/\r?\n/).filter(Boolean);
     this.log.info({ repo: fullName, headSha, files: files.length }, "repo synced");
     return {
@@ -172,8 +184,78 @@ export class RepoService {
       headSha,
       indexedSha: meta?.indexedSha ?? null,
       changedSince,
+      affectedClaims: changedSince?.length
+        ? await this.claimsCiting(
+            fullName,
+            changedSince.map((c) => c.path),
+          )
+        : [],
       fileCount: files.length,
     };
+  }
+
+  /** Ids of claims that cite one of `paths`, or a folder holding one. A claims.yaml that doesn't parse gives []. */
+  private async claimsCiting(fullName: string, paths: string[]): Promise<string[]> {
+    const loaded = await this.loadClaims(fullName);
+    if ("errors" in loaded) return [];
+    const cites = (cited: string, path: string) => {
+      const c = cited.replace(/^\.?\//, "").replace(/\/+$/, "");
+      return c === "" || c === "." || path === c || path.startsWith(`${c}/`);
+    };
+    return loaded.claims.filter((c) => c.files.some((f) => paths.some((p) => cites(f, p)))).map((c) => c.id);
+  }
+
+  /**
+   * The unified diff from the indexed commit to the cached HEAD, limited to `paths` (files or folders) when
+   * given, cut at DIFF_MAX_CHARS. Reading the diff instead of whole files is what keeps a re-index small.
+   */
+  async diff(
+    fullName: string,
+    paths: string[] = [],
+  ): Promise<{ from: string; to: string; diff: string; truncated: boolean }> {
+    assertRepoName(fullName);
+    const dir = await this.requireCache(fullName);
+    const meta = await this.knowledgeMeta(fullName);
+    if (!meta) {
+      throw new EzError(ErrorCode.BadRequest, `${fullName} hasn't been indexed yet.`, "Index the whole repo instead.");
+    }
+    for (const p of paths) {
+      if (p.includes("..") || p.startsWith("/") || p.startsWith("-") || /^[a-z]:/i.test(p)) {
+        throw new EzError(ErrorCode.BadRequest, `Invalid path: ${p}`, "Use paths relative to the repo root.");
+      }
+    }
+    const headSha = (await this.git([], ["-C", dir, "rev-parse", "HEAD"])).trim();
+    // Never fetches (the sync already brought both sides' blobs), and --no-ext-diff / --no-textconv so the
+    // repo's .gitattributes can't make git run a driver.
+    const out = await this.git(
+      ["-c", "core.hooksPath=", "-c", "protocol.allow=never"],
+      [
+        "-C",
+        dir,
+        "diff",
+        "--no-color",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        meta.indexedSha,
+        headSha,
+        "--",
+        ...paths,
+      ],
+      {},
+      120_000,
+    ).catch((err: unknown) => {
+      throw new EzError(
+        ErrorCode.Internal,
+        `Couldn't diff ${fullName} against the indexed commit.`,
+        `Run repo_sync first, or read the changed files instead. (${(err as Error).message.slice(0, 200)})`,
+      );
+    });
+    const truncated = out.length > DIFF_MAX_CHARS;
+    const diff = truncated
+      ? `${out.slice(0, DIFF_MAX_CHARS)}\n… (cut at ${DIFF_MAX_CHARS} characters: ask for fewer paths)`
+      : out;
+    return { from: meta.indexedSha, to: headSha, diff, truncated };
   }
 
   /** How much of the repo is the user's own work, from commit history (no file contents needed). */
@@ -242,11 +324,8 @@ export class RepoService {
     return parsed.success ? parsed.data : null;
   }
 
-  /**
-   * Record that knowledge/<repo> now reflects the cached HEAD, after stamping a hash of the cited lines on
-   * every evidence entry that has a line range but no hash (Claude verified those lines in its self-check).
-   */
-  async markIndexed(fullName: string): Promise<KnowledgeMeta & { stamped: number }> {
+  /** Record that knowledge/<repo> now reflects the cached HEAD, once claims.yaml checks out. */
+  async markIndexed(fullName: string): Promise<KnowledgeMeta> {
     const dir = await this.requireCache(fullName);
     const headSha = (await this.git([], ["-C", dir, "rev-parse", "HEAD"])).trim();
     const fileCount = (await this.git([], ["-C", dir, "ls-files"])).split(/\r?\n/).filter(Boolean).length;
@@ -258,7 +337,7 @@ export class RepoService {
         JSON.stringify(claims.errors.slice(0, 5)),
       );
     }
-    const stamped = await this.stampEvidence(fullName);
+    await this.migrateEvidence(fullName);
     const meta: KnowledgeMeta = {
       schemaVersion: 1,
       repo: fullName,
@@ -271,73 +350,43 @@ export class RepoService {
     await writeJsonAtomic(join(this.knowledgePath(fullName), "meta.json"), meta);
     // Current again, so a timer the user set for its new commits has nothing left to put off.
     await this.ws.dropDeferredRepos((r) => r.toLowerCase() === fullName.toLowerCase());
-    return { ...meta, stamped };
+    return meta;
   }
 
-  /**
-   * Schema + evidence check: every cited file must exist in the cache, every line range must fit, and cited
-   * lines that carry a hash must still hash the same (otherwise the code changed under the claim).
-   */
+  /** Schema, unique ids, and every cited path (a file or a folder) present in the cached repo. */
   async checkClaims(fullName: string): Promise<ClaimsCheck> {
     const loaded = await this.loadClaims(fullName);
-    if ("errors" in loaded) return { valid: false, claims: 0, errors: loaded.errors, unstamped: 0 };
+    if ("errors" in loaded) return { valid: false, claims: 0, errors: loaded.errors };
     const errors: { path: string; message: string }[] = [];
     const ids = new Set<string>();
-    const files = new Map<string, string[] | null>();
-    let unstamped = 0;
     for (const [i, c] of loaded.claims.entries()) {
       if (ids.has(c.id)) errors.push({ path: `claims.${i}.id`, message: `duplicate id ${c.id}` });
       ids.add(c.id);
-      for (const [j, ev] of c.evidence.entries()) {
-        const where = `claims.${i}.evidence.${j}`;
-        if (ev.path.includes("..")) {
+      for (const [j, f] of c.files.entries()) {
+        const where = `claims.${i}.files.${j}`;
+        if (f.includes("..") || f.startsWith("/") || /^[a-z]:/i.test(f)) {
           errors.push({ path: where, message: "path must stay inside the repo" });
-          continue;
-        }
-        const lines = await this.cachedLines(fullName, ev.path, files);
-        if (lines === null) {
-          errors.push({ path: where, message: `${ev.path} not found in the cached repo` });
-          continue;
-        }
-        if (!ev.lines) continue;
-        const range = lineRange(ev.lines);
-        if (!range || range[0] < 1 || range[1] > lines.length || range[1] < range[0]) {
-          errors.push({ path: where, message: `lines ${ev.lines} outside 1-${lines.length} of ${ev.path}` });
-          continue;
-        }
-        if (!ev.hash) unstamped++;
-        else if (ev.hash !== hashLines(lines, range)) {
-          errors.push({
-            path: where,
-            message:
-              `${ev.path} lines ${ev.lines} changed since claim "${c.id}" was verified. Re-read them, fix the ` +
-              "claim or its line range, then delete this evidence's hash (knowledge_mark_indexed stamps a new one).",
-          });
+        } else if (!(await stat(join(this.cachePath(fullName), f)).catch(() => null))) {
+          errors.push({ path: where, message: `${f} not found in the cached repo` });
         }
       }
     }
-    return { valid: errors.length === 0, claims: loaded.claims.length, errors, unstamped };
+    return { valid: errors.length === 0, claims: loaded.claims.length, errors };
   }
 
-  /** Write a hash onto every evidence entry with a line range and no hash, keeping the file's comments. */
-  private async stampEvidence(fullName: string): Promise<number> {
+  /** Rewrite claims still in the old `evidence` form as `files`, keeping the file's comments and layout. */
+  private async migrateEvidence(fullName: string): Promise<void> {
     const file = join(this.knowledgePath(fullName), "claims.yaml");
     const doc = parseDocument(await readFile(file, "utf8"));
     const parsed = ClaimsFile.parse(doc.toJS());
-    const files = new Map<string, string[] | null>();
-    let stamped = 0;
+    let changed = false;
     for (const [i, c] of parsed.claims.entries()) {
-      for (const [j, ev] of c.evidence.entries()) {
-        const range = ev.lines ? lineRange(ev.lines) : null;
-        if (!range || ev.hash) continue;
-        const lines = await this.cachedLines(fullName, ev.path, files);
-        if (!lines) continue;
-        doc.setIn(["claims", i, "evidence", j, "hash"], hashLines(lines, range));
-        stamped++;
-      }
+      if (!doc.hasIn(["claims", i, "evidence"])) continue;
+      doc.deleteIn(["claims", i, "evidence"]);
+      doc.setIn(["claims", i, "files"], doc.createNode(c.files, { flow: true }));
+      changed = true;
     }
-    if (stamped > 0) await writeFile(file, doc.toString({ lineWidth: 0 }), "utf8");
-    return stamped;
+    if (changed) await writeFile(file, doc.toString({ lineWidth: 0 }), "utf8");
   }
 
   private async loadClaims(
@@ -352,18 +401,6 @@ export class RepoService {
       return { errors: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) };
     }
     return { claims: parsed.data.claims };
-  }
-
-  private async cachedLines(
-    fullName: string,
-    path: string,
-    memo: Map<string, string[] | null>,
-  ): Promise<string[] | null> {
-    if (!memo.has(path)) {
-      const content = await readFile(join(this.cachePath(fullName), path), "utf8").catch(() => null);
-      memo.set(path, content === null ? null : content.split("\n"));
-    }
-    return memo.get(path) ?? null;
   }
 
   async requireCache(fullName: string): Promise<string> {
@@ -471,26 +508,24 @@ export class RepoService {
   }
 }
 
-/** "12" or "12-40" as [first, last]. */
 /** A claim's text on one line (YAML block scalars can carry line breaks). */
 function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function lineRange(spec: string): [number, number] | null {
-  const [a, b] = spec.split("-").map(Number);
-  if (a === undefined || Number.isNaN(a)) return null;
-  const last = b ?? a;
-  return Number.isNaN(last) ? null : [a, last];
-}
-
-/** 12 hex characters of SHA-256 over the cited lines, ignoring line endings and trailing whitespace. */
-function hashLines(lines: string[], [a, b]: [number, number]): string {
-  const text = lines
-    .slice(a - 1, b)
-    .map((l) => l.trimEnd())
-    .join("\n");
-  return createHash("sha256").update(text).digest("hex").slice(0, 12);
+/** `git diff --numstat` lines: "added<TAB>removed<TAB>path", with "-" counts for a binary file. */
+function parseNumstat(out: string): ChangedFile[] {
+  return out
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const [added = "-", removed = "-", ...rest] = line.split("\t");
+      return {
+        path: rest.join("\t"),
+        added: added === "-" ? null : Number(added),
+        removed: removed === "-" ? null : Number(removed),
+      };
+    });
 }
 
 function requireGit(): void {

@@ -170,8 +170,9 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       title: "Sync repo cache",
       description:
         "Clone or update a selected repo into repo-cache/<owner>__<name>/ (read-only). Returns the cache path, HEAD " +
-        "sha, the last indexed sha, and the files changed since then (null = index everything). Read the files with " +
-        "your own Read/Grep/Glob tools. Never modify, build or run anything in the cache.",
+        "sha, the last indexed sha, changedSince (each file changed since then with lines added/removed; [] = " +
+        "current; null = no usable earlier index) and affectedClaims (ids of claims citing a changed path). Read " +
+        "changes with repo_diff, files with your own Read/Grep/Glob. Never modify, build or run anything in the cache.",
       inputSchema: { repo: z.string().describe("owner/name") },
     },
     tool(s.log, "repo_sync", async ({ repo }: { repo: string }) => {
@@ -182,6 +183,20 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       }
       return s.repos.sync(repo, entry.source);
     }),
+  );
+
+  server.registerTool(
+    "repo_diff",
+    {
+      title: "Changes since the last index",
+      description:
+        "The unified diff of a synced repo from its last indexed commit to the cached HEAD, for the given paths " +
+        "(files or folders; omit for all). Cut at 60k characters. Pass only the source paths that matter (skip " +
+        "lock, generated and vendored files): reading the diff instead of whole files keeps a re-index small.",
+      inputSchema: { repo: z.string().describe("owner/name"), paths: z.array(z.string()).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    tool(s.log, "repo_diff", ({ repo, paths }: { repo: string; paths?: string[] }) => s.repos.diff(repo, paths)),
   );
 
   server.registerTool(
@@ -216,8 +231,8 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
     {
       title: "Check claims",
       description:
-        "Validate knowledge/<owner>__<name>/claims.yaml: schema, unique ids, and that every evidence path exists in " +
-        "the cached repo with line ranges in bounds. Run after writing or editing claims.",
+        "Validate knowledge/<owner>__<name>/claims.yaml: schema, unique ids, and that every path in a claim's files " +
+        "exists in the cached repo. Run after writing or editing claims.",
       inputSchema: { repo: z.string() },
       annotations: { readOnlyHint: true },
     },

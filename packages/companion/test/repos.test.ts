@@ -27,6 +27,7 @@ const log = createLogger({ toFile: false, level: "silent" });
 let root: string;
 let origin: string;
 let repos: RepoService;
+let github: GitHubService;
 
 function git(cwd: string, ...args: string[]) {
   const r = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -72,7 +73,7 @@ beforeAll(async () => {
     }),
   );
   const ws = new Workspace(join(root, "ws"));
-  const github = new GitHubService({
+  github = new GitHubService({
     secrets,
     appFilePath: join(root, "app.json"),
     localBaseUrl: () => "http://127.0.0.1:1",
@@ -106,28 +107,38 @@ describe("RepoService", () => {
   it("validates claims against the cached files", async () => {
     const dir = repos.knowledgePath("jane/proj");
     await mkdir(dir, { recursive: true });
-    const claims = (lines: string, path = "src/limiter.ts") =>
-      `schemaVersion: 1\nrepo: jane/proj\nclaims:\n  - id: rate-limiter\n    claim: Implemented a sliding-window rate limiter\n    skills: [TypeScript]\n    evidence:\n      - path: ${path}\n        lines: "${lines}"\n    confidence: high\n`;
-    await writeFile(join(dir, "claims.yaml"), claims("2-9"));
+    const claims = (files: string) =>
+      `schemaVersion: 1\nrepo: jane/proj\nclaims:\n  - id: rate-limiter\n    claim: Implemented a sliding-window rate limiter\n    skills: [TypeScript]\n    files: ${files}\n    confidence: high\n`;
+    await writeFile(join(dir, "claims.yaml"), claims("[src/nope.ts]"));
     expect(await repos.checkClaims("jane/proj")).toMatchObject({
       valid: false,
-      errors: [expect.objectContaining({ message: expect.stringMatching(/outside 1-5/) })],
+      errors: [expect.objectContaining({ message: expect.stringMatching(/src\/nope.ts not found/) })],
     });
     await expect(repos.markIndexed("jane/proj")).rejects.toMatchObject({ code: "bad_request" });
 
-    await writeFile(join(dir, "claims.yaml"), claims("1-3", "src/nope.ts"));
-    expect((await repos.checkClaims("jane/proj")).errors[0]?.message).toMatch(/not found/);
+    await writeFile(join(dir, "claims.yaml"), claims("[../outside]"));
+    expect((await repos.checkClaims("jane/proj")).errors[0]?.message).toMatch(/inside the repo/);
 
-    await writeFile(join(dir, "claims.yaml"), `# written by the index skill\n${claims("1-3")}`);
-    expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [], unstamped: 1 });
+    // A folder counts as a path.
+    await writeFile(join(dir, "claims.yaml"), claims("[src/]"));
+    expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [] });
+  });
+
+  it("reads claims in the old evidence form, and rewrites them as files when marking indexed", async () => {
+    const dir = repos.knowledgePath("jane/proj");
+    await writeFile(
+      join(dir, "claims.yaml"),
+      "# written by the index skill\nschemaVersion: 1\nrepo: jane/proj\nclaims:\n  - id: rate-limiter\n" +
+        "    claim: Implemented a sliding-window rate limiter\n    evidence:\n" +
+        '      - { path: src/limiter.ts, lines: "1-3", hash: 0123456789ab }\n    confidence: high\n',
+    );
+    expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [] });
     const meta = await repos.markIndexed("jane/proj");
     expect(meta.indexedSha).toMatch(/^[0-9a-f]{40}$/);
-    // Marking stamps a hash of the cited lines, keeping the file's comments.
-    expect(meta.stamped).toBe(1);
-    const stamped = await readFile(join(dir, "claims.yaml"), "utf8");
-    expect(stamped).toMatch(/^# written by the index skill/);
-    expect(stamped).toMatch(/hash: [0-9a-f]{12}/);
-    expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [], unstamped: 0 });
+    const migrated = await readFile(join(dir, "claims.yaml"), "utf8");
+    expect(migrated).toMatch(/^# written by the index skill/);
+    expect(migrated).toContain("files: [ src/limiter.ts ]");
+    expect(migrated).not.toMatch(/evidence|hash|lines/);
   });
 
   it("lists every claim compactly: repo once, id and claim, impact only when there is one", async () => {
@@ -154,22 +165,36 @@ describe("RepoService", () => {
     await rm(repos.knowledgePath("acme/docs-only"), { recursive: true });
   });
 
-  it("reports only files changed since the last index", async () => {
-    await commit("Jane Doe", "123+jane@users.noreply.github.com", { "src/limiter.ts": "a\nb\nc\nd\ne\n" }, "tweak");
+  it("reports the files changed since the last index, the claims citing them, and their diff", async () => {
+    await commit(
+      "Jane Doe",
+      "123+jane@users.noreply.github.com",
+      { "src/limiter.ts": "a\nB\nc\nd\ne\n", "docs/guide.md": "guide\nmore\n" },
+      "tweak",
+    );
     const r = await repos.sync("jane/proj", "public-url");
-    expect(r.changedSince).toEqual(["src/limiter.ts"]);
     expect(r.indexedSha).not.toBe(r.headSha);
-    // Lines 1-3 didn't change, so the claim still checks out.
-    expect((await repos.checkClaims("jane/proj")).valid).toBe(true);
+    expect(r.changedSince).toEqual([
+      { path: "docs/guide.md", added: 1, removed: 0 },
+      { path: "src/limiter.ts", added: 2, removed: 1 },
+    ]);
+    expect(r.affectedClaims).toEqual(["rate-limiter"]);
+
+    const d = await repos.diff("jane/proj", ["src"]);
+    expect(d).toMatchObject({ from: r.indexedSha, to: r.headSha, truncated: false });
+    expect(d.diff).toContain("-b\n+B");
+    expect(d.diff).not.toContain("guide");
+    expect((await repos.diff("jane/proj")).diff).toContain("+more");
+    await expect(repos.diff("jane/proj", ["../x"])).rejects.toMatchObject({ code: "bad_request" });
+
+    await repos.markIndexed("jane/proj");
+    expect(await repos.sync("jane/proj", "public-url")).toMatchObject({ changedSince: [], affectedClaims: [] });
   });
 
-  it("flags a claim whose cited lines changed", async () => {
-    await commit("Jane Doe", "123+jane@users.noreply.github.com", { "src/limiter.ts": "a\nB\nc\nd\ne\n" }, "edit");
-    await repos.sync("jane/proj", "public-url");
-    const check = await repos.checkClaims("jane/proj");
-    expect(check.valid).toBe(false);
-    expect(check.errors[0]?.message).toMatch(/lines 1-3 changed since claim "rate-limiter"/);
-    await expect(repos.markIndexed("jane/proj")).rejects.toMatchObject({ code: "bad_request" });
+  it("refuses a diff before the repo is indexed", async () => {
+    const fresh = new RepoService(new Workspace(join(root, "ws-fresh")), github, log, () => origin);
+    await fresh.sync("jane/proj", "public-url");
+    await expect(fresh.diff("jane/proj")).rejects.toMatchObject({ code: "bad_request" });
   });
 
   it("runs concurrent syncs of one repo one after the other", async () => {

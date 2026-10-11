@@ -81,11 +81,12 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `github_list_repos` | — | Every repo the app can read, newest push first, with `selected` |
 | `repos_selection_get` | — | Selected repos with cache and index state |
 | `repos_selection_set` | `repos[] { fullName, source (app/public-url), note? }` | Replace `profile/repos.yaml` |
-| `repo_sync` | `repo` (must be selected) | Clone or update the read-only cache; `{ path, headSha, indexedSha, changedSince, fileCount }` |
+| `repo_sync` | `repo` (must be selected) | Clone or update the read-only cache; `{ path, headSha, indexedSha, changedSince, affectedClaims, fileCount }`: `changedSince` is each file changed since the indexed commit as `{ path, added, removed }` (null counts for a binary file), `[]` when current, null when there's no usable earlier index; `affectedClaims` the ids of claims whose `files` include a changed path |
+| `repo_diff` | `repo`, `paths?` (files or folders) | The unified diff from the indexed commit to the cached HEAD, for `paths` or everything; `{ from, to, diff, truncated }`, cut at 60k characters. Refused before the repo's first index. How a re-index reads changes without re-reading files ([why](components/knowledge-base.md#indexing-procedure-the-ezapply-index-repo-skill)) |
 | `repo_contributions` | `repo` | The user's share of commits, dates, areas touched, top authors |
 | `claims_list` | — | Every claim of every indexed repo as compact text: `## owner/name`, then `- id: claim (impact: …)`, the impact only when set; evidence, skills and confidence left out. A repo whose `claims.yaml` doesn't parse gets one line pointing at `claims_check`. `EZAPPLY.md` has Claude call it once, at the first request about a posting ([why](components/workspace.md#the-agent-file-ezapplymd)) |
-| `claims_check` | `repo` | Validate `claims.yaml`, every evidence path and line range, and that stamped lines haven't changed. `{ valid, claims, errors[], unstamped }` |
-| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; stamps a hash on evidence that has none, records the indexed commit. Returns the meta plus `stamped` |
+| `claims_check` | `repo` | Validate `claims.yaml`: schema, unique ids, every path in a claim's `files` present in the cache. `{ valid, claims, errors[] }` |
+| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; rewrites old-form `evidence` as `files`, records the indexed commit. Returns the meta |
 
 ## Forms
 Every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP

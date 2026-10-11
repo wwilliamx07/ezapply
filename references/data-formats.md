@@ -360,12 +360,11 @@ salutation, sign-off, subject line, length). No quoted text.
 `{ schemaVersion: 1, repo, url, indexedSha, indexedAt, fileCount?, depthPolicy }`
 
 ### `knowledge/<owner>__<name>/claims.yaml`
-`{ schemaVersion: 1, repo, claims: [ { id (kebab-case), claim (≥10 chars), skills[], impact (string|null), evidence[] (≥1) { path, lines? ("12" or "12-40"), sha? (≥7), hash? (12 hex) }, confidence (high|medium), user_edited } ] }`
+`{ schemaVersion: 1, repo, claims: [ { id (kebab-case), claim (≥10 chars), skills[], impact (string|null), files[] (≥1, repo paths: files or folders), confidence (high|medium), user_edited } ] }`
 
-`hash`: SHA-256 of the cited lines (line endings and trailing whitespace ignored), first 12 hex characters,
-written by `knowledge_mark_indexed` on evidence with `lines`; `claims_check` fails when the lines no longer
-match. Adding it didn't change `schemaVersion` (it's optional; older files are stamped on their next
-`knowledge_mark_indexed`).
+The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is still read (each entry as its
+`path`) and is rewritten as `files` by the next `knowledge_mark_indexed`; `schemaVersion` stayed 1
+([why files](components/knowledge-base.md#claims-claimsyaml)).
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),

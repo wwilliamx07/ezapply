@@ -70,7 +70,7 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
   call `claims_list` once: every claim, compact. Documents, form answers about experience and chat questions
   all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
-  can't, stay narrow: one component doc, or the cited lines of one file.
+  can't, stay narrow: one component doc, or one file a claim cites.
 - Check layout with `pdf_render { path, page? }` of the page you need; use `pdf_info { path }` for page
   counts and `pdf_text { path, pages? }` for wording. Don't re-read files you just wrote.
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.
