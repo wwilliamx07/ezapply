@@ -1,5 +1,16 @@
 # ezapply: todo
 
+- refactor references to improve building agent performance
+- refactor skills to improve agent performance
+- everything happens in browser, no need to directly interact with the agent
+- all agent flows have minimal reliance on agent performance
+- compatibility with various agents
+- approval page: approval should be per item
+- run multiple applications in parallel
+- work on minimized tabs
+- get rid of status.md
+- for claims/repo documentation, maybe follow some technical writing spec, tailored and humanized before use in application documents
+
 Proposals, as of 2026-10-10: only work that isn't built. Whatever is built, in whole or in part, is described in
 `references/` (what still needs a live run is in `references/status.md`) and in git history.
 
