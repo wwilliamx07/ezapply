@@ -12,23 +12,22 @@ Anything that changes an adapter follows "One adapter change per live run" in `r
 | # | Proposal | Value | Effort | Needs first |
 |---|----------|-------|--------|-------------|
 | 1 | Application forms on an employer's own page | Medium | M–L | a page saved from a real one |
-| 2 | Put off re-indexing a repo for a set time | Low | S | — |
-| 3 | Application tracker: progress and outcomes (application manager) | Medium | M | — |
-| 4 | Job search across the boards ezapply knows (application manager) | Medium | L | — |
-| 5 | Job alerts (application manager) | Medium | M | Job search |
-| 6 | Auto mode (application manager) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
-| 7 | Agents that try to break a new adapter (adapter building) | Medium | M–L | — |
-| 8 | One directory per adapter (adapter building) | Medium | M–L | — |
-| 9 | The side panel's later parts | Medium | M–L | — |
+| 2 | Application tracker: progress and outcomes (application manager) | Medium | M | — |
+| 3 | Job search across the boards ezapply knows (application manager) | Medium | L | — |
+| 4 | Job alerts (application manager) | Medium | M | Job search |
+| 5 | Auto mode (application manager) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| 6 | Agents that try to break a new adapter (adapter building) | Medium | M–L | — |
+| 7 | One directory per adapter (adapter building) | Medium | M–L | — |
+| 8 | The side panel's later parts | Medium | M–L | — |
 
 Suggested order: the live runs in `references/status.md` ("Not yet verified for real"): a Workday run with debug
 mode off whose timings match the earlier runs' (the adapter trace's no-op path), which also presses a row's Delete
 and binds a job-board posting's tab; then runs with debug on, the two comparing the browser behind and in front
 among them; a Greenhouse application embedded in a careers page; then an Oracle run.
 
-Item 8 before the next new site, and before item 1, so neither is built in the old layout and then moved. Item 1
-waits for a saved careers page whose application is its own form, with no frame. The application manager (items 3
-to 6) is built in that order, each on the one before; auto mode last, and only once the rest has shown the quality
+Item 7 before the next new site, and before item 1, so neither is built in the old layout and then moved. Item 1
+waits for a saved careers page whose application is its own form, with no frame. The application manager (items 2
+to 5) is built in that order, each on the one before; auto mode last, and only once the rest has shown the quality
 holds without the user watching.
 
 ---
@@ -127,40 +126,6 @@ generic definition"), `components/extension.md` (replace "Not covered"), `protoc
 - A form that forwards to Workday or Oracle may still send the user to that site for a later step: it's then a
   registry site from that point on.
 
-## 2. Put off re-indexing a repo for a set time (Low, S)
-
-**Why.** When the user answers "later" to re-indexing a repo with new commits, `workspace_change_mark { as:
-"later" }` hides it only until the chat ends (`FreshnessService.later`, in memory, by change id). Every new
-`ezapply chat` asks again, which for someone opening several chats a day is the same question each time, and a
-repo pushed to daily is asked about daily.
-
-**How.**
-- **A timer per repo,** in `state.json`: `deferred: { repos: { "<owner>/<name>": { until, at } } }`. Optional, so
-  no `schemaVersion` bump.
-- **Setting it:** `workspace_change_mark { ids, as: "later", hours? }` (`ids` replaces `id`, so one call puts off
-  several). On a `repo-pushed` change, `later` starts that repo's timer: 24 hours by default, longer when the user
-  says ("for a week" → 168), at most 90 days so no repo is silenced for good (deselecting it is how to stop for
-  good). **All:** the agent passes every current `repo-pushed` id; **some:** the ones the user names.
-- **While a timer runs** the repo isn't checked at all (no `ls-remote`), so pushes made meanwhile don't ask, unlike
-  the change id's state today. **When it has run out,** the next chat's check reports the repo if its head differs
-  from `indexedSha`, pushes made while it was put off included. A repo with no running timer that gets new commits
-  is asked about at the next chat's start, as now.
-- **Ending a timer early:** re-indexing (`knowledge_mark_indexed`) and deselecting the repo drop it. Expired
-  timers are dropped on any write to `state.json`.
-- **Seen by the agent:** `workspace_changes` lists running timers as `deferred[] { repo, until }`, so it can answer
-  "what did I put off?" and offer to re-index one early.
-- **Other kinds keep `later` for the chat,** and `hours` on them is refused with a hint: a template or profile
-  behind its source feeds the next document, so asking each chat is right for them.
-- **Skill** (`ezapply-onboard`, keeping current): ask now, after this posting, or put off, for a day unless the
-  user says longer; all repos or the ones named.
-- **Tests:** a timer set and the repo not checked in a new service (no `ls-remote`); the default and a given
-  length, the cap; an expired timer checked and reporting pushes made meanwhile; a repo without a timer reported
-  at once; all and some through `ids`; `hours` on another kind refused; re-indexing and deselecting dropping the
-  timer; `deferred` listed; the skill's call shape.
-
-**References when built:** `components/companion.md` ("Keeping the workspace current"), `mcp-tools.md`,
-`data-formats.md` (`state.json`), `flows.md`, `development.md` (the freshness test's row), `status.md`.
-
 ---
 
 ## Application manager
@@ -169,7 +134,7 @@ One place for the user's job search: the postings they might apply to, where eac
 to do next. ezapply already keeps each application's record (the posting folder: `meta.json`, `form-log.jsonl`),
 so the manager reads and extends those; it adds no database.
 
-### 3. Application tracker: progress and outcomes (Medium, M)
+### 2. Application tracker: progress and outcomes (Medium, M)
 
 **What.** "What's in flight?": each posting's progress (drafted, filled, submitted), deadline, date submitted, what
 happened after (applied, interviewing, rejected, offer, withdrawn), and the next action. Postings drafted but not
@@ -195,7 +160,7 @@ applied to show up as such.
 - Is a page worth it over the CLI table and the skill? A page on the UI package
   (`references/components/ui.md`) would cost little.
 
-### 4. Job search across the boards ezapply knows (Medium, L)
+### 3. Job search across the boards ezapply knows (Medium, L)
 
 **What.** Find new postings that fit the user, from the employers they care about, without visiting each careers
 page: a list to pick from, each captured as a posting with one word.
@@ -222,7 +187,7 @@ page: a list to pick from, each captured as a posting with one word.
 - A posting captured from JSON has no visible-HTML step; its description is still untrusted, so the
   prompt-injection rules apply unchanged.
 
-### 5. Job alerts (Medium, M)
+### 4. Job alerts (Medium, M)
 
 **What.** Tell the user when a new posting matching their search appears, without a chat open. Deadline reminders
 from the tracker ride along.
@@ -239,7 +204,7 @@ days get one too. The next `ezapply chat` lists them first, as it does workspace
 - How often: daily is enough for most boards; more risks rate limits.
 - Email or phone alerts need a sender or a service, which ezapply avoids: start with OS notifications.
 
-### 6. Auto mode (High if trusted, else Low; XL)
+### 5. Auto mode (High if trusted, else Low; XL)
 
 **What.** The agent searches regularly, drafts the documents for strong matches, fills each application, and leaves
 it at the review step, so that applying is the user checking it and pressing Submit.
@@ -272,7 +237,7 @@ it at the review step, so that applying is the user checking it and pressing Sub
 
 ## Improvements to the adapter-building workflow
 
-### 7. Agents that try to break a new adapter (Medium, M–L)
+### 6. Agents that try to break a new adapter (Medium, M–L)
 
 **Why.** One agent writing an adapter and judging it too sees what it meant to build, not what it built. The
 process in `references/building-adapters.md` goes from tests the builder wrote straight to a live run with the
@@ -319,7 +284,7 @@ skill).
   real site does. They test robustness, not fidelity: the saved pages and a live run stay the evidence.
 - A loop of agents costs many tokens per site; worth it for sites with many applications behind them.
 
-### 8. One directory per adapter (Medium, M–L)
+### 7. One directory per adapter (Medium, M–L)
 
 **Why.** A site is spread over three packages. Its URL rules (`protocol/src/<site>.ts`), registry entry and id
 (`protocol/src/sites.ts`, `SiteId` in `postings.ts`, the export in `index.ts`, a `PROTOCOL_VERSION` bump), its
@@ -390,7 +355,7 @@ e2e tests. They move with the sites, and the e2e tests import them from there.
 
 ## The browser as the only interface
 
-### 9. The side panel's later parts (Medium, M–L)
+### 8. The side panel's later parts (Medium, M–L)
 
 **Why.** The side panel ([ui](references/components/ui.md#the-side-panel-srcpanel)) works only while the user
 has started `./ezapply` in a terminal, and two things still leave it for a tab: the review and the form.

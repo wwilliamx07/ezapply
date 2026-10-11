@@ -81,6 +81,8 @@ export function servePanels(
         return {};
       }
       case "connection":
+        // The open panel asks every 5 s while it isn't connected (portTransport): each ask tries again.
+        void connection.ensureConnected();
         return panelConnection(await store.connState());
     }
   }

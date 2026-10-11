@@ -314,6 +314,19 @@ hobbies: [chess]
     expect((await p.get("file?path=library/transcript.pdf")).status).toBe(400);
   });
 
+  it("deletes a library file the step lists, and nothing outside library/", async () => {
+    const p = page(handle.services.onboarding.open().url);
+    await p.upload("transcript.pdf", "%PDF-1.4 a");
+    await writeFile(join(ws, "profile-copy.yaml"), "name: x");
+    expect(await (await p.act({ action: "deleteLibrary", name: "transcript.pdf" })).json()).toEqual({
+      deleted: "library/transcript.pdf",
+    });
+    expect((await p.state()).library).toEqual([]);
+    expect((await p.act({ action: "deleteLibrary", name: "transcript.pdf" })).status).toBe(400);
+    expect((await p.act({ action: "deleteLibrary", name: "../profile-copy.yaml" })).status).toBe(400);
+    expect(await readFile(join(ws, "profile-copy.yaml"), "utf8")).toBe("name: x");
+  });
+
   it("suggests repos by the rules that need no judgment", () => {
     const repo = (fullName: string, extra: Record<string, unknown> = {}) => ({
       fullName,

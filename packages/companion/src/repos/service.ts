@@ -269,6 +269,8 @@ export class RepoService {
       depthPolicy: ">15 source files or >2k LOC per component → subfolder, max depth 3",
     };
     await writeJsonAtomic(join(this.knowledgePath(fullName), "meta.json"), meta);
+    // Current again, so a timer the user set for its new commits has nothing left to put off.
+    await this.ws.dropDeferredRepos((r) => r.toLowerCase() === fullName.toLowerCase());
     return { ...meta, stamped };
   }
 

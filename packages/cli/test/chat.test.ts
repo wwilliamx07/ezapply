@@ -192,7 +192,7 @@ describe("ezapply chat hosts the companion", () => {
     expect(res.status).toBe(200);
     expect(JSON.stringify(await res.json())).not.toMatch(/"isError":true/);
 
-    // What the extension's Set posting delivers over the bridge.
+    // What the side panel's Capture delivers over the bridge.
     const html = `<div data-automation-id="jobPostingHeader">Data Engineer</div><p>${LONG}</p>`;
     await s.handle().services.postings.capture({
       url: "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Data-Engineer_R-2",

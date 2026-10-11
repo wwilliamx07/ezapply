@@ -156,8 +156,42 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     await transport.call("panel.reset", { key: selected }).catch(fail);
     await refreshConv().catch(fail);
   };
+  const deletePosting = async () => {
+    if (!posting) return;
+    const name = labelOf(posting.id);
+    if (
+      !window.confirm(
+        `Delete ${name} for good? Its folder goes: the capture, notes, documents and form log, and its conversation.`,
+      )
+    )
+      return;
+    try {
+      await transport.call("panel.deletePosting", { postingId: posting.id });
+      setPicked(null);
+      await refreshState();
+    } catch (err) {
+      fail(err);
+    }
+  };
+  const deleteDocument = async (file: string) => {
+    if (!window.confirm(`Delete ${file} for good? Its LaTeX source stays, so Claude can build it again.`)) return;
+    await transport.call("panel.deleteDocument", { postingId: selected, file }).catch(fail);
+    await refreshConv().catch(fail);
+  };
 
-  // A new card brings the "Needs you" cards into view (the conversation doesn't scroll past them meanwhile).
+  // A menu or the posting popover closes when the user clicks anywhere else.
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      for (const d of document.querySelectorAll<HTMLDetailsElement>(
+        "details.ez-panel-menu[open], details.ez-split-menu[open]",
+      ))
+        if (!d.contains(e.target as Node)) d.open = false;
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+
+  // A new card brings the "Needs you" cards, at the conversation's end, into view.
   const needsRef = useRef<HTMLElement>(null);
   const cardIds = (state?.cards ?? []).map((c) => c.id).join(",");
   useEffect(() => {
@@ -170,6 +204,8 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       ? "Claude is working in another conversation"
       : undefined;
   const cards = state?.cards ?? [];
+  const docCount = conv?.documents.length ?? 0;
+  const waiting = conv?.documents.filter((d) => !isApproved(d.state)).length ?? 0;
 
   return (
     <div className="ez-panel">
@@ -190,6 +226,131 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           ))}
           <option value={GENERAL_CONVERSATION}>No posting (general)</option>
         </select>
+        {/* Beside the picker: it adds a posting to choose from, where the footer acts on the chosen one. */}
+        <Button
+          size="sm"
+          className="ez-panel-capture"
+          disabled={!connected}
+          onClick={capture}
+          title={
+            tab?.kind === "posting"
+              ? "Capture this posting's page again"
+              : "Capture the page in this tab as a posting, and make it the active one"
+          }
+        >
+          <Icon name="plus" size={14} /> Capture
+        </Button>
+        <details className="ez-panel-menu ez-panel-details">
+          <summary
+            aria-label={`Posting and documents${waiting ? `, ${waiting} waiting for your review` : ""}`}
+            title="The posting and its documents"
+            className="ez-btn ez-btn-ghost ez-btn-icon"
+          >
+            <Icon name="file" />
+            {docCount ? <span className={waiting ? "ez-count ez-count-warn" : "ez-count"}>{docCount}</span> : null}
+          </summary>
+          <div className="ez-panel-menu-items ez-panel-pop">
+            {posting ? (
+              <section className="ez-panel-posting" aria-label="Posting">
+                <div className="ez-panel-role">{posting.role ?? posting.id}</div>
+                <div className="ez-muted">
+                  {[posting.company, siteLabel(posting.site), posting.deadline ? `due ${posting.deadline}` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+                {posting.requirements.length > 0 ? (
+                  <div className="ez-chips">
+                    {posting.requirements.map((r) => (
+                      <span key={r} className="ez-chip">
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : (
+              <section className="ez-panel-posting" aria-label="Conversation">
+                <div className="ez-panel-role">General</div>
+                <div className="ez-muted">No posting. Capture one from its page, or ask anything.</div>
+              </section>
+            )}
+            {conv && conv.documents.length > 0 ? (
+              <section className="ez-panel-docs" aria-label="Documents">
+                <p className="ez-label">Documents</p>
+                {conv.documents.map((d) => (
+                  <div key={d.file} className="ez-panel-doc">
+                    <button
+                      type="button"
+                      className="ez-linklike"
+                      onClick={() =>
+                        void transport
+                          .call("panel.open", { what: "file", postingId: selected, file: d.file })
+                          .catch(fail)
+                      }
+                    >
+                      <Icon name="file" size={15} /> {d.file}
+                    </button>
+                    <DocState state={d.state} />
+                    {isApproved(d.state) ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ez-btn-icon ez-panel-danger"
+                        aria-label={`Delete ${d.file}`}
+                        title={`Delete ${d.file}`}
+                        disabled={!connected}
+                        onClick={() => void deleteDocument(d.file)}
+                      >
+                        <Icon name="trash" size={15} />
+                      </Button>
+                    ) : null}
+                    {d.state === "review" && conv.review ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void transport
+                            .call("panel.open", { what: "review", reviewId: conv.review?.reviewId as string })
+                            .catch(fail)
+                        }
+                      >
+                        Review
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </section>
+            ) : posting ? (
+              <p className="ez-muted ez-panel-nodocs">No documents yet.</p>
+            ) : null}
+            {posting ? (
+              <div className="ez-panel-pop-actions">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!connected}
+                  className="ez-panel-danger"
+                  onClick={reset}
+                  title="A new conversation for this posting"
+                >
+                  Reset Conversation
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!connected || working}
+                  className="ez-panel-danger"
+                  onClick={() => void deletePosting()}
+                  title={
+                    working ? "Claude is working: wait, or Stop it" : "Delete this posting and everything in its folder"
+                  }
+                >
+                  Delete posting
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </details>
         <details className="ez-panel-menu">
           <summary aria-label="Menu" className="ez-btn ez-btn-ghost ez-btn-icon">
             <Icon name="menu" />
@@ -227,104 +388,9 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         </Banner>
       ) : null}
 
+      {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
-        {posting ? (
-          <section className="ez-panel-posting" aria-label="Posting">
-            <div className="ez-panel-posting-top">
-              <div>
-                <div className="ez-panel-role">{posting.role ?? posting.id}</div>
-                <div className="ez-muted">
-                  {[posting.company, siteLabel(posting.site), posting.deadline ? `due ${posting.deadline}` : ""]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!connected}
-                className="ez-panel-reset"
-                onClick={reset}
-                title="A new conversation for this posting"
-              >
-                Reset Conversation
-              </Button>
-            </div>
-            <div className="ez-chips">
-              <Badge tone="accent">{posting.status}</Badge>
-              {posting.requirements.map((r) => (
-                <span key={r} className="ez-chip">
-                  {r}
-                </span>
-              ))}
-            </div>
-          </section>
-        ) : (
-          <section className="ez-panel-posting" aria-label="Conversation">
-            <div className="ez-panel-role">General</div>
-            <div className="ez-muted">No posting. Set one from its page, or ask anything.</div>
-          </section>
-        )}
-
-        {tab ? (
-          <p className={`ez-panel-tab ez-panel-tab-${tab.kind}`}>
-            <Icon name={tab.kind === "application" || tab.kind === "posting" ? "check" : "info"} size={15} /> This tab:{" "}
-            {tab.text}
-          </p>
-        ) : null}
-
-        <div className="ez-panel-actions">
-          <Button disabled={!connected} onClick={capture} title="Make the page in this tab the posting">
-            <Icon name="target" size={16} /> {tab?.kind === "posting" ? "Capture again" : "Set posting"}
-          </Button>
-          <TailorButton
-            disabled={!connected || !posting || working}
-            why={!posting ? "Set a posting first" : busyWhy}
-            onPick={(text) => void send(text).catch(() => {})}
-          />
-          <FillButton
-            disabled={!connected || !posting || working}
-            why={!posting ? "Set a posting first" : busyWhy}
-            tab={tab}
-            application={posting?.application}
-            onFill={(tabId) => void send(REQUESTS.fill(tabId)).catch(() => {})}
-            onOpen={(url) => void transport.openTab(url).catch(fail)}
-          />
-        </div>
-
-        {conv && conv.documents.length > 0 ? (
-          <section className="ez-panel-docs" aria-label="Documents">
-            <p className="ez-label">Documents</p>
-            {conv.documents.map((d) => (
-              <div key={d.file} className="ez-panel-doc">
-                <button
-                  type="button"
-                  className="ez-linklike"
-                  onClick={() =>
-                    void transport.call("panel.open", { what: "file", postingId: selected, file: d.file }).catch(fail)
-                  }
-                >
-                  <Icon name="file" size={15} /> {d.file}
-                </button>
-                <DocState state={d.state} />
-                {d.state === "review" && conv.review ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      void transport
-                        .call("panel.open", { what: "review", reviewId: conv.review?.reviewId as string })
-                        .catch(fail)
-                    }
-                  >
-                    Review
-                  </Button>
-                ) : null}
-              </div>
-            ))}
-          </section>
-        ) : null}
-
+        <Conversation events={conv?.events ?? []} />
         {cards.length > 0 ? (
           <section className="ez-panel-needs" aria-label="Needs you" ref={needsRef}>
             <p className="ez-label">Needs you · {cards.length}</p>
@@ -345,11 +411,30 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             ))}
           </section>
         ) : null}
-
-        <Conversation events={conv?.events ?? []} follow={cards.length === 0} />
       </div>
 
       <footer className="ez-panel-foot">
+        {tab ? (
+          <p className={`ez-panel-tab ez-panel-tab-${tab.kind}`}>
+            <Icon name={tab.kind === "application" || tab.kind === "posting" ? "check" : "info"} size={15} /> This tab:{" "}
+            {tab.text}
+          </p>
+        ) : null}
+        <div className={connected ? "ez-panel-actions" : "ez-panel-actions ez-panel-off"}>
+          <TailorButton
+            disabled={!connected || !posting || working}
+            why={!posting ? "Capture a posting first" : busyWhy}
+            onPick={(text) => void send(text).catch(() => {})}
+          />
+          <FillButton
+            disabled={!connected || !posting || working}
+            why={!posting ? "Capture a posting first" : busyWhy}
+            tab={tab}
+            application={posting?.application}
+            onFill={(tabId) => void send(REQUESTS.fill(tabId)).catch(() => {})}
+            onOpen={(url) => void transport.openTab(url).catch(fail)}
+          />
+        </div>
         <AgentLine state={state} selected={selected} labelOf={labelOf} />
         <ChatBar
           disabled={!connected || agent?.status === "unavailable"}
@@ -428,7 +513,7 @@ function Blocker({ conn }: { conn: ConnectionState }) {
     <Banner tone="warn">
       ezapply isn't running. Start it in your workspace: <code>{"./ezapply"}</code> (on Windows{" "}
       <code>{".\\ezapply"}</code>
-      ). The panel connects within half a minute.
+      ). The panel connects within a few seconds.
     </Banner>
   );
 }
@@ -496,18 +581,13 @@ function FillButton({
   );
 }
 
+/** Approved (an attached document was approved first), or not yet: the one thing the user acts on. */
+export function isApproved(state: PanelConversation["documents"][number]["state"]): boolean {
+  return state === "approved" || state === "attached";
+}
+
 function DocState({ state }: { state: PanelConversation["documents"][number]["state"] }) {
-  const [tone, text] =
-    state === "approved"
-      ? (["ok", "approved"] as const)
-      : state === "attached"
-        ? (["ok", "attached"] as const)
-        : state === "review"
-          ? (["warn", "waiting for your review"] as const)
-          : state === "changes"
-            ? (["danger", "changes asked"] as const)
-            : ([undefined, "draft"] as const);
-  return <Badge tone={tone}>{text}</Badge>;
+  return isApproved(state) ? <Badge tone="ok">approved</Badge> : <Badge tone="warn">waiting for your review</Badge>;
 }
 
 function CardView({
@@ -552,7 +632,7 @@ function CardView({
 }
 
 /** The conversation: messages, Claude's text, tool calls folded to a line, settled cards, each turn's end. */
-export function Conversation({ events, follow = true }: { events: AgentEvent[]; follow?: boolean }) {
+export function Conversation({ events }: { events: AgentEvent[] }) {
   const end = useRef<HTMLDivElement>(null);
   const done = useMemo(() => {
     const m = new Map<string, Extract<AgentEvent, { kind: "toolDone" }>>();
@@ -561,10 +641,10 @@ export function Conversation({ events, follow = true }: { events: AgentEvent[]; 
   }, [events]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on every new event
   useEffect(() => {
-    if (follow) end.current?.scrollIntoView?.({ block: "end" });
+    end.current?.scrollIntoView?.({ block: "end" });
   }, [events.length]);
   if (events.length === 0) {
-    return <p className="ez-panel-empty">Nothing here yet. Use the buttons above, or ask anything below.</p>;
+    return <p className="ez-panel-empty">Nothing here yet. Use the buttons below, or ask anything.</p>;
   }
   // Each turn's cost: the session's total so far, less the turn before's.
   const costs = new Map<number, number>();

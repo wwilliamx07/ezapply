@@ -130,6 +130,9 @@ anonymously.
 - **`forget`**: deletes a repo's `repo-cache/` mirror (made writable first, queued behind any sync of it) and
   its `knowledge/` folder. Only `workspace_change_mark` calls it, for a repo no longer selected, after the
   user agrees.
+- **Timers:** a repo whose new commits the user put off isn't asked about by `remoteHead` until its timer
+  (`state.json` `deferred.repos`) runs out. `markIndexed` drops the repo's timer, and writing `repos.yaml` drops
+  the timers of repos it no longer lists ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## Contributions (`repo_contributions`)
 From commit history only (no file contents): total commits, the user's commits (matched by GitHub noreply

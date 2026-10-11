@@ -245,6 +245,20 @@
 .ob-list svg {
   color: var(--ok);
 }
+.ob-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ob-list .ob-delete svg {
+  color: var(--text-3);
+}
+.ob-list .ob-delete:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+.ob-list .ob-delete:hover:not(:disabled) svg {
+  color: var(--danger);
+}
 .ob-dot {
   width: 10px;
   height: 10px;

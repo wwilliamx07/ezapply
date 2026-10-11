@@ -918,7 +918,7 @@ function mismatchOf(
     hint:
       `${why[by]}, so nothing that changes the page runs and nothing is logged. If the user is applying to ` +
       "that job, activate its posting (postings_list with a company filter, then posting_activate) or have " +
-      "them capture it with Set posting; otherwise switch to the right tab. If the user says this tab is the " +
+      "them capture it with the side panel's Capture button; otherwise switch to the right tab. If the user says this tab is the " +
       `active posting's application after all, posting_activate { id: "${active.id}", tabId: ${tab.tabId} } ties them.`,
   };
 }

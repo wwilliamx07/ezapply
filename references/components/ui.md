@@ -86,51 +86,77 @@ Everything the user does with ezapply after setup ("Everything in the browser"):
 side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It reaches ezapply through a
 `PanelTransport`, which the extension implements over its background and tests fake: `call` (the companion's
 `panel.*` methods: [agent](agent.md#the-panels-side-panelts)), `capture`, `tab`, `openTab`, `connection`,
-`subscribe` (pushes: the connection's state, "the tab changed", the companion's updates). Top to bottom:
+`subscribe` (pushes: the connection's state, "the tab changed", the companion's updates).
+
+**Layout.** Only the conversation scrolls. The header sits above it, and the buttons and the chat box sit in the
+footer below it, so however long the conversation gets, the buttons are next to where the user types. The
+posting's details and its documents moved into a popover from the header. An earlier layout put the posting
+card, the buttons and the documents above the conversation in the same scroll, so a long conversation pushed the
+buttons out of reach. Splitting that into two scrolling boxes (the controls capped at half the height) fixed the
+reach but split the panel into two cramped areas. The other candidates were a sticky posting strip under the
+header, tabs for the chat and the posting, and icon buttons in the header. The footer layout was chosen because the
+buttons belong where the user's attention already is. Capture sits beside the picker rather than with
+the footer's buttons: it adds a posting to choose from, while those act on the chosen one, and among them it read
+as one of the posting's own actions. The menus and the popover close on a click elsewhere. Top
+to bottom:
 
 1. **Header:** ezapply's mark; a status dot (connected, not paired, an error, not running); the posting picker (the
-   20 newest postings and "No posting (general)"; choosing a posting makes it active); a menu with Setup (opens the
-   setup page) and Extension settings (the extension's options page: its port and pairing, opened by the panel
-   itself). No log view: the conversation shows every tool call, and the form log is in the posting's folder.
+   20 newest postings and "No posting (general)"; choosing a posting makes it active); **+ Capture**, the header's one
+   tinted button, which captures the current tab as a posting and follows the new active posting (its title says
+   it captures again on the posting's own page; the label stays, so the header doesn't change width), and keeps its
+   full width while the picker's label is cut short in a narrow panel. To leave the picker room to read, the
+   wordmark gives way to the mark alone below 420 px, and the mark goes too below 360 px (Chrome's side panel is
+   320 px at its narrowest); the **posting popover**
+   (item 3), its button showing how many documents the posting has (amber while any isn't approved); a menu with
+   Setup (opens the setup page) and Extension settings (the extension's options page: its port and pairing, opened
+   by the panel itself). No log view: the conversation shows every tool call, and the form log is in the posting's
+   folder.
 2. **When it can't work:** not running ("Start it in your workspace: `./ezapply`"), not paired, or the
    connection's error, as a banner; the rest is shown but disabled. Setup not finished is a banner of its own with
    **Continue setup** (the steps left are named); the rest stays usable, since setup's own tasks go to the agent.
-3. **Posting card:** role, company, site, deadline, its status and the requirement chips from `notes.md`, and
-   **Reset Conversation** (red when hovered; asks first: a new conversation for the posting; the documents stay). For the general conversation, a
-   line saying there's no posting.
-4. **This tab:** what the window's current tab is to the active posting (its page, its application on a site,
-   another posting's application, another page), read again when the tab changes.
-5. **Action buttons:** **Set posting** ("Capture again" on the posting's own page; captures the current tab and
-   follows the new active posting); **Tailor documents** (the resume, and the cover letter when the posting or the
-   preferences call for one), with a menu for the resume only, the cover letter only, or one PDF; **Fill form** on
-   the application's tab, or **Open the application** when the tab isn't it and the posting knows its address.
-   Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it up either way;
-   Fill form names the tab (`tabId`). They're disabled, with why in their title, without a posting or while
-   Claude works.
-6. **Documents:** the posting's PDFs and where each stands (draft, waiting for your review, approved, changes
-   asked, attached); the name opens the PDF; **Review** brings a waiting review's tab back.
-7. **Needs you** (while anything waits): every open card, oldest first, a card from another conversation labelled
-   with it (or "From a terminal chat"). The panel scrolls them into view when one arrives, and the conversation
-   doesn't scroll past them meanwhile. A **question card**: title, intro, each question by its type (radios,
+3. **Posting popover:** role, company, site, deadline and the requirement chips from `notes.md`; the
+   **documents**, the posting's PDFs, each **approved** (approved or attached) or **waiting for your review**
+   (draft, under review, changes asked), the name opening the PDF and **Review** bringing a waiting review's tab back ("No documents
+   yet." before there are any), an approved document with a **trash** button that deletes the PDF (asks first; its
+   LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new conversation for the posting;
+   the documents stay); and **Delete posting** (red when hovered; asks first; disabled while Claude works),
+   which deletes the posting's folder and its conversation for good, after which the panel follows the active
+   posting again (none). For the general conversation, a line saying there's no posting. The panel
+   shows only approved or not because approving is the one thing the user does with a document. The finer states
+   (`DocumentState`) and the posting's status (`PostingStatus`: drafting, attached, …) are still kept and used by
+   the tools and skills; they just aren't shown. A posting-level "documents approved" tag was dropped as well:
+   each document's own tag already says it.
+4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude" until taken); Claude's text
+   as Markdown built as elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics;
+   links stay text); each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary),
+   unfolding to its error or arguments, red when it failed, "…" while it runs; settled cards; each turn's end with
+   its cost (the session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest
+   event.
+5. **Needs you** (while anything waits), at the conversation's end, just above the buttons: every open card, oldest
+   first, a card from another conversation labelled with it (or "From a terminal chat"). The panel scrolls them
+   into view when one arrives. A **question card**: title, intro, each question by its type (radios,
    checkboxes with Other, a text field or box), the suggestion filled in and marked ("suggested"; a sensitive
    question is flagged and may have one too), `why` under it, "(optional)" ones skippable, **Save for next time**
    where offered; **Send answers** checks the answers first (`askAnswerProblems`, each problem under its
    question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
    wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
    the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
-8. **Conversation:** the user's messages ("waiting for Claude" until taken); Claude's text as Markdown built as
-   elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics; links stay text);
-   each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary), unfolding to its
-   error or arguments, red when it failed, "…" while it runs; settled cards; each turn's end with its cost (the
-   session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest event.
-9. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
+6. **This tab** (first in the footer): what the window's current tab is to the active posting (its page, its
+   application on a site, another posting's application, another page), read again when the tab changes.
+7. **Action buttons**, acting on the chosen posting: **Tailor documents** (the resume, and the cover letter when the posting or the
+   preferences call for one), with a menu (opening upwards) for the resume only, the cover letter only, or one PDF;
+   **Fill form** on the application's tab, or **Open the application** when the tab isn't it and the posting knows
+   its address. Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it
+   up either way; Fill form names the tab (`tabId`). They're disabled, with why in their title, without a posting
+   or while Claude works.
+8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
    waiting), or that the agent runs only under `ezapply`.
-10. **Footer:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in its
-    title), the model (Fable, Opus, Sonnet, Haiku) and the effort (Low to Max), which ezapply keeps and applies to
-    the running conversation, the effort from its next message ([agent](agent.md#permission-mode-model-and-effort));
-    and the conversation's cost so far.
+9. **Settings line:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in
+   its title), the model (Fable, Opus, Sonnet, Haiku) and the effort (Low to Max), which ezapply keeps and applies
+   to the running conversation, the effort from its next message
+   ([agent](agent.md#permission-mode-model-and-effort)); and the conversation's cost so far.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.
@@ -242,7 +268,7 @@ window gets focus. The comparison stops when no page listens.
 | Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview and "Anything to change in how it looks?" | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`; `compile`, `import` |
 | Screening questions | The unanswered ones, eight at a time, the suggestion filled in (a sensitive one's too: Claude still asks about it every time, suggesting what's saved; left empty, there's no suggestion), the profile path an answer usually comes from; **Save these** | `answers` |
 | Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters | `preferences` (`attach_mode`'s setting and `profile/preferences.md`) |
-| Library | A drop zone (or the browser's picker: here only contents are needed), the files there | `library` |
+| Library | A drop zone (or the browser's picker: here only contents are needed), the files there, each with a trash button that deletes it for good after asking | `library` |
 
 Plus **Finish setup** (**Finish later** while required steps remain), which ends the agent's wait, and an
 **Ask Claude** box in Claude's panel (task `question`, the answer shown as the task's note). A finished page says
@@ -252,7 +278,8 @@ it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes
 **Actions** (`POST action`, validated with zod): `task { kind, params }`, `pair { replace? }`, `github { app? }`,
 `repos { repos }`, `browse { kind: folder | tex, title? }`, `import { kind, source, main?, replace? }`,
 `compile { kind }`, `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
-neverMention, targets, coverLetters }`, `finish`.
+neverMention, targets, coverLetters }`, `deleteLibrary { name }` (only a file the step lists, by its exact name, so no
+name reaches outside `library/`), `finish`.
 
 ### The agent's side: tasks
 What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,

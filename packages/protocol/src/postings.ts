@@ -16,7 +16,7 @@ export const SiteId = z.enum([
 ]);
 export type SiteId = z.infer<typeof SiteId>;
 
-/** What the extension sends when the user presses "Set posting". */
+/** What the extension sends when the user presses "Capture". */
 export const CapturePayload = z.object({
   url: z.string().url(),
   pageTitle: z.string(),

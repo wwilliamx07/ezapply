@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AgentEvent, AskQuestion, Card, PanelConversation, PanelState } from "@ezapply/protocol";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Conversation, PanelApp, REQUESTS, withEvent } from "../src/panel/App.js";
 import { answerOf, initialDraft, permissionBody } from "../src/panel/cards.js";
@@ -55,7 +55,11 @@ function fakeTransport(opts: {
     call: vi.fn(async (method: string, params: unknown) => {
       calls.push([method, params]);
       if (method === "panel.state") return st;
-      if (method === "panel.conversation") return cv;
+      // Only the conversation asked for, as the companion: a posting's never stands in for the general one.
+      if (method === "panel.conversation") {
+        const key = (params as { key: string }).key;
+        return key === cv.key ? cv : { key, documents: [], events: [] };
+      }
       if (method === "panel.send") return { id: "m1" };
       if (method === "panel.stop") return { stopped: true };
       return {};
@@ -107,12 +111,53 @@ describe("the side panel", () => {
     ]);
   });
 
-  it("opens the application when this tab isn't it, captures on Set posting, and resets after asking", async () => {
+  it("shows each document as approved or waiting for review", async () => {
+    const t = fakeTransport({
+      conv: conversation({
+        documents: [
+          { file: "resume.pdf", state: "attached" },
+          { file: "cover-letter.pdf", state: "draft" },
+          { file: "bundle.pdf", state: "changes" },
+        ],
+      }),
+    });
+    render(<PanelApp transport={t.transport} />);
+    expect(await screen.findByText("resume.pdf")).toBeTruthy();
+    expect(screen.getAllByText("approved")).toHaveLength(1);
+    expect(screen.getAllByText("waiting for your review")).toHaveLength(2);
+    expect(screen.getByLabelText("Posting and documents, 2 waiting for your review")).toBeTruthy();
+  });
+
+  it("deletes an approved document and the posting after asking, and offers no trash on a document not approved", async () => {
+    const t = fakeTransport({
+      conv: conversation({
+        documents: [
+          { file: "resume.pdf", state: "approved" },
+          { file: "cover-letter.pdf", state: "draft" },
+        ],
+      }),
+    });
+    render(<PanelApp transport={t.transport} />);
+    expect(await screen.findByText("resume.pdf")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete cover-letter.pdf" })).toBeNull();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Delete resume.pdf" }));
+    expect(t.calls.some(([m]) => m === "panel.deleteDocument")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Delete resume.pdf" }));
+    await waitFor(() =>
+      expect(t.calls).toContainEqual(["panel.deleteDocument", { postingId: POSTING.id, file: "resume.pdf" }]),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Delete posting/ }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.deletePosting", { postingId: POSTING.id }]));
+    confirm.mockRestore();
+  });
+
+  it("opens the application when this tab isn't it, captures from the header, and resets after asking", async () => {
     const t = fakeTransport({ tab: { kind: "page", text: "Not this posting's application", tabId: 3 } });
     render(<PanelApp transport={t.transport} />);
     fireEvent.click(await screen.findByRole("button", { name: /Open the application/ }, { timeout: 5000 }));
     expect(t.transport.openTab).toHaveBeenCalledWith(POSTING.url);
-    fireEvent.click(screen.getByRole("button", { name: /Set posting/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Capture/ }));
     expect(t.transport.capture).toHaveBeenCalledTimes(1);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
@@ -148,7 +193,7 @@ describe("the side panel", () => {
     const off = fakeTransport({ conn: { state: "disconnected", reason: "refused" } });
     const { unmount } = render(<PanelApp transport={off.transport} />);
     expect(await screen.findByText(/ezapply isn't running/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Set posting/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Capture/ }) as HTMLButtonElement).disabled).toBe(true);
     unmount();
     render(<PanelApp transport={fakeTransport({ conn: { state: "unconfigured" } }).transport} />);
     expect(await screen.findByText(/isn't paired/)).toBeTruthy();
@@ -250,7 +295,7 @@ describe("the side panel", () => {
     expect(screen.getByText("sensitive")).toBeTruthy();
     expect(screen.getByText("From your profile")).toBeTruthy();
     expect(screen.getByText("winget install MiKTeX.MiKTeX")).toBeTruthy();
-    expect(screen.getByText("General")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Needs you" })).getByText("General")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
     await waitFor(() =>

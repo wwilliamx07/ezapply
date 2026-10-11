@@ -145,6 +145,14 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
         await postings.activate(postingId);
         return {};
       },
+      "panel.deletePosting": async ({ postingId }) => {
+        await panel.deletePosting(postingId);
+        return {};
+      },
+      "panel.deleteDocument": async ({ postingId, file }) => {
+        await panel.deleteDocument(postingId, file);
+        return {};
+      },
       "panel.open": async (what) => {
         await panel.open(what);
         return {};

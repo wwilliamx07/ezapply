@@ -12,7 +12,7 @@ on the companion's review page.
 | Path | Role |
 |---|---|
 | `src/ext.ts` | `ext`: Firefox's promise-based `browser`, else Chrome's `chrome` (typed as Chrome's API); `isFirefox` |
-| `src/background/index.ts` | Entry: wiring, the toolbar button (opens the panel), Set posting (the panel's button and the shortcut), lifecycle listeners and the reconnect alarm, `browser.status` and `panel.update` handlers |
+| `src/background/index.ts` | Entry: wiring, the toolbar button (opens the panel), Capture (the panel's button and the shortcut), lifecycle listeners and the reconnect alarm, `browser.status` and `panel.update` handlers |
 | `src/background/panel.ts` | `servePanels`: the side panels' ports, their requests relayed to the companion, what only the background can do, the companion's updates passed on; `panelUpdate` ([the side panel](#the-side-panel)) |
 | `src/panel/main.tsx`, `src/panel/transport.ts`, `static/panel.html` | The side panel's page: the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with `portTransport`, a runtime port to the background |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
@@ -45,7 +45,7 @@ on the companion's review page.
   (`tab.screenshot`). Chrome warns "Read and change all your data on all websites" at install.
 - `side_panel.default_path: panel.html` (Chrome); Firefox's build has `sidebar_action` with the same page
   instead (`default_title: ezapply`, not opened at install). The action's title is "ezapply".
-- `commands.set-posting`: Alt+Shift+P runs Set posting. Not `_execute_action`, which now opens the panel.
+- `commands.set-posting`: Alt+Shift+P runs Capture. Not `_execute_action`, which now opens the panel.
 - Options page embedded (`open_in_tab: false`).
 
 ## Builds (`npm run build -w @ezapply/extension`)
@@ -77,9 +77,9 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
   `welcome`, start RPC and the 20 s ping. On close: `Unauthorized`/`ProtocolMismatch` → error state
   showing the companion's message and hint (no backoff retries); `Replaced` → nothing; otherwise
-  "disconnected" with the reason "ezapply isn't running: start it with ./ezapply in your workspace (Set posting
+  "disconnected" with the reason "ezapply isn't running: start it with ./ezapply in your workspace (Capture
   still works)",
-  and retry with backoff from 1 s up to 30 s. The companion lives only while `ezapply` (or `ezapply chat`) runs, so a
+  and retry with backoff from 1 s up to 5 s (while the background stays awake; see wake-ups). The companion lives only while `ezapply` (or `ezapply chat`) runs, so a
   refused or closed connection means no chat is running.
 - `hello` carries `browser` (`detectBrowser`), so the companion opens pages and PDFs in this browser, and
   `pendingCapture: true` when a capture is queued, so a freshly started companion waits
@@ -88,10 +88,14 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   only while pairing is open; the `welcome` then carries the code, which is saved without reconnecting.
   Failures quietly leave the state "not paired" and the alarm tries again.
 - **Wake-ups:** a 30 s alarm, browser startup, install/update, and settings changes all call
-  `ensureConnected()`, which is a no-op when already connected or connecting. The alarm is created every
+  `ensureConnected()`, which is a no-op when already connected or connecting. While a side panel is open and
+  not connected, it also asks every 5 s (`portTransport`'s `connection` request, which calls
+  `ensureConnected()`). The message keeps Chrome's service worker awake, so starting ezapply is noticed within
+  5 s while the panel is open. The alarm can't do this itself: Chrome fires alarms at most every 30 s, so with
+  no panel open a reconnect still takes up to 30 s. The alarm is created every
   time the background starts, if it doesn't exist (`ensureReconnectAlarm`): Firefox drops alarms when the
   browser closes and Chrome may clear them on restart, so an alarm made only at install left the extension
-  disconnected after a browser restart, until the user clicked Set posting. Creating it only when missing
+  disconnected after a browser restart, until the user clicked Capture. Creating it only when missing
   keeps a wake-up from pushing the next firing back. `test/background.test.ts` loads the background with a
   stubbed API and checks this.
 - **Firefox keepalive:** its MV3 background is an event page unloaded after 30 s without an extension
@@ -108,7 +112,7 @@ open. The page (`panel.html`) is the UI package's `PanelApp` ([ui](ui.md#the-sid
 over a runtime port (`ezapply-panel`) to the background:
 - **`call`**: a `panel.*` method relayed to the companion over the bridge (60 s timeout); anything else is refused,
   so the panel can't capture or fill through the relay. It needs the companion connected.
-- **`capture`**: Set posting on the current tab of the panel's window. The panel calls
+- **`capture`**: Capture on the current tab of the panel's window. The panel calls
   `permissions.request({ origins: <all_urls> })` inside its own click first (Firefox asks only during the user's
   gesture), then the background captures as below and answers with the outcome (the posting, or why not).
 - **`tab`**: the window's current tab, its site told as for a form call, and what it is to the active posting
@@ -121,8 +125,8 @@ activated or navigates, and the companion's `panel.update`s. It tells the compan
 (`panel.watch`) when one opens or closes and on every connection. The panel's port is opened again if the
 background restarts (Chrome ends an idle service worker); calls made meanwhile fail with "try again".
 
-## Set posting
-The panel's **Set posting**, or Alt+Shift+P, on an `http(s)` page → ask for access to every site, synchronously in
+## Capture
+The panel's **Capture**, or Alt+Shift+P, on an `http(s)` page → ask for access to every site, synchronously in
 the click or the shortcut's handler (Firefox allows `permissions.request` only there; already granted, it resolves
 without asking; [access](#access-to-websites))
 → once that's settled, inject `capturePage` into every frame the extension may read → pick the frame that holds
@@ -146,7 +150,7 @@ and a capture of the top frame alone holds only the company's page around it.
   data (LinkedIn's) was captured as the reCAPTCHA frame, with an empty description.
 - `unreadableBoard`: when the chosen frame has no `JobPosting` data but contains a visible iframe of at least
   300×300 from a known job board host that couldn't be read (only when access to websites is withheld), nothing
-  is captured: the board's URL opens in a new tab next to the page, and the badge says to click Set posting there.
+  is captured: the board's URL opens in a new tab next to the page, and the badge says to click Capture there.
 
 ## Telling a page's site (`frames.ts`)
 A page (or a frame) is a site's when its body shows it: `pageSite` runs in the page (isolated world,
@@ -167,7 +171,7 @@ page still loading answers at once, from what it has so far).
 ## Access to websites
 The extension holds every site from the install (`<all_urls>`). Firefox lets the user withhold that, and Chrome
 lets them limit it to some sites or to a click. Where it's missing:
-- **Set posting** asks for it in the click, the one moment a request is allowed without a window of its own.
+- **Capture** asks for it in the click, the one moment a request is allowed without a window of its own.
 - **A form call** checks `permissions.contains` for its page's origin (the frame's, for an embedded application)
   before reading anything. Missing, it can't ask itself (`permissions.request` needs a user gesture, and a call
   from the companion is none), so it opens a small extension window (`grant.html`, `askForAccess`) naming the

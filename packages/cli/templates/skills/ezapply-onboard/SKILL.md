@@ -12,7 +12,15 @@ user's agreement: these cost time, and the templates and profile are theirs.
 1. Tell the user what changed, one short line per change (its `summary`). Say which ones the request in hand
    needs first (`affects`): a resume tailored from a template whose source moved, a form filled from a profile
    behind the resume. Ask whether to update now, after this posting, or later. Mark the ones put off with
-   `workspace_change_mark { id, as: "later" }`, so later sessions in this chat don't ask again.
+   `workspace_change_mark { ids, as: "later", hours? }`, one call for all of them:
+   - **Repos (`repo-pushed`):** "later" puts them off past this chat, for a day unless the user says longer
+     (`hours`: "for a week" is 168; at most 90 days). They aren't checked or asked about until then. All of them
+     unless the user names some. Say until when.
+   - **Anything else:** no `hours`. It's hidden for the rest of this chat only: a template or profile behind its
+     source feeds the next document, so the next chat asks again.
+
+   If the user asks what they put off, `workspace_changes` lists the repos under `deferred`, with when each is
+   checked again; re-indexing one early ends its timer.
 2. Work in this order, since each feeds the next:
    - **`template-source`:** confirm first, then `template_import { source, kind, replace: true }` with the
      folder or file from the summary. The old copy moves to `templates/.old/`. If it held a fix made at onboarding

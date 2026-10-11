@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CapturePayload,
@@ -132,7 +132,7 @@ export class PostingsService {
       throw new EzError(
         ErrorCode.NoActivePosting,
         "No active posting.",
-        "Ask the user to open the job posting in their browser and click the ezapply toolbar button (Set posting), or activate a previous one with posting_activate.",
+        "Ask the user to open the job posting in their browser and click Capture in the ezapply side panel, or activate a previous one with posting_activate.",
       );
     }
     return id;
@@ -224,6 +224,21 @@ export class PostingsService {
   }
 
   /** The posting's folder. Ids come from Claude, so anything that isn't a plain folder name is refused. */
+  /**
+   * Delete a posting for good: its folder and everything in it (capture, notes, documents, form log). When it's the
+   * active posting, there's none after.
+   */
+  delete(id: string): Promise<void> {
+    return this.serialize(async () => {
+      await this.get(id);
+      const wasActive = (await this.ws.readState()).activePostingId === id;
+      if (wasActive) await this.ws.updateState({ activePostingId: undefined });
+      await rm(this.folder(id), { recursive: true, force: true });
+      this.searched.delete(id);
+      if (wasActive) this.activeChanged();
+    });
+  }
+
   folder(id: string): string {
     if (!isPostingId(id)) {
       throw new EzError(ErrorCode.BadRequest, `Invalid posting id: ${id}`, "Use an id from postings_list.");

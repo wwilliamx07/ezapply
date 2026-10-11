@@ -449,7 +449,7 @@ describe("workspace changes", () => {
     const res = await callJson(client, "workspace_changes");
     expect(res.isError).toBe(false);
     expect(res.data).toEqual({ changes: [] });
-    const mark = await callJson(client, "workspace_change_mark", { id: "resume-edited@000000000000", as: "done" });
+    const mark = await callJson(client, "workspace_change_mark", { ids: ["resume-edited@000000000000"], as: "done" });
     expect(mark).toMatchObject({ isError: true, data: { error: { code: "not_found" } } });
     await client.close();
   });
@@ -723,7 +723,7 @@ describe("set posting → MCP", () => {
     const res = await callJson(client, "posting_active");
     expect(res.isError).toBe(true);
     expect(res.data.error.code).toBe("no_active_posting");
-    expect(res.data.error.hint).toMatch(/Set posting/);
+    expect(res.data.error.hint).toMatch(/Capture/);
     await client.close();
   });
 

@@ -449,7 +449,17 @@ export function PreferencesStep() {
 }
 
 export function LibraryStep() {
-  const { state } = useOnboard();
+  const { state, act } = useOnboard();
+  const [error, setError] = useState<string | null>(null);
+  const remove = async (name: string) => {
+    if (!window.confirm(`Delete ${name} from your library for good?`)) return;
+    setError(null);
+    try {
+      await act("deleteLibrary", { name });
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  };
   return (
     <>
       <StepHead title="Library" done={state.library.length > 0}>
@@ -464,11 +474,22 @@ export function LibraryStep() {
         <ul className="ob-list">
           {state.library.map((f) => (
             <li key={f}>
-              <Icon name="file" size={16} /> {f}
+              <Icon name="file" size={16} /> <span className="ob-list-name">{f}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ez-btn-icon ob-delete"
+                aria-label={`Delete ${f}`}
+                title={`Delete ${f}`}
+                onClick={() => void remove(f)}
+              >
+                <Icon name="trash" size={15} />
+              </Button>
             </li>
           ))}
         </ul>
       ) : null}
+      <ErrorNote error={error} />
     </>
   );
 }

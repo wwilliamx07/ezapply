@@ -18,6 +18,8 @@ export type PanelMessage =
 type Unsent = PanelRequest extends infer R ? (R extends PanelRequest ? Omit<R, "id"> : never) : never;
 
 export const PANEL_PORT = "ezapply-panel";
+/** How often the open panel asks the background to connect while it isn't connected. */
+const CHECK_MS = 5_000;
 
 /**
  * The panel's way to ezapply: a runtime port to the extension's background, which relays `panel.*` to the companion
@@ -73,6 +75,20 @@ export function portTransport(): PanelTransport {
     });
 
   open();
+  // Chrome fires alarms at most every 30 s. While the panel is open and not connected, it asks the background every
+  // 5 s instead: each ask tries to connect, and the message keeps Chrome's service worker awake for it. A change
+  // reaches the panel as the background's push.
+  let connected = false;
+  const seen = (state: ConnectionState) => {
+    connected = state.state === "connected";
+    return state;
+  };
+  listeners.add((p) => {
+    if (p.type === "connection") seen(p.state);
+  });
+  setInterval(() => {
+    if (!connected) void ask<ConnectionState>({ type: "connection" }).then(seen, () => undefined);
+  }, CHECK_MS);
   return {
     call: (method, params) => ask({ type: "call", method, params }),
     capture() {
@@ -87,7 +103,7 @@ export function portTransport(): PanelTransport {
     },
     // An extension page may open the options page itself: nothing to relay.
     openSettings: () => ext.runtime.openOptionsPage(),
-    connection: () => ask({ type: "connection" }),
+    connection: () => ask<ConnectionState>({ type: "connection" }).then(seen),
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);

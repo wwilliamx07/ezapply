@@ -16,7 +16,7 @@ export function registerPostingTools(server: McpServer, s: Services): void {
     {
       title: "Active posting",
       description:
-        "Get the active job posting: the one the user last captured with the extension's Set posting button (or activated). " +
+        "Get the active job posting: the one the user last captured with the side panel's Capture button (or activated). " +
         "Returns its metadata, folder, the path of posting.md (cleaned description, read this first), visible.txt " +
         "(everything that was visible on the page), the files already generated in the folder, and `documents`: " +
         "the attach mode, which documents the user approved (current = unchanged since), and an open review. " +

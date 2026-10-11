@@ -12,7 +12,7 @@ let clickListener: ((tab: unknown) => void) | undefined;
 let connectListener: ((port: unknown) => void) | undefined;
 /** What the background asked of Chrome's side panel when it loaded. */
 let panelBehavior: unknown;
-/** The keyboard shortcut's listener (Set posting). */
+/** The keyboard shortcut's listener (Capture). */
 let commandListener: ((command: string, tab: unknown) => void) | undefined;
 const chromeStub = {
   runtime: {
@@ -120,12 +120,12 @@ describe("the toolbar button", () => {
     expect(panelBehavior).toEqual({ openPanelOnActionClick: true });
     clickListener?.({ id: 3, url: "https://example.com/", index: 0, windowId: 1 });
     expect(chromeStub.sidebarAction.toggle).toHaveBeenCalledTimes(1);
-    // A click captures nothing: Set posting is the panel's button, or the shortcut.
+    // A click captures nothing: Capture is the panel's button, or the shortcut.
     expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
   });
 });
 
-describe("Set posting", () => {
+describe("Capture", () => {
   /** The keyboard shortcut on a page. */
   const click = async (url: string) => {
     await import("../src/background/index.js");

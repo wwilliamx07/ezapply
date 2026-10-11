@@ -51,7 +51,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    place.
 12. **Preferences:** the attach mode, then tone, emphasis, never-mention list, target roles and locations, cover
    letters → `profile/preferences.md`.
-13. **Library (optional):** files dropped on the page go into `library/`.
+13. **Library (optional):** files dropped on the page go into `library/`; each listed file can be deleted there.
 14. **Finish setup** (or **Finish later**) ends Claude's wait: it says in two lines what's ready and what's left.
 
 Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry). The page shows a
@@ -63,7 +63,8 @@ indexing, knowledge from repos no longer selected, a template's source folder ed
 template edited since the profile was updated from it, the profile's contact changed under the cover's fields.
 Nothing listed, Claude says nothing. Otherwise it lists them, and with the user's agreement re-imports,
 updates the profile from the diff, updates the cover fields and re-indexes, marking each done, or marks them
-`later` for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
+`later`: a repo for a day unless the user says longer (it isn't checked in any chat until then), anything else
+for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## 2. Pairing the extension
 On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
@@ -81,8 +82,8 @@ On the setup page its extension step does steps 1 and 2 (the same `startPairing`
 copy (for example in another browser) can't reconnect. A code typed on the options page still works for
 non-default ports.
 
-## 3. Capturing a posting ("Set posting")
-1. The user presses **Set posting** in the side panel (or Alt+Shift+P) on any `http(s)` page. The extension holds
+## 3. Capturing a posting ("Capture")
+1. The user presses **Capture** in the side panel (or Alt+Shift+P) on any `http(s)` page. The extension holds
    every site from the install; where the user withheld that (Firefox) or limited it (Chrome), the click asks for it again
    ([access](components/extension.md#access-to-websites)).
 2. The extension injects `capturePage` into the tab's frames it may read (every frame; with access withheld,

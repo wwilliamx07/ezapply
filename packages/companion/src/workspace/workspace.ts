@@ -32,6 +32,13 @@ const WorkspaceState = z.object({
       library: z.record(z.string(), Synced).optional(),
     })
     .optional(),
+  /** What the user put off past the chat they said it in. */
+  deferred: z
+    .object({
+      /** Repos whose new commits aren't checked or asked about until `until`, by `owner/name`. */
+      repos: z.record(z.string(), z.object({ until: z.string(), at: z.string() })).optional(),
+    })
+    .optional(),
 });
 export type WorkspaceState = z.infer<typeof WorkspaceState>;
 
@@ -77,7 +84,8 @@ export class Workspace {
 
   /**
    * Merge a change into state.json. Updates run one at a time: the active posting and the workspace check's
-   * baselines are written by different services, and two read-modify-writes at once would lose one.
+   * baselines are written by different services, and two read-modify-writes at once would lose one. Repo
+   * timers that have run out are dropped on every write.
    */
   updateState(
     patch:
@@ -86,7 +94,11 @@ export class Workspace {
   ): Promise<WorkspaceState> {
     const next = this.stateWrites.then(async () => {
       const cur = await this.readState();
-      const value = WorkspaceState.parse({ ...cur, ...(typeof patch === "function" ? patch(cur) : patch) });
+      const merged = WorkspaceState.parse({ ...cur, ...(typeof patch === "function" ? patch(cur) : patch) });
+      const value = {
+        ...merged,
+        deferred: keepDeferredRepos(merged.deferred, (_, t) => Date.parse(t.until) > Date.now()),
+      };
       await writeJsonAtomic(this.path("state.json"), value);
       return value;
     });
@@ -94,5 +106,27 @@ export class Workspace {
     return next;
   }
 
+  /** Drop the repo timers `drop` picks (re-indexed, or no longer selected). Writes nothing when none match. */
+  async dropDeferredRepos(drop: (repo: string) => boolean): Promise<void> {
+    const timers = (await this.readState()).deferred?.repos ?? {};
+    if (!Object.keys(timers).some(drop)) return;
+    await this.updateState((s) => ({ deferred: keepDeferredRepos(s.deferred, (repo) => !drop(repo)) }));
+  }
+
   private stateWrites: Promise<unknown> = Promise.resolve();
+}
+
+type Deferred = NonNullable<WorkspaceState["deferred"]>;
+type RepoTimer = NonNullable<Deferred["repos"]>[string];
+
+/** `deferred` with only the repo timers `keep` picks; undefined once nothing is left in it. */
+function keepDeferredRepos(
+  deferred: Deferred | undefined,
+  keep: (repo: string, t: RepoTimer) => boolean,
+): Deferred | undefined {
+  if (!deferred?.repos) return deferred;
+  const { repos, ...others } = deferred;
+  const kept = Object.fromEntries(Object.entries(repos).filter(([repo, t]) => keep(repo, t)));
+  if (Object.keys(kept).length) return { ...others, repos: kept };
+  return Object.keys(others).length ? others : undefined;
 }

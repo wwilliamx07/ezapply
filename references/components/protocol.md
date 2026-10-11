@@ -55,7 +55,7 @@ its host, which for sites on any host means every host: asked for one origin at 
 host stayed unreadable until something already knew its site, which only the URL could say.
 `HOST_PERMISSIONS` is `<all_urls>`, which also lets `tab.screenshot` work. The cost is Chrome's broadest
 install warning ("Read and change all your data on all websites"), accepted for this; the extension still acts
-on a page only for Set posting or a call from Claude ([security](../security.md)).
+on a page only for Capture or a call from Claude ([security](../security.md)).
 
 ## Bridge handshake
 

@@ -310,6 +310,10 @@ export const PanelMethods = {
     result: Empty,
   },
   "panel.activate": { params: z.object({ postingId: z.string() }), result: Empty },
+  /** Delete a posting for good: its folder and its conversation. Refused while it has a review open. */
+  "panel.deletePosting": { params: z.object({ postingId: z.string() }), result: Empty },
+  /** Delete one of a posting's PDFs for good (its LaTeX source stays). Refused while it's in an open review. */
+  "panel.deleteDocument": { params: z.object({ postingId: z.string(), file: z.string() }), result: Empty },
   /** Open, for the user: a review's tab again, a posting's file, or the setup page. */
   "panel.open": {
     params: z.discriminatedUnion("what", [

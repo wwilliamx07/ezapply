@@ -31,6 +31,38 @@ body {
   flex: 1;
   min-width: 0;
 }
+/* The header's one tinted button; the picker gives way first when the panel is narrow. */
+.ez-panel-capture {
+  flex: none;
+  gap: 3px;
+  padding: 0 10px;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+/* A narrow panel (Chrome's is 320 px at its narrowest) keeps only the mark, leaving the picker room to read. */
+@media (max-width: 420px) {
+  .ez-panel-head {
+    gap: 6px;
+  }
+  .ez-panel-head .ez-brand {
+    gap: 0;
+    font-size: 0;
+  }
+  .ez-panel-head .ez-brand-mark {
+    font-size: 14px;
+  }
+}
+@media (max-width: 360px) {
+  .ez-panel-head .ez-brand {
+    display: none;
+  }
+}
+.ez-panel-capture:hover:not(:disabled) {
+  background: var(--accent-soft);
+  filter: brightness(0.97);
+}
 .ez-dot {
   width: 9px;
   height: 9px;
@@ -72,7 +104,7 @@ body {
   border-radius: var(--radius-s);
   box-shadow: var(--shadow-page);
 }
-.ez-panel-menu-items button {
+.ez-panel-menu-items > button {
   display: block;
   width: 100%;
   padding: 6px 10px;
@@ -84,15 +116,17 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-.ez-panel-menu-items button:hover:not(:disabled) {
+.ez-panel-menu-items > button:hover:not(:disabled) {
   background: var(--surface-2);
 }
 .ez-panel > .ez-banner {
   margin: 8px 12px 0;
 }
 
+/* Only the conversation scrolls; the buttons and the chat box stay in the footer. */
 .ez-panel-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 10px 12px 12px;
   display: flex;
@@ -104,16 +138,42 @@ body {
   opacity: 0.55;
   pointer-events: none;
 }
-.ez-panel-posting {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
+/* The posting and its documents: a popover from the header. */
+.ez-panel-details > summary {
+  position: relative;
 }
-.ez-panel-posting-top {
+.ez-count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+.ez-count-warn {
+  background: var(--warn);
+  color: var(--bg);
+}
+.ez-panel-pop {
+  width: min(340px, calc(100vw - 24px));
+  padding: 10px 12px;
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
+}
+.ez-panel-pop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ez-panel-nodocs {
+  margin: 0;
 }
 .ez-panel-role {
   font-weight: 600;
@@ -150,6 +210,11 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* The footer's menus open upwards, over the conversation. */
+.ez-panel-foot .ez-panel-menu-items {
+  bottom: 100%;
+  margin: 0 0 4px;
 }
 .ez-split {
   display: inline-flex;
@@ -437,7 +502,7 @@ body {
   padding: 2px 6px;
   font-size: 12px;
 }
-.ez-panel-reset:hover:not(:disabled) {
+.ez-panel-danger:hover:not(:disabled) {
   background: var(--danger-soft);
   color: var(--danger);
 }

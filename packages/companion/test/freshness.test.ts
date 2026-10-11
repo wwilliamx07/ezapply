@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { FreshnessService } from "../src/freshness/service.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { DEFER_MAX_HOURS, FreshnessService } from "../src/freshness/service.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { GitHubService } from "../src/github/service.js";
 import { createLogger } from "../src/logger.js";
@@ -90,7 +90,7 @@ describe("FreshnessService: repos", () => {
       expect.objectContaining({ id: `repo-pushed:jane/proj@${head.slice(0, 7)}`, kind: "repo-pushed" }),
     ]);
     await expect(stat(repos.cachePath("jane/proj"))).rejects.toThrow(); // nothing cloned or fetched
-    await expect(svc.mark(changes[0]?.id ?? "", "done")).rejects.toThrow(/re-index/);
+    await expect(svc.mark([changes[0]?.id ?? ""], "done")).rejects.toThrow(/re-index/);
   });
 
   it("stops reporting new commits once the repo is re-indexed in the same chat", async () => {
@@ -102,15 +102,78 @@ describe("FreshnessService: repos", () => {
     await markIndexed("jane/proj", before);
   });
 
-  it("hides a change put off until the chat ends, and shows a newer push again", async () => {
+  it("puts a repo off for a day across chats, without asking its remote, and lists the timer", async () => {
     const svc = service();
     const [first] = (await svc.changes()).changes;
-    await svc.mark(first?.id ?? "", "later");
+    const before = Date.now();
+    const { marked } = await svc.mark([first?.id ?? ""], "later");
+    const until = Date.parse(marked[0]?.until ?? "");
+    expect(until - before).toBeGreaterThanOrEqual(24 * 3_600_000);
+    expect(until - Date.now()).toBeLessThanOrEqual(24 * 3_600_000);
     expect((await svc.changes()).changes).toEqual([]);
-    const head = await push("more.ts", "export {}\n");
-    expect((await svc.changes({ refresh: true })).changes[0]?.id).toBe(`repo-pushed:jane/proj@${head.slice(0, 7)}`);
-    expect((await service().changes()).changes).toHaveLength(1);
-    await markIndexed("jane/proj", head);
+    expect((await ws.readState()).deferred?.repos?.["jane/proj"]?.until).toBe(marked[0]?.until);
+
+    await push("more.ts", "export {}\n");
+    const ask = vi.spyOn(repos, "remoteHead");
+    const next = service(); // a new chat, with a push made meanwhile
+    expect(await next.changes({ refresh: true })).toEqual({
+      changes: [],
+      deferred: [{ repo: "jane/proj", until: marked[0]?.until }],
+    });
+    expect(ask).not.toHaveBeenCalled();
+    ask.mockRestore();
+  });
+
+  it("checks a repo whose timer ran out, reporting pushes made while it was put off", async () => {
+    const head = git(origin, "rev-parse", "HEAD");
+    const past = new Date(Date.now() - 1000).toISOString();
+    await writeFile(
+      ws.path("state.json"),
+      JSON.stringify({ schemaVersion: 1, deferred: { repos: { "jane/proj": { until: past, at: past } } } }),
+    );
+    const r = await service().changes();
+    expect(r.changes.map((c) => c.id)).toEqual([`repo-pushed:jane/proj@${head.slice(0, 7)}`]);
+    expect(r.deferred).toBeUndefined();
+    await ws.updateState({}); // any write drops the expired timer
+    expect((await ws.readState()).deferred).toBeUndefined();
+  });
+
+  it("takes a length, caps it at 90 days, and refuses hours on a change that isn't a repo's", async () => {
+    const svc = service();
+    const [change] = (await svc.changes()).changes;
+    const week = (await svc.mark([change?.id ?? ""], "later", 168)).marked[0]?.until ?? "";
+    expect(Date.parse(week) - Date.now()).toBeGreaterThan(167 * 3_600_000);
+    expect(Date.parse(week) - Date.now()).toBeLessThanOrEqual(168 * 3_600_000);
+    await ws.dropDeferredRepos(() => true);
+
+    const capped = (await svc.mark([change?.id ?? ""], "later", 10_000)).marked[0]?.until ?? "";
+    expect(Date.parse(capped) - Date.now()).toBeLessThanOrEqual(DEFER_MAX_HOURS * 3_600_000);
+    expect(Date.parse(capped) - Date.now()).toBeGreaterThan((DEFER_MAX_HOURS - 1) * 3_600_000);
+    await ws.dropDeferredRepos(() => true);
+  });
+
+  it("re-indexing a repo, or deselecting it, ends its timer", async () => {
+    const svc = service();
+    const [change] = (await svc.changes()).changes;
+    await svc.mark([change?.id ?? ""], "later");
+    await repos.sync("jane/proj", "public-url");
+    await writeFile(
+      join(repos.knowledgePath("jane/proj"), "claims.yaml"),
+      "schemaVersion: 1\nrepo: jane/proj\nclaims: []\n",
+    );
+    const before = (await repos.knowledgeMeta("jane/proj"))?.indexedSha ?? "";
+    await repos.markIndexed("jane/proj");
+    expect((await ws.readState()).deferred).toBeUndefined();
+    await markIndexed("jane/proj", before);
+
+    await svc.mark([change?.id ?? ""], "later");
+    await profile.writeRepos({ schemaVersion: 1, repos: [{ fullName: "jane/proj", source: "public-url" }] });
+    expect((await ws.readState()).deferred?.repos).toHaveProperty("jane/proj"); // still selected: kept
+    await profile.writeRepos({ schemaVersion: 1, repos: [] });
+    expect((await ws.readState()).deferred).toBeUndefined();
+    await profile.writeRepos({ schemaVersion: 1, repos: [{ fullName: "jane/proj", source: "public-url" }] });
+    expect((await service().changes()).changes.map((c) => c.kind)).toEqual(["repo-pushed"]);
+    await markIndexed("jane/proj", git(origin, "rev-parse", "HEAD"));
   });
 
   it("lists a repo it can't reach under notChecked, and one needing a login with the hint", async () => {
@@ -135,8 +198,19 @@ describe("FreshnessService: repos", () => {
     const svc = service();
     const ids = (await svc.changes()).changes.map((c) => c.id).sort();
     expect(ids).toEqual(["repo-deselected:jane/gone", "repo-deselected:jane/private"]);
-    const r = await svc.mark("repo-deselected:jane/gone", "done");
-    expect(r.removed).toEqual(["knowledge/jane__gone"]);
+    // Every id is checked first: one that isn't current, or hours on a change that isn't a repo's, marks none.
+    await expect(svc.mark(["repo-deselected:jane/gone", "repo-pushed:jane/x@0000000"], "done")).rejects.toThrow(
+      /No current change/,
+    );
+    await expect(svc.mark(ids, "later", 24)).rejects.toThrow(/repo's new commits only/);
+    expect((await svc.changes()).changes.map((c) => c.id).sort()).toEqual(ids);
+    // Several put off in one call, for this chat only.
+    const other = service();
+    await other.mark(ids, "later");
+    expect((await other.changes()).changes).toEqual([]);
+    expect((await ws.readState()).deferred).toBeUndefined();
+    const [r] = (await svc.mark(["repo-deselected:jane/gone"], "done")).marked;
+    expect(r?.removed).toEqual(["knowledge/jane__gone"]);
     await expect(stat(repos.knowledgePath("jane/gone"))).rejects.toThrow();
     expect((await svc.changes()).changes.map((c) => c.id)).toEqual(["repo-deselected:jane/private"]);
     await rm(repos.knowledgePath("jane/private"), { recursive: true });
@@ -177,7 +251,7 @@ describe("FreshnessService: templates and profile", () => {
     const [change] = (await svc.changes()).changes;
     expect(change).toMatchObject({ kind: "template-source", affects: ["resume"] });
     expect(change?.id).toMatch(/^template-source:resume@[0-9a-f]{12}$/);
-    await svc.mark(change?.id ?? "", "done");
+    await svc.mark([change?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
   });
 
@@ -189,7 +263,7 @@ describe("FreshnessService: templates and profile", () => {
     expect(changes[0]).toMatchObject({ kind: "resume-edited", affects: ["profile", "forms"] });
     expect(changes[0]?.diff).toContain("+\\item Intern at Initech");
     expect(changes[0]?.diff).not.toContain("documentclass");
-    await svc.mark(changes[0]?.id ?? "", "done");
+    await svc.mark([changes[0]?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
     expect(await readFile(ws.path("templates", ".synced", "resume", "sections", "work.tex"), "utf8")).toContain(
       "Initech",
@@ -244,7 +318,7 @@ describe("FreshnessService: templates and profile", () => {
     await writeFile(ws.path("profile", "profile.yaml"), yaml("jane.doe@example.com", "Initech"));
     const [change] = (await svc.changes()).changes;
     expect(change).toMatchObject({ kind: "profile-identity", affects: ["cover"] });
-    await svc.mark(change?.id ?? "", "done");
+    await svc.mark([change?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
     expect((await ws.readState()).synced?.profileIdentity).toBeDefined();
   });
@@ -277,7 +351,7 @@ describe("FreshnessService: templates and profile", () => {
     changes = (await svc.changes()).changes;
     expect(changes.map((c) => c.kind)).toEqual(["resume-edited"]);
     expect(changes[0]?.diff).toContain("+Engineer at Initech");
-    await svc.mark(changes[0]?.id ?? "", "done");
+    await svc.mark([changes[0]?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
   });
 
@@ -290,7 +364,7 @@ describe("FreshnessService: templates and profile", () => {
     const { changes } = await svc.changes();
     expect(changes.map((c) => c.kind)).toEqual(["template-untracked"]);
     expect(changes[0]?.detail).toMatch(/^library\/resume\.tex has the same text/);
-    await svc.mark(changes[0]?.id ?? "", "done");
+    await svc.mark([changes[0]?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
     expect(await templates.templateMeta("resume")).not.toHaveProperty("importedFrom");
     expect(await templates.templateMeta("resume")).not.toHaveProperty("sourceHash");
@@ -302,7 +376,7 @@ describe("FreshnessService: templates and profile", () => {
     const svc = service();
     const [change] = (await svc.changes()).changes;
     expect(change?.kind).toBe("library-template");
-    await svc.mark(change?.id ?? "", "done");
+    await svc.mark([change?.id ?? ""], "done");
     expect((await svc.changes()).changes).toEqual([]);
     expect(Object.keys((await ws.readState()).synced?.library ?? {})).toEqual(["library/sample-letter.tex"]);
 
@@ -310,11 +384,11 @@ describe("FreshnessService: templates and profile", () => {
     const again = (await svc.changes()).changes;
     expect(again.map((c) => c.kind)).toEqual(["library-template"]);
     expect(again[0]?.id).not.toBe(change?.id);
-    await svc.mark(again[0]?.id ?? "", "done");
+    await svc.mark([again[0]?.id ?? ""], "done");
   });
 
   it("refuses an id that isn't current", async () => {
-    await expect(service().mark("resume-edited@000000000000", "done")).rejects.toThrow(/No current change/);
+    await expect(service().mark(["resume-edited@000000000000"], "done")).rejects.toThrow(/No current change/);
   });
 });
 

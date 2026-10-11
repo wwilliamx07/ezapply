@@ -101,6 +101,10 @@ and a notice. Claude Code stopping mid-turn is a notice with the first line it w
 of a process is checked for the `ezapply` MCP server: anything but `connected` is an error notice ("Run `ezapply
 init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
 
+**Forget** (`forget(key)`, when the panel deletes a posting) ends the conversation's process, withdraws its open
+cards, removes it from `conversations.json` and deletes its folder of logs (`agent/<key>/`). Nothing is kept for
+`claude --resume`, since the posting it was about is gone.
+
 ## Permission mode, model and effort
 Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { permissionMode, model, effort }`,
 kept in the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply. The defaults
@@ -170,6 +174,8 @@ own and no web page can reach it.
 | `panel.settings { permissionMode?, model?, effort? }` | Change the agent's settings ([above](#permission-mode-model-and-effort)); returns them. `panel.state` carries them as `agent.settings` |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
 | `panel.activate { postingId }` | Make a posting active (the panel's picker) |
+| `panel.deletePosting { postingId }` | Delete a posting for good: its conversation (`forget`), then its folder (`PostingsService.delete`). Refused while it has a review open |
+| `panel.deleteDocument { postingId, file }` | Delete one of the PDFs the panel lists for the posting, and nothing else (any other name is `not_found`). The `.tex` source stays, so Claude can build it again. Refused while the PDF is in an open review |
 | `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |
 
 **Updates** (`panel.update`, the companion calling the extension): each agent event with its conversation, and

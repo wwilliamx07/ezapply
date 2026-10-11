@@ -47,6 +47,9 @@ export class ProfileService {
   async writeRepos(file: ReposFile): Promise<void> {
     const header = "GitHub repos that feed the knowledge base. Managed by ezapply; edit freely.";
     await this.writeYaml(this.ws.path("profile", "repos.yaml"), ReposFile.parse(file), header);
+    // A repo deselected loses its re-index timer: selected again, it's checked at the next chat.
+    const chosen = new Set(file.repos.map((r) => r.fullName.toLowerCase()));
+    await this.ws.dropDeferredRepos((r) => !chosen.has(r.toLowerCase()));
   }
 
   /** Create answers.yaml from the seed list if it does not exist. Returns true when created. */

@@ -19,7 +19,8 @@ import { type ConnState, DEFAULT_PORT, type Settings, store } from "./settings.j
 // Chrome keeps the MV3 service worker alive while WebSocket traffic flows at least every 30s.
 // Firefox's event page ignores socket traffic and idles out after 30s without an extension event.
 const KEEPALIVE_MS = 20_000;
-const MAX_BACKOFF_MS = 30_000;
+// Retries after a drop wait 1, 2, 4, then 5 s each: ezapply is noticed within 5 s of starting.
+const MAX_BACKOFF_MS = 5_000;
 
 /**
  * Owns the single WebSocket to the companion: handshake, keepalive, reconnect with backoff,
@@ -163,7 +164,7 @@ export class CompanionConnection {
       // The companion runs inside `ezapply chat`: not reachable, or closed, means no chat is open.
       await this.setState({
         state: "disconnected",
-        reason: "ezapply isn't running: start it with ./ezapply in your workspace (Set posting still works)",
+        reason: "ezapply isn't running: start it with ./ezapply in your workspace (Capture still works)",
       });
       this.scheduleRetry();
     };

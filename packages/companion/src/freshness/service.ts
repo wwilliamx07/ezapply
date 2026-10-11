@@ -39,9 +39,17 @@ export interface NotChecked {
   hint?: string;
 }
 
+/** A repo whose new commits the user put off: not checked until `until`. */
+export interface DeferredRepo {
+  repo: string;
+  until: string;
+}
+
 export interface ChangesResult {
   changes: WorkspaceChange[];
   notChecked?: NotChecked[];
+  /** Repos put off with a timer still running. */
+  deferred?: DeferredRepo[];
   /** The repo check was still running when the wait ran out: call again with `refresh: false` later. */
   pending?: true;
 }
@@ -52,8 +60,21 @@ interface RepoCheck {
   notChecked: NotChecked[];
 }
 
+export interface Marked {
+  id: string;
+  as: "done" | "later";
+  /** For `repo-deselected` marked done: what was deleted. */
+  removed?: string[];
+  /** For `repo-pushed` put off: when the repo is checked again. */
+  until?: string;
+}
+
 const DIFF_MAX_LINES = 200;
 const REPO_CONCURRENCY = 4;
+/** How long a repo is put off when the user doesn't say. */
+export const DEFER_DEFAULT_HOURS = 24;
+/** The longest a repo is put off, so none is silenced for good (deselecting it is how to stop for good). */
+export const DEFER_MAX_HOURS = 90 * 24;
 
 interface Options {
   /** How long `changes` waits for a repo check still running (tests shorten it). */
@@ -68,7 +89,9 @@ interface Options {
  * came from, the profile behind the resume template, the cover letter's fields behind the profile, and
  * knowledge from repos no longer selected. The repo check needs the network, so it runs once per chat, in
  * the background from `start()`; the local checks are cheap and run on every call. Nothing here changes
- * the derived files: the agent does that with the user's agreement, then marks the change done.
+ * the derived files: the agent does that with the user's agreement, then marks the change done. A repo put
+ * off gets a timer in state.json and isn't checked until it runs out; any other change put off is hidden
+ * until the chat ends.
  */
 export class FreshnessService {
   private repoCheck: Promise<RepoCheck> | null = null;
@@ -101,9 +124,11 @@ export class FreshnessService {
     const current = await this.current(remote);
     const changes = current.changes.filter((c) => !this.later.has(c.id));
     const { notChecked } = current;
+    const deferred = [...(await this.deferredRepos()).values()];
     return {
       changes,
       ...(notChecked.length ? { notChecked } : {}),
+      ...(deferred.length ? { deferred } : {}),
       ...(remote ? {} : { pending: true as const }),
     };
   }
@@ -118,32 +143,66 @@ export class FreshnessService {
   }
 
   /**
-   * `later` hides a change for the rest of the chat. `done` records that the derived part is current: the
-   * template with its source, the profile with the resume template, the cover fields with the profile; for
-   * a deselected repo it deletes the repo's knowledge and cache. A repo's new commits are ended by
-   * `knowledge_mark_indexed` only, after re-indexing.
+   * `later` puts a repo's new commits off for `hours` (a day by default, at most 90 days), past the end of
+   * the chat, and hides any other change for the rest of the chat. `done` records that the derived part is
+   * current: the template with its source, the profile with the resume template, the cover fields with the
+   * profile; for a deselected repo it deletes the repo's knowledge and cache. A repo's new commits are ended
+   * by `knowledge_mark_indexed` only, after re-indexing. Every id is checked before any is marked.
    */
-  async mark(id: string, as: "done" | "later"): Promise<{ id: string; as: string; removed?: string[] }> {
-    const change = (await this.current(await this.repoCheck)).changes.find((c) => c.id === id);
-    if (!change) {
+  async mark(ids: string[], as: "done" | "later", hours?: number): Promise<{ marked: Marked[] }> {
+    const current = (await this.current(await this.repoCheck)).changes;
+    const picked = ids.map((id) => {
+      const change = current.find((c) => c.id === id);
+      if (!change) {
+        throw new EzError(
+          ErrorCode.NotFound,
+          `No current change ${id}.`,
+          "It may be done already, or changed again since: call workspace_changes for the current ids.",
+        );
+      }
+      return change;
+    });
+    if (as === "done" && picked.some((c) => c.kind === "repo-pushed")) {
       throw new EzError(
-        ErrorCode.NotFound,
-        `No current change ${id}.`,
-        "It may be done already, or changed again since: call workspace_changes for the current ids.",
+        ErrorCode.BadRequest,
+        "A repo's new commits are ended by re-indexing it, not by marking.",
+        "Run the ezapply-index-repo skill for it (knowledge_mark_indexed ends this change), or mark it `later`.",
       );
+    }
+    const timed = picked.find((c) => c.kind !== "repo-pushed");
+    if (hours !== undefined && (as !== "later" || timed)) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `\`hours\` puts off a repo's new commits only${timed ? `; ${timed.id} is a ${timed.kind} change` : ""}.`,
+        "Mark the others `later` without hours: a template or profile behind its source feeds the next document, " +
+          "so the next chat asks again.",
+      );
+    }
+    const marked: Marked[] = [];
+    for (const change of picked) marked.push(await this.markOne(change, as, hours));
+    return { marked };
+  }
+
+  private async markOne(change: WorkspaceChange, as: "done" | "later", hours?: number): Promise<Marked> {
+    const { id } = change;
+    const rest = id.slice(id.indexOf(":") + 1);
+    if (as === "later" && change.kind === "repo-pushed") {
+      const repo = rest.slice(0, rest.lastIndexOf("@"));
+      const ms = Math.min(hours ?? DEFER_DEFAULT_HOURS, DEFER_MAX_HOURS) * 3_600_000;
+      const at = new Date();
+      const until = new Date(at.getTime() + ms).toISOString();
+      await this.ws.updateState((s) => ({
+        deferred: { ...s.deferred, repos: { ...s.deferred?.repos, [repo]: { until, at: at.toISOString() } } },
+      }));
+      return { id, as, until };
     }
     if (as === "later") {
       this.later.add(id);
       return { id, as };
     }
-    const rest = id.slice(id.indexOf(":") + 1);
     switch (change.kind) {
       case "repo-pushed":
-        throw new EzError(
-          ErrorCode.BadRequest,
-          "A repo's new commits are ended by re-indexing it, not by marking.",
-          "Run the ezapply-index-repo skill for it (knowledge_mark_indexed ends this change), or mark it `later`.",
-        );
+        throw new Error("unreachable: checked in mark()");
       case "repo-deselected": {
         const { removed } = await this.repos.forget(rest);
         return { id, as, removed };
@@ -186,12 +245,17 @@ export class FreshnessService {
     this.repoCheck = check;
   }
 
-  /** New commits since indexing, by `ls-remote` only: nothing is fetched before the user agrees. */
+  /**
+   * New commits since indexing, by `ls-remote` only: nothing is fetched before the user agrees. A repo put
+   * off isn't asked at all until its timer runs out.
+   */
   private async checkRepos(): Promise<RepoCheck> {
     const sel = await this.profile.repos();
     if (!sel.exists || !sel.valid) return { pushed: [], notChecked: [] };
+    const deferred = await this.deferredRepos();
     const queue: { repo: (typeof sel.value.repos)[number]; sha: string }[] = [];
     for (const repo of sel.value.repos) {
+      if (deferred.has(repo.fullName.toLowerCase())) continue;
       const meta = await this.repos.knowledgeMeta(repo.fullName);
       if (meta) queue.push({ repo, sha: meta.indexedSha });
     }
@@ -242,8 +306,11 @@ export class FreshnessService {
       });
     }
 
+    const deferred = await this.deferredRepos();
     for (const { fullName, indexedSha, head } of remote?.pushed ?? []) {
       if (!chosen.has(fullName.toLowerCase())) continue;
+      // Put off since the check ran: hidden for as long as the timer runs.
+      if (deferred.has(fullName.toLowerCase())) continue;
       // Indexed again since the check: repo_sync fetched at least the head the check saw, so it's current.
       if ((await this.repos.knowledgeMeta(fullName))?.indexedSha !== indexedSha) continue;
       changes.push({
@@ -257,6 +324,19 @@ export class FreshnessService {
     changes.sort((a, b) => a.id.localeCompare(b.id));
     const notChecked = (remote?.notChecked ?? []).filter((n) => chosen.has(n.what.toLowerCase()));
     return { changes, notChecked };
+  }
+
+  /** Selected repos with a timer still running, by lowercased name. */
+  private async deferredRepos(): Promise<Map<string, DeferredRepo>> {
+    const timers = (await this.ws.readState()).deferred?.repos ?? {};
+    const sel = await this.profile.repos();
+    const chosen = new Set(sel.exists && sel.valid ? sel.value.repos.map((r) => r.fullName.toLowerCase()) : []);
+    const now = Date.now();
+    const running = new Map<string, DeferredRepo>();
+    for (const [repo, { until }] of Object.entries(timers).sort(([a], [b]) => a.localeCompare(b))) {
+      if (Date.parse(until) > now && chosen.has(repo.toLowerCase())) running.set(repo.toLowerCase(), { repo, until });
+    }
+    return running;
   }
 
   // ---- templates and profile (local, every call) -----------------------------------------------

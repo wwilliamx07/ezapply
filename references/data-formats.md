@@ -163,7 +163,7 @@ A call that fails or times out is still recorded. Records are written after the 
 ([security](security.md)).
 
 ### `state.json`
-`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } } }`.
+`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } }, deferred?: { repos?: { "<owner>/<name>": { until, at } } } }`.
 
 `synced` is what the workspace check ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes))
 compares against: `resume`, the hash of the resume template's main file and content files when the profile was
@@ -171,8 +171,13 @@ last brought in line with it; `profileIdentity`, the hash of the profile's `iden
 when the cover template's fields were last set from them; `library`, per LaTeX document in `library/` the user
 said isn't a template, the hash of it and the `.tex` files it pulls in at the time (it's reported again once
 that changes). All are 12 hex characters of SHA-256 and written
-by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`). Writes to `state.json`
-run one at a time.
+by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`).
+
+`deferred.repos` holds the repos whose new commits the user put off (`workspace_change_mark { as: "later" }` on
+a `repo-pushed` change): `until` (ISO time; at most 90 days after `at`) and `at`, when it was put off. Until then
+the repo isn't checked. Re-indexing or deselecting the repo removes its entry, and entries past `until` are
+removed on any write. Both keys are optional, so adding them needed no `schemaVersion` bump. Writes to
+`state.json` run one at a time.
 
 ### `agent/`
 The side panel's conversations ([agent](components/agent.md)), written by the companion only.

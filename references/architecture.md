@@ -23,7 +23,7 @@ the same relay to the same tools; the extension's side panel talks to the compan
                                                                                                             WebSocket │
                                            ┌────────────────────────────────────────────────────────────────────────┐ │
                                            │ browser extension (Chrome MV3 / Firefox 128+ MV3)                      │◀┘
-                                           │  • toolbar button: Set posting (capture any page)                      │
+                                           │  • toolbar button: Capture (capture any page)                      │
                                            │  • background: bridge client, pairing, routing, badge                 │
                                            │  • site adapters (one per site), injected into the MAIN world          │
                                            └────────────────────────────────────────────────────────────────────────┘

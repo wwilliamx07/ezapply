@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, extname, join, relative, sep } from "node:path";
 import {
@@ -114,6 +114,7 @@ const Action = z.discriminatedUnion("action", [
     targets: z.string().max(4000),
     coverLetters: z.string().max(4000),
   }),
+  z.object({ action: z.literal("deleteLibrary"), name: z.string().min(1).max(500) }),
   z.object({ action: z.literal("finish") }),
 ]);
 type Action = z.infer<typeof Action>;
@@ -304,6 +305,8 @@ export class OnboardingService {
         await s.profile.savePreferences(prefs);
         return { ok: true };
       }
+      case "deleteLibrary":
+        return this.deleteLibrary(a.name);
       case "finish":
         this.finished = true;
         for (const w of this.waiters) w();
@@ -397,6 +400,21 @@ export class OnboardingService {
     for (let n = 2; await exists(target); n++) target = join(dir, `${stem}-${n}${ext}`);
     await writeFile(target, Buffer.concat(chunks), { flag: "wx" });
     return { saved: this.rel(target) };
+  }
+
+  /**
+   * Delete a file from library/ for good: only one the library step lists (a file directly in library/, by its exact
+   * name), so no name reaches outside it.
+   */
+  private async deleteLibrary(name: string): Promise<{ deleted: string }> {
+    const s = this.services();
+    if (!(await s.profile.libraryFiles()).includes(name)) {
+      throw new EzError(ErrorCode.NotFound, `There's no ${name} in your library.`);
+    }
+    const target = s.workspace.path("library", name);
+    if (!(await stat(target)).isFile()) throw new EzError(ErrorCode.BadRequest, `${name} isn't a file.`);
+    await rm(target);
+    return { deleted: `library/${name}` };
   }
 
   /** The repos the app can read, with which to suggest when nothing is selected yet. */

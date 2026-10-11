@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   AgentEffort,
@@ -198,6 +198,25 @@ export class AgentService {
     }
     this.opts.needs.withdraw(key);
     await this.updateFile((f) => renewed(f, key));
+    this.stateChanged();
+  }
+
+  /**
+   * Forget a conversation for good (its posting was deleted): its process ends, its open cards are withdrawn, and its
+   * record and logs go.
+   */
+  async forget(key: string): Promise<void> {
+    checkKey(key);
+    if (this.live?.key === key) {
+      this.live.process.kill();
+      this.live = null;
+    }
+    this.opts.needs.withdraw(key);
+    await this.updateFile((f) => {
+      const { [key]: _, ...rest } = f.conversations;
+      return { ...f, conversations: rest };
+    });
+    await rm(this.opts.workspace.path(AGENT_DIR, key), { recursive: true, force: true });
     this.stateChanged();
   }
 

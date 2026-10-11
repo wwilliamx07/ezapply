@@ -55,7 +55,7 @@ connection.onState((s) => {
   if (s.state === "connected") void flushPendingCapture();
 });
 
-// ---- The panel and Set posting ---------------------------------------------------------------
+// ---- The panel and Capture ---------------------------------------------------------------
 
 /** The keyboard shortcut's command (the manifest's `commands`). */
 export const SET_POSTING_COMMAND = "set-posting";
@@ -108,7 +108,7 @@ async function setPosting(tab: chrome.tabs.Tab, access?: Promise<boolean>): Prom
       // The job sits in a frame from another site that the extension may not read (access to websites withheld):
       // open it on its own.
       await ext.tabs.create({ url: board, index: tab.index + 1, openerTabId: tab.id });
-      return failed("This job is embedded from a job board. It opened in a new tab: Set posting there.");
+      return failed("This job is embedded from a job board. It opened in a new tab: Capture there.");
     }
     const top = frames.find((f) => f.frameId === 0)?.page ?? chosen.page;
     const site = await frameSite(tab.id, chosen.frameId, chosen.page.url);

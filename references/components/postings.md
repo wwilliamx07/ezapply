@@ -1,6 +1,6 @@
 # Postings (`companion/src/postings/`)
 
-A posting is a job page the user captured with **Set posting**. Each one gets a folder, and one posting at
+A posting is a job page the user captured with **Capture**. Each one gets a folder, and one posting at
 a time is **active**: the default context for every request.
 
 ## Capture (`PostingsService.capture`)
@@ -94,7 +94,10 @@ bound on first use. (SuccessFactors' career site joined the registry since; a pa
 - `details(id)`: meta plus folder, the paths of `posting.md`, `visible.txt` and `raw.html`, the files in the
   folder (excluding `.history`, `.build`, `.previews`), and whether it's active.
 - `activate(id)`, `activeId()`, `requireActiveId()` (fails with `no_active_posting` and a hint to use
-  Set posting or `posting_activate`).
+  Capture or `posting_activate`).
+- `delete(id)`: removes the posting's folder for good, serialized with the other writes; when it was the active
+  posting, the active posting is unset (and its listeners hear of it). Only the side panel calls it
+  (`panel.deletePosting`); no MCP tool can delete a posting, so Claude can't.
 - **Ids** come from Claude (`posting_activate`, `posting_update_meta`), so `folder(id)` accepts only plain
   folder names (`[\w.-]+`, not `.` or `..`) and refuses anything else with `bad_request`: an id like `../x`
   would otherwise resolve outside `postings/`. `list()` skips folders with other names.

@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-06.
+As of 2026-10-10.
 
 ## Done
 | Area | State |
@@ -25,14 +25,14 @@ As of 2026-10-06.
 | Agent guidance | Lean `EZAPPLY.md` with prompt-injection, application-requirement and context rules; kept in context by the `CLAUDE.md` import, backed by the MCP instructions and the `agent_file` check; call shapes in the skills (no schema errors in about 110 ezapply calls over five sessions); the form tools' descriptions and the apply skill name no site: what a site does differently is in its notes, given once per chat session as `siteNotes` ([site notes](mcp-tools.md#site-notes)) |
 | Context and usage | `ezapply chat` starts a fresh Claude session when another posting is captured (never during a tool call); one `fill_fields` per step with bare results for clean successes, `list_options` for several fields in one call; every claim read at the first request (`claims_list`); form calls on a tab one at a time |
 | Opening things | Pages and PDFs open in the browser the extension runs in (reported in `hello`; its program found per OS), else the system default |
-| Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, a template imported from a scratchpad copy, a LaTeX document in `library/` that no template came from, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
+| Keeping the workspace current | `workspace_changes` at the start of every session: repos pushed since indexing (`ls-remote`, once per chat, in the background), knowledge from deselected repos, templates whose source folder changed, a template imported from a scratchpad copy, a LaTeX document in `library/` that no template came from, the resume template edited since the profile was updated (with its diff), the profile's contact changed under the cover fields; brought current through `ezapply-onboard` with the user's agreement, or put off: a repo for a set time (a day unless the user says, at most 90 days) in which it isn't checked, anything else for the chat ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes)) |
 | Setup | `npm run setup` + onboarding on a page (`./ezapply` opens it while setup isn't finished; or `./ezapply chat`, "set me up": the steps in the browser, what needs judgment done by Claude as tasks, [ui](components/ui.md#the-onboarding-page-onboard)), Claude Code's auto memory off in the workspace, code-less pairing, install hints for TeX and git that work without a restart |
 | Everything in the browser | `./ezapply` hosts ezapply with no Claude in the terminal ([cli](components/cli.md#ezapply-panelts)); the extension's toolbar button opens its side panel (Chrome's side panel, Firefox's sidebar; [extension](components/extension.md#the-side-panel)), where the user sets the posting, tailors the documents, fills the form, chats with Claude and answers its question and approval cards ([ui](components/ui.md#the-side-panel-srcpanel)). Claude Code runs headless, one process per conversation ([agent](components/agent.md)): stream-json both ways, a conversation per posting with Reset, Stop by interrupt, messages taken mid-turn, a typed message answering the open card, `ask_user` and `permission_ask`; the permission mode, model and effort chosen in the panel (Auto, Sonnet, medium by default), kept, and applied to a running session; the panel's `panel.*` methods over the paired bridge only, the card count on the toolbar badge; setup's tasks sent to the agent as messages. Tested with a stub Claude, a fake extension and a fake transport; the protocol it relies on (permission prompts, interrupt, messages mid-turn, replay, cost, switching mode and model mid-session) checked against Claude Code 2.1. `ezapply chat` still works as before |
 | Browser pages | The UI package ([ui](components/ui.md)): the review page in pdf.js with comments on passages and what changed since the last review (`reviewed.json`, the same word diff for the page and `pdf_text { sinceReviewed }`), and the onboarding page; the token traded for a cookie on the page's path, POSTs from the companion's origin only, no inline script, nothing loaded from elsewhere; the companion's own pages in the same style |
 
 ## Not yet verified for real
 - **The side panel** ("Everything in the browser"). Not yet loaded in a browser: Chrome's side panel opened by the
-  toolbar button and Firefox's sidebar toggled by it, Set posting from the panel asking Firefox for access in the
+  toolbar button and Firefox's sidebar toggled by it, Capture from the panel asking Firefox for access in the
   click, the bundle's size and start-up; nor a whole application from the panel with the real Claude Code: a
   setup run, tailoring with the review, a fill whose steps' questions come as cards, approvals answered there,
   Stop mid-fill, Reset, and a long `review_documents` or `ask_user` wait. Not yet seen either: how the skills
@@ -192,7 +192,7 @@ As of 2026-10-06.
   through the companion with a fake extension whose careers-page tab holds a Greenhouse frame (the saved
   Greenhouse application). Not yet seen live: Chrome and Firefox injecting into a cross-origin frame by
   `frameIds` while the page around it is out of reach, `webNavigation`'s frame ids matching `scripting`'s, the
-  second Set posting click asking for the frame's origin (and Firefox accepting it), Greenhouse's embed filled
+  second Capture click asking for the frame's origin (and Firefox accepting it), Greenhouse's embed filled
   inside a careers page with its own submit guard, and how often embeds move to a new frame between steps.
 - **Asking for a site's access from a form call** (2026-10-04): tested against a stubbed WebExtensions API.
   Not yet seen live: the window opening over the user's terminal, Chrome's and Firefox's own prompts after Allow
@@ -208,7 +208,8 @@ As of 2026-10-06.
   agent calling `workspace_changes` at a session's start and following the skill (asking first, re-importing a
   template from a resume dropped into `library/`, updating the
   profile from a diff without dropping what the resume never held), and how often a push that changes nothing
-  indexed comes up.
+  indexed comes up. Putting a repo off for a set time (2026-10-10) is tested the same way; not yet seen: the
+  agent offering it, passing the user's length as `hours` and the repo ids they named, and saying until when.
 - **Guidance from five live sessions** (`.tex` edited with the Edit tool only, the answer bank read
   before asking, resolved answers saved into the existing entry with `sensitive: false`): not yet seen in a
   session.

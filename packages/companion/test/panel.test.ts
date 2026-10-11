@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -239,6 +240,39 @@ describe("the side panel over the bridge", () => {
     await ext.peer.request("panel.permission", { cardId: id, allow: false, reason: "not now" });
     expect(await decision).toEqual({ behavior: "deny", message: "The user denied this in the ezapply panel: not now" });
     await waitFor(async () => (ext.updates.at(-1)?.cards === 0 ? true : null), 5000);
+  });
+
+  it("deletes a document the panel lists, and only that, keeping its source", async () => {
+    const { peer } = await extension();
+    const id = await capture();
+    const folder = join(dir, "ws", "postings", id);
+    await writeFile(join(folder, "resume.pdf"), Buffer.from("%PDF-1.4 resume"));
+    await writeFile(join(folder, "resume.tex"), "\\documentclass{article}");
+    await peer.request("panel.deleteDocument", { postingId: id, file: "resume.pdf" });
+    expect(existsSync(join(folder, "resume.pdf"))).toBe(false);
+    expect(existsSync(join(folder, "resume.tex"))).toBe(true);
+    await expect(peer.request("panel.deleteDocument", { postingId: id, file: "resume.tex" })).rejects.toThrow(
+      /No document/,
+    );
+    await expect(
+      peer.request("panel.deleteDocument", { postingId: id, file: "../../profile/profile.yaml" }),
+    ).rejects.toThrow(/No document/);
+  });
+
+  it("deletes a posting: its folder and conversation go, and it's no longer the active posting", async () => {
+    const ext = await extension();
+    const id = await capture();
+    await handle.services.postings.activate(id);
+    await ext.peer.request("panel.send", { key: id, text: "hello" });
+    await waitFor(async () => ((await handle.services.agent.history(id)).length >= 3 ? true : null), 10_000);
+    await ext.peer.request("panel.deletePosting", { postingId: id });
+    expect(existsSync(join(dir, "ws", "postings", id))).toBe(false);
+    expect(existsSync(join(dir, "ws", "agent", id))).toBe(false);
+    expect(await handle.services.agent.history(id)).toEqual([]);
+    const state = await ext.peer.request("panel.state", {});
+    expect(state.activePostingId).toBeNull();
+    expect(state.postings).toEqual([]);
+    await expect(ext.peer.request("panel.deletePosting", { postingId: id })).rejects.toThrow(/No posting/);
   });
 
   it("opens the setup page and a posting's file for the user, and refuses a file outside the posting", async () => {

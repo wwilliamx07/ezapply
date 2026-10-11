@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import {
   type AskAnswers,
   type DocumentState,
@@ -164,6 +164,34 @@ export class PanelService {
     }
     const abs = s.workspace.resolveAllowed(`postings/${what.postingId}/${what.file}`, [`postings/${what.postingId}`]);
     await s.opener.file(abs);
+  }
+
+  /** Delete a posting for good: its folder, and its conversation with the agent. */
+  async deletePosting(postingId: string): Promise<void> {
+    const s = this.s();
+    await s.postings.get(postingId);
+    if (s.reviews.openFor(postingId)) {
+      throw new EzError(ErrorCode.BadRequest, "This posting has a review open. Finish or close it first.");
+    }
+    await s.agent.forget(postingId);
+    await s.postings.delete(postingId);
+    this.changed();
+  }
+
+  /**
+   * Delete one of a posting's documents (a PDF the panel lists) for good. Its LaTeX source, if it has one, stays, so
+   * Claude can build it again.
+   */
+  async deleteDocument(postingId: string, file: string): Promise<void> {
+    const s = this.s();
+    const listed = await this.documents(postingId);
+    const doc = listed.find((d) => d.file === file);
+    if (!doc) throw new EzError(ErrorCode.NotFound, `No document ${file} in this posting.`);
+    if (doc.state === "review") {
+      throw new EzError(ErrorCode.BadRequest, `${file} is in an open review. Finish or close it first.`);
+    }
+    await rm(s.workspace.resolveAllowed(`postings/${postingId}/${file}`, [`postings/${postingId}`]), { force: true });
+    this.changed();
   }
 
   // ---- internals ----

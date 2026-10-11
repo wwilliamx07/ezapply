@@ -34,7 +34,7 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 | `templates/service.ts` | `TemplateService`: template import, example letters, the main file and its content files, the engine a template needs → [profile-and-templates.md](profile-and-templates.md#templates-templatesresume-templatescover) |
 | `github/` | `service.ts` (App, login, tokens, repo listing), `secrets.ts` (`SecretStore`: OS keychain, or memory in tests) → [github-and-repos.md](github-and-repos.md) |
 | `repos/` | Read-only repo cache, contributions, claims, knowledge meta → [github-and-repos.md](github-and-repos.md), [knowledge-base.md](knowledge-base.md) |
-| `workspace/workspace.ts` | `Workspace`: paths, `resolveAllowed` guard, config and `state.json`; `WORKSPACE_DIRS` |
+| `workspace/workspace.ts` | `Workspace`: paths, `resolveAllowed` guard, config and `state.json` (one write at a time, expired repo timers dropped on each; `dropDeferredRepos`); `WORKSPACE_DIRS` |
 | `config/app.ts`, `config/workspace.ts` | `~/.ezapply/config.json` (load with readable errors and the move from an earlier build's `daemon.json`, `updateAppConfig`) and `ezapply.config.json` schemas, token generators, `appDir()` |
 | `logger.ts` | pino logger to the log file only, with redaction and size-based rotation (`rotateLog`) |
 | `util/fs.ts` | `exists`, `readJson`, `writeFileAtomic` (text or bytes; a locked target gets a "close it" hint), `writeJsonAtomic` |
@@ -218,7 +218,7 @@ re-import happened only when the user remembered to ask.
 
 | Kind | Derived part | Out of date when | Ended by |
 |---|---|---|---|
-| `repo-pushed` | `knowledge/<repo>/` | `git ls-remote <url> HEAD` (`RepoService.remoteHead`) differs from `meta.json` `indexedSha`, for a selected, indexed repo | `knowledge_mark_indexed` after `ezapply-index-repo`; `done` is refused |
+| `repo-pushed` | `knowledge/<repo>/` | `git ls-remote <url> HEAD` (`RepoService.remoteHead`) differs from `meta.json` `indexedSha`, for a selected, indexed repo with no running timer | `knowledge_mark_indexed` after `ezapply-index-repo`; `done` is refused; `later` puts it off for a set time (below) |
 | `repo-deselected` | `knowledge/<repo>/`, still read by `claims_list` | its repo isn't in `repos.yaml` (only checked while `repos.yaml` is valid) | `done`, which deletes the knowledge folder and the repo's cache (`RepoService.forget`), or selecting the repo again |
 | `template-source` | `templates/<kind>/` | the hash of the importable files in `importedFrom` (a folder, or one `.tex` file) differs from `template.json` `sourceHash` | `template_import` (records the new hash), or `done` when it doesn't matter |
 | `template-untracked` | `templates/<kind>/` | `importedFrom` is in a Claude Code scratchpad (`inScratchpad`: a `claude` path segment with a `scratchpad` segment below it), a copy that never changes; replaces `template-source` for that kind. Its `detail` names a library document with the same text as the template, if any | `template_import` from the user's own file, or `done`, which drops `importedFrom` and `sourceHash` (nothing left to watch) |
@@ -235,7 +235,7 @@ hand needs it first.
 
 - **The repos are checked once per chat**, in the background from startup, and the heads kept for the chat: `ezapply
   chat` restarts Claude for every captured posting, and the network check would repeat for nothing.
-  `workspace_changes { refresh: true }` runs it again. `ls-remote` only, never a fetch, so nothing in
+  `workspace_changes { refresh: true }` runs it again. Repos put off with a running timer are skipped. `ls-remote` only, never a fetch, so nothing in
   `repo-cache/` changes before the user agrees (re-indexing fetches anyway). Four repos at a time, 10 s each,
   through the same hardened git invocation as `repo_sync` (HTTPS only, the token in git's environment). A repo
   that can't be reached, or a logged-out user, goes into `notChecked` with the error's hint, never into an
@@ -254,8 +254,27 @@ hand needs it first.
   the current state and reports nothing: it can't tell what changed before. A template imported before
   `sourceHash` existed is compared with its workspace copy file by file (without the added `% !TEX program`
   line): equal, the hash is recorded silently; different, it's reported as differing from the copy.
-- **`later`** is kept in the companion's memory, so the sessions after a capture don't ask again, and a new chat
-  does. Putting a stale profile or claim set off for longer isn't offered.
+- **`later` on a repo's new commits starts a timer.** `workspace_change_mark { ids, as: "later", hours? }` on
+  `repo-pushed` changes writes `state.json` `deferred.repos["<owner>/<name>"] = { until, at }`: 24 hours by
+  default (`DEFER_DEFAULT_HOURS`), longer when the user says, capped at 90 days (`DEFER_MAX_HOURS`; a longer
+  `hours` is cut to it, and the returned `until` says so) so no repo is silenced for good: deselecting it is how
+  to stop for good. While it runs the repo isn't checked at all, in this chat or any other: the background
+  check skips it (no `ls-remote`), and one put off after the check ran is filtered out of the result. So pushes
+  made meanwhile don't ask either, unlike an id hidden for the chat. Once `until` passes, the next check
+  compares the head with `indexedSha` as usual, which reports pushes made while it was put off too. The
+  timer ends early when the repo is re-indexed (`RepoService.markIndexed` drops it) or deselected
+  (`ProfileService.writeRepos`, behind both `repos_selection_set` and the setup page, drops timers of repos no
+  longer listed). Expired timers are dropped on any write to `state.json` (`Workspace.updateState`), and only
+  running timers of selected repos count. `workspace_changes` lists them as `deferred[] { repo, until }`, so the
+  agent can answer "what did I put off?" and offer to re-index one early. *Why a timer per repo, not per id:*
+  a change's id names the head, so a repo pushed to daily would come back under a new id every day; and the
+  per-chat `later` meant everyone opening several chats a day was asked the same question each time.
+- **`later` on anything else** is kept in the companion's memory by id, so the sessions after a capture don't
+  ask again, and a new chat does. `hours` on these is refused, with a hint: a template or profile behind its
+  source feeds the next document, so asking each chat is right for them.
+- **`ids` takes several changes in one call** (all the repos, or the ones the user named). Every id is checked
+  before any is marked: one that isn't current, `done` on a `repo-pushed`, or `hours` alongside a change that
+  isn't a repo's refuses the whole call. Returns `{ marked[] { id, as, removed?, until? } }`.
 - **A template source that's gone** (moved, an unplugged drive) goes into `notChecked`; nothing nags about it.
 - **A source nobody edits, and a file nobody imported.** Before `template_import` took single files and
   `library/`, a resume kept as one file could only be imported through a copy Claude made in its scratchpad.

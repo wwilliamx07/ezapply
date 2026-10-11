@@ -23,7 +23,7 @@ says ezapply isn't running, tell the user to start it.
   `{{EZAPPLY}} status`, `{{EZAPPLY}} init` (refresh skills and this file; user files are kept).
 
 ## How the user works
-- In the browser they open a posting and click **Set posting**; it becomes the **active posting**. Every
+- In the browser they open a posting and click **Capture** in the side panel; it becomes the **active posting**. Every
   request is about it unless they name another: start with `posting_active`.
 - Tweaks happen in chat (the panel's chat bar, or this terminal): edit, rebuild, and report in one or two lines
   with the file path. Don't paste whole documents unless asked.
