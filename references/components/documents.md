@@ -8,7 +8,7 @@ Compiling LaTeX, checking the result, and handling PDFs. `DocumentsService` hold
 | Operation | Allowed folders (workspace-relative) |
 |---|---|
 | TeX source (`tex_compile`, `tex_diff`) | `postings/`, `templates/` |
-| Read PDFs (`pdf_render`, `pdf_text`, `pdf_info`, merge inputs) | `postings/`, `templates/`, `library/` |
+| Read PDFs (`pdf_text`, `pdf_info`, merge inputs) | `postings/`, `templates/`, `library/` |
 | Write PDFs (merge output, images → PDF, compress output) | `postings/`, `library/` |
 | Images for `pdf_from_images` | `postings/`, `library/` |
 | `open_file` | `postings/`, `templates/`, `library/` |
@@ -52,7 +52,7 @@ Anything else fails with `path_not_allowed`.
 - **Availability** is re-checked until found: `which()` doesn't cache misses, and latexmk's Perl check
   only remembers success. A TeX install mid-session is picked up without a restart. The distribution check
   (MiKTeX or TeX Live, which spell some options differently) likewise remembers only a definite answer:
-  an `ezapply chat` started before MiKTeX was installed would otherwise keep treating it as unknown and pass the TeX
+  an `ezapply` started before MiKTeX was installed would otherwise keep treating it as unknown and pass the TeX
   Live flag (harmless: MiKTeX accepts `-no-shell-escape`, but loses `--max-print-line`).
 - **No engine:** `not_found` with the install command for this OS (winget MiKTeX + package auto-install
   on Windows, `brew install --cask mactex-no-gui` on macOS, `texlive-xetex latexmk` on Linux).
@@ -69,8 +69,9 @@ Anything else fails with `path_not_allowed`.
 3. Parse the log into diagnostics (below).
 4. On failure: `ok: false`, the diagnostics, and a hint: fix the first error; or the timeout; or the tail of
    the engine output when the log has nothing parsable.
-5. On success: copy the PDF to `<dir>/<name>.pdf`, count pages, check the page limit, snapshot, and return
-   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, diagnostics, logPath, durationMs, snapshot }`.
+5. On success: copy the PDF to `<dir>/<name>.pdf`, count pages, check the page limit, lint the layout, snapshot,
+   and return
+   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, lint?, diagnostics, logPath, durationMs, snapshot, hint? }`.
    Failures also carry `engine` and `engineFrom`.
 
 - **Page limit:** files whose name contains `resume` or `cv` are checked against `resume.pageLimit`
@@ -78,6 +79,26 @@ Anything else fails with `path_not_allowed`.
   the pages past it (`pdfText`, first 400 characters) and its non-empty line count, and the hint says how
   many lines to cut. A live resume took five compiles to fit when the result said only "2 pages": three lines
   of skills had spilled over.
+- **Layout lint** (`pdf/lint.ts`): within the page limit, `lint[]` lists layout problems found from where the
+  text sits on the page (`pdfLines`), each `{ kind, page, text, message }`, at most 8, and the hint points to
+  them. Over the limit there's no lint: the cuts come first and move every line. A PDF the lint can't read
+  gives no issues, never a failed build.
+  - `short-line`: the last line of a wrapped bullet or paragraph holds one or two words (and under a fifth of
+    the text width). A wrapped line follows a line reaching at least 80% of the text width, within 1.45 line
+    heights, in the same size, without a list marker (`•`, `–`, `*` …), and the line before doesn't end a
+    sentence. Three or four words aren't flagged: run on a live tailored resume, a fifth-of-the-width rule
+    flagged four bullets ending in three or four words, common in a full resume, and each fix costs a compile.
+  - `ragged-right`: a right-aligned entry (the span after a gap of over 1.5 em, ending in the right quarter:
+    dates, places) ends more than 1.5 pt from the edge most such entries share.
+  - `underfilled`: at the page limit, three or more lines' worth free at the bottom of the last page, with the
+    margins taken as equal top and bottom. Room for the next strongest bullet.
+  - `off-page`: a line runs past the page's edge.
+
+  Overfull and underfull lines come from the log (diagnostics), not the lint. *Why a lint and not an image of
+  the page:* tailoring changes only the text inside a template the user approved, so what goes wrong is
+  mechanical. A rendered page (the removed `pdf_render` tool) cost about 2.5k tokens of context each, re-sent
+  on every later turn of the session, two per tailoring, to find what these checks name exactly. Changes to a
+  template's look are the user's to ask for.
 - **History:** each successful build copies the `.tex` and `.pdf` to `<dir>/.history/<timestamp>/`. The
   newest 30 snapshots are kept. "Go back to the previous version" restores from there.
 
@@ -137,8 +158,8 @@ tab they'd used), the page says "Sent to Claude. You can close this tab." A 409 
 meanwhile, or replaced) shows the page as it now is; a failed request (ezapply closed) says so and keeps what the
 user wrote, which is also kept across a reload. The page's scripts come from the companion, none inline, and its
 token becomes a cookie on the review's path ([ui](ui.md#how-a-page-talks-to-the-companion)). Closing the tab was
-seen working in Chromium with the tab opened from the command line, as the `Opener` does; not yet tried in
-Firefox, nor on this page.
+seen working in Chromium with the tab opened from the command line, as the `Opener` does; not yet tried on this
+page.
 
 **Approvals** go to `postings/<id>/approvals.json`: per document (path relative to the posting folder) the
 SHA-256 of the approved bytes, when, and the review. `upload_file` in the `after-approval` mode refuses a file
@@ -166,7 +187,7 @@ fails with a hint.
 
 | Function | Backend | Behaviour |
 |---|---|---|
-| `pdfRender(path, page, scale)` | pdf.js + `@napi-rs/canvas` | PNG of one page (scale 1 = 72 dpi); the tool also saves it under `.previews/` |
+| `pdfLines(source)` | pdf.js | Per page: its size and its lines top to bottom, each with baseline `y`, `x0`/`x1`, font `size`, `text` and `spans` (runs a gap over 1.5 em separates, as an `\hfill` does). Items on one baseline (within a third of the font size) make a line; rotated text is left out. For the layout lint |
 | `pdfText(source, pages?)` | pdf.js | Text per page in reading order, as an applicant-tracking system would see it. `source` is a path or bytes (a review's snapshot; copied, since pdf.js takes over the buffer it's given) |
 | `pdfInfo(path)`, `pdfInfoOf(bytes, path)` | pdf-lib (+ pdf.js for the text-layer check) | Pages, bytes, page sizes, encryption, text layer present, title and author; `pdfInfoOf` for bytes in hand |
 | `pdfMerge(inputs, output, opts)` | pdf-lib | Inputs in order with optional page ranges (`"1-2,4"`), a bookmark per input, page sizes normalized (`auto` = to the first page, `letter`, `a4`, `none`), title/author metadata. Returns `sections[] { label, source, firstPage, lastPage }` and `normalizedPages` |

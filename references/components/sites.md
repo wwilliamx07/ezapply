@@ -64,7 +64,7 @@ rest on the behavioural fixture. Page actions: Apply, Apply Manually, Autofill w
 **Moving.** Live step titles are often all "Application", so the step key is the progress bar's index and title:
 comparing titles alone reported every move as none, and Back waited out 12 s each time. After a move the definition
 waits (up to `stepFieldsMs`, 3 s) for the new step to show a field, since Workday moves the progress bar before it
-renders the step: a `get_form` straight after `go_next` read an empty step, which with `onlyEmpty` looks like a step
+renders the step: a read straight after the move (now `go_next`'s own `form`) found an empty step, which with `onlyEmpty` looks like a step
 with nothing left to fill. The review page has no fields and isn't waited for. Back (`bottom-navigation-previous-button`,
 `pageFooterBackButton`, `wd-CommandButton_back`, else a button reading Back or Previous) works from any step,
 review included, to correct an answer; what Workday keeps of unsaved entries on the step left isn't known, so the
@@ -138,8 +138,8 @@ parts that do while the field shows an error stay `ok` with "Filled, but the pag
 
 Typing worked on live tenants, and failed once in a run whose browser window may have been behind the terminal: every
 multi-part date read back right while Workday called it required. The next run, with the window in front, took
-every date. So calls that change the page bring the window to the front (`forms.focusBrowser`; [the tab in
-front](../mcp-tools.md#forms)), and debug mode records `focused` and the date's `date part set directly` and `date
+every date. So the application tab now runs under focus emulation, which gives the page focus wherever its window
+is ([the tab at full speed](../mcp-tools.md#forms)), and debug mode records `focused` and the date's `date part set directly` and `date
 entered again` branches, to settle it.
 
 **Tests.** The behavioural fixture (`test/workday-fixture.ts`) is the one model of a Workday step: the adapter tests

@@ -4,18 +4,18 @@ import type { Services } from "../../services.js";
 import { tool } from "../result.js";
 
 export function registerOnboardingTools(server: McpServer, s: Services): void {
-  // One tool opens the page, reports the last task and waits for the next, so the agent never leaves the page's
-  // tasks unread between calls (the lesson of the two review tools that became review_documents).
+  // One tool opens the page and reports a task. The panel's agent gets each task as a message; without a panel
+  // agent (tests), `wait: true` reports the last task and waits for the next in one call, so the agent never
+  // leaves the page's tasks unread between calls (the lesson of the two review tools that became review_documents).
   server.registerTool(
     "onboarding",
     {
       title: "Onboarding page",
       description:
-        "Open the setup page in the user's browser (if it isn't open) and wait for work from it (default up to 10 " +
-        "minutes). The user does setup on the page; what needs you comes back as `task` { id, kind, params, how }: " +
-        "do what `how` says, then call onboarding { taskId, result: { ok, note? } }, which reports it and waits for " +
-        "the next. `done` once the user finishes. `waiting` when nothing came: call onboarding {} again. Use it " +
-        "when workspace_check isn't ready, or when the user wants to change a setup step.",
+        "Open the setup page in the user's browser (if it isn't open). The user does setup on the page; what needs " +
+        'you arrives as a message ("Setup task t3 from the setup page …"): do it, then report it with ' +
+        "onboarding { taskId, result: { ok, note? } }. Use it when workspace_check isn't ready, or when the user " +
+        "wants to change a setup step.",
       inputSchema: {
         taskId: z.string().optional().describe("The task you finished."),
         result: z
@@ -27,8 +27,11 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
         timeoutSeconds: z.number().int().min(5).max(900).default(600),
         wait: z
           .boolean()
-          .default(true)
-          .describe("false: only report the task and return (a task given to you as a message in the panel)."),
+          .default(false)
+          .describe(
+            "true only when no panel agent hands you tasks: report, then wait for the next task (up to " +
+              "timeoutSeconds), returned as `task` { id, kind, params, how }, `done`, or `waiting` (call again).",
+          ),
       },
     },
     tool(
@@ -65,7 +68,7 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
               url,
               openedBrowser: false,
               tell: `Ask the user to open ${url} (a page ezapply serves on this computer) to set ezapply up.`,
-              hint: "Then wait for its tasks: onboarding {}.",
+              hint: "Then wait for its tasks: onboarding { wait: true }.",
             };
           }
           const next = await s.onboarding.next(timeoutSeconds * 1000);
@@ -80,7 +83,9 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
 
 function hintFor(next: object): { hint?: string } {
   if ("waiting" in next) {
-    return { hint: "Nothing yet: the user is working on the page. Call onboarding {} again to keep waiting." };
+    return {
+      hint: "Nothing yet: the user is working on the page. Call onboarding { wait: true } again to keep waiting.",
+    };
   }
   if ("done" in next) return { hint: "Say in two lines what's ready and what's left (notDone), then stop." };
   return {};

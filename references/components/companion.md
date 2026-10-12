@@ -1,8 +1,8 @@
 # Companion (`packages/companion`)
 
 The code that does all real work: it serves the MCP tools, holds the connection to the browser extension,
-and reads and writes the workspace. It's a library: `ezapply chat` calls `startCompanion` in its own process
-and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there is no background daemon
+and reads and writes the workspace. It's a library: `ezapply` calls `startCompanion` in its own process
+and runs it for as long as it's open ([cli](cli.md#ezapply-panelts)); there is no background daemon
 ([architecture](../architecture.md#processes-and-lifecycle)). The CLI also imports the helpers exported from
 `src/index.ts`.
 
@@ -10,14 +10,13 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
 
 | Path | Role |
 |---|---|
-| `main.ts` | `startCompanion(options)`: builds every service, the bridge and the HTTP server; returns `{ port, services, chat, onServerError, close }` |
+| `main.ts` | `startCompanion(options)`: builds every service, the bridge and the HTTP server; returns `{ port, services, onServerError, close }` |
 | `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `freshness`, `forms`, `onboarding`, `agent`, `needs`, `bridge`, `opener`, `ui`, `extensionDir?` |
-| `http.ts` | The HTTP server: routes, guards, stateless MCP transport, tool calls counted per chat session |
-| `chat.ts` | `ChatSessions` (tool calls per Claude session) and `ChatHost`, what `ezapply chat` reads to decide on a restart ([below](#chat-sessions-chatts)) |
-| `mcp/server.ts` | Creates the `McpServer` and registers the tool groups, with the chat session of the request (the form tools give a site's notes once per session) |
+| `http.ts` | The HTTP server: routes, guards, stateless MCP transport with the request's session |
+| `mcp/server.ts` | Creates the `McpServer` and registers the tool groups, with the session of the request (the form tools give a site's notes once per session; `ask_user` knows the conversation) |
 | `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `onboarding.ts`, `templates.ts`, `github.ts`, `forms.ts`, `agent.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
 | `mcp/result.ts` | `tool()` / `rawTool()`: turn results into compact JSON text and errors into `{ error }` results |
-| `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site, and applications embedded in other pages as tabs of their own: `formTabs`, with every call on one naming its frame: `framed`; [embedded applications](../mcp-tools.md#forms)), one call per tab at a time, `tab.show` before each call (the tab brought to the front, and the browser window before a call that changes the page when `forms.focusBrowser` is on; `tabHidden` when the tab stays hidden, `browserBehind` when the window stays behind another app: [the tab in front](../mcp-tools.md#forms)), crediting form activity to the posting the tab may belong to and binding the tab to it on the first change (`decide`, `claim`, `bindTab`: [which posting](../mcp-tools.md#forms)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (debug mode: a record per form call when `debug.enabled` is on, with the adapter's trace of each bridge call and its markup and screenshots as files of their own: `extractFiles`), `debugRequest` (what each adapter call asks for, by `debug.markup`), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/debug-export.ts`: `debugExport`, `scrub`, `profileStrings` (`ezapply debug export`: [cli](cli.md#debug-export)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, for the checklist; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
+| `forms/service.ts` | `FormsService`: tab choice (tabs of any registry site, and applications embedded in other pages as tabs of their own: `formTabs`, with every call on one naming its frame: `framed`; [embedded applications](../mcp-tools.md#forms)), one call per tab at a time, `tab.show` before each call (focus emulation on the tab; where it can't run, `tabHidden` when the tab is hidden, `browserBehind` when the window is behind another app: [the tab at full speed](../mcp-tools.md#forms)), crediting form activity to the posting the tab may belong to and binding the tab to it on the first change (`decide`, `claim`, `bindTab`: [which posting](../mcp-tools.md#forms)), `form-log.jsonl`, status moves, the hand-off at the review page or a step whose only way on is Submit (`lastPage`), reading files for upload, `notAttached` (approved documents no upload attached, after an upload and at review), the lean `get_form` ([mcp-tools](../mcp-tools.md#forms)); `forms/checklist.ts`: `stepWarnings` and `handoff`, the hand-off checklist ([mcp-tools](../mcp-tools.md#forms)); `forms/debug.ts`: `DebugRecorder` (debug mode: a record per form call when `debug.enabled` is on, with the adapter's trace of each bridge call and its markup and screenshots as files of their own: `extractFiles`), `debugRequest` (what each adapter call asks for, by `debug.markup`), `pruneDebug`, `stripBulk`; `forms/debug-report.ts`: `debugReport` (what `ezapply debug report` prints); `forms/debug-export.ts`: `debugExport`, `scrub`, `profileStrings` (`ezapply debug export`: [cli](cli.md#debug-export)); `forms/lists.ts`: which profile list a section, add button or saved item belongs to, and the profile's links, for the checklist; `forms/timing.ts`: `loadTiming(ws, site)` (reads `autofill-timing.yaml` for every call: the top-level waits and the tab's site's section, resolved against that site's own waits) and `timingFileTemplate` |
 | `forms/sites/` | `SITE_NOTES`: each site's notes for the agent, one module per site, given once per chat session as `siteNotes` ([site notes](../mcp-tools.md#site-notes)) |
 | `forms/match.ts` | Which posting an application tab belongs to: `postingFacts`, `matchPosting` (evidence: site, job, binding, the page's requisition, tenant, title), `compareTitles` ([which posting](../mcp-tools.md#forms)) |
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension; `onConnectionChange` (the side panel's watch ends with the connection) |
@@ -58,41 +57,40 @@ and runs it for as long as the chat is open ([cli](cli.md#chat-chatts)); there i
    the handlers for `posting.capture` and the side panel's `panel.*` methods, and `onConnectionChange`. Build
    `NeedsYou` and `AgentService` (with Claude Code when the `claude` option gives it), and `PanelService`, whose
    pushes go to the extension only while it's connected.
-4. Build `FormsService` over postings and the bridge, `ChatSessions`, and the HTTP server; listen on
+4. Build `FormsService` over postings and the bridge, and the HTTP server; listen on
    `config.host:config.port` (port 0 picks a free one, for tests). A taken port rejects with `EADDRINUSE`,
-   which `ezapply chat` turns into a message.
+   which `ezapply` turns into a message.
 5. Start the workspace check's repo check in the background (`FreshnessService.start`): it never delays
    `/health`, the extension's handshake or the first tool call ([below](#keeping-the-workspace-current-workspace_changes)).
 6. Start relaying to the side panel (`PanelService.start`): the agent's events and state, the cards, the active
    posting and reviews.
 
 **Persisting pairing** changes only the pairing fields of `config.json` as it is on disk at that moment
-(`updateAppConfig`), not the copy read at start. Otherwise an `ezapply init --port` made while a chat ran
+(`updateAppConfig`), not the copy read at start. Otherwise an `ezapply init --port` made while ezapply ran
 would be undone the next time an extension paired.
 
 Options: `config`, `log`, `saveConfig` (tests: receives the whole new config instead of the file update),
 `appDataDir`, `secrets` (keychain by default), `opener` (by default `createDesktopOpener` with the browser
-the bridge reports; tests stub it), `claude` (Claude Code for the side panel's agent: `ezapply` passes it, `ezapply
-chat` doesn't),
+the bridge reports; tests stub it), `claude` (Claude Code for the side panel's agent: `ezapply` passes it; tests mostly don't),
 `extensionDir` (so `extension_pair` can name the build folders), `reconnectGraceMs` (tests), and GitHub test
 hooks.
 
-The handle: `port`, `services`, `chat` (the `ChatHost`), `onServerError(fn)` (an error on the server after it
-listens; `ezapply chat` logs it), and `close()` (extension socket closed with 1001, server connections
+The handle: `port`, `services`, `onServerError(fn)` (an error on the server after it
+listens; `ezapply` logs it), and `close()` (extension socket closed with 1001, server connections
 dropped, server closed); it ends the agent's Claude Code process first.
 
-**Nothing reaches the terminal.** The companion runs in the same process as the wrapper whose terminal Claude
-Code owns, so it never writes to stdout or stderr: the logger writes to the log file only, jsdom gets a silent
+**Nothing reaches the terminal.** The companion runs in the `ezapply` process, whose terminal shows only its own
+few lines, so it never writes to stdout or stderr: the logger writes to the log file only, jsdom gets a silent
 `VirtualConsole` (it forwards a page's CSS parse errors to `console.error` by default), and pdfjs runs at
-`verbosity: 0`. What libraries still print goes to the log through the wrapper's `quietProcess`
-([cli](cli.md#hosting-the-companion-hostchat)).
+`verbosity: 0`. What libraries still print goes to the log through `ezapply`'s `quietProcess`
+([cli](cli.md#ezapply-panelts)).
 
 ## HTTP surface
 
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
-| `/health` | GET | none | `{ ok, name: "ezapply", mode: "chat", version, protocolVersion, extensionConnected }`; no user data. `mode` tells a second `ezapply chat` it's this build (earlier builds' background daemon had none) |
-| `/mcp` | POST | Bearer `mcpToken`, no `Origin` | MCP Streamable HTTP. Stateless: a fresh `McpServer` and transport per request, built with the request's chat session (`x-ezapply-chat-session`), JSON responses |
+| `/health` | GET | none | `{ ok, name: "ezapply", version, protocolVersion, extensionConnected }`; no user data |
+| `/mcp` | POST | Bearer `mcpToken`, no `Origin` | MCP Streamable HTTP. Stateless: a fresh `McpServer` and transport per request, built with the request's session (`x-ezapply-session`, [below](#sessions)), JSON responses |
 | `/github/*` | GET (POST for `/github/reuse`) | one-time state values | GitHub App creation, reuse, install and login pages ([github-and-repos](github-and-repos.md)) |
 | `/review/<id>` and `state`, `file/<n>`, `events`, `answer` under it | GET / POST | random token (`t`), then a cookie on the page's path; POSTs from the companion's origin | The document review page, its state, PDFs and events, and the user's answer ([ui](ui.md#the-review-page-reviewid)) |
 | `/onboard` and `state`, `events`, `repos`, `file`, `action`, `library` under it | GET / POST | the same | The onboarding page and its API ([ui](ui.md#the-onboarding-page-onboard)) |
@@ -101,26 +99,18 @@ Code owns, so it never writes to stdout or stderr: the logger writes to the log 
 
 Every request, including upgrades, must carry `Host: 127.0.0.1:<port>` or `localhost:<port>`, or it gets
 403. Unknown paths get 404. There are no control routes: pairing opens only through `extension_pair`, and the
-companion stops when its chat ends.
+companion stops when `ezapply` does.
 
-### Chat sessions (`chat.ts`)
-`ezapply chat` restarts Claude when the user captures another posting ([cli](cli.md#restarting-claude-runchat)),
-and needs two facts about its session to do that safely: has it done anything, and is a tool call running.
-Under the wrapper, the relay sends `x-ezapply-chat-session: <id>` (8–64 letters, digits and dashes; anything
-else is ignored) with every MCP request. For such a request the companion reads and parses the body itself (up
-to 4 MB, the SDK's own limit; 413 above, a JSON-RPC parse error for bad JSON) and hands the parsed message to
-the transport. Each `tools/call` in it, single or batched, counts: `ChatSessions.beginToolCall(id)` when it
-arrives, its end when the response closes. `initialize`, `tools/list` and notifications don't count: Claude
-Code sends them at startup on its own, so they say nothing about the session being used. Requests without the
-header (another MCP client) aren't counted. Sessions live only in memory and are forgotten after a day without
-calls.
+### Sessions
+A panel conversation's Claude Code has `EZAPPLY_SESSION=<its session id>` in its environment, and its relay sends
+it with every MCP request as `x-ezapply-session` ([agent](agent.md)). `sessionId` (in `agent/process.ts`) accepts
+8–64 letters, digits and dashes and ignores anything else; the MCP server is built with it, so `ask_user` and
+`permission_ask` know which conversation asks, and the form tools give a site's notes once per session. A request
+without the header (Claude Code run by hand in the workspace, another MCP client) has no session.
 
-The wrapper reads this in-process through `ChatHost` (`chatHost(postings, workspace, sessions)`):
-`activePosting()` (`{ id, company?, role? }` or null), `session(id)` (`{ used, inFlight }`),
-`restartOnCapture()` (`context.restartOnCapture`, true when the config can't be read), and `onChange(fn)`,
-which fires when `PostingsService` sets the active posting (a capture or `posting_activate`, through
-`onActiveChange`) and when a tool call ends (`ChatSessions.onCallEnd`). Events rather than polling: a restart
-happens the moment the rules allow it, and nothing runs while nothing changes.
+*Removed:* the per-session tool-call counts (`ChatSessions`) and the `ChatHost` that `ezapply chat` read to decide
+when to restart its terminal Claude. With `chat` gone nothing reads them, and the body no longer has to be parsed
+before the transport.
 
 ## MCP server
 `mcp/server.ts` creates an `McpServer` named `ezapply` with short instructions, sent to every session and
@@ -136,19 +126,19 @@ postings, browser, documents, profile, templates, GitHub, forms. Each tool is a 
   with `Replaced`.
 - **`call(method, params, timeoutMs?, onDebug?)`**: `onDebug` gets the debug trace the extension sends beside a
   result ([RPC](protocol.md#rpc)); only the debug recorder passes one ([debug mode](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)).
-- **Origin check at upgrade:** Chrome ids (`chrome-extension://` + 32 of a–p) and Firefox install UUIDs
-  (`moz-extension://<uuid>`) are accepted; once an id is pinned, only it is.
+- **Origin check at upgrade:** only extension ids (`chrome-extension://` + 32 of a–p) are accepted; once an id
+  is pinned, only it is.
 - **Handshake** (5 s timeout): protocol version, then the pairing code, or an empty code while the pairing
   window is open. The first successful pairing pins the extension id (`onPaired`).
 - **Pairing window** (`openPairing(ms)`): one code-less pairing is allowed until it expires; the window
   closes on use. `pairingStatus()` reports `{ openUntil?, pairedExtensionId?, connected }`.
 - **Forgetting** (`forgetPaired(newCode)`): unpins, replaces the pairing code (so the old extension's
   stored code stops working), drops the current connection at once, and persists (`onForgotten`).
-- **After `ezapply chat` starts** the paired extension needs up to its 30 s alarm to reconnect. For 40 s
+- **After `ezapply` starts** the paired extension needs up to its 30 s alarm to reconnect. For 40 s
   after start (`RECONNECT_GRACE_MS`), `call()` and `settled()` wait for it when it's paired but not
   connected. The user typing their first message usually uses most of that window up, so the wait is rarely
   felt. (The background daemon of earlier builds also skipped the wait when the extension hadn't been seen for
-  6 hours, since it could start long after the browser closed; a chat is started by a user at the computer,
+  6 hours, since it could start long after the browser closed; `ezapply` is started by a user at the computer,
   so that rule and its state file went.) A `hello` with `pendingCapture: true` makes `settled()` also wait
   (up to 15 s) until that `posting.capture` has been handled. `settled()` returns `{ extensionReconnecting }`:
   true while the paired extension hasn't connected since the start (the grace period ran out first), which
@@ -169,7 +159,7 @@ with the URL; handed a URL, a running browser opens it as a new tab in its open 
 - **Finding the program** (`findBrowser` in `util/browser.ts`): on Windows, the `App Paths` registry key
   installers write (`HKCU`, then `HKLM`; `%VARIABLES%` expanded), then the usual folders under Program Files,
   Program Files (x86) and Local AppData; on macOS the `.app` bundle in `/Applications` or `~/Applications`,
-  run as `open -a <bundle>`; elsewhere the browser's command on PATH (`google-chrome`, `firefox`…). Chromium
+  run as `open -a <bundle>`; elsewhere the browser's command on PATH (`google-chrome`, `microsoft-edge`…). Chromium
   isn't looked up in App Paths: its program is also `chrome.exe`, and that key belongs to Google Chrome.
   Found programs are cached for the chat; a miss isn't, so a browser installed later is found.
 - **Pages** (`url`): only `http://127.0.0.1:<port>/` (`assertLocalUrl`), in the reported browser.
@@ -233,8 +223,8 @@ put off and then changed again comes back under a new id, and `done` on an id th
 refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the agent whether the request in
 hand needs it first.
 
-- **The repos are checked once per chat**, in the background from startup, and the heads kept for the chat: `ezapply
-  chat` restarts Claude for every captured posting, and the network check would repeat for nothing.
+- **The repos are checked once per chat** (a run of `ezapply`), in the background from startup, and the heads kept
+  for it: every posting gets its own conversation, and a check per conversation would repeat for nothing.
   `workspace_changes { refresh: true }` runs it again. Repos put off with a running timer are skipped. `ls-remote` only, never a fetch, so nothing in
   `repo-cache/` changes before the user agrees (re-indexing fetches anyway). Four repos at a time, 10 s each,
   through the same hardened git invocation as `repo_sync` (HTTPS only, the token in git's environment). A repo

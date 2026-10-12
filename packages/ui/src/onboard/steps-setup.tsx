@@ -47,7 +47,6 @@ export function TexStep() {
 export function ExtensionStep() {
   const { state, act } = useOnboard();
   const ext = state.extension;
-  const [browser, setBrowser] = useState<"chromium" | "firefox">(ext.browser === "firefox" ? "firefox" : "chromium");
   const [error, setError] = useState<string | null>(null);
   const label = ext.browser ? ext.browser.charAt(0).toUpperCase() + ext.browser.slice(1) : "your browser";
   return (
@@ -64,40 +63,18 @@ export function ExtensionStep() {
               The extension isn't built yet. Run <code>npm run setup</code> in the ezapply folder, then come back.
             </Banner>
           ) : null}
-          <fieldset className="ob-choice">
-            <legend className="ez-label">Your browser</legend>
-            <label>
-              <input type="radio" checked={browser === "chromium"} onChange={() => setBrowser("chromium")} /> Chrome,
-              Edge, Brave or another Chromium browser
-            </label>
-            <label>
-              <input type="radio" checked={browser === "firefox"} onChange={() => setBrowser("firefox")} /> Firefox
-            </label>
-          </fieldset>
-          {browser === "chromium" ? (
-            <ol className="ob-steps">
-              <li>
-                Open the extensions page (<code>chrome://extensions</code>, or <code>edge://extensions</code> in Edge):
-                paste it into the address bar.
-              </li>
-              <li>Turn on Developer mode (top right), then click Load unpacked.</li>
-              <li>
-                Choose this folder:
-                {ext.chromeFolder ? <Copyable value={ext.chromeFolder} label="Extension folder" /> : null}
-              </li>
-            </ol>
-          ) : (
-            <ol className="ob-steps">
-              <li>
-                Open <code>about:debugging#/runtime/this-firefox</code>: paste it into the address bar.
-              </li>
-              <li>
-                Click Load Temporary Add-on and choose this file:
-                {ext.firefoxManifest ? <Copyable value={ext.firefoxManifest} label="Extension manifest" /> : null}
-              </li>
-              <li>Firefox removes it when it closes: load it again next time.</li>
-            </ol>
-          )}
+          <p>Chrome, Edge, Brave or another Chromium browser:</p>
+          <ol className="ob-steps">
+            <li>
+              Open the extensions page (<code>chrome://extensions</code>, or <code>edge://extensions</code> in Edge):
+              paste it into the address bar.
+            </li>
+            <li>Turn on Developer mode (top right), then click Load unpacked.</li>
+            <li>
+              Choose this folder:
+              {ext.chromeFolder ? <Copyable value={ext.chromeFolder} label="Extension folder" /> : null}
+            </li>
+          </ol>
           <div className="ob-actions">
             <Button
               variant="primary"

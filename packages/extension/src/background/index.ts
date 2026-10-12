@@ -6,6 +6,7 @@ import { chooseFrame, type FrameCapture, unreadableBoard } from "../capture/fram
 import { ext } from "../ext.js";
 import { flashBadge, renderBadge } from "./badge.js";
 import { CompanionConnection } from "./connection.js";
+import { releaseAll } from "./emulation.js";
 import { formHandlers } from "./forms.js";
 import { frameSite, tabSites } from "./frames.js";
 import { panelUpdate, servePanels } from "./panel.js";
@@ -53,6 +54,8 @@ servePanels(connection, (tab) => setPosting(tab));
 connection.onState((s) => {
   void renderBadge(s);
   if (s.state === "connected") void flushPendingCapture();
+  // Nothing fills a tab without the companion: let Chrome's debugging bar go.
+  else void releaseAll();
 });
 
 // ---- The panel and Capture ---------------------------------------------------------------
@@ -60,22 +63,15 @@ connection.onState((s) => {
 /** The keyboard shortcut's command (the manifest's `commands`). */
 export const SET_POSTING_COMMAND = "set-posting";
 
-// The toolbar button opens the side panel, where everything else happens. Chrome opens it by itself; Firefox's
-// sidebar is toggled here, inside the click, the only place it may be opened from.
-const sidePanel = (
-  ext as unknown as { sidePanel?: { setPanelBehavior(o: { openPanelOnActionClick: boolean }): Promise<void> } }
-).sidePanel;
-void sidePanel?.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
-ext.action.onClicked.addListener(() => {
-  (ext as unknown as { sidebarAction?: { toggle(): Promise<void> } }).sidebarAction?.toggle().catch(() => undefined);
-});
+// The toolbar button opens the side panel, where everything else happens.
+void ext.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
 
 // Alt+Shift+P captures the page without opening the panel.
 ext.commands.onCommand.addListener((command, tab) => {
   if (command !== SET_POSTING_COMMAND || !tab) return;
-  // The extension holds every site from the install, but Firefox lets the user withhold that and Chrome lets them
-  // limit it. Asked here, while the shortcut still counts as the user's gesture: Firefox accepts
-  // permissions.request only synchronously inside the handler. Already granted, it resolves without asking.
+  // The extension holds every site from the install, but Chrome lets the user limit that. Asked here, while the
+  // shortcut still counts as the user's gesture: permissions.request needs one, so it's called synchronously
+  // inside the handler. Already granted, it resolves without asking.
   // Declined, the capture still reads the page itself (the shortcut grants activeTab), not other sites' frames.
   const access =
     tab.url && /^https?:/i.test(tab.url) ? ext.permissions.request({ origins: [...HOST_PERMISSIONS] }) : undefined;
@@ -181,9 +177,9 @@ async function flushPendingCapture(): Promise<void> {
 // ---- Lifecycle -------------------------------------------------------------------------------
 
 /**
- * The reconnect alarm, created on every background start and not only at install: Firefox doesn't keep
- * alarms across browser sessions and Chrome may clear them on restart, and without it the extension stays
- * disconnected once `ezapply chat` (started later) brings the companion up. Created only when missing, so a
+ * The reconnect alarm, created on every background start and not only at install: Chrome may clear alarms on
+ * restart, and without it the extension stays disconnected once `ezapply` (started later) brings the
+ * companion up. Created only when missing, so a
  * wake-up doesn't push the next firing back.
  */
 export async function ensureReconnectAlarm(): Promise<void> {

@@ -13,6 +13,7 @@ import {
 } from "@ezapply/protocol";
 import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
+import { captureAttached, emulateFocus } from "./emulation.js";
 import { frameSite, frameUrl, tabSite } from "./frames.js";
 
 type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status" | "panel.update">;
@@ -101,8 +102,8 @@ async function requireFormFrame(tab: chrome.tabs.Tab, frameId: number): Promise<
 
 /**
  * The extension must hold the form page's origin (the frame's, for an embedded form) before it can read which site
- * the page is, let alone fill it. It's granted every site at install (`HOST_PERMISSIONS`), but Firefox lets the
- * user withhold or revoke that, and Chrome lets them limit it to some sites. Missing, the call asks for every site
+ * the page is, let alone fill it. It's granted every site at install (`HOST_PERMISSIONS`), but Chrome lets the
+ * user limit that to some sites. Missing, the call asks for every site
  * again: a small window with an Allow access button (`askForAccess`), which the call waits on for a while before
  * failing with a hint to call again once the user has allowed it. A page that isn't on the web is never readable,
  * and its URL decides.
@@ -183,9 +184,14 @@ async function callAdapter<T>(
   return trace ? new WithDebug(out.__ok as T, trace) : (out.__ok as T);
 }
 
-/** The tab's visible area as a PNG (base64), when it's the active tab of its window; never fails the call. */
+/**
+ * The tab's page as a PNG (base64): through the debugger while focus emulation holds the tab (it renders even in
+ * the background), else the visible area when it's the active tab of its window. Never fails the call.
+ */
 async function screenshotIfShown(tabId: number): Promise<string | undefined> {
   try {
+    const attached = await captureAttached(tabId);
+    if (attached) return attached;
     const tab = await ext.tabs.get(tabId);
     if (!tab.active) return undefined;
     const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
@@ -237,6 +243,8 @@ export const formHandlers: FormHandlers = {
   "tab.screenshot": async ({ tabId }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
+    const attached = await captureAttached(tab.id);
+    if (attached) return { tabId: tab.id, pngBase64: attached };
     if (!tab.active) {
       throw new EzError(
         ErrorCode.BadRequest,
@@ -247,73 +255,58 @@ export const formHandlers: FormHandlers = {
     const dataUrl = await ext.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     return { tabId: tab.id, pngBase64: dataUrl.replace(/^data:image\/png;base64,/, "") };
   },
-  "tab.show": async ({ tabId, frameId, activate, focusWindow }) => {
+  "tab.show": async ({ tabId, frameId }) => {
     const tab = await resolveTab(tabId);
     if (!tab.id) throw new EzError(ErrorCode.NotFound, "Tab has no id.");
-    // The window only with focusWindow (forms.focusBrowser): it pulls the browser in front of the terminal the
-    // user may be typing in, and takes keyboard focus. Switching the tab within its window is done either way.
-    const windowFocused = activate && focusWindow === true && (await raiseWindow(tab.windowId));
-    const activated = activate && !tab.active;
-    if (activated) await ext.tabs.update(tab.id, { active: true });
-    return {
-      tabId: tab.id,
-      activated,
-      ...(windowFocused ? { windowFocused } : {}),
-      ...(await pageState(
-        { tabId: tab.id, windowId: tab.windowId, ...(frameId ? { frameId } : {}) },
-        { activated, windowFocused, wasActive: tab.active ?? false },
-      )),
-    };
+    const at = { tabId: tab.id, windowId: tab.windowId, ...(frameId ? { frameId } : {}) };
+    const wasActive = tab.active ?? false;
+    // Focus emulation: the tab runs visible and focused where it is, so nothing is switched or raised and the
+    // user keeps the tab and app they're on. Turned on again once if the page doesn't report it (a page that
+    // navigated may have lost it).
+    if (!(await emulateFocus(tab.id)))
+      return { tabId: tab.id, emulated: false, ...(await pageState(at, { wasActive })) };
+    let state = await pageState(at, { emulated: true, wasActive });
+    if (state.hidden || state.focused === false) {
+      await emulateFocus(tab.id, true);
+      state = await pageState(at, { emulated: true, wasActive });
+    }
+    return { tabId: tab.id, emulated: true, ...state };
   },
 };
 
 /**
- * Bring the tab's window to the front, restoring it when minimized (to its normal size: a window minimized from
- * maximized comes back unmaximized). False when it's already the focused window, or the browser refused. On
- * Windows the OS may still keep it behind and flash its taskbar button: the page's `focused` tells.
- */
-async function raiseWindow(windowId: number): Promise<boolean> {
-  try {
-    const win = await ext.windows.get(windowId);
-    if (win.focused && win.state !== "minimized") return false;
-    await ext.windows.update(windowId, { focused: true, ...(win.state === "minimized" ? { state: "normal" } : {}) });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Whether the page reports itself hidden, and whether it has focus. A minimized window, or on Windows one fully
- * covered by others (Chrome tracks occlusion), keeps its tabs hidden even when active: that's reported, not
- * forced. The page learns of a switch, or of its window coming to the front, asynchronously, so after one it's
- * asked a few times (until it's visible, and focused when the window was raised). Polled from here, not from the
- * page: the background's timers aren't throttled. Without access to the page (it's never an application tab
- * then), the tab's active state stands in, and focus isn't known.
+ * Whether the page reports itself hidden, and whether it has focus. The page learns of focus emulation
+ * asynchronously, so after it's turned on the page is asked a few times (until it's visible and focused). Polled
+ * from here, not from the page: the background's timers aren't throttled. Without access to the page (it's never
+ * an application tab then), the tab's active state stands in, and focus isn't known.
  *
- * An embedded form is read in its frame (the page around it is usually out of reach), and its `focused` is the
- * browser window's: a frame's `document.hasFocus()` is false whenever focus is in the page around it.
+ * An embedded form is read in its frame (the page around it is usually out of reach). Its `focused` is the top
+ * page's under focus emulation, else the browser window's: a frame's own `document.hasFocus()` is false whenever
+ * focus is in the page around it.
  */
 async function pageState(
   at: { tabId: number; windowId: number; frameId?: number },
-  changed: { activated: boolean; windowFocused: boolean; wasActive: boolean },
+  { emulated = false, wasActive }: { emulated?: boolean; wasActive: boolean },
 ): Promise<{ hidden: boolean; focused?: boolean }> {
   const { tabId, frameId } = at;
   const windowFocused = async () => (await ext.windows.get(at.windowId).catch(() => null))?.focused === true;
-  const tries = changed.activated || changed.windowFocused ? 10 : 1;
+  const read = () => ({ hidden: document.visibilityState === "hidden", focused: document.hasFocus() });
+  const topFocused = async () => {
+    const [top] = await ext.scripting.executeScript({ target: { tabId }, func: read }).catch(() => [undefined]);
+    return (top?.result as { focused?: unknown } | undefined)?.focused === true;
+  };
+  const tries = emulated ? 10 : 1;
   let state = { hidden: true, focused: false };
   for (let i = 0; i < tries; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 50));
     const [res] = await ext.scripting
-      .executeScript({
-        target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] },
-        func: () => ({ hidden: document.visibilityState === "hidden", focused: document.hasFocus() }),
-      })
+      .executeScript({ target: frameId === undefined ? { tabId } : { tabId, frameIds: [frameId] }, func: read })
       .catch(() => [undefined]);
     const r = res?.result as { hidden?: unknown; focused?: unknown } | undefined;
-    if (typeof r?.hidden !== "boolean") return { hidden: !(changed.activated || changed.wasActive) };
-    state = { hidden: r.hidden, focused: frameId === undefined ? r.focused === true : await windowFocused() };
-    if (!r.hidden && (state.focused || !changed.windowFocused)) break;
+    if (typeof r?.hidden !== "boolean") return { hidden: !wasActive };
+    const focused = frameId === undefined ? r.focused === true : emulated ? await topFocused() : await windowFocused();
+    state = { hidden: r.hidden, focused };
+    if (!r.hidden && focused) break;
   }
   return state;
 }

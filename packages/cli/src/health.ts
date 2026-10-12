@@ -1,8 +1,6 @@
 import { type AppConfig, HEALTH_PATH } from "@ezapply/companion";
 
 export interface Health {
-  /** "chat" for this build; missing on a background daemon from an earlier build. */
-  mode?: string;
   version: string;
   protocolVersion: number;
   extensionConnected: boolean;

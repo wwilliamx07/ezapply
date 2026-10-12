@@ -140,7 +140,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   };
   const capture = () => {
     setError(null);
-    // Called inside the click: Firefox asks for access to websites only during the gesture.
+    // Called inside the click: access to websites can be asked for only during the gesture.
     void transport.capture().then((r) => {
       if (!r.ok) setError(r.error);
       else setPicked(null);
@@ -735,8 +735,7 @@ function AgentLine({
   const agent = state?.agent;
   if (!agent) return null;
   let text = "";
-  if (agent.status === "unavailable")
-    text = "Claude runs here when ezapply is started with `ezapply`, not `ezapply chat`.";
+  if (agent.status === "unavailable") text = "Claude isn't available: Claude Code wasn't found when ezapply started.";
   else if (agent.status === "starting") text = "Starting Claude…";
   else if (agent.status === "working") {
     text =

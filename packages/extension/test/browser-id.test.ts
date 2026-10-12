@@ -1,19 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-type Globals = { chrome?: unknown; browser?: unknown };
+type Globals = { chrome?: unknown };
 
-/** Load browser-id.ts against a stubbed WebExtensions API (ext.ts reads it once, at import). */
-async function load(api: { getURL: (p: string) => string; getBrowserInfo?: () => Promise<{ version: string }> }) {
+/** Load browser-id.ts against a stubbed extension API. */
+async function load(api: { getURL: (p: string) => string }) {
   vi.resetModules();
-  const stub = { runtime: api };
-  (globalThis as Globals).chrome = stub;
-  if (api.getBrowserInfo) (globalThis as Globals).browser = stub;
+  (globalThis as Globals).chrome = { runtime: api };
   return import("../src/background/browser-id.js");
 }
 
 afterEach(() => {
   delete (globalThis as Globals).chrome;
-  delete (globalThis as Globals).browser;
 });
 
 const chromium = { getURL: (p: string) => `chrome-extension://abcdefghijklmnopabcdefghijklmnop/${p}` };
@@ -31,13 +28,5 @@ describe("detectBrowser", () => {
     expect(await detectBrowser(brands("Chromium", "Brave"))).toEqual({ name: "brave", version: "131" });
     expect(await detectBrowser(brands("Chromium"))).toEqual({ name: "chromium", version: "131" });
     expect(await detectBrowser({})).toBeUndefined();
-  });
-
-  it("asks Firefox itself", async () => {
-    const { detectBrowser } = await load({
-      getURL: (p) => `moz-extension://0f8e3c2a-5b1d-4c6e-9a7f-2d4b6e8a1c3f/${p}`,
-      getBrowserInfo: async () => ({ version: "140.0" }),
-    });
-    expect(await detectBrowser({})).toEqual({ name: "firefox", version: "140.0" });
   });
 });

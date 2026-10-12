@@ -128,12 +128,12 @@ describe("findBrowser", () => {
     );
     expect(found).toEqual([chromium]);
     expect(asked).toEqual([]);
-    expect(await findBrowser("firefox", deps({}))).toBeNull();
+    expect(await findBrowser("vivaldi", deps({}))).toBeNull();
   });
 
   it("on macOS opens the application bundle, and elsewhere runs the command on PATH", async () => {
-    const app = join("/Users/u/Applications", "Firefox.app");
-    expect(await findBrowser("firefox", deps({ platform: "darwin", exists: (p) => p === app }))).toEqual([
+    const app = join("/Users/u/Applications", "Vivaldi.app");
+    expect(await findBrowser("vivaldi", deps({ platform: "darwin", exists: (p) => p === app }))).toEqual([
       "open",
       "-a",
       app,
@@ -194,7 +194,7 @@ describe("createDesktopOpener", () => {
     for (const { o, launched } of [
       opener(undefined),
       opener({ name: "arc" }),
-      opener({ name: "firefox" }, null),
+      opener({ name: "vivaldi" }, null),
       opener({ name: "chrome" }, ["/bin/chrome"], true),
     ]) {
       expect(await o.url(page)).toBe("default");
@@ -254,10 +254,7 @@ describe("updateAppConfig", () => {
 });
 
 describe("WorkspaceConfig", () => {
-  it("brings the browser to the front by default, and falls back to that on a bad value", () => {
-    expect(WorkspaceConfig.parse({ schemaVersion: 1 }).forms).toEqual({ focusBrowser: "on" });
-    expect(WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: "off" } }).forms.focusBrowser).toBe("off");
-    const bad = WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: true } });
-    expect(bad.forms).toEqual({ focusBrowser: "on" });
+  it("drops the old forms.focusBrowser rather than failing on it", () => {
+    expect(WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: "off" } })).not.toHaveProperty("forms");
   });
 });

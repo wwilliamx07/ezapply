@@ -82,7 +82,7 @@ async function readPdfBytes(path: string): Promise<Uint8Array> {
   }
 }
 
-// ---- pdf.js (text + rendering) ------------------------------------------------------------------
+// ---- pdf.js (text and its layout) --------------------------------------------------------------
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 let pdfjsPromise: Promise<PdfJs> | undefined;
@@ -131,25 +131,82 @@ export async function pdfText(source: PdfSource, pages?: string): Promise<{ page
   }
 }
 
-/** Render one page to PNG. */
-export async function pdfRender(path: string, pageNumber: number, scale: number): Promise<Buffer> {
-  const { createCanvas } = await import("@napi-rs/canvas");
-  const { doc, close } = await openPdfJs(path);
+/** A run of text on a line, in points from the page's bottom-left corner. */
+export interface TextSpan {
+  x0: number;
+  x1: number;
+  text: string;
+}
+
+/** One printed line: its baseline, extent, font size, and the spans a wide gap (an \hfill) separates. */
+export interface TextLine extends TextSpan {
+  y: number;
+  size: number;
+  spans: TextSpan[];
+}
+
+export interface PageLines {
+  page: number;
+  width: number;
+  height: number;
+  /** Top to bottom. */
+  lines: TextLine[];
+}
+
+/** Where the text sits on each page, line by line (lint.ts checks it). Rotated text is left out. */
+export async function pdfLines(source: PdfSource): Promise<PageLines[]> {
+  const { doc, close } = await openPdfJs(source);
   try {
-    if (pageNumber < 1 || pageNumber > doc.numPages) {
-      throw new EzError(ErrorCode.BadRequest, `Page ${pageNumber} does not exist (document has ${doc.numPages}).`);
+    const out: PageLines[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const [vx0 = 0, vy0 = 0, vx1 = 0, vy1 = 0] = page.view;
+      const items: Item[] = [];
+      for (const item of (await page.getTextContent()).items) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const [, b = 0, c = 0, d = 0, e = 0, f = 0] = item.transform as number[];
+        if (Math.abs(b) > 0.01 || Math.abs(c) > 0.01) continue;
+        const x0 = e - vx0;
+        items.push({ x0, x1: x0 + item.width, y: f - vy0, size: Math.abs(d) || item.height, text: item.str });
+      }
+      out.push({ page: i, width: vx1 - vx0, height: vy1 - vy0, lines: groupLines(items) });
     }
-    const page = await doc.getPage(pageNumber);
-    const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvas: canvas as unknown as HTMLCanvasElement, viewport }).promise;
-    return canvas.toBuffer("image/png");
+    return out;
   } finally {
     await close();
   }
+}
+
+interface Item extends TextSpan {
+  y: number;
+  size: number;
+}
+
+/** Items on one baseline (within a third of the font size) make a line; a gap over 1.5 em starts a new span. */
+function groupLines(items: Item[]): TextLine[] {
+  const rows: Item[][] = [];
+  for (const item of [...items].sort((a, b) => b.y - a.y || a.x0 - b.x0)) {
+    const row = rows[rows.length - 1];
+    const first = row?.[0];
+    if (row && first && Math.abs(first.y - item.y) <= 0.35 * Math.max(first.size, item.size)) row.push(item);
+    else rows.push([item]);
+  }
+  return rows.map((row) => {
+    const sorted = row.sort((a, b) => a.x0 - b.x0);
+    const size = Math.max(...sorted.map((i) => i.size));
+    const spans: TextSpan[] = [];
+    for (const item of sorted) {
+      const span = spans[spans.length - 1];
+      const gap = span ? item.x0 - span.x1 : Number.POSITIVE_INFINITY;
+      if (span && gap <= 1.5 * size) {
+        span.text += (gap > 0.15 * size && !span.text.endsWith(" ") ? " " : "") + item.text;
+        span.x1 = Math.max(span.x1, item.x1);
+      } else spans.push({ x0: item.x0, x1: item.x1, text: item.text });
+    }
+    const y = sorted.reduce((sum, i) => sum + i.y, 0) / sorted.length;
+    const text = spans.map((s) => s.text.trim()).join(" ");
+    return { y, size, x0: spans[0]?.x0 ?? 0, x1: Math.max(...spans.map((s) => s.x1)), text, spans };
+  });
 }
 
 // ---- pdf-lib (structure) ------------------------------------------------------------------------

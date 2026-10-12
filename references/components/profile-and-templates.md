@@ -116,12 +116,14 @@ The user gives a sample letter whose **format** they like:
 1. The tool copies it into `templates/cover/example/` (a previous example moves to `templates/.old/`) and
    records `example` in `template.json`. Accepted: PDF, PNG/JPG/WebP, TXT, MD, up to 20 MB. Word and other
    formats are refused with a hint to export a PDF.
-2. Claude reads it (`pdf_render` + `pdf_text`, or directly for images and text), reworks `cover.tex` to
+2. Claude reads it (`pdf_info` for the page size and `pdf_text`, or directly for images and text; what the text
+   can't tell, such as font and margins, it asks or keeps from the template), reworks `cover.tex` to
    reproduce its layout (margins, font, header, date and addressee block, subject line, salutation,
    spacing, sign-off) while keeping the fields and body markers, and writes `templates/cover/format.md`
    describing the structure every letter should follow (paragraphs, salutation, sign-off, length).
 3. `template_set_main` then marks the template `origin: "custom"` (a reworked default stops being
-   replaceable without confirmation). Compile, render next to the example, and ask the user to approve.
+   replaceable without confirmation). Compile, open the PDF (`open_file`) for the user to compare with the
+   example, and adjust what they point out until they approve.
 
 Only the example's format carries over, never its sentences, claims or voice.
 

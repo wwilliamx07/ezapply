@@ -67,7 +67,7 @@ describe("ezapply (the side panel's mode)", () => {
     expect(said[1]).toBe("Setup isn't finished: the setup page opened in your browser.");
     expect(opened).toEqual([expect.stringMatching(/\/onboard\?t=/)]);
     expect(said[2]).toMatch(/Open the ezapply panel from your browser's toolbar.*Ctrl\+C/);
-    // The panel's agent is there (not "unavailable", as under `ezapply chat`).
+    // The panel's agent is there, not "unavailable".
     expect(handle?.services.agent.state().status).toBe("idle");
     const health = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.json());
     expect(health).toMatchObject({ name: "ezapply" });

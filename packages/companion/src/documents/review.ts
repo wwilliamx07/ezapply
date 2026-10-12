@@ -287,13 +287,6 @@ export class ReviewService {
     );
   }
 
-  /** True while a review waits for the user. */
-  pending(): boolean {
-    const now = Date.now();
-    for (const s of this.sessions.values()) if (!s.answer && !s.supersededBy && s.expires > now) return true;
-    return false;
-  }
-
   /** Whether the file's current bytes are a version the user approved. Only files in posting folders count. */
   async isApproved(abs: string): Promise<boolean> {
     const where = this.locate(abs);

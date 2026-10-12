@@ -15,7 +15,7 @@ ezapply tailors your documents and form answers to the posting, based on your pr
 
 ## Setup
 
-You need Node 22.12+, Chrome or Firefox 128+, and [Claude Code](https://claude.com/claude-code).
+You need Node 22.12+, Chrome 120+ (or another Chromium browser), and [Claude Code](https://claude.com/claude-code).
 
 ```sh
 npm run setup        # install, build, create the workspace ~/ezapply-home
@@ -53,8 +53,8 @@ untrusted data, never as instructions. Repos are mirrored read-only, and secrets
 |---|---|
 | `packages/protocol` | Shared zod schemas: the extension↔companion protocol, forms, postings, errors |
 | `packages/companion` | The MCP server, the extension bridge, the side panel's agent, and the services behind them: postings, documents (TeX/PDF), profile, GitHub, repos, forms |
-| `packages/cli` | The `ezapply` command (`init`, `chat`, `status`, `doctor`, `debug`, `mcp`), the workspace templates and Claude Code skills |
-| `packages/extension` | The MV3 extension for Chrome (`dist/`) and Firefox (`dist-firefox/`): side panel, capture, site adapters |
+| `packages/cli` | The `ezapply` command (`init`, `doctor`, `debug`, `mcp`), the workspace templates and Claude Code skills |
+| `packages/extension` | The MV3 extension for Chrome and other Chromium browsers (`dist/`): side panel, capture, site adapters |
 | `packages/ui` | The side panel's components and the review and setup pages (React, pdf.js) |
 
 Where your data lives:

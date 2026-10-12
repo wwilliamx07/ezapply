@@ -8,7 +8,7 @@ async function load(): Promise<void> {
   const { port, pairingToken, connState } = await ext.storage.local.get(["port", "pairingToken", "connState"]);
   $<HTMLInputElement>("port").value = String(typeof port === "number" ? port : DEFAULT_PORT);
   $<HTMLInputElement>("code").value = typeof pairingToken === "string" ? pairingToken : "";
-  // The id the companion pins: Chrome's extension id, or Firefox's per-install UUID.
+  // The id the companion pins: the extension id.
   $("extid").textContent = location.host;
   render(connState as ConnState | undefined);
   await renderAccess();
@@ -16,7 +16,7 @@ async function load(): Promise<void> {
 
 /**
  * Access to websites (`HOST_PERMISSIONS`, every site): Chrome grants it at install, though the user may limit it to
- * some sites; Firefox lets the user withhold it.
+ * some sites.
  */
 async function renderAccess(): Promise<void> {
   $("access").hidden = await ext.permissions.contains({ origins: [...HOST_PERMISSIONS] });

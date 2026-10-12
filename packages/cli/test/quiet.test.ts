@@ -13,7 +13,7 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-describe("ezapply chat leaves the terminal to Claude", () => {
+describe("ezapply keeps its terminal to its own lines", () => {
   it("sends console, stderr, jsdom and uncaught errors to the log, and keeps running", async () => {
     dir = await mkdtemp(join(tmpdir(), "ezapply-quiet-"));
     const r = spawnSync(process.execPath, [CHILD], {

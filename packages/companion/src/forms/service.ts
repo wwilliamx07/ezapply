@@ -134,20 +134,14 @@ interface Target {
   debug: boolean;
 }
 
-/** The tab brought to the front (`activated`), or left hidden: see `FormsService.show`. */
+/** What `tab.show` found: focus emulation on (`emulated`), or the page as the browser left it. See `FormsService.show`. */
 interface Shown {
-  activated: boolean;
-  /** The call changes the page (not a read): only those may raise the browser window. */
+  emulated: boolean;
+  /** The call changes the page (not a read): only those say when the page has no focus (`browserBehind`). */
   changesPage: boolean;
-  /** The browser window was asked to come to the front too (`forms.focusBrowser`). */
-  focusWindow: boolean;
-  /** The extension raised the window (it wasn't the focused one). Absent from older extensions. */
-  windowFocused?: boolean;
   hidden: boolean;
-  /** The page had focus; false while the browser window is behind another app. Absent from older extensions. */
+  /** The page had focus. Absent when it couldn't be read. */
   focused?: boolean;
-  /** A review page was waiting for the user, so the tab wasn't switched to. */
-  reviewPending: boolean;
 }
 
 /** Said in a result when the application page is still hidden after `tab.show`. */
@@ -160,7 +154,7 @@ export interface BrowserBehind {
   hint: string;
 }
 
-/** Form tools that only read the page: `tab.show` never raises the browser window for them. */
+/** Form tools that only read the page: a page without focus doesn't matter to them. */
 const READS_PAGE = new Set(["get_form", "list_options", "search_options", "screenshot"]);
 
 /**
@@ -371,7 +365,8 @@ export class FormsService {
     });
   }
 
-  async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number) {
+  /** Remove a row, then read the step again: later rows' field ids have changed. */
+  async removeRepeatable(sectionId: string, reason: string | undefined, tabId?: number, session?: string) {
     return this.onTab({ tool: "remove_repeatable", params: { sectionId, reason } }, tabId, async (t) => {
       await this.claim(t);
       const result = await this.bridge
@@ -385,23 +380,52 @@ export class FormsService {
         ok: result.ok,
         ...(result.error ? { error: result.error } : {}),
       });
-      return annotate(result, t);
+      if (!result.ok) return annotate(result, t);
+      return { ...result, form: await this.reread(t, { session }) };
     });
   }
 
-  async addRepeatable(addButtonId: string, tabId?: number) {
-    return this.onTab({ tool: "add_repeatable", params: { addButtonId } }, tabId, async (t) => {
+  /**
+   * Press add buttons in order (the same id again for another row), then read the step once: its empty fields
+   * are the new rows to fill. One call instead of a turn per row plus a get_form, each re-sending the whole
+   * conversation. Stops at the first button that fails, with the page as it is then.
+   */
+  async addRepeatable(addButtonIds: string[], tabId?: number, session?: string) {
+    return this.onTab({ tool: "add_repeatable", params: { addButtonIds } }, tabId, async (t) => {
       await this.claim(t);
-      const result = await t.bridge.call(
-        "form.addRepeatable",
-        { addButtonId, tabId: t.tab.tabId, timing: t.timing },
-        20_000,
-      );
-      return annotate(result, t);
+      let pressed = 0;
+      let error: { addButtonId: string; error: string } | undefined;
+      for (const addButtonId of addButtonIds) {
+        const r = await t.bridge.call(
+          "form.addRepeatable",
+          { addButtonId, tabId: t.tab.tabId, timing: t.timing },
+          20_000,
+        );
+        if (!r.ok) {
+          error = { addButtonId, error: r.error ?? "The button did nothing." };
+          break;
+        }
+        pressed++;
+      }
+      return {
+        ok: !error,
+        pressed,
+        ...(error ? { failed: error } : {}),
+        form: await this.reread(t, { session, onlyEmpty: true }),
+      };
     });
   }
 
-  async next(tabId?: number) {
+  /** The step after a change, as get_form would give it (called inside the tab's queue). */
+  private async reread(t: Target, opts: { session?: string; onlyEmpty?: boolean }) {
+    return this.view(t, await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts);
+  }
+
+  /**
+   * Press Next. When the step advanced, the result carries the new page as get_form gives it (`form`): every
+   * advance was followed by a get_form, a turn that re-sent the whole conversation for nothing else.
+   */
+  async next(tabId?: number, session?: string) {
     return this.onTab({ tool: "go_next", params: {} }, tabId, async (t) => {
       await this.claim(t);
       // The step as it's left, for the hand-off: what still looked off then (one read, only when it's logged).
@@ -427,10 +451,10 @@ export class FormsService {
         ...(r.step?.index ? { stepIndex: r.step.index } : {}),
       });
       const left = leaving.length ? { checklist: leaving } : {};
-      if (r.pageKind !== "review") return annotate({ ...r, ...left }, t);
-      await this.setStatus(t, "filled");
-      const missing = await this.notAttached(t, "review");
-      return annotate({ ...r, ...left, ...(missing ? { notAttached: missing } : {}) }, t);
+      if (!r.advanced) return annotate({ ...r, ...left }, t);
+      // The new page's pageKind, step, errors and (on the review page) notAttached are in `form`.
+      const { pageKind: _k, step: _s, errors: _e, ...rest } = r;
+      return { ...rest, ...left, form: await this.reread(t, { session }) };
     });
   }
 
@@ -524,60 +548,36 @@ export class FormsService {
   }
 
   /**
-   * Bring the application tab to the front of its window. Browsers throttle a hidden tab's timers to about once
-   * a second, and every adapter wait (and much of Workday's own rendering) is a timer: in one live run, 16
-   * fields took 6.7 s, then the review page opened in front of the form and 4 dates took 28 s. A slow fill runs
-   * past its timeout and keeps going in the page unlogged, which looks like a broken adapter.
+   * Make the application tab run at full speed: the extension turns on focus emulation, and the page runs visible
+   * and focused where it is (in the background, minimized, behind the terminal), with nothing switched or raised.
+   * Browsers throttle a hidden tab's timers to about once a second, and every adapter wait (and much of Workday's
+   * own rendering) is a timer: in one live run, 16 fields took 6.7 s, then the review page opened in front of the
+   * form and 4 dates took 28 s. A slow fill runs past its timeout and keeps going in the page unlogged, which looks
+   * like a broken adapter. And a page whose window is behind another app gets no focus events, which Workday's
+   * split dates seemed to need.
    *
-   * With `forms.focusBrowser` on (read for every call, so a change applies to the next one), a call that changes
-   * the page also brings the browser window to the front: a window behind another app gets no focus events from
-   * Chrome, and Workday's split dates weren't taken there. Reads don't need it, so they leave the user's
-   * terminal in front.
-   *
-   * Not while a review page waits for the user: switching would take it away from them mid-approval. Never
-   * fails the call: an extension built before `tab.show` answers "Unknown method" (logged once), and any other
-   * problem leaves the tab as it was.
+   * Never fails the call: an extension built before it (or before this form of it) fails `tab.show`, which is
+   * logged once, and the call goes ahead with the page as the browser left it.
    */
   private async show(tab: FormTab, changesPage: boolean): Promise<Shown | undefined> {
     const { tabId, frameId } = tab;
-    const reviewPending = this.reviews.pending();
-    const focusWindow = changesPage && !reviewPending && (await this.focusBrowser());
     try {
-      const r = await this.bridge.call(
-        "tab.show",
-        { tabId, ...(frameId !== undefined ? { frameId } : {}), activate: !reviewPending, focusWindow },
-        5_000,
-      );
-      if (r.activated) this.log.info({ tabId }, "application tab brought to the front");
-      if (r.windowFocused) this.log.info({ tabId, focused: r.focused }, "browser window brought to the front");
-      if (r.hidden) this.log.warn({ tabId, reviewPending }, "application tab is hidden; the browser throttles it");
+      const r = await this.bridge.call("tab.show", { tabId, ...(frameId !== undefined ? { frameId } : {}) }, 5_000);
+      if (!r.emulated) this.log.warn({ tabId }, "no focus emulation on the application tab");
+      if (r.hidden) this.log.warn({ tabId }, "application tab is hidden; the browser throttles it");
       return {
-        activated: r.activated,
+        emulated: r.emulated,
         changesPage,
-        focusWindow,
-        ...(r.windowFocused !== undefined ? { windowFocused: r.windowFocused } : {}),
         hidden: r.hidden,
         ...(r.focused !== undefined ? { focused: r.focused } : {}),
-        reviewPending,
       };
     } catch (err) {
       const e = EzError.from(err);
-      if (!e.message.includes("Unknown method tab.show")) {
-        this.log.warn({ err: e.message }, "tab.show failed; the call goes ahead");
-      } else if (!this.warnedNoTabShow) {
+      if (!this.warnedNoTabShow) {
         this.warnedNoTabShow = true;
-        this.log.warn("the extension predates tab.show: application tabs aren't brought to the front");
+        this.log.warn({ err: e.message }, "tab.show failed: no focus emulation on application tabs; calls go ahead");
       }
       return undefined;
-    }
-  }
-
-  /** `forms.focusBrowser`: on unless the config says off (an unreadable config means the default, on). */
-  private async focusBrowser(): Promise<boolean> {
-    try {
-      return (await this.ws.readConfig()).forms.focusBrowser === "on";
-    } catch {
-      return true;
     }
   }
 
@@ -766,15 +766,14 @@ export class FormsService {
   }
 
   /**
-   * Append to the posting's form-log.jsonl: the audit trail for "what did we submit". `tabActivated`,
-   * `windowFocused`, `tabHidden` and `windowInBackground` (only when true) let a slow step, or a field that
-   * wasn't taken, be matched afterwards to a hidden tab or a browser window behind another app.
+   * Append to the posting's form-log.jsonl: the audit trail for "what did we submit". `focusNotEmulated`,
+   * `tabHidden` and `windowInBackground` (only when true) let a slow step, or a field that wasn't taken, be
+   * matched afterwards to a hidden tab or a page without focus.
    */
   private async logEvent(t: Target, event: Record<string, unknown>): Promise<void> {
     if (!t.posting) return;
     const tab = {
-      ...(t.shown?.activated ? { tabActivated: true } : {}),
-      ...(t.shown?.windowFocused ? { windowFocused: true } : {}),
+      ...(t.shown && !t.shown.emulated ? { focusNotEmulated: true } : {}),
       ...(t.shown?.hidden ? { tabHidden: true } : {}),
       ...(t.shown && !t.shown.hidden && t.shown.focused === false ? { windowInBackground: true } : {}),
       // Why this posting was credited (forms/match.ts): `job`, `binding`, `tenant`, `title`… or `unconfirmed`.
@@ -1038,30 +1037,25 @@ function annotate<T extends object>(
 function tabHiddenOf(t: Target): { tabHidden?: TabHidden } {
   if (!t.shown?.hidden) return {};
   const hint =
-    "The application tab is in the background, where the browser slows it down (its timers run about once a " +
-    "second), so filling is slow and can time out. Tell the user once and keep filling: ask them to keep the tab " +
-    "visible (window not minimized, the review page closed or moved to another window)." +
-    (t.shown.reviewPending
-      ? " A review page is waiting for them, so ezapply doesn't switch tabs until they answer."
-      : "");
+    "The application tab is hidden and focus emulation couldn't run on it, so the browser slows it down (its " +
+    "timers run about once a second): filling is slow and can time out. Tell the user once and keep filling: " +
+    "ask them to keep the tab visible (window not minimized, the tab in front), or to close DevTools or other " +
+    "debugging on that tab, which can keep ezapply's debugger out.";
   return { tabHidden: { hint } };
 }
 
 /**
- * The page is on screen but without focus (the browser window is behind another app) on a call that changes the
- * page, where widgets that track focus (Workday's split dates) may not take a value. Not while a review page
- * waits (the user is on it), and not when the tab is hidden (`tabHidden` says that).
+ * The page is on screen but without focus on a call that changes the page (focus emulation couldn't run, and the
+ * browser window is behind another app), where widgets that track focus (Workday's split dates) may not take a
+ * value. Not when the tab is hidden (`tabHidden` says that).
  */
 function browserBehindOf(t: Target): { browserBehind?: BrowserBehind } {
   const s = t.shown;
-  if (!s?.changesPage || s.hidden || s.focused !== false || s.reviewPending) return {};
-  const hint = s.focusWindow
-    ? "ezapply asked the browser to come to the front, but it stayed behind another app (the system may have " +
-      "kept it there). If a field isn't taken (a date reads back empty or is called required), ask the user to " +
-      "click the browser window, then fill it again."
-    : "The browser window is behind another app, where the page gets no focus events, and some fields (dates on " +
-      "some sites) may not be taken. If a field isn't taken, ask the user to bring the browser to the front, or to " +
-      'turn on "focusBrowser" under "forms" in ezapply.config.json, then fill it again.';
+  if (!s?.changesPage || s.hidden || s.focused !== false) return {};
+  const hint =
+    "The browser window is behind another app and focus emulation couldn't run on the tab, so the page gets no " +
+    "focus events and some fields (dates on some sites) may not be taken. If a field isn't taken, ask the user to " +
+    "bring the browser to the front, then fill it again.";
   return { browserBehind: { hint } };
 }
 
@@ -1081,10 +1075,19 @@ function olderExtension(method: string, what: string) {
 }
 
 /**
+ * Option lists longer than this go out as `optionCount` only. A native select can carry hundreds (a
+ * certificate dropdown with 400 issuers, the same language list on every language row): on a live run they were
+ * most of a 42k-character get_form, re-sent with every later turn. fill_fields matches the closest option and
+ * returns the options when nothing matches, and list_options and search_options read them when needed.
+ */
+export const MAX_INLINE_OPTIONS = 25;
+
+/**
  * get_form is the largest result and is read at every step, so leave out what carries no information:
  * `required: false`, `multiple: false`, empty option lists, `optionsLazy` (always true for dropdowns and
- * typeaheads) and the raw automation id (the field id already contains it). `onlyEmpty` keeps fields that
- * are empty or show an error; `section` keeps sections whose id or title contains it.
+ * typeaheads) and the raw automation id (the field id already contains it). Long option lists become a count
+ * (MAX_INLINE_OPTIONS). `onlyEmpty` keeps fields that are empty or show an error; `section` keeps sections whose
+ * id or title contains it.
  */
 export function leanForm(form: FormSchema, opts: { onlyEmpty?: boolean; section?: string } = {}) {
   const wanted = opts.section?.toLowerCase();
@@ -1106,7 +1109,11 @@ function leanField(f: Field) {
     ...rest,
     ...(required ? { required } : {}),
     ...(multiple ? { multiple } : {}),
-    ...(options && options.length > 0 ? { options } : {}),
+    ...(options && options.length > MAX_INLINE_OPTIONS
+      ? { optionCount: options.length }
+      : options && options.length > 0
+        ? { options }
+        : {}),
   };
 }
 

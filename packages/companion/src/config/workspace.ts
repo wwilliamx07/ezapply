@@ -38,18 +38,6 @@ export const WorkspaceConfig = z.object({
       attach: z.enum(["after-approval", "immediately"]).default("after-approval"),
     })
     .default({ attach: "after-approval" }),
-  forms: z
-    .object({
-      /**
-       * on: a form call that changes the page brings the browser window to the front first (tab.show's
-       * focusWindow). Widgets that track focus need it: Chrome sends no focus events to a window behind another
-       * app, and Workday's split dates weren't taken there. The cost: the browser comes in front of the
-       * terminal, and takes keyboard focus, on each such call. off: only the tab is switched to, within its
-       * window. A bad value falls back to on rather than failing every form call.
-       */
-      focusBrowser: z.enum(["on", "off"]).default("on").catch("on"),
-    })
-    .default({ focusBrowser: "on" }),
   debug: z
     .object({
       /** Debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */
@@ -64,15 +52,6 @@ export const WorkspaceConfig = z.object({
       markup: z.enum(["failures", "always", "none"]).default("failures").catch("failures"),
     })
     .default({ enabled: false, maxMB: 500, markup: "failures" }),
-  context: z
-    .object({
-      /**
-       * Under `ezapply chat`, capturing a different posting restarts Claude with a fresh session, so the last
-       * posting's conversation stops being re-sent with every turn.
-       */
-      restartOnCapture: z.boolean().default(true),
-    })
-    .default({ restartOnCapture: true }),
 });
 export type AttachMode = WorkspaceConfig["documents"]["attach"];
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfig>;

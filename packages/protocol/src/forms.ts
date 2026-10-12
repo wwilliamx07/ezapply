@@ -254,24 +254,18 @@ export const FormMethods = {
     result: z.object({ tabId: z.number().int(), pngBase64: z.string() }),
   },
   /**
-   * Bring the application tab to the front of its window before a form call (browsers throttle hidden tabs'
-   * timers to about once a second, and every adapter wait is a timer). `activate: false` only reports.
-   * `activated`: the extension switched to the tab. `hidden`: the page still reports
-   * `document.visibilityState === "hidden"` (a minimized or fully covered window), which the extension doesn't
-   * try to force. `focused`: `document.hasFocus()`, false while the browser window is behind another app (the
-   * terminal), where Chrome holds back focus events; absent when the page can't be read.
-   * `focusWindow` (with `activate`): also bring the browser window to the front, restoring it if minimized
-   * (`forms.focusBrowser`); `windowFocused`: the extension asked the window to come to the front, which the
-   * OS may still refuse (`focused` says whether it worked). An older extension ignores `focusWindow`.
-   * With `frameId`, `hidden` is read in that frame, and `focused` is whether the browser window has focus (a
-   * frame's own `document.hasFocus()` is false whenever focus is on the page around it).
+   * Turn on focus emulation for the application tab before a form call (`chrome.debugger`): the page runs visible
+   * and focused where it is, so the browser doesn't throttle it (hidden tabs' timers run about once a second, and
+   * every adapter wait is a timer) and widgets that track focus get it. Nothing is switched or raised.
+   * `emulated`: it's on. `hidden`: the page still reports `document.visibilityState === "hidden"` (only when
+   * emulation couldn't run). `focused`: `document.hasFocus()` (the top page's, with `frameId`, under emulation;
+   * else whether the browser window has focus); absent when the page can't be read.
    */
   "tab.show": {
-    params: TabParam.extend({ activate: z.boolean(), focusWindow: z.boolean().optional() }),
+    params: TabParam,
     result: z.object({
       tabId: z.number().int(),
-      activated: z.boolean(),
-      windowFocused: z.boolean().optional(),
+      emulated: z.boolean(),
       hidden: z.boolean(),
       focused: z.boolean().optional(),
     }),

@@ -129,9 +129,8 @@ export type OnboardingNext =
  * Onboarding on a page (the UI package's onboard page): the workspace_check list as steps the user works through
  * in the browser, where most of them are form-filling. What needs judgment or a shell goes to the agent as a
  * task. Under `ezapply` (the side panel's agent, agent/service.ts) a task is a message to the general
- * conversation, and the agent reports it with `onboarding { taskId, result, wait: false }`. Under `ezapply chat`
- * there's no panel agent: Claude in the terminal sits in a blocking `onboarding` call, takes the next task and
- * reports. Either way Claude Code is the only agent, and the user approves its commands.
+ * conversation, and the agent reports it with `onboarding { taskId, result, wait: false }`. Without a panel
+ * agent (tests), Claude sits in a blocking `onboarding` call, takes the next task and reports. Either way Claude Code is the only agent, and the user approves its commands.
  */
 export class OnboardingService {
   private token: string | null = null;
@@ -194,11 +193,7 @@ export class OnboardingService {
   report(taskId: string, result: { ok: boolean; note?: string }): void {
     const task = this.tasks.find((t) => t.id === taskId);
     if (!task) {
-      throw new EzError(
-        ErrorCode.NotFound,
-        `No onboarding task ${taskId}.`,
-        "Call onboarding {} for the current task.",
-      );
+      throw new EzError(ErrorCode.NotFound, `No onboarding task ${taskId}.`, "The setup page lists the current tasks.");
     }
     task.status = result.ok ? "done" : "failed";
     if (result.note) task.note = result.note.slice(0, 4000);
@@ -324,7 +319,7 @@ export class OnboardingService {
     const message =
       `Setup task ${task.id} from the setup page (${task.kind}). ${HOW[task.kind]}\n` +
       `Parameters: ${JSON.stringify(task.params)}\n` +
-      `When it's done, report it: onboarding { taskId: "${task.id}", result: { ok, note? }, wait: false }.`;
+      `When it's done, report it: onboarding { taskId: "${task.id}", result: { ok, note? } }.`;
     s.agent.send(GENERAL_CONVERSATION, message).catch((err: Error) => {
       task.status = "failed";
       task.note = err.message;
@@ -482,7 +477,6 @@ export class OnboardingService {
         pairingOpen: s.bridge.pairingStatus().openUntil !== undefined,
         built: folders.built,
         ...(folders.chrome ? { chromeFolder: folders.chrome } : {}),
-        ...(folders.firefox ? { firefoxManifest: folders.firefox } : {}),
       },
       github: {
         appRegistered: gh.appRegistered,

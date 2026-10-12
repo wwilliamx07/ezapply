@@ -52,12 +52,6 @@ const SPECS: Record<BrowserName, BrowserSpec> = {
     macApp: "Chromium",
     bins: ["chromium", "chromium-browser"],
   },
-  firefox: {
-    appPath: "firefox.exe",
-    winPaths: ["Mozilla Firefox\\firefox.exe"],
-    macApp: "Firefox",
-    bins: ["firefox"],
-  },
 };
 
 export interface FindBrowserDeps {

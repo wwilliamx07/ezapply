@@ -1,12 +1,10 @@
-export { type ClaudeCommand, findClaude } from "./agent/process.js";
-export { CHAT_SESSION_HEADER, type ChatHost, type ChatSessionState, type PostingRef } from "./chat.js";
+export { type ClaudeCommand, findClaude, SESSION_ENV, SESSION_HEADER } from "./agent/process.js";
 export {
   AppConfig,
   appConfigPath,
   appDir,
   DEFAULT_PORT,
   LEGACY_CONFIG_FILE,
-  LEGACY_STATE_FILE,
   loadAppConfig,
   newPairingToken,
   newToken,
@@ -21,7 +19,7 @@ export { FormsService } from "./forms/service.js";
 export { loadTiming, TIMING_FILE, timingFileTemplate } from "./forms/timing.js";
 export { KeyringStore } from "./github/secrets.js";
 export { GitHubService } from "./github/service.js";
-export { HEALTH_MODE, HEALTH_PATH, MCP_PATH } from "./http.js";
+export { HEALTH_PATH, MCP_PATH } from "./http.js";
 export { createLogger, type Logger } from "./logger.js";
 export { type CompanionHandle, type CompanionOptions, startCompanion } from "./main.js";
 export { ProfileService } from "./profile/service.js";

@@ -17,7 +17,7 @@ export const AppConfig = z.object({
   mcpToken: z.string().min(32),
   /** Code the extension presents; handed to it automatically while pairing is open (extension_pair). */
   pairingToken: z.string().min(16),
-  /** Extension id pinned on first successful pairing (Chrome extension id or Firefox install UUID). */
+  /** Extension id pinned on first successful pairing (the extension id). */
   pairedExtensionId: z.string().optional(),
   /** Absolute path of the workspace (ezapply-home). */
   workspace: z.string(),
@@ -26,9 +26,8 @@ export type AppConfig = z.infer<typeof AppConfig>;
 
 export const DEFAULT_PORT = 17373;
 
-/** Files earlier builds kept in the app folder: the config under its old name, and the daemon's run state. */
+/** The config's name in earlier builds, which ran the companion as a background daemon. */
 export const LEGACY_CONFIG_FILE = "daemon.json";
-export const LEGACY_STATE_FILE = "daemon-state.json";
 
 export function appDir(): string {
   return process.env.EZAPPLY_APP_DIR ?? join(homedir(), ".ezapply");

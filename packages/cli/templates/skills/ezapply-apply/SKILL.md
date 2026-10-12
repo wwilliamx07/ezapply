@@ -32,10 +32,10 @@ this skill, they win. They come once per site, so keep them in mind for the rest
    results carry its `frameId` and the form's own `url`, and you keep passing only the `tabId`. If a call says
    the extension has no access to it yet, a small ezapply window is asking for access to websites: pass the hint
    on (the user clicks Allow access there and confirms the browser's prompt), then call again.
-   Each form call brings the application tab to the front of its window, and one that changes the page
-   brings the browser window to the front too unless the user turned that off (neither while a review page
-   waits for the user). A result with `tabHidden` means the tab is still hidden and the browser slows it
-   down: pass its hint to the user once and keep filling. `browserBehind` means the browser window is behind
+   The extension keeps the application tab running at full speed wherever it is (in the background,
+   minimized, behind the terminal), so the user can do other things; Chrome shows "ezapply started debugging
+   this browser" while it does. A result with `tabHidden` means it couldn't, the tab is hidden and the
+   browser slows it down: pass its hint to the user once and keep filling. `browserBehind` means the browser window is behind
    another app, where some fields (dates) may not be taken: keep filling, and pass its hint to the user
    when a field isn't taken.
 2. For "attach them" requests, confirm which files: normally `postings/<id>/resume.pdf` and `cover.pdf`,
@@ -59,25 +59,25 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      last resort, only when neither of you can tell (see **Screenshots**).
 
 ## Each step
-1. `get_form` (after `go_next` advanced, its result already gives the new step). Its `checklist` is what looks
-   off on this step: a list section whose rows don't match the profile, a file this application didn't upload.
+1. `get_form` (after `go_next` advanced, its `form` is that read: don't call `get_form` again). Its
+   `checklist` is what looks off on this step: a list section whose rows don't match the profile, a file this application didn't upload.
    Fix it on this step, or say why not in the hand-off (the user left out an old job on purpose).
 
    Then decide a value for every field that is empty or wrong. Read each label as it is written: a level
    asked "1 entry - 10 expert" takes a number on that scale, not a word.
    - **Profile facts** (a `hint` is given, or the label clearly matches): use `profile.yaml`, formatted for
-     the widget. Work, education, language and link rows: `add_repeatable { addButtonId }` until the rows
-     match the profile's entries, then `get_form` again and fill each row from its entry. Rows beyond the
-     profile's entries (usually carried over from a previous application) go with
-     `remove_repeatable { sectionId, reason? }` when the user doesn't want them; later rows' field ids change,
-     so `get_form` again after each.
+     the widget. Work, education, language and link rows: one `add_repeatable { addButtonIds }` with an id for
+     every missing row across the step's sections (repeat an id for each row), then fill each row from its
+     entry using the result's `form` (the step's empty fields). Rows beyond the profile's entries (usually
+     carried over from a previous application) go with `remove_repeatable { sectionId, reason? }` when the
+     user doesn't want them; later rows' field ids change, and its `form` gives the new ones.
    - **Every add button is a list to fill.** Go through `addButtons` and match each `section` to the
      profile: work → `work`, education → `education`, languages → `languages`, licenses or certificates →
      `certifications`, links or websites → `links`. Add each profile entry the page doesn't hold yet. A
      section that starts empty shows no fields at all, only its add button, so it's easy to miss: check them
      all before the hand-off, and list in it what you added.
-   - **Add buttons by `kind`:** `row` adds a row of fields to fill; `form` opens an inline form: `get_form`,
-     `fill_fields` its new fields, then `add_repeatable` its `save` button, which adds the item (an error means
+   - **Add buttons by `kind`:** `row` adds a row of fields to fill; `form` opens an inline form (the result's `form`
+     shows its fields): `fill_fields` them, then `add_repeatable` its `save` button, which adds the item (an error means
      the page wants more: fill it and save again). A `save` button can also belong to a form that's part of the
      step: press it once that form is filled. `edit` opens a saved item's form again. Saved items show as
      `removable` sections with no fields; `remove_repeatable` deletes one.
@@ -128,8 +128,7 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      from those or leave the entry out.
    - **Dates:** give profile dates as `YYYY-MM` (or `YYYY` where the field has only a year). If a date comes
      back `ok: false` ("the page didn't take the date"), don't retry: ask the user to type it, giving the
-     value. When that result also has `browserBehind`, pass its hint too (bring the browser to the front, or
-     turn the option on).
+     value. When that result also has `browserBehind`, pass its hint too (bring the browser to the front).
    - **Files:** use `upload_file { fieldId, path }` with the posting's PDFs: every document the user
      approved for it, usually `resume.pdf` **and** `cover.pdf`. A form whose only file field takes several
      files (`multiple: true`) gets both, one `upload_file` each. "The form has no cover-letter field" is never a
@@ -157,8 +156,8 @@ this skill, they win. They come once per site, so keep them in mind for the rest
    re-sends the whole conversation. Re-check with `get_form` (`onlyEmpty: true`) only if something is
    unclear.
 3. `go_next`. Its `checklist` is what still looked off on the step you just left: `go_back` and fix it, or
-   note why for the hand-off. When it advanced, its result already gives the new step: fill it. If it
-   didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
+   note why for the hand-off. When it advanced, its `form` is the new step as `get_form` gives it: fill it.
+   If it didn't advance, read the `errors` (`messages` are notices, such as a completed upload), fix them, and try
    again. If a widget still won't take a value after one retry, stop guessing: tell the user which field
    and what the tools returned, and ask them to set it in the browser.
 4. To change something on an earlier step (the user spotted it on the review page, or an answer turns out

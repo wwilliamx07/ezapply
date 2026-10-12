@@ -96,7 +96,7 @@ export function TaskStatus({ kinds }: { kinds: OnboardTaskKind[] }) {
   return <TaskLine task={task} listening={state.agentListening} agentIn={state.agentIn} />;
 }
 
-/** Where the user sees Claude: the ezapply panel (`ezapply`), or the terminal (`ezapply chat`). */
+/** Where the user sees Claude: the ezapply panel, or a terminal (no panel agent). */
 export function TaskLine({
   task,
   listening,

@@ -92,8 +92,8 @@ export function portTransport(): PanelTransport {
   return {
     call: (method, params) => ask({ type: "call", method, params }),
     capture() {
-      // Synchronously in the click: Firefox grants access to websites only during the user's gesture. Already
-      // granted, it resolves without asking.
+      // Synchronously in the click: access to websites is granted only during the user's gesture (the user may
+      // have limited it to some sites). Already granted, it resolves without asking.
       const access = ext.permissions.request({ origins: [...HOST_PERMISSIONS] }).catch(() => false);
       return access.then(async () => ask<CaptureOutcome>({ type: "capture", windowId: await windowId }));
     },

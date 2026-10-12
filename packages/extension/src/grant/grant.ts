@@ -3,7 +3,7 @@ import { ext } from "../ext.js";
 /**
  * The page a form call opens when the extension has no access to the application's page (`background/access.ts`).
  * `permissions.request` needs a user gesture, which a form call (a message from the companion) never is: the click
- * on Allow access here is one, in Chrome and in Firefox, as long as the request is made synchronously inside it.
+ * on Allow access here is one, as long as the request is made synchronously inside it.
  */
 
 /** The origin patterns the page may ask for, from its URL: every site, or host patterns, never anything else. */
@@ -19,7 +19,7 @@ function start(): void {
   $("host").textContent = params.get("host") ?? "this site";
   const status = $("status");
   $("allow").addEventListener("click", () => {
-    // Synchronous in the click: Firefox refuses the request once the handler has awaited anything.
+    // Synchronous in the click: the gesture no longer counts once the handler has awaited anything.
     ext.permissions.request({ origins }).then(
       (ok) => {
         if (ok) {

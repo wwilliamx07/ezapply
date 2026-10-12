@@ -41,7 +41,7 @@ user's agreement: these cost time, and the templates and profile are theirs.
      asked about, not deleted: forms often want the full history. `profile_check`, then mark it `done`. A diff
      that touches nothing in the profile (layout, spacing) is marked `done` too.
    - **`profile-identity`:** update the cover template's name and contact fields (`\myname`, `\mycontact`) from
-     the profile, `tex_compile { path }`, `pdf_render { path, page? }`, then mark it `done`.
+     the profile, `tex_compile { path }` (fix what `lint` lists), then mark it `done`.
    - **`repo-pushed`:** run the **ezapply-index-repo** skill for each repo, in parallel subagents when there are
      more than two. Its `knowledge_mark_indexed { repo }` ends the change. If `claims_list` was read earlier in this
      session, read it again afterwards.
@@ -58,22 +58,12 @@ Onboarding happens on a page in the user's browser, not in this chat: TeX, the e
 the resume and profile, the cover letter template, screening answers, preferences, library. The user fills in
 the page; you do the parts that need you, as tasks it sends.
 
-1. Call `onboarding {}`. It opens the page (or gives you its `url` to pass on when no browser opened, then
-   call it again) and waits for work. Tell the user in one line that setup is on the page that opened and you'll
-   handle what it hands you.
-2. A `task` comes back with `{ id, kind, params, how }`. Do what `how` says, with your tools and the skills it
-   names. Keep the chat short: the page shows the user what you're doing. Then report and wait for the next in
-   one call: `onboarding { taskId, result: { ok, note? } }`. `note` is shown on the page: a sentence on what you
-   did, or what the user must do if it failed (`ok: false`).
-3. `waiting` means nothing came yet: call `onboarding {}` again. Past two minutes the call continues in the
-   background and its result arrives as a notification, so the chat stays usable meanwhile.
-4. `done` means the user finished (or paused) on the page: say in two lines what's ready and what's left
-   (`notDone`), and that they can ask you to set them up again any time.
-
-**In the ezapply panel** (ezapply started with `ezapply`), you don't wait in `onboarding`: a task arrives as a
-message ("Setup task t3 from the setup page …") with what to do and its parameters. Do it, then report it
-without waiting: `onboarding { taskId, result: { ok, note? }, wait: false }`. To open the page, call
-`onboarding { wait: false }`.
+1. Call `onboarding {}`. It opens the page, or gives you its `url` to pass on when no browser
+   opened. Tell the user in one line that setup is on that page and you'll handle what it hands you.
+2. A task arrives as a message ("Setup task t3 from the setup page …") with what to do and its parameters. Do
+   it, with your tools and the skills it names. Keep the chat short: the page shows the user what you're doing.
+   Then report it: `onboarding { taskId, result: { ok, note? } }`. `note` is shown on the page: a
+   sentence on what you did, or what the user must do if it failed (`ok: false`).
 
 The same call reopens the page later, when the user wants to change a step (another resume, more repos).
 Never ask in chat for what the page collects: a password, a client secret, an address, screening answers.

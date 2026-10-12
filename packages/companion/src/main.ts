@@ -5,7 +5,6 @@ import { PanelService } from "./agent/panel.js";
 import type { ClaudeCommand } from "./agent/process.js";
 import { AgentService } from "./agent/service.js";
 import { ExtensionBridge } from "./bridge/server.js";
-import { type ChatHost, ChatSessions, chatHost } from "./chat.js";
 import { type AppConfig, appDir, updateAppConfig } from "./config/app.js";
 import { ReviewService } from "./documents/review.js";
 import { DocumentsService } from "./documents/service.js";
@@ -47,7 +46,7 @@ export interface CompanionOptions {
   ui?: UiAssets;
   /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
-  /** Claude Code, for the panel's agent; without it the agent is unavailable (tests, `ezapply chat`). */
+  /** Claude Code, for the panel's agent; without it the agent is unavailable (tests). */
   claude?: ClaudeCommand;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
@@ -56,16 +55,14 @@ export interface CompanionOptions {
 export interface CompanionHandle {
   port: number;
   services: Services;
-  /** What `ezapply chat` reads to decide when to restart Claude. */
-  chat: ChatHost;
-  /** Called if the HTTP server fails after it started listening (`ezapply chat` logs it and carries on). */
+  /** Called if the HTTP server fails after it started listening (`ezapply` logs it and carries on). */
   onServerError(fn: (err: Error) => void): void;
   close(): Promise<void>;
 }
 
 /**
- * Wire services together and start listening on the loopback interface. `ezapply chat` is the only caller
- * outside tests: the companion lives exactly as long as the chat.
+ * Wire services together and start listening on the loopback interface. `ezapply` is the only caller
+ * outside tests: the companion lives exactly as long as it runs.
  */
 export async function startCompanion(opts: CompanionOptions): Promise<CompanionHandle> {
   let config = opts.config;
@@ -206,12 +203,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     ui,
     ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
   };
-  const sessions = new ChatSessions();
   const server = createHttpServer({
     services,
     bridge,
     mcpToken: config.mcpToken,
-    chat: sessions,
     log: log.child({ svc: "http" }),
   });
 
@@ -232,7 +227,6 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   return {
     port,
     services,
-    chat: chatHost(postings, workspace, sessions),
     onServerError: (fn) => server.on("error", fn),
     close: async () => {
       await agent.close();

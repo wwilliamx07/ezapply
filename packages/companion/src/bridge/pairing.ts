@@ -5,13 +5,12 @@ import type { Services } from "../services.js";
 
 export const PAIRING_MS = 15 * 60_000;
 
-/** Where the user loads the extension from, per browser, and whether it's built. */
-export function extensionFolders(s: Services): { built: boolean; chrome?: string; firefox?: string } {
+/** Where the user loads the extension from, and whether it's built. */
+export function extensionFolders(s: Services): { built: boolean; chrome?: string } {
   const dir = s.extensionDir;
   const chrome = dir ? join(dir, "dist") : undefined;
-  const firefox = dir ? join(dir, "dist-firefox", "manifest.json") : undefined;
-  const built = Boolean(chrome && firefox && existsSync(chrome) && existsSync(firefox));
-  return { built, ...(chrome ? { chrome } : {}), ...(firefox ? { firefox } : {}) };
+  const built = Boolean(chrome && existsSync(join(chrome, "manifest.json")));
+  return { built, ...(chrome ? { chrome } : {}) };
 }
 
 /**

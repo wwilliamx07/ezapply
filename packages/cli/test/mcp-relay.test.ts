@@ -46,7 +46,7 @@ function relay(url: string, headers?: Record<string, string>) {
 }
 
 describe("ezapply mcp relay", () => {
-  it("relays requests and notifications, and tags them with the chat session, which counts only tool calls", async () => {
+  it("relays requests and notifications to the companion", async () => {
     dir = await mkdtemp(join(tmpdir(), "ezapply-relay-"));
     const port = await freePort();
     handle = await startCompanion({
@@ -63,7 +63,7 @@ describe("ezapply mcp relay", () => {
       saveConfig: async () => {},
     });
     const session = "0b7c7f1e-4a52-4b8e-9d0e-6d4f3c2a1b00";
-    const r = relay(`http://127.0.0.1:${port}/mcp`, { "x-ezapply-chat-session": session });
+    const r = relay(`http://127.0.0.1:${port}/mcp`, { "x-ezapply-session": session });
 
     const init = await r.send({
       id: 1,
@@ -74,21 +74,18 @@ describe("ezapply mcp relay", () => {
     r.post({ method: "notifications/initialized" });
     const list = await r.send({ id: 2, method: "tools/list" });
     expect(list.result.tools.map((t: { name: string }) => t.name)).toContain("template_import_example");
-    expect(handle.chat.session(session)).toEqual({ used: false, inFlight: 0 });
 
     const listed = await r.send({ id: 3, method: "tools/call", params: { name: "postings_list", arguments: {} } });
     expect(listed.result.isError).toBeFalsy();
-    expect(handle.chat.session(session)).toEqual({ used: true, inFlight: 0 });
-    expect(handle.chat.session("another-session-id")).toMatchObject({ used: false });
     await r.end();
   }, 30_000);
 
-  it("answers every request with how to start ezapply when no chat is running, and starts nothing", async () => {
+  it("answers every request with how to start ezapply when it isn't running, and starts nothing", async () => {
     const port = await freePort();
     const r = relay(`http://127.0.0.1:${port}/mcp`);
     expect(await r.send({ id: 7, method: "tools/list" })).toMatchObject({ id: 7, error: { message: NOT_RUNNING } });
     expect(await r.send({ id: 8, method: "tools/call" })).toMatchObject({ id: 8, error: { message: NOT_RUNNING } });
-    expect(NOT_RUNNING).toMatch(/ezapply chat/);
+    expect(NOT_RUNNING).toMatch(/\.\/ezapply/);
     await r.end();
   });
 

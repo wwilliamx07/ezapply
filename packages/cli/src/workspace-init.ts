@@ -49,7 +49,7 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
     ...cur,
     mcpServers: {
       ...(cur.mcpServers as object | undefined),
-      // `ezapply mcp` relays to the companion inside `ezapply chat`; outside a chat every tool says so.
+      // `ezapply mcp` relays to the companion inside `ezapply`; while it isn't running every tool says so.
       ezapply: { type: "stdio", command: process.execPath, args: [CLI_MAIN, "mcp"] },
     },
   }));
@@ -82,7 +82,7 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
 }
 
 /**
- * `ezapply` in the workspace, so `ezapply chat` (how ezapply is used) runs from there without putting the CLI
+ * `ezapply` in the workspace, so ezapply runs from there without putting the CLI
  * on PATH: a global `npm link` needs write access to npm's global folder, which many installs don't give.
  * Absolute paths to this Node and this build, like `.mcp.json`; rewritten by every init.
  */
@@ -179,6 +179,8 @@ async function migrateWorkspaceConfig(path: string, report: InitReport): Promise
   const raw = JSON.parse(await readFile(path, "utf8")) as {
     tex?: Record<string, unknown>;
     debug?: Record<string, unknown>;
+    forms?: Record<string, unknown>;
+    context?: Record<string, unknown>;
   };
   const changes: string[] = [];
   const tex = raw.tex;
@@ -194,6 +196,16 @@ async function migrateWorkspaceConfig(path: string, report: InitReport): Promise
     if (debug.enabled === undefined && typeof debug.autofill === "boolean") debug.enabled = debug.autofill;
     delete debug.autofill;
     changes.push(`debug.autofill → debug.enabled (${debug.enabled === true ? "on" : "off"})`);
+  }
+  // forms.focusBrowser brought the browser window to the front before a call; focus emulation replaced it.
+  if (raw.forms && Object.keys(raw.forms).every((k) => k === "focusBrowser")) {
+    delete raw.forms;
+    changes.push("forms.focusBrowser removed (focus emulation replaced it)");
+  }
+  // context.restartOnCapture restarted the terminal's Claude on a new posting under `ezapply chat`, which is gone.
+  if (raw.context && Object.keys(raw.context).every((k) => k === "restartOnCapture")) {
+    delete raw.context;
+    changes.push("context.restartOnCapture removed (`ezapply chat` is gone)");
   }
   if (changes.length === 0) return;
   await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, "utf8");

@@ -2,16 +2,17 @@
 
 The companion runs Claude Code headless and relays what it does, so the user can work with it from the
 extension's side panel instead of a terminal. Claude Code is still the
-only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as `ezapply
-chat`; the companion only starts it, writes the user's messages to it and reads what it does.
+only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as
+running `claude` in the workspace by hand; the companion only starts it, writes the user's messages to it and
+reads what it does.
 
 It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Code to the companion
-(`CompanionOptions.claude`). Under `ezapply chat` it has none: `AgentService.state()` is `unavailable`, the panel
-says so, and Claude in the terminal does the work.
+(`CompanionOptions.claude`; `ezapply` won't start without it). A companion without it (tests) has an
+`unavailable` agent: `AgentService.state()` says so, and so does the panel.
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT`; `findClaude` (also used by `ezapply chat`); `PERMISSION_TOOL`, `SESSION_ENV` |
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` (the header's value, if it's 8–64 letters, digits and dashes) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
 | `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, the permission mode and model |
@@ -48,19 +49,19 @@ reached.
 | `--session-id <uuid>` / `--resume <uuid>` | A new conversation's session, or the one it had |
 
 Not `--bare`: bare mode skips the workspace's skills, `.mcp.json`, settings and `CLAUDE.md`, and doesn't use a
-subscription login. The environment gets `EZAPPLY_CHAT_SESSION=<session id>`, which the MCP relay sends as
-`x-ezapply-chat-session`, so the companion knows which conversation a tool call (an `ask_user`) comes from, and
+subscription login. The environment gets `EZAPPLY_SESSION=<session id>`, which the MCP relay sends as
+`x-ezapply-session`, so the companion knows which conversation a tool call (an `ask_user`) comes from, and
 loses `CLAUDE_AUTO_BACKGROUND_TASKS`: in `-p` a long MCP call holds the turn, as `ask_user` and `review_documents`
 need, unless that variable is set, which would end the turn with the question open.
 
 **Stop** writes `{ type: "control_request", request_id, request: { subtype: "interrupt" } }`; Claude Code answers
 with a `control_response` and ends the turn (`terminal_reason: "aborted_tools"`). A tool call running then gets a
 "rejected" result: a form call already sent still finishes in the companion and on the page, but Claude doesn't
-see its result (the next `get_form` shows the page as it is). Stop doesn't wait for a running form call to end,
-as `ezapply chat`'s restart does: the user pressed Stop to stop, and whatever the call did to the form stays on the
+see its result (the next `get_form` shows the page as it is). Stop doesn't wait for a running form call to end:
+the user pressed Stop to stop, and whatever the call did to the form stays on the
 page for them to see. Not SIGTERM, which leaves the turn unfinished with no
 result. **Closing** ends stdin (the process exits once idle) and kills the tree after a grace period (`taskkill /T
-/F` on Windows, as `ezapply chat` does). A message written while a tool call runs is taken when the call ends, in
+/F` on Windows). A message written while a tool call runs is taken when the call ends, in
 the same turn.
 
 All of this was checked against Claude Code 2.1 in a scratch folder with a throwaway MCP server: a message sent
@@ -153,7 +154,7 @@ description; the decision resolves the waiting call, allow with the input unchan
 this in the ezapply panel: <reason>"; no answer in 10 minutes is a deny. There's no "always allow": the workspace's
 permission rules are the only standing approvals.
 
-A terminal chat's question gets a card only when a panel watches the cards (`watch()`); otherwise `ask_user` says to
+A question from a Claude Code run by hand in the workspace (no session header) gets a card only when a panel watches the cards (`watch()`); otherwise `ask_user` says to
 ask in chat, and `permission_ask` denies. A panel conversation's question always gets a card. Settled cards are
 recorded in their conversation as a `card` event (answered, replied in the chat, allowed, denied, timed out,
 withdrawn).
@@ -191,5 +192,3 @@ is open: the toolbar badge shows it.
   card. The first answer settles it; the other gets "No open approval" (or question), and its panel drops the card
   with the next update. Whether a second window should say more than that.
 - Cost is Claude Code's estimate; whether to warn before a turn of a long-resumed session.
-- `ezapply chat` stays for now, as a way to see everything Claude does in a terminal: keep it for debugging
-  ezapply, or drop it so there's one way to run ezapply and less to keep current?

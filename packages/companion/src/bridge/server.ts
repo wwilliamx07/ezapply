@@ -23,11 +23,11 @@ export const BRIDGE_PATH = "/bridge";
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 /**
- * How long after `ezapply chat` starts a paired extension is waited for: it notices the companion within its
+ * How long after `ezapply` starts a paired extension is waited for: it notices the companion within its
  * 30 s reconnect alarm. Only a posting or browser call made in that window waits, and the user typing their
  * first message usually uses most of it up. (A background daemon used to also check when the extension was
- * last seen, since it could start hours after the browser closed; a chat is started by the user, who is at
- * the computer.)
+ * last seen, since it could start hours after the browser closed; `ezapply` is started by the user, who is
+ * at the computer.)
  */
 const RECONNECT_GRACE_MS = 40_000;
 /** How long to wait for a capture the extension announced in `hello` (made while ezapply wasn't running). */
@@ -81,7 +81,7 @@ interface Connection {
 }
 
 /**
- * WebSocket endpoint for the browser extension (Chrome or Firefox). One live connection at a time; a new
+ * WebSocket endpoint for the browser extension. One live connection at a time; a new
  * authenticated connection replaces the old one (e.g. after the background worker restarts).
  */
 export class ExtensionBridge {
@@ -246,7 +246,7 @@ export class ExtensionBridge {
     return true;
   }
 
-  /** Close every socket with 1001 (going away): `ezapply chat` is ending. */
+  /** Close every socket with 1001 (going away): `ezapply` is stopping. */
   close(): void {
     this.conn?.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Companion shutting down"));
     for (const client of this.wss.clients) client.close(1001, "shutting down");
@@ -391,15 +391,9 @@ export class ExtensionBridge {
   }
 }
 
-/**
- * Chrome: `chrome-extension://<32 a–p>` (the extension id). Firefox: `moz-extension://<uuid>`, a
- * per-profile install UUID that stays fixed across reloads because the manifest pins a gecko id.
- */
+/** `chrome-extension://<32 a–p>`: the extension id. */
 function extensionIdFromOrigin(origin: string | undefined): string | null {
-  const m =
-    origin?.match(/^chrome-extension:\/\/([a-p]{32})$/) ??
-    origin?.match(/^moz-extension:\/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
-  return m?.[1] ?? null;
+  return origin?.match(/^chrome-extension:\/\/([a-p]{32})$/)?.[1] ?? null;
 }
 
 function tokensEqual(a: string, b: string): boolean {

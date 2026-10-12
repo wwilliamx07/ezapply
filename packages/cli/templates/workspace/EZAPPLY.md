@@ -6,9 +6,9 @@ This is the user's ezapply workspace: their profile, base documents, project kno
 job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills in
 `.claude/skills/` (`ezapply-onboard`, `-repos`, `-index-repo`, `-resume`, `-cover-letter`, `-bundle`,
 `-apply`, `-answers`): use the matching skill for each task. Tool calls here and in the skills are written
-`tool { parameter, optional? }`: use exactly those parameter names. The tools work while ezapply runs: `ezapply`
-(the user works in the browser's side panel, and you run behind it) or `ezapply chat` (this terminal). If a tool
-says ezapply isn't running, tell the user to start it.
+`tool { parameter, optional? }`: use exactly those parameter names. The tools work while `ezapply` runs (the user
+works in the browser's side panel, and you run behind it). If a tool says ezapply isn't running, tell the user to
+start it.
 
 ## Setup and errors
 - New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill. Setup
@@ -19,13 +19,13 @@ says ezapply isn't running, tell the user to start it.
 - Tool errors carry a `hint` with the fix (e.g. an install command for this OS). Ask before installing
   anything, run it yourself, then retry. If only the user can do it (load the extension, click in the
   browser), tell them exactly that.
-- Commands, for you to run when a hint or the user asks: `{{EZAPPLY}} doctor` (check everything),
-  `{{EZAPPLY}} status`, `{{EZAPPLY}} init` (refresh skills and this file; user files are kept).
+- Commands, for you to run when a hint or the user asks: `{{EZAPPLY}} doctor` (check everything, including whether
+  ezapply is running), `{{EZAPPLY}} init` (refresh skills and this file; user files are kept).
 
 ## How the user works
 - In the browser they open a posting and click **Capture** in the side panel; it becomes the **active posting**. Every
   request is about it unless they name another: start with `posting_active`.
-- Tweaks happen in chat (the panel's chat bar, or this terminal): edit, rebuild, and report in one or two lines
+- Tweaks happen in the panel's chat: edit, rebuild, and report in one or two lines
   with the file path. Don't paste whole documents unless asked.
 - **Asking the user:** put the questions you need answered on a card,
   `ask_user { title, questions: [{ id, prompt, type, options?, proposed?, why?, sensitive? }] }`, all of one
@@ -71,8 +71,8 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
   all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
   can't, stay narrow: one component doc, or one file a claim cites.
-- Check layout with `pdf_render { path, page? }` of the page you need; use `pdf_info { path }` for page
-  counts and `pdf_text { path, pages? }` for wording. Don't re-read files you just wrote.
+- Check layout with `tex_compile`'s `lint` (no page images: they cost more context than the findings); use
+  `pdf_info { path }` for page counts and `pdf_text { path, pages? }` for wording. Don't re-read files you just wrote.
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.
 
 ## Layout
@@ -94,7 +94,7 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - **Edit `.tex` files with the Edit tool**, never with a script (`python`, `sed`, PowerShell `-replace`). Files
   can have Windows line endings, and LaTeX is full of backslashes: scripted edits miss their text
   or corrupt it (`"\t"` in `"\textbf"` becomes a tab). To drop a block, Edit it out whole.
-- After every edit: `tex_compile { path }` → fix the first error first → `pdf_render` the page. Treat overfull
+- After every edit: `tex_compile { path }` → fix the first error first → fix what `lint` lists. Treat overfull
   boxes and missing glyphs as defects.
 - **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
   - `after-approval` (default): write your report first, then `review_documents { files }` the finished PDFs.

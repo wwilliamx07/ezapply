@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NeedsYou } from "../src/agent/needs.js";
-import { agentArgs, type ClaudeCommand } from "../src/agent/process.js";
+import { agentArgs, type ClaudeCommand, sessionId } from "../src/agent/process.js";
 import { AgentService } from "../src/agent/service.js";
 import { readStreamLine, toolSummary } from "../src/agent/stream.js";
 import { MemoryStore } from "../src/github/secrets.js";
@@ -199,6 +199,14 @@ describe("reading Claude Code's stream-json", () => {
     expect(agentArgs("abc", true).slice(-2)).toEqual(["--resume", "abc"]);
     const chosen = agentArgs("abc", false, { permissionMode: "default", model: "opus", effort: "max" }).join(" ");
     expect(chosen).toContain("--permission-mode default --model opus --effort max --permission-prompt-tool");
+  });
+
+  it("accepts only plain session ids from the relay's header", () => {
+    expect(sessionId("0b7c7f1e-4a52-4b8e-9d0e-6d4f3c2a1b00")).toBe("0b7c7f1e-4a52-4b8e-9d0e-6d4f3c2a1b00");
+    expect(sessionId(["session-one-x", "session-two-x"])).toBe("session-one-x");
+    expect(sessionId("short")).toBeUndefined();
+    expect(sessionId("has spaces and ; semicolons")).toBeUndefined();
+    expect(sessionId(undefined)).toBeUndefined();
   });
 });
 
@@ -550,7 +558,7 @@ describe("ask_user and permission_ask over MCP", () => {
     await c.connect(
       new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`), {
         requestInit: {
-          headers: { Authorization: `Bearer ${MCP_TOKEN}`, ...(session ? { "x-ezapply-chat-session": session } : {}) },
+          headers: { Authorization: `Bearer ${MCP_TOKEN}`, ...(session ? { "x-ezapply-session": session } : {}) },
         },
       }),
     );

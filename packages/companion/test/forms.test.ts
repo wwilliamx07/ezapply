@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
 import { type CallRecord, extractFiles, pruneDebug, stripBulk } from "../src/forms/debug.js";
 import { debugReport } from "../src/forms/debug-report.js";
-import { FormsService } from "../src/forms/service.js";
+import { FormsService, leanForm, MAX_INLINE_OPTIONS } from "../src/forms/service.js";
 import { loadTiming, TIMING_FILE, timingFileTemplate } from "../src/forms/timing.js";
 import { createLogger } from "../src/logger.js";
 import type { PostingsService } from "../src/postings/service.js";
@@ -44,13 +44,13 @@ function slowBridge() {
 const workspaceAt = (dir = join(tmpdir(), "ezapply-no-such-workspace")) =>
   ({ path: (...p: string[]) => join(dir, ...p) }) as unknown as Workspace;
 
-/** FormsService over `bridge`, with the tab always in front (`tab.show` is answered here, not by the bridge). */
+/** FormsService over `bridge`, with focus emulation always on (`tab.show` is answered here, not by the bridge). */
 function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
   const postings = { activeId: async () => null } as unknown as PostingsService;
   const shown = {
     call: (method: string, params: { tabId: number }, timeoutMs?: number) =>
       method === "tab.show"
-        ? Promise.resolve({ tabId: params.tabId, activated: false, hidden: false })
+        ? Promise.resolve({ tabId: params.tabId, emulated: true, hidden: false })
         : (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(method, params, timeoutMs),
   } as unknown as ExtensionBridge;
   const reviews = { pending: () => false } as never;
@@ -275,7 +275,7 @@ describe("debug mode", () => {
         call: async (method: string, params: { debug?: unknown }) => {
           sent.push({ method, debug: params.debug });
           if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
-          if (method === "tab.show") return { tabId: 7, activated: false, hidden: false };
+          if (method === "tab.show") return { tabId: 7, emulated: true, hidden: false };
           if (method === "form.listOptions") return [{ label: "Yes" }];
           return {
             adapter: "workday",
@@ -348,5 +348,28 @@ describe("debug mode", () => {
       },
       screenshot: "0004-fail.png",
     });
+  });
+});
+
+describe("leanForm", () => {
+  const field = (id: string, options?: string[]) => ({
+    id,
+    label: id,
+    required: false,
+    kind: "dropdown" as const,
+    currentValue: null,
+    ...(options ? { options } : {}),
+  });
+  const form = (fields: ReturnType<typeof field>[]) =>
+    ({ sections: [{ id: "s", title: "S", fields }] }) as unknown as Parameters<typeof leanForm>[0];
+
+  it("sends a long option list as its count, a short one as it is", () => {
+    const many = Array.from({ length: MAX_INLINE_OPTIONS + 1 }, (_, i) => `Issuer ${i}`);
+    const lean = leanForm(form([field("issuer", many), field("yes-no", ["Yes", "No"]), field("free", [])]));
+    expect(lean.sections[0]?.fields).toEqual([
+      { id: "issuer", label: "issuer", kind: "dropdown", currentValue: null, optionCount: MAX_INLINE_OPTIONS + 1 },
+      { id: "yes-no", label: "yes-no", kind: "dropdown", currentValue: null, options: ["Yes", "No"] },
+      { id: "free", label: "free", kind: "dropdown", currentValue: null },
+    ]);
   });
 });

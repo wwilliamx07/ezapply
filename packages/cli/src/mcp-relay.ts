@@ -8,26 +8,26 @@ export interface RelayOptions {
   /** The companion's MCP endpoint. */
   url: string;
   token: string;
-  /** Extra request headers, e.g. the `ezapply chat` session id. */
+  /** Extra request headers: the panel conversation's session id. */
   headers?: Record<string, string>;
 }
 
-/** What every request gets while no `ezapply chat` is running: the relay never starts anything itself. */
+/** What every request gets while ezapply isn't running: the relay never starts anything itself. */
 export const NOT_RUNNING =
-  "ezapply isn't running. It runs inside `ezapply` (the browser's side panel) or `ezapply chat`: ask the user to " +
-  "start it (`./ezapply` in the workspace), or to exit this Claude session and start it again with `ezapply chat`.";
+  "ezapply isn't running. Ask the user to start it (`./ezapply` in the workspace, `.\\ezapply` on Windows) and " +
+  "keep it open while they work in the browser's ezapply panel.";
 
 /**
  * Claude Code talks MCP over stdio to `ezapply mcp`; this relays each JSON-RPC message to the companion's
- * stateless Streamable HTTP endpoint (inside `ezapply chat`) and writes the JSON answer back. Messages are
+ * stateless Streamable HTTP endpoint (inside `ezapply`) and writes the JSON answer back. Messages are
  * handled concurrently so a slow tool call doesn't hold up others. Resolves when the input ends.
  *
  * Why a relay rather than Claude Code's own HTTP transport: that brings its own timeouts, and some tools wait
  * for many minutes.
  *
  * Two rules keep tool calls from running twice or being cut off:
- * - Nothing is re-sent. A refused connection means no `ezapply chat` is running, and every request gets
- *   NOT_RUNNING. A connection that breaks after the request went out (the chat ended mid-call) is reported
+ * - Nothing is re-sent. A refused connection means ezapply isn't running, and every request gets
+ *   NOT_RUNNING. A connection that breaks after the request went out (ezapply stopped mid-call) is reported
  *   as such: the tool may already have run (a second upload, a second row).
  * - No timeout. Some tools legitimately take many minutes (extension_pair_wait and github_login_wait up to
  *   15, a large repo_sync up to 10). Node's fetch gives up on response headers after 300 s, so this uses
@@ -83,7 +83,7 @@ interface HttpResult {
   text: string;
 }
 
-/** Nothing listens on the port: no `ezapply chat` is running. */
+/** Nothing listens on the port: ezapply isn't running. */
 function connectionRefused(err: unknown): boolean {
   return (err as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED";
 }

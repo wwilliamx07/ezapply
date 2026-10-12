@@ -46,7 +46,7 @@ const result = await build({
   splitting: true,
   minify: true,
   sourcemap: "linked",
-  target: ["chrome120", "firefox128"],
+  target: ["chrome120"],
   jsx: "automatic",
   entryNames: "[name]-[hash]",
   chunkNames: "chunk-[hash]",

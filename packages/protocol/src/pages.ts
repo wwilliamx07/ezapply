@@ -129,7 +129,7 @@ export interface OnboardState {
   tasks: OnboardTask[];
   /** The agent can take a task: the panel's agent is available, or Claude in the terminal waits in `onboarding`. */
   agentListening: boolean;
-  /** Where the agent works: the side panel's (`ezapply`), or Claude in a terminal (`ezapply chat`). */
+  /** Where the agent works: the side panel's, or Claude in a terminal when there's no panel agent. */
   agentIn: "panel" | "terminal";
   tex: { done: boolean; detail: string; installCommand: string };
   extension: {
@@ -139,7 +139,6 @@ export interface OnboardState {
     pairingOpen: boolean;
     built: boolean;
     chromeFolder?: string;
-    firefoxManifest?: string;
   };
   github: { appRegistered: boolean; loggedIn: boolean; login?: string; manageUrl?: string; problem?: string };
   repos: { selected: string[]; indexed: Record<string, string | null> };

@@ -65,7 +65,7 @@ WebSocket, JSON text frames, one message per frame.
    `pairingToken` asks to pair; it's accepted only while a pairing window is open. `pendingCapture: true`
    says a capture made while the companion was down follows right after `welcome` (the companion holds
    `posting_active` until it's saved). `browser { name, version? }` is the browser the extension runs in
-   (`BrowserInfo`; `name` one of `BROWSER_NAMES`: chrome, edge, brave, opera, vivaldi, chromium, firefox, or
+   (`BrowserInfo`; `name` one of `BROWSER_NAMES`: chrome, edge, brave, opera, vivaldi, chromium, or
    something newer the companion ignores); the companion opens pages and files there.
 2. Companion → `welcome { protocolVersion, companionVersion, pairingToken? }` (the code is included only
    when the extension paired without one), or `reject { error }` followed by a close.
@@ -80,8 +80,8 @@ The companion closes the socket if no `hello` arrives within 5 s.
 | 4003 | `Replaced` | A newer connection from the same extension took over | Stays quiet |
 | 4004 | `HandshakeTimeout` | No `hello` in time | Retries with backoff |
 
-Upgrades from an unexpected `Origin` (not `chrome-extension://<32 a–p>` or `moz-extension://<uuid>`, or not
-the pinned id) are refused with HTTP 403 before any message is exchanged.
+Upgrades from an unexpected `Origin` (not `chrome-extension://<32 a–p>`, or not the
+pinned id) are refused with HTTP 403 before any message is exchanged.
 
 ## RPC
 
@@ -130,7 +130,7 @@ say, and the response brings it back in its `debug`. The `tab.*` methods ignore 
 | `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` (always the whole tab) |
-| `tab.show` | `{ tabId?, frameId?, activate, focusWindow? }` → `{ tabId, activated, windowFocused?, hidden, focused? }`: with `focusWindow` (and `activate`), bring the browser window to the front first, restoring it if minimized (`windowFocused`: it was raised; the OS may still keep it behind); switch to the tab in its window (`activate`), then report whether the page still says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (false while the browser window is behind another app; absent when the page can't be read). Sent before every form call ([which tab](../mcp-tools.md#forms)). Added without a version bump, and `focused`, then `focusWindow` and `windowFocused`, later the same way (an older extension ignores `focusWindow`); an extension older than `tab.show` answers "Unknown method" |
+| `tab.show` | `{ tabId?, frameId? }` → `{ tabId, emulated, hidden, focused? }`: turn on focus emulation for the tab ([extension](extension.md#focus-emulation-emulationts)), then report whether the page says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (absent when the page can't be read). `emulated` false: it couldn't, and nothing else was done. Sent before every form call ([the tab at full speed](../mcp-tools.md#forms)). Added without a version bump; it switched to the tab and raised its window (`activate`, `focusWindow`) until focus emulation replaced that, also without one. An older extension fails it (it requires `activate`, or answers "Unknown method"), and the companion goes ahead without it |
 
 ## Form schema
 
@@ -191,7 +191,7 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
   `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict` (since removed), and
   `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`; then `tab.show`'s `focused`, and
-  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused`; then `TabInfo.frames`, the `frameId`
+  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused` (since removed); then `TabInfo.frames`, the `frameId`
   param of the form methods and `tab.show`, and `FormSchema.frameId`. An older extension ignores `frameId` and
   acts on the tab's own page, which isn't an application, so the call fails with "not an application page"
   rather than landing anywhere else. Then `CapturePayload.site`, and `TabInfo.site` (and `FrameInfo.site`) going by

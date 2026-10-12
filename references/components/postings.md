@@ -108,7 +108,7 @@ bound on first use. (SuccessFactors' career site joined the registry since; a pa
 ## Folder layout
 See [data-formats.md](../data-formats.md#postings) for every file. Besides the capture files, a posting
 folder holds `notes.md`, the tailored `.tex`/`.pdf` files, bundles, `.history/` snapshots, `.build/`
-compiler output, `.previews/` rendered pages, and `form-log.jsonl`.
+compiler output, `.previews/` (rendered pages, left by older versions), and `form-log.jsonl`.
 
 ## Status
 `captured`, `drafting`, `attached`, `filled`, `submitted`, `archived`. Skills set `drafting`; the form

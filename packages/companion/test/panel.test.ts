@@ -314,7 +314,7 @@ describe("setup tasks for the panel's agent", () => {
     });
     await waitFor(async () => (events.length > 0 ? true : null), 10_000);
     expect(events[0]).toMatch(/^echo: Setup task t1 from the setup page \(question\)/);
-    expect(events[0]).toContain('onboarding { taskId: "t1", result: { ok, note? }, wait: false }');
+    expect(events[0]).toContain('onboarding { taskId: "t1", result: { ok, note? } }');
 
     const client = new Client({ name: "test", version: "0.0.0" });
     await client.connect(
@@ -324,7 +324,7 @@ describe("setup tasks for the panel's agent", () => {
     );
     const r = await client.callTool({
       name: "onboarding",
-      arguments: { taskId: task.id, result: { ok: true, note: "Answered." }, wait: false },
+      arguments: { taskId: task.id, result: { ok: true, note: "Answered." } },
     });
     expect(JSON.parse((r.content as { text: string }[])[0]?.text ?? "null")).toEqual({ reported: true });
     const state = await (await fetch(`${u.origin}/onboard/state?t=${u.searchParams.get("t")}`)).json();

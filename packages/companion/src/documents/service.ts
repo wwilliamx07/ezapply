@@ -8,6 +8,7 @@ import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Opener } from "../util/open.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { type LayoutIssue, lintLayout } from "./pdf/lint.js";
 import type { PageSizeName } from "./pdf/pages.js";
 import {
   type MergeInput,
@@ -15,8 +16,8 @@ import {
   pdfCompress,
   pdfFromImages,
   pdfInfo,
+  pdfLines,
   pdfMerge,
-  pdfRender,
   pdfText,
 } from "./pdf/toolkit.js";
 import {
@@ -54,6 +55,8 @@ export interface CompileResult {
   pageLimitExceeded?: boolean;
   /** Past the page limit: how many text lines run over, and (the start of) that text. */
   overflow?: { lines: number; text: string };
+  /** Layout problems on the pages (pdf/lint.ts), when the document is within its page limit. */
+  lint?: LayoutIssue[];
   diagnostics: TexDiagnostic[];
   logPath: string;
   durationMs: number;
@@ -130,6 +133,8 @@ export class DocumentsService {
     const pageLimit = opts.maxPages ?? (/resume|cv/i.test(name) ? config.resume.pageLimit : undefined);
     const pageLimitExceeded = pageLimit !== undefined && pages > pageLimit;
     const overflow = pageLimitExceeded ? await overflowOf(pdf, pageLimit, pages) : undefined;
+    // Over the limit, the cuts come first and will move every line: lint what fits.
+    const lint = pageLimitExceeded ? [] : await lintOf(pdf, pageLimit);
     const snapshot = await this.snapshot(dir, [texPath, pdf]);
 
     return {
@@ -140,6 +145,7 @@ export class DocumentsService {
       pages,
       ...(pageLimit !== undefined ? { pageLimit, pageLimitExceeded } : {}),
       ...(overflow ? { overflow } : {}),
+      ...(lint.length ? { lint } : {}),
       diagnostics,
       logPath,
       durationMs,
@@ -150,7 +156,13 @@ export class DocumentsService {
               `The document is ${pages} pages; the limit is ${pageLimit}. ${overflow ? `${overflow.lines} lines run past it (overflow.text). ` : ""}` +
               "Cut about that much: tighten wording or drop the weakest content. Do not shrink fonts or margins.",
           }
-        : {}),
+        : lint.length
+          ? {
+              hint:
+                `${lint.length} layout issue${lint.length === 1 ? "" : "s"} in \`lint\`. Fix them in the text, then recompile. ` +
+                "Do not shrink fonts or margins.",
+            }
+          : {}),
     };
   }
 
@@ -195,16 +207,6 @@ export class DocumentsService {
 
   async text(input: string, pages?: string) {
     return pdfText(this.pdfPath(input, "read"), pages);
-  }
-
-  /** Render a page to PNG and keep a copy in <dir>/.previews/ for the user. */
-  async render(input: string, page: number, scale: number): Promise<{ png: Buffer; savedTo: string }> {
-    const path = this.pdfPath(input, "read");
-    const png = await pdfRender(path, page, scale);
-    const savedTo = join(dirname(path), ".previews", `${basename(path, ".pdf")}-p${page}.png`);
-    await mkdir(dirname(savedTo), { recursive: true });
-    await writeFile(savedTo, png);
-    return { png, savedTo };
   }
 
   async merge(inputs: MergeInput[], output: string, opts: MergeOptions) {
@@ -303,6 +305,12 @@ async function overflowOf(pdf: string, limit: number, pages: number): Promise<Co
   const text = extra.map((p) => p.text).join("\n");
   const lines = text.split("\n").filter((l) => l.trim()).length;
   return { lines, text: text.length > 400 ? `${text.slice(0, 400)}…` : text };
+}
+
+/** The layout checks; a document the checks can't read is reported as having no issues, never as a failed build. */
+async function lintOf(pdf: string, pageLimit: number | undefined): Promise<LayoutIssue[]> {
+  const pages = await pdfLines(pdf).catch(() => null);
+  return pages ? lintLayout(pages, pageLimit === undefined ? {} : { pageLimit }) : [];
 }
 
 function noEngine(configured: EngineId | "auto"): EzError {

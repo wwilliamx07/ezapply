@@ -11,8 +11,8 @@ export const LOG_KEEP = 3;
 const ROTATE_CHECK_MS = 10 * 60_000;
 
 /**
- * Structured logs go to ~/.ezapply/logs/companion.log, and only there: the companion runs inside
- * `ezapply chat`, whose terminal belongs to Claude. Anything that could hold personal data (page content,
+ * Structured logs go to ~/.ezapply/logs/companion.log, and only there: the terminal `ezapply` runs in
+ * shows only its own few lines. Anything that could hold personal data (page content,
  * form values, tokens) is redacted by path; log ids and sizes instead. `toFile: false` (tests) logs to stdout.
  */
 export function createLogger(opts: { level?: string; toFile?: boolean } = {}): Logger {

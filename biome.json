@@ -10,7 +10,6 @@
     "includes": [
       "**",
       "!**/dist",
-      "!**/dist-firefox",
       "!**/test/fixtures/live",
       "!**/test/golden",
       "!project.txt",

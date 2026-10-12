@@ -15,6 +15,7 @@
     "packages/cli/test",
     "packages/extension/test",
     "packages/ui/test",
+    "test",
     "packages/ui/src/env.d.ts",
     "vitest.config.ts"
   ]

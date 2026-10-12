@@ -7,7 +7,7 @@ import { findBrowser } from "./browser.js";
 
 /**
  * Opens something for the user. Replaceable in tests, where nothing may pop up. Each call resolves to what
- * it was opened with: a browser name (`chrome`, `firefox`…) or `default` (the system's own choice).
+ * it was opened with: a browser name (`chrome`, `edge`…) or `default` (the system's own choice).
  */
 export interface Opener {
   /** A file: in the user's browser when a browser shows that kind of file, else its default application. */
@@ -89,7 +89,6 @@ const LABELS: Record<BrowserName, string> = {
   opera: "Opera",
   vivaldi: "Vivaldi",
   chromium: "Chromium",
-  firefox: "Firefox",
 };
 
 /** A browser's name for the user ("Chrome"); "the browser" for an Opener's `default` (the system's choice). */

@@ -41,16 +41,3 @@ jobs:
       - run: npx vitest run packages/companion/test/documents.test.ts packages/companion/test/templates.test.ts
         env:
           EZAPPLY_REQUIRE_TEX: "1"
-
-  # Mozilla's linter over the Firefox build (manifest, CSP, APIs). Firefox itself isn't run in CI.
-  firefox:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npx --yes web-ext@8 lint --source-dir packages/extension/dist-firefox --self-hosted

@@ -33,8 +33,18 @@ export function findClaude(env: NodeJS.ProcessEnv = process.env, platform = proc
   return null;
 }
 
-/** The environment variable the MCP relay passes on as `x-ezapply-chat-session`, naming the conversation's session. */
-export const SESSION_ENV = "EZAPPLY_CHAT_SESSION";
+/** The environment variable the MCP relay passes on as `SESSION_HEADER`, naming the conversation's session. */
+export const SESSION_ENV = "EZAPPLY_SESSION";
+/** The header the MCP relay names the conversation's session in. */
+export const SESSION_HEADER = "x-ezapply-session";
+
+const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
+
+/** The session id from a request header, or undefined when it's missing or malformed. */
+export function sessionId(header: string | string[] | undefined): string | undefined {
+  const id = Array.isArray(header) ? header[0] : header;
+  return id && SESSION_ID.test(id) ? id : undefined;
+}
 
 /** The permission prompt tool Claude Code asks instead of a terminal dialog (served by `mcp/tools/agent.ts`). */
 export const PERMISSION_TOOL = "mcp__ezapply__permission_ask";

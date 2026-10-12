@@ -34,7 +34,7 @@ extension already builds with it; no dev server or framework build is needed.
 ## The build (`npm run build -w @ezapply/ui`)
 - **Bundles:** `review` and `onboard` (`src/<page>/main.tsx`) and `base` (`src/styles/base.css`), as ES modules with
   code splitting (React and pdf.js land in one shared chunk), minified, with source maps, names carrying a hash
-  (`review-<HASH>.js`). Targets Chrome 120 and Firefox 128, as the extension does. Each page's CSS bundle holds
+  (`review-<HASH>.js`). Targets Chrome 120, as the extension does. Each page's CSS bundle holds
   every stylesheet its modules import (the viewer's comes with `Viewer.tsx`).
 - **pdf.js** (`pdfjs-dist`, the version the companion uses): its worker copied as `pdf.worker-<hash>.mjs`, whose
   address the bundle gets at build time (`__PDF_WORKER__`); `standard_fonts`, `cmaps`, `iccs` and `wasm` copied
@@ -83,7 +83,7 @@ extension already builds with it; no dev server or framework build is needed.
 
 ## The side panel (`src/panel/`)
 Everything the user does with ezapply after setup ("Everything in the browser"): the extension shows it as Chrome's
-side panel or Firefox's sidebar ([extension](extension.md#the-side-panel)). It reaches ezapply through a
+side panel ([extension](extension.md#the-side-panel)). It reaches ezapply through a
 `PanelTransport`, which the extension implements over its background and tests fake: `call` (the companion's
 `panel.*` methods: [agent](agent.md#the-panels-side-panelts)), `capture`, `tab`, `openTab`, `connection`,
 `subscribe` (pushes: the connection's state, "the tab changed", the companion's updates).
@@ -133,7 +133,7 @@ to bottom:
    its cost (the session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest
    event.
 5. **Needs you** (while anything waits), at the conversation's end, just above the buttons: every open card, oldest
-   first, a card from another conversation labelled with it (or "From a terminal chat"). The panel scrolls them
+   first, a card from another conversation labelled with it (or "From a terminal chat", for a Claude Code run by hand in the workspace). The panel scrolls them
    into view when one arrives. A **question card**: title, intro, each question by its type (radios,
    checkboxes with Other, a text field or box), the suggestion filled in and marked ("suggested"; a sensitive
    question is flagged and may have one too), `why` under it, "(optional)" ones skippable, **Save for next time**
@@ -263,7 +263,7 @@ window gets focus. The comparison stops when no page listens.
 | Step | On the page | Action |
 |---|---|---|
 | LaTeX | The engine found; else the install command for this OS, and **Ask Claude to install it** | task `install-tex` |
-| Browser extension | Chromium or Firefox, the steps and the folder or manifest to load (copyable: a page can't open `chrome://extensions`); **connect** opens the 15-minute pairing window and the step turns green when it connects; a warning when the extension isn't built | `pair` (`startPairing`, shared with `extension_pair`, `bridge/pairing.ts`) |
+| Browser extension | The steps for Chrome and other Chromium browsers and the folder to load (copyable: a page can't open `chrome://extensions`); **connect** opens the 15-minute pairing window and the step turns green when it connects; a warning when the extension isn't built | `pair` (`startPairing`, shared with `extension_pair`, `bridge/pairing.ts`) |
 | GitHub | Without an app: create a new one or connect an existing one; **Continue on GitHub** opens the `/github/` flow in a new tab (opened in the click, so it isn't blocked, then pointed at the address the companion gives); a port mismatch's hint | `github` |
 | Repositories | Every repository with language, last push, description, private, a search, and the ones left out (forks, archived, under 10 KB, the profile README repo, dotfiles or config) behind a toggle; nothing selected yet → the rest preselected; a link to give the app access to a missing one | `repos` (sources of repos added by URL kept) |
 | Your projects, read | Each selected repository read or not; **Have Claude read N repositories** | task `index-repos` |
@@ -292,13 +292,14 @@ with `how`, what to do (`HOW` in the service), so the skill needs no copy of it.
 gets one (`agentIn` in the page's state):
 - **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
   ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:
-  `onboarding { taskId, result: { ok, note? }, wait: false }`, which marks it done or failed with the note and
+  `onboarding { taskId, result: { ok, note? } }`, which marks it done or failed with the note and
   returns. The task is running from then; Claude busy in another conversation fails it with why, and the page
   offers it again. The page shows Claude as listening while the agent is available, and says to follow it in the
   ezapply panel, where its commands are approved.
-- **Under `ezapply chat` (`terminal`):** the agent sits in a blocking [`onboarding`](../mcp-tools.md#setup-and-status)
+- **Without a panel agent (`terminal`; a companion started without Claude Code, which only tests do now that
+  `ezapply chat` is gone):** the agent sits in a blocking [`onboarding { wait: true }`](../mcp-tools.md#setup-and-status)
   call; a task the page queues wakes it, and it gets `{ id, kind, params, how }`. Its report
-  (`onboarding { taskId, result }`) marks the task done or failed and waits for the next in the same call. Tasks
+  (`onboarding { taskId, result, wait: true }`) marks the task done or failed and waits for the next in the same call. Tasks
   are taken in the order asked, one at a time; a task taken and never reported is given again, in case the agent
   lost track of it. The page shows whether the agent is listening; a queued task while it isn't says to tell
   Claude in the terminal to continue.

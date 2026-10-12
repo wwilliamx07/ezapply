@@ -38,22 +38,22 @@ Constraints:
 - Escape LaTeX specials in anything taken from the posting.
 
 ## Build and check
-`tex_compile { path }` (must be one page) → `pdf_render { path, page? }` → read it once as the hiring manager
+`tex_compile { path }` (must be one page; fix what `lint` lists) → read the letter once as the hiring manager
 would. Cut filler and repeated claims.
 
 ## Build from an example
 When the user gives a sample letter whose format they like:
 1. `template_import_example { sourcePath }` with its absolute path. Word files: ask for a PDF export first.
-2. Look at it: `pdf_render` and `pdf_text { path, pages? }` for a PDF, or read the image or text file
-   directly.
+2. Read it: `pdf_info { path }` (page size) and `pdf_text { path, pages? }` for a PDF, or the image or text
+   file directly. What the text can't tell you (font, margins), ask the user or keep the template's.
 3. Rework `templates/cover/cover.tex` to reproduce its **format**: page size and margins, font family
    and size (the closest available), header layout and contact line, date and addressee block, subject
    line, salutation, paragraph spacing or indents, and the sign-off. Keep the `\newcommand` fields and
    the `% BODY START` / `% BODY END` markers. Fill the identity fields from the profile.
 4. Write `templates/cover/format.md`: a short list of the structure to follow in every letter
    (paragraph count and roles, salutation form, sign-off, typical length). Describe it; don't quote it.
-5. `template_set_main { kind: "cover", main }`, `tex_compile`, then `pdf_render` it next to the example.
-   Adjust until the layouts match, then ask the user to approve.
+5. `template_set_main { kind: "cover", main }` and `tex_compile`. `open_file { path }` the PDF and ask the
+   user to compare it with the example; adjust what they point out until they approve.
 
 Never reuse the example's sentences, claims or voice in the user's letters. Only its format carries over.
 Tone comes from `profile/preferences.md`.

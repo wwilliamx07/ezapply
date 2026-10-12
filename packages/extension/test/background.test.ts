@@ -6,14 +6,14 @@ const event = () => ({ addListener: vi.fn() });
 const openedUrl = () => ((chromeStub.windows.create.mock.calls[0]?.[0] ?? { url: "" }) as { url: string }).url;
 /** Listeners for granted permissions (`permissions.onAdded`), so a test can play the user allowing access. */
 const grantListeners = new Set<() => void>();
-/** The toolbar button's click listener, kept outside the mock (mock calls are cleared between tests). */
-let clickListener: ((tab: unknown) => void) | undefined;
 /** The listener for ports (the side panel's). */
 let connectListener: ((port: unknown) => void) | undefined;
 /** What the background asked of Chrome's side panel when it loaded. */
 let panelBehavior: unknown;
 /** The keyboard shortcut's listener (Capture). */
 let commandListener: ((command: string, tab: unknown) => void) | undefined;
+/** The debugger's detach listener, so a test can play the user closing Chrome's debugging bar. */
+let detachListener: ((source: { tabId?: number }, reason: string) => void) | undefined;
 const chromeStub = {
   runtime: {
     getManifest: () => ({ version: "1.0.0" }),
@@ -39,13 +39,8 @@ const chromeStub = {
       panelBehavior = o;
     },
   },
-  sidebarAction: { toggle: vi.fn(async () => {}) },
   action: {
-    onClicked: {
-      addListener: (l: (tab: unknown) => void) => {
-        clickListener = l;
-      },
-    },
+    onClicked: event(),
     setBadgeText: vi.fn(async () => {}),
     setBadgeBackgroundColor: vi.fn(async () => {}),
     setTitle: vi.fn(async () => {}),
@@ -57,7 +52,6 @@ const chromeStub = {
   },
   storage: {
     local: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
-    session: { set: vi.fn(async () => {}) },
     onChanged: event(),
   },
   tabs: {
@@ -67,6 +61,20 @@ const chromeStub = {
     create: vi.fn(async (_props: unknown) => ({})),
     onActivated: event(),
     onUpdated: event(),
+    onRemoved: event(),
+  },
+  // Attaching fails unless a test says otherwise: tab.show then reports the page as the browser leaves it.
+  debugger: {
+    attach: vi.fn(async (_target: unknown, _version: string): Promise<void> => {
+      throw new Error("Cannot access a chrome:// URL");
+    }),
+    detach: vi.fn(async (_target: unknown) => {}),
+    sendCommand: vi.fn(async (_target: unknown, _method: string, _params?: unknown): Promise<unknown> => ({})),
+    onDetach: {
+      addListener: (l: (source: { tabId?: number }, reason: string) => void) => {
+        detachListener = l;
+      },
+    },
   },
   webNavigation: {
     getAllFrames: vi.fn(async (_d: { tabId: number }): Promise<unknown[] | null> => []),
@@ -115,13 +123,11 @@ describe("background lifecycle", () => {
 });
 
 describe("the toolbar button", () => {
-  it("opens the side panel: Chrome's by itself, Firefox's sidebar toggled in the click", async () => {
+  it("opens the side panel (Chrome does it by itself), and captures nothing", async () => {
     await import("../src/background/index.js");
     expect(panelBehavior).toEqual({ openPanelOnActionClick: true });
-    clickListener?.({ id: 3, url: "https://example.com/", index: 0, windowId: 1 });
-    expect(chromeStub.sidebarAction.toggle).toHaveBeenCalledTimes(1);
-    // A click captures nothing: Capture is the panel's button, or the shortcut.
-    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+    // No click listener: Capture is the panel's button, or the shortcut.
+    expect(chromeStub.action.onClicked.addListener).not.toHaveBeenCalled();
   });
 });
 
@@ -135,8 +141,8 @@ describe("Capture", () => {
 
   it("asks for every site in the shortcut's handler itself, while it counts as the user's gesture", async () => {
     await click("https://jobs.umbrella.example/en/sites/CX_1/job/10001");
-    // Called synchronously: Firefox refuses permissions.request once the handler has awaited anything. Already
-    // granted (Chrome, from the install), it resolves without asking.
+    // Called synchronously: the gesture no longer counts once the handler has awaited anything. Already granted
+    // (from the install), it resolves without asking.
     expect(chromeStub.permissions.request).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
   });
 
@@ -357,9 +363,9 @@ describe("embedded application forms", () => {
     const handlers = await onFrame();
     chromeStub.scripting.executeScript.mockResolvedValue([{ result: { hidden: false, focused: false } }]);
     chromeStub.windows.get.mockResolvedValueOnce({ id: 1, focused: true, state: "normal" });
-    expect(await handlers["tab.show"]({ tabId: 5, frameId: 7, activate: true })).toEqual({
+    expect(await handlers["tab.show"]({ tabId: 5, frameId: 7 })).toEqual({
       tabId: 5,
-      activated: false,
+      emulated: false,
       hidden: false,
       focused: true,
     });
@@ -467,143 +473,25 @@ describe("asking for access to websites when a form call finds it missing", () =
   });
 });
 
-describe("tab.show", () => {
+describe("tab.show without focus emulation", () => {
   const APPLY = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply";
-  /** The tab as tabs.get gives it, and what the page answers for each visibility read, in order. */
-  const show = async (tab: { active: boolean }, hidden: boolean[], activate = true, focused = true) => {
+
+  it("switches and raises nothing when the debugger can't attach, and reports the page as it is", async () => {
     const { formHandlers } = await import("../src/background/forms.js");
     chromeStub.tabs.update.mockClear();
     chromeStub.windows.update.mockClear();
     chromeStub.scripting.executeScript.mockReset();
-    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, ...tab });
-    // The page has focus only when it's visible and the window is in front (`focused`).
-    const page = (h: boolean | undefined) => [{ result: { hidden: h, focused: !h && focused } }];
-    for (const h of hidden) chromeStub.scripting.executeScript.mockResolvedValueOnce(page(h));
-    chromeStub.scripting.executeScript.mockResolvedValue(page(hidden.at(-1)));
-    return formHandlers["tab.show"]({ tabId: 5, activate });
-  };
-
-  /**
-   * `focusWindow` asked for, with the window as windows.get gives it, and what the page answers for each read:
-   * `[hidden, focused]`, in order.
-   */
-  const raise = async (win: { focused: boolean; state: string }, reads: [boolean, boolean][], activate = true) => {
-    const { formHandlers } = await import("../src/background/forms.js");
-    chromeStub.tabs.update.mockClear();
-    chromeStub.windows.update.mockClear();
-    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, ...win });
-    chromeStub.scripting.executeScript.mockReset();
-    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, active: true });
-    const page = ([hidden, focused]: [boolean, boolean]) => [{ result: { hidden, focused } }];
-    for (const r of reads) chromeStub.scripting.executeScript.mockResolvedValueOnce(page(r));
-    chromeStub.scripting.executeScript.mockResolvedValue(page(reads.at(-1) as [boolean, boolean]));
-    return formHandlers["tab.show"]({ tabId: 5, activate, focusWindow: true });
-  };
-
-  it("brings the browser window to the front with focusWindow, and waits for the page to get focus", async () => {
-    expect(
-      await raise({ focused: false, state: "normal" }, [
-        [false, false],
-        [false, true],
-      ]),
-    ).toEqual({ tabId: 5, activated: false, windowFocused: true, hidden: false, focused: true });
-    expect(chromeStub.windows.update).toHaveBeenCalledWith(1, { focused: true });
-    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(2);
-  });
-
-  it("restores a minimized window", async () => {
-    expect(await raise({ focused: false, state: "minimized" }, [[false, true]])).toMatchObject({
-      windowFocused: true,
-      focused: true,
-    });
-    expect(chromeStub.windows.update).toHaveBeenCalledWith(1, { focused: true, state: "normal" });
-  });
-
-  it("leaves a window that's already in front alone", async () => {
-    expect(await raise({ focused: true, state: "maximized" }, [[false, true]])).toEqual({
-      tabId: 5,
-      activated: false,
-      hidden: false,
-      focused: true,
-    });
-    expect(chromeStub.windows.update).not.toHaveBeenCalled();
-  });
-
-  it("reports a window the system kept behind", async () => {
-    expect(await raise({ focused: false, state: "normal" }, [[false, false]])).toEqual({
-      tabId: 5,
-      activated: false,
-      windowFocused: true,
-      hidden: false,
-      focused: false,
-    });
-    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(10);
-  });
-
-  it("never raises the window with activate: false (a review page waits)", async () => {
-    await raise({ focused: false, state: "normal" }, [[false, false]], false);
-    expect(chromeStub.windows.update).not.toHaveBeenCalled();
-    chromeStub.windows.get.mockReset();
-    chromeStub.windows.get.mockResolvedValue({ id: 1, focused: true, state: "normal" });
-  });
-
-  it("still switches the tab when the window can't be raised", async () => {
-    chromeStub.windows.update.mockRejectedValueOnce(new Error("No window with id: 1."));
-    const { formHandlers } = await import("../src/background/forms.js");
-    chromeStub.tabs.update.mockClear();
-    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, focused: false, state: "normal" });
-    chromeStub.scripting.executeScript.mockReset();
-    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { hidden: false, focused: false } }]);
+    chromeStub.scripting.executeScript.mockResolvedValue([{ result: { hidden: true, focused: false } }]);
     chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: APPLY, active: false });
-    expect(await formHandlers["tab.show"]({ tabId: 5, activate: true, focusWindow: true })).toEqual({
+    expect(await formHandlers["tab.show"]({ tabId: 5 })).toEqual({
       tabId: 5,
-      activated: true,
-      hidden: false,
-      focused: false,
-    });
-    expect(chromeStub.tabs.update).toHaveBeenCalledWith(5, { active: true });
-  });
-
-  it("switches to an application tab in the background and waits for the page to notice", async () => {
-    expect(await show({ active: false }, [true, true, false])).toEqual({
-      tabId: 5,
-      activated: true,
-      hidden: false,
-      focused: true,
-    });
-    expect(chromeStub.tabs.update).toHaveBeenCalledWith(5, { active: true });
-    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(3);
-    // Without focusWindow the browser window isn't focused: that would pull it in front of the user's terminal.
-    expect(chromeStub.windows.update).not.toHaveBeenCalled();
-  });
-
-  it("leaves a tab that's already in front alone", async () => {
-    expect(await show({ active: true }, [false])).toEqual({ tabId: 5, activated: false, hidden: false, focused: true });
-    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
-  });
-
-  it("only reports with activate: false", async () => {
-    expect(await show({ active: false }, [true], false)).toEqual({
-      tabId: 5,
-      activated: false,
+      emulated: false,
       hidden: true,
       focused: false,
     });
+    // Read once: nothing changed, so there's nothing to wait for.
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(1);
     expect(chromeStub.tabs.update).not.toHaveBeenCalled();
-  });
-
-  it("reports a page without focus: its window is behind another app", async () => {
-    expect(await show({ active: true }, [false], true, false)).toEqual({
-      tabId: 5,
-      activated: false,
-      hidden: false,
-      focused: false,
-    });
-    expect(chromeStub.windows.update).not.toHaveBeenCalled();
-  });
-
-  it("reports a tab still hidden after switching (a minimized window), without forcing it", async () => {
-    expect(await show({ active: false }, [true])).toEqual({ tabId: 5, activated: true, hidden: true, focused: false });
     expect(chromeStub.windows.update).not.toHaveBeenCalled();
   });
 });
@@ -668,5 +556,62 @@ describe("the side panel's port", () => {
       title: expect.not.stringContaining("waiting for you"),
     });
     chromeStub.storage.local.get.mockResolvedValue({} as never);
+  });
+});
+
+describe("tab.show with focus emulation", () => {
+  const APPLY = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply";
+  /** A tab in the background (not active), and what the page answers for each read, in order. */
+  const show = async (reads: [boolean, boolean][]) => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.tabs.update.mockClear();
+    chromeStub.windows.update.mockClear();
+    chromeStub.debugger.attach.mockClear();
+    chromeStub.debugger.sendCommand.mockClear();
+    chromeStub.debugger.attach.mockResolvedValue(undefined);
+    chromeStub.scripting.executeScript.mockReset();
+    chromeStub.tabs.get.mockResolvedValue({ id: 9, windowId: 1, url: APPLY, active: false });
+    const page = ([hidden, focused]: [boolean, boolean]) => [{ result: { hidden, focused } }];
+    for (const r of reads) chromeStub.scripting.executeScript.mockResolvedValueOnce(page(r));
+    chromeStub.scripting.executeScript.mockResolvedValue(page(reads.at(-1) as [boolean, boolean]));
+    return formHandlers["tab.show"]({ tabId: 9 });
+  };
+  const focusCommands = () =>
+    chromeStub.debugger.sendCommand.mock.calls.filter(([, m]) => m === "Emulation.setFocusEmulationEnabled");
+
+  it("runs a background tab visible and focused where it is: nothing switched, no window raised", async () => {
+    expect(
+      await show([
+        [true, false],
+        [false, true],
+      ]),
+    ).toEqual({ tabId: 9, emulated: true, hidden: false, focused: true });
+    expect(chromeStub.debugger.attach).toHaveBeenCalledWith({ tabId: 9 }, "1.3");
+    expect(focusCommands().map(([, , p]) => p)).toEqual([{ enabled: true }]);
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.windows.update).not.toHaveBeenCalled();
+  });
+
+  it("stays attached, and turns it on again when the page has lost it", async () => {
+    const lost: [boolean, boolean][] = Array.from({ length: 10 }, () => [true, false]);
+    expect(await show([...lost, [false, true]])).toMatchObject({ emulated: true, hidden: false, focused: true });
+    expect(chromeStub.debugger.attach).not.toHaveBeenCalled();
+    expect(focusCommands().map(([, , p]) => p)).toEqual([{ enabled: true }, { enabled: false }, { enabled: true }]);
+  });
+
+  it("takes screenshots of the tab in the background through the debugger", async () => {
+    const { formHandlers } = await import("../src/background/forms.js");
+    chromeStub.debugger.sendCommand.mockImplementation(async (_t, method) =>
+      method === "Page.captureScreenshot" ? { data: "UE5H" } : {},
+    );
+    expect(await formHandlers["tab.screenshot"]({ tabId: 9 })).toEqual({ tabId: 9, pngBase64: "UE5H" });
+    chromeStub.debugger.sendCommand.mockImplementation(async () => ({}));
+  });
+
+  it("attaches again on the next call after the user cancels Chrome's debugging bar", async () => {
+    detachListener?.({ tabId: 9 }, "canceled_by_user");
+    expect(await show([[false, true]])).toEqual({ tabId: 9, emulated: true, hidden: false, focused: true });
+    expect(chromeStub.debugger.attach).toHaveBeenCalledWith({ tabId: 9 }, "1.3");
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
   });
 });

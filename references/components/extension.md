@@ -1,6 +1,6 @@
 # Browser extension (`packages/extension`)
 
-A Manifest V3 extension for Chrome and Firefox 128+. Its toolbar button opens the **side panel**, where the user
+A Manifest V3 extension for Chrome 120+ and other Chromium browsers. Its toolbar button opens the **side panel**, where the user
 works with ezapply ([below](#the-side-panel)); Alt+Shift+P sets the posting without it. Otherwise it quietly
 carries out the form reads, fills and uploads the companion asks for, on the application pages of every site in
 the [registry](protocol.md#the-site-registry-sitests): Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby,
@@ -11,40 +11,45 @@ on the companion's review page.
 
 | Path | Role |
 |---|---|
-| `src/ext.ts` | `ext`: Firefox's promise-based `browser`, else Chrome's `chrome` (typed as Chrome's API); `isFirefox` |
+| `src/ext.ts` | `ext`: Chrome's `chrome`, under one name |
 | `src/background/index.ts` | Entry: wiring, the toolbar button (opens the panel), Capture (the panel's button and the shortcut), lifecycle listeners and the reconnect alarm, `browser.status` and `panel.update` handlers |
 | `src/background/panel.ts` | `servePanels`: the side panels' ports, their requests relayed to the companion, what only the background can do, the companion's updates passed on; `panelUpdate` ([the side panel](#the-side-panel)) |
 | `src/panel/main.tsx`, `src/panel/transport.ts`, `static/panel.html` | The side panel's page: the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with `portTransport`, a runtime port to the background |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
-| `src/background/forms.ts` | Handlers for the form methods: choose the tab (and the frame, for an embedded application), check access to it, tell its site, pick the site's adapter, inject and call it |
+| `src/background/forms.ts` | Handlers for the form methods: choose the tab (and the frame, for an embedded application), check access to it, tell its site, pick the site's adapter, inject and call it; `tab.show` and `tab.screenshot` |
+| `src/background/emulation.ts` | [Focus emulation](#focus-emulation-emulationts): `emulateFocus` (attach the debugger to a tab and turn it on), `captureAttached` (a screenshot through the debugger), `releaseAll`, the idle detach and the user's Cancel |
 | `src/background/frames.ts` | [Telling a page's site](#telling-a-pages-site-framests): `pageSite` (runs in the page: the first site whose signature its document matches), `tabSite` (a tab's own page), `tabSites` (a tab and its frames on a form site), `frameSite`, and `frameUrl` |
 | `src/background/access.ts` | `askForAccess`: a form call that finds its page's origin withheld opens `grant.html` (or brings it forward) and waits for the grant ([access](#access-to-websites)) |
 | `src/grant/grant.ts`, `static/grant.html` | The access window: names the host that needed it, and its **Allow access** click makes the `permissions.request` (`originsFrom`: `<all_urls>` or host patterns only, from its URL) |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
 | `src/background/badge.ts` | Toolbar badge and tooltip, with the number of cards waiting in the panel (`setCardsWaiting`) |
 | `src/env.d.ts` | Stylesheet imports (the panel's) for TypeScript |
-| `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. Firefox from `runtime.getBrowserInfo()`; Chromium browsers from `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
+| `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. From `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
 | `src/options/options.ts`, `static/options.html` | Options page: status, access to websites when it's withheld, manual pairing |
 | `src/adapters/engine/` | The adapter engine every site runs on → [adapters.md](adapters.md) |
 | `src/adapters/widgets/` | Shared widget drivers → [adapters.md](adapters.md#shared-drivers-widgets) |
 | `src/adapters/sites/<site>/` | A definition per site: [Workday](sites.md#workday-sitesworkday), [Oracle Recruiting Cloud](sites.md#oracle-recruiting-cloud-sitesoracle), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
-| `static/manifest.json` | The Chrome manifest; the Firefox one is derived from it at build time. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
-| `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and both output folders |
+| `static/manifest.json` | The manifest. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
+| `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and `dist/` |
 
 ## Manifest
-- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, and in Chrome `sidePanel`. `webNavigation` lists a
-  tab's frames ([embedded applications](#embedded-applications)); in Chrome it adds no install warning beside
-  `tabs` (both are "Read your browsing history"). In Firefox it's a warning of its own ("Access browser activity
-  during navigation").
+- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, `sidePanel` and
+  `debugger`. `webNavigation` lists a tab's frames ([embedded applications](#embedded-applications)); it adds no
+  install warning beside `tabs` (both are "Read your browsing history"). `debugger` runs
+  [focus emulation](#focus-emulation-emulationts); its install warning ("Access the page debugger backend") sits
+  beside the one for every site, which already covers reading and changing pages.
+- `content_security_policy.extension_pages`: `script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:*`.
+  The extension's pages and background may run only its own scripts and connect only to the companion on
+  loopback. Nothing in them fetches anything else (the adapters run in the page's world, under the page's
+  policy). `test/manifest.test.ts` guards it.
 - Host permissions: `<all_urls>` (the protocol's `HOST_PERMISSIONS`), granted at install, and no optional ones.
   The build writes them; a test checks both builds. Every site, because the extension tells a form site by what
   its pages show, on whatever host (Phenom and Oracle run on employers' own domains), and reading a page needs
   access to it ([why](protocol.md#the-site-registry-sitests)). It also covers `tabs.captureVisibleTab`
-  (`tab.screenshot`). Chrome warns "Read and change all your data on all websites" at install.
-- `side_panel.default_path: panel.html` (Chrome); Firefox's build has `sidebar_action` with the same page
-  instead (`default_title: ezapply`, not opened at install). The action's title is "ezapply".
+  (`tab.screenshot` of a tab in front). Chrome warns "Read and change all your data on all websites" at install.
+- `side_panel.default_path: panel.html`. The action's title is "ezapply".
 - `commands.set-posting`: Alt+Shift+P runs Capture. Not `_execute_action`, which now opens the panel.
 - Options page embedded (`open_in_tab: false`).
 
@@ -54,24 +59,17 @@ package's panel and React, with the base and panel stylesheets; about 700 KB, mo
 schemas, which the panel's answer checks use), and one adapter per registry site, `<site>-main.js` from
 `src/adapters/sites/<site>/main.ts` (IIFE, 50–80 KB each and without zod: they import only the protocol's
 import-free subpaths) for
-`chrome120` and `firefox128`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
+`chrome120`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
 (so the source map stays exact). Any change to the adapter therefore replaces older copies in open tabs,
 with no version number to remember to bump.
 
-| Folder | For | Manifest differences |
-|---|---|---|
-| `dist/` | Chrome (Load unpacked) | `background.service_worker`, `minimum_chrome_version: 120` |
-| `dist-firefox/` | Firefox (Load Temporary Add-on → `manifest.json`) | `background.scripts` (event page); `sidebar_action` for `side_panel`, without the `sidePanel` permission; `browser_specific_settings.gecko`: id `ezapply@ezapply.local`, `strict_min_version: 128.0`, `data_collection_permissions: none`; `content_security_policy.extension_pages`: `script-src 'self'; connect-src ws://127.0.0.1:*` |
+The output is `dist/`, loaded in Chrome with Load unpacked (`background.service_worker`,
+`minimum_chrome_version: 120`). It stays at the same path because Chrome derives an unpacked extension's id from
+its folder, and the companion pins that id.
 
-`dist/` stays at the same path because Chrome derives an unpacked extension's id from its folder, and the
-companion pins that id. Firefox's fixed gecko id keeps its per-profile install UUID (the pinned value) stable
-across reloads. 128 is the first Firefox with `scripting.executeScript({ world: "MAIN" })`.
-
-The explicit Firefox CSP is required: Firefox's default MV3 policy includes `upgrade-insecure-requests`,
-which silently rewrites `ws://127.0.0.1:<port>` to `wss://`, and the companion has no TLS, so the extension
-could never connect ("can't establish a connection to wss://127.0.0.1:17373/bridge"). The replacement
-drops that directive and allows connections only to loopback. Chrome's default policy doesn't upgrade, so
-the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
+**Chromium only.** Firefox was supported until focus emulation, which needs `chrome.debugger`, an API Firefox
+lacks. A Firefox build would have run every application tab throttled or pulled to the front, so it was dropped
+rather than kept as the slower path.
 
 ## Connection (`CompanionConnection`)
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
@@ -79,7 +77,7 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   showing the companion's message and hint (no backoff retries); `Replaced` → nothing; otherwise
   "disconnected" with the reason "ezapply isn't running: start it with ./ezapply in your workspace (Capture
   still works)",
-  and retry with backoff from 1 s up to 5 s (while the background stays awake; see wake-ups). The companion lives only while `ezapply` (or `ezapply chat`) runs, so a
+  and retry with backoff from 1 s up to 5 s (while the background stays awake; see wake-ups). The companion lives only while `ezapply` runs, so a
   refused or closed connection means no chat is running.
 - `hello` carries `browser` (`detectBrowser`), so the companion opens pages and PDFs in this browser, and
   `pendingCapture: true` when a capture is queued, so a freshly started companion waits
@@ -93,28 +91,24 @@ the Chrome manifest keeps it. `test/manifest.test.ts` guards this.
   `ensureConnected()`). The message keeps Chrome's service worker awake, so starting ezapply is noticed within
   5 s while the panel is open. The alarm can't do this itself: Chrome fires alarms at most every 30 s, so with
   no panel open a reconnect still takes up to 30 s. The alarm is created every
-  time the background starts, if it doesn't exist (`ensureReconnectAlarm`): Firefox drops alarms when the
-  browser closes and Chrome may clear them on restart, so an alarm made only at install left the extension
+  time the background starts, if it doesn't exist (`ensureReconnectAlarm`): Chrome may clear alarms on restart,
+  so an alarm made only at install left the extension
   disconnected after a browser restart, until the user clicked Capture. Creating it only when missing
   keeps a wake-up from pushing the next firing back. `test/background.test.ts` loads the background with a
   stubbed API and checks this.
-- **Firefox keepalive:** its MV3 background is an event page unloaded after 30 s without an extension
-  event, and socket traffic doesn't count. Each ping therefore also writes `storage.session`; the
-  resulting `storage.onChanged` event resets the idle timer.
 - **Settings changes** (`port`, `pairingToken`) reconnect only when they differ from the live connection's.
 - Connection states: `unconfigured`, `connecting`, `connected { companionVersion }`,
   `disconnected { reason }`, `error { message, hint? }`, stored for the badge and options page.
 
 ## The side panel
-The toolbar button opens it: Chrome by itself (`sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` at
-every background start), Firefox's sidebar by `sidebarAction.toggle()` in the click, the only place Firefox lets it
-open. The page (`panel.html`) is the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with a transport
+The toolbar button opens it: Chrome does that by itself (`sidePanel.setPanelBehavior({ openPanelOnActionClick:
+true })` at every background start). The page (`panel.html`) is the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with a transport
 over a runtime port (`ezapply-panel`) to the background:
 - **`call`**: a `panel.*` method relayed to the companion over the bridge (60 s timeout); anything else is refused,
   so the panel can't capture or fill through the relay. It needs the companion connected.
 - **`capture`**: Capture on the current tab of the panel's window. The panel calls
-  `permissions.request({ origins: <all_urls> })` inside its own click first (Firefox asks only during the user's
-  gesture), then the background captures as below and answers with the outcome (the posting, or why not).
+  `permissions.request({ origins: <all_urls> })` inside its own click first (a request is allowed only during the
+  user's gesture), then the background captures as below and answers with the outcome (the posting, or why not).
 - **`tab`**: the window's current tab, its site told as for a form call, and what it is to the active posting
   (`panel.tab`); none without a connection or a web page.
 - **`openTab`**: an `http(s)` address in a new tab of the panel's window (the posting's application).
@@ -127,7 +121,7 @@ background restarts (Chrome ends an idle service worker); calls made meanwhile f
 
 ## Capture
 The panel's **Capture**, or Alt+Shift+P, on an `http(s)` page → ask for access to every site, synchronously in
-the click or the shortcut's handler (Firefox allows `permissions.request` only there; already granted, it resolves
+the click or the shortcut's handler (`permissions.request` needs the user's gesture; already granted, it resolves
 without asking; [access](#access-to-websites))
 → once that's settled, inject `capturePage` into every frame the extension may read → pick the frame that holds
 the posting → tell that frame's site ([telling a page's site](#telling-a-pages-site-framests)), sent as `site`
@@ -169,8 +163,8 @@ page still loading answers at once, from what it has so far).
 - Why the body: [the site registry](protocol.md#the-site-registry-sitests).
 
 ## Access to websites
-The extension holds every site from the install (`<all_urls>`). Firefox lets the user withhold that, and Chrome
-lets them limit it to some sites or to a click. Where it's missing:
+The extension holds every site from the install (`<all_urls>`). Chrome lets the user limit that to some sites
+or to a click. Where it's missing:
 - **Capture** asks for it in the click, the one moment a request is allowed without a window of its own.
 - **A form call** checks `permissions.contains` for its page's origin (the frame's, for an embedded application)
   before reading anything. Missing, it can't ask itself (`permissions.request` needs a user gesture, and a call
@@ -198,10 +192,10 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
   closed tab does; the companion resolves the frame again on every call. Access is checked for the frame's
   origin, its site told by its own page, and the adapter is injected into `{ tabId, frameIds: [frameId] }` only,
   so the frame gets its own adapter instance and its own submit guard, like any page.
-- **Per tab still:** `tab.show` switches the tab and raises its window. It reads `hidden` in the frame, and takes
-  `focused` from `windows.get` (the browser window's focus): a frame's own `document.hasFocus()` is false whenever
-  focus is in the page around it. `tab.screenshot` takes the whole tab.
-- **Not covered:** a form rendered straight into the company's page with no frame (`todo.md`, "Application
+- **Per tab still:** focus emulation covers the whole tab. `tab.show` reads `hidden` in the frame, and takes `focused` from the top page under focus emulation, else
+  from `windows.get` (the browser window's focus): a frame's own `document.hasFocus()` is false whenever focus is
+  in the page around it. `tab.screenshot` takes the whole tab.
+- **Not covered:** a form rendered straight into the company's page with no frame (`todo/`, "Application
   forms on an employer's own page").
 
 ## Serving form requests (`forms.ts`)
@@ -223,35 +217,71 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    ([adapters](adapters.md#debug-mode-the-adapter-trace)). The handler returns it beside the result
    (protocol's `WithDebug`), or sets it on the error it throws, so it reaches the companion in the response's
    `debug` and never in the result. After a debugged call where a field failed, with `failures` asked for, a
-   screenshot of the tab joins the trace when the tab is the active one in its window: one per call, after it,
+   screenshot of the tab joins the trace (through the debugger while focus emulation holds the tab, else only when
+   it's the active one in its window): one per call, after it,
    because the page's MAIN world can't reach the extension mid-call, and the browser allows only a couple of
    captures a second. A capture that fails is left out; it never fails the call.
-5. `tab.screenshot` uses `tabs.captureVisibleTab` and only works on the visible tab (otherwise a hint to
-   switch to it). It needs `<all_urls>` or `activeTab`; the extension holds `<all_urls>` (not yet run live
-   with it: [status](../status.md#not-yet-verified-for-real)).
-6. `tab.show` (sent by the companion before every form call): with `activate` and `focusWindow`, and the
-   tab's window not the focused one (or minimized), `windows.update(windowId, { focused: true })`, with
-   `state: "normal"` when it's minimized, and `windowFocused: true` in the result. Then, with `activate` and the
-   tab not active, `tabs.update(tabId, { active: true })`. Then it reads `document.visibilityState` and
-   `document.hasFocus()` with one `executeScript` in the isolated world. The page learns of a switch, or of its window coming to the front, asynchronously, so after one
-   it's read up to 10 times, 50 ms apart (until it's visible, and focused when the window was raised), from the
-   background, whose timers aren't throttled. Without access to the page it falls back to the tab's active
-   state, and `focused` is left out. `focused` says whether a raise worked, and debug mode records it: a page in
-   a window behind another app gets no focus events from Chrome, which widgets that track focus depend on
-   (Workday's split dates weren't taken there; [Workday's dates](sites.md#dates-typed-into-workdays-split-widget)).
-   - **Window focus only when asked.** Raising the window pulls the browser in front of the terminal the user
-     may be typing in, and takes keyboard focus. The companion asks for it (`focusWindow`) only on calls that
-     change the page, only when `forms.focusBrowser` is on, and never while a review page waits. A failed
-     `windows.update` is swallowed: the tab is still switched to.
-   - **Restoring a minimized window** sets `state: "normal"`, so a window minimized from maximized comes back
-     at its normal size. Asking for it outright means not depending on how each browser treats `focused: true`
-     on a minimized window.
-   - **Windows' focus-stealing rules** may keep the window behind and flash its taskbar button instead. Then
-     `windowFocused` is true and `focused` false, and the companion's `browserBehind` hint asks the user to
-     click the browser.
-   - **Hidden stays hidden.** A minimized window, or on Windows one fully covered by others (Chrome tracks
-     occlusion), keeps its pages hidden even when the tab is active. That's reported as `hidden: true`, not
-     forced.
+5. `tab.screenshot`: while focus emulation holds the tab, `Page.captureScreenshot` through the debugger, which
+   works with the tab in the background or its window minimized (the tab keeps rendering). Otherwise
+   `tabs.captureVisibleTab`, which only works on the visible tab (otherwise a hint to switch to it). That needs
+   `<all_urls>` or `activeTab`; the extension holds `<all_urls>` (not yet run live with it:
+   [status](../status.md#not-yet-verified-for-real)).
+6. `tab.show` (sent by the companion before every form call):
+   [focus emulation](#focus-emulation-emulationts) (`emulateFocus`), which switches and raises nothing. Then it
+   reads `document.visibilityState` and `document.hasFocus()` with one `executeScript` in the isolated world. The
+   page learns of focus emulation asynchronously, so it's read up to 10 times, 50 ms apart, until it's visible
+   and focused, from the background, whose timers aren't throttled. A page that still isn't is given it once more
+   (off, then on: a page that navigated may have lost it) and read again. The result is
+   `{ emulated: true, hidden, focused }`. When the tab can't be attached, the page is read once and reported as
+   it is (`emulated: false`): nothing is switched to or raised. Without access to the page it falls back to the
+   tab's active state, and `focused` is left out. `focused` is recorded in debug mode: a page without focus gets
+   no focus events, which widgets that track focus depend on
+   ([Workday's dates](sites.md#dates-typed-into-workdays-split-widget)).
+
+   **Why nothing is brought to the front.** Earlier builds switched to the tab and raised the browser window
+   (`windows.update`, restoring a minimized one) when focus emulation wasn't there. That pulled the browser in
+   front of the terminal the user was typing in, took keyboard focus, could be refused by Windows' focus-stealing
+   rules, and a window kept minimized or covered stayed hidden anyway. Focus emulation needs none of it.
+
+## Focus emulation (`emulation.ts`)
+Chrome slows a hidden page's timers to about once a second (once a minute for chained timers after five hidden
+minutes), stops its animation frames, and under Energy Saver may freeze it outright. A page whose window is behind
+another app gets no focus events. Every adapter wait is a timer, and Workday's widgets render on timers and
+animation frames and track focus, so a hidden tab filled many times slower, past the companion's timeouts, and
+Workday's split dates weren't taken behind the terminal ([the tab at full speed](../mcp-tools.md#forms)).
+
+`emulateFocus(tabId)` attaches `chrome.debugger` to the tab (DevTools protocol `1.3`) and sends
+`Emulation.setFocusEmulationEnabled({ enabled: true })`. The page then reports itself focused, and Chrome counts
+the tab as being captured, which keeps it visible to the page and rendering wherever it is: in the background,
+minimized, covered, behind another app. It's the browser's own state, so the page's timers, animation frames and
+focus events all behave as in a tab in front, the page's own code included.
+
+**Why the debugger, not a script in the page.** Scripts that replace `setTimeout` (a worker clock, as HackTimer
+does) or `document.visibilityState` speed up only the code that goes through them: Workday's own timers, animation
+frames and CSS transitions stay throttled, and focus events still don't arrive. Bringing the tab and window to the
+front (what `tab.show` did before) works only while the user leaves it there, and pulls the browser in front of
+their terminal. Launch flags (`--disable-background-timer-throttling`) need a browser
+started specially. Other browser-automation tools settled on the same command for the same problem.
+
+- **When it's attached:** from the first form call on a tab (`tab.show`) until no call has come for 5 minutes
+  (`IDLE_MS`, a timer per tab, reset by every call), the companion disconnects (`releaseAll`, from the connection's
+  state listener), or the tab closes. Chrome shows "ezapply started debugging this browser" while any tab is
+  attached, so it's kept to the fill. An attached debugger also keeps the service worker alive, so the idle timer
+  isn't lost to an idle background.
+- **Turned on again before every call:** a Chromium change that kept it across navigations was reverted, so a page
+  that navigated may have lost it. `emulateFocus` sends it each time, and `tab.show` turns it off and on when the
+  page still reports hidden or unfocused.
+- **The user's Cancel:** closing Chrome's bar detaches the debugger (`onDetach`), and the next form call attaches
+  it again, bar and all. Filling depends on it, and nothing else keeps a hidden tab at full speed; a user who
+  wants it gone stops filling (it goes after 5 idle minutes) or stops ezapply.
+- **Can't attach:** another debugger client holding the tab, a policy forbidding the debugger, or a page the
+  debugger can't reach. Any failure detaches what was attached, and the page runs as the browser leaves it
+  (`emulated: false`; the companion's hints say what to do). An "already attached" error (the
+  background lost track of its own attachment) is taken as attached.
+- **Screenshots** of an attached tab go through `Page.captureScreenshot`, which works off screen
+  (`captureAttached`).
+- **Clicks stay the adapter's own** DOM events: none go through the debugger, whose input events would take real
+  focus.
 
 `browser.status` lists every tab with a URL: id, window, URL, title, active, `focused` (active in the window
 the user last focused), `lastAccessed` when the browser reports it, `site` (what its page shows, else its URL's),
@@ -263,8 +293,8 @@ and `frames` (embedded applications, when there are any). The companion picks fo
   the companion even while no panel is open. The tooltip shows the status, the cards waiting, any pending capture,
   and the active posting.
 - Options page: connection status (live), a **Grant access** row while access to websites is missing ("No access
-  to websites, so ezapply can't read or fill application forms"), the extension id the companion pins (Chrome's
-  id or Firefox's install UUID, from the page's own origin), and manual port and code fields (only needed for a
+  to websites, so ezapply can't read or fill application forms"), the extension id the companion pins (from the
+  page's own origin), and manual port and code fields (only needed for a
   non-default port).
 
 ## Constraints worth knowing

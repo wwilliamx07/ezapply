@@ -2,30 +2,24 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SESSION_HEADER, sessionId } from "./agent/process.js";
 import type { ExtensionBridge } from "./bridge/server.js";
-import { CHAT_SESSION_HEADER, type ChatSessions, chatSessionId, toolCallCount } from "./chat.js";
 import type { Logger } from "./logger.js";
 import { createMcpServer } from "./mcp/server.js";
 import type { Services } from "./services.js";
 
 export const MCP_PATH = "/mcp";
 export const HEALTH_PATH = "/health";
-/** What /health answers as `mode`. Builds before it ran a background daemon, whose /health had no mode. */
-export const HEALTH_MODE = "chat";
-/** The MCP SDK's own limit for a message body. */
-const MAX_MCP_BODY_BYTES = 4 * 1024 * 1024;
 
 export interface HttpOptions {
   services: Services;
   bridge: ExtensionBridge;
   mcpToken: string;
   log: Logger;
-  /** Tool calls per `ezapply chat` session, read by the wrapper that hosts this server. */
-  chat: ChatSessions;
 }
 
 /**
- * One loopback HTTP server, living as long as `ezapply chat`, hosts:
+ * One loopback HTTP server, living as long as `ezapply`, hosts:
  *   GET  /health            — unauthenticated liveness probe (no user data)
  *   POST /mcp               — MCP Streamable HTTP, stateless, bearer-token protected
  *   /review/*, /github/*    — pages for the user's browser, each guarded by its own one-time value
@@ -57,7 +51,6 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     return sendJson(res, 200, {
       ok: true,
       name: "ezapply",
-      mode: HEALTH_MODE,
       version: opts.services.version,
       protocolVersion: PROTOCOL_VERSION,
       extensionConnected: opts.bridge.status().connected,
@@ -101,31 +94,15 @@ async function route(req: IncomingMessage, res: ServerResponse, server: Server, 
     return sendJson(res, 405, { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
   }
 
-  // The relay names its Claude session: count its tool calls, so the wrapper knows whether the session has
-  // done anything and never restarts Claude while a call is running (clients without the header aren't
-  // counted). That needs the body here, so it's parsed once and handed to the transport.
-  let parsed: unknown;
-  const chatId = chatSessionId(req.headers[CHAT_SESSION_HEADER]);
-  if (chatId) {
-    const raw = await readRawBody(req, MAX_MCP_BODY_BYTES);
-    if (raw === null)
-      return sendJson(res, 413, { jsonrpc: "2.0", error: { code: -32000, message: "Too large." }, id: null });
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null });
-    }
-    for (let n = toolCallCount(parsed); n > 0; n--) res.on("close", opts.chat.beginToolCall(chatId));
-  }
-
-  const mcp = createMcpServer(opts.services, chatId);
+  // The relay names the panel conversation's session, so the tools know which conversation a call comes from.
+  const mcp = createMcpServer(opts.services, sessionId(req.headers[SESSION_HEADER]));
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on("close", () => {
     void transport.close();
     void mcp.close();
   });
   await mcp.connect(transport);
-  await transport.handleRequest(req, res, parsed);
+  await transport.handleRequest(req, res);
 }
 
 function hostAllowed(req: IncomingMessage, server: Server): boolean {
@@ -141,18 +118,6 @@ function bearerOk(header: string | undefined, token: string): boolean {
   const a = Buffer.from(m[1]);
   const b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** The whole body as text, or null when it passes `max` bytes. */
-async function readRawBody(req: IncomingMessage, max: number): Promise<string | null> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > max) return null;
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

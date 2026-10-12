@@ -13,17 +13,17 @@ and adds a migration (run by `ezapply init`). Schemas are zod definitions in the
 | `port` | default 17373 |
 | `mcpToken` | bearer token for `/mcp` (43 base64url chars), presented by the relay |
 | `pairingToken` | the extension's code, `XXXX-XXXX-XXXX-XXXX` from an unambiguous alphabet; rotated when a paired extension is forgotten |
-| `pairedExtensionId?` | pinned Chrome extension id (stored bare, as before Firefox support, so older configs still match) or Firefox install UUID |
+| `pairedExtensionId?` | pinned extension id (the 32 a–p of `chrome-extension://…`). One pinned by a Firefox build (an install UUID) no longer matches anything: `extension_pair` with `replace: true` pairs the Chrome copy |
 | `workspace` | absolute workspace path |
 
 A running companion writes only the pairing fields, into the file as it is at that moment, so edits made while
-a chat runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix
+ezapply runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix
 it, or delete it and run `ezapply init`), not as a stack trace.
 
 **From earlier builds.** The file used to be `daemon.json`; loading the config moves it to `config.json` when
 there's no `config.json` yet, so the tokens and pairing carry over. Its `idleTimeoutMinutes` (the background
-daemon's idle stop) is dropped on the next write. `daemon-state.json` (when the extension was last connected,
-for the daemon's start-up wait) is deleted by `ezapply init`; nothing reads it.
+daemon's idle stop) is dropped on the next write. The daemon's `daemon-state.json` may still sit beside it;
+nothing reads it, and it can be deleted.
 
 ### `github-app.json` (`companion/src/github/service.ts`)
 `{ schemaVersion: 1, appId?, slug, clientId, htmlUrl, owner?, createdAt, origin?, localBaseUrl? }`: the public
@@ -56,22 +56,17 @@ dropped.
   },
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
-  "forms": {
-    "focusBrowser": "on"    // or "off": calls that change the page don't bring the browser window to the front
-  },
-  "debug": { "enabled": false, "maxMB": 500, "markup": "failures" },   // debug mode: record every form call under debug/
-  "context": { "restartOnCapture": true }   // ezapply chat: a new posting starts a fresh Claude session
+  "debug": { "enabled": false, "maxMB": 500, "markup": "failures" }   // debug mode: record every form call under debug/
 }
 ```
-Every field has a default; a missing file means all defaults. `forms.focusBrowser` is read for every form
-call, so a change applies to the next one, and a bad value falls back to `"on"` instead of failing every form
-call. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
+Every field has a default; a missing file means all defaults. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
 markup debug mode saves: `"failures"` before each call and at every field that fails, `"always"` after each call
 too, `"none"` never (the adapter's trace is still recorded). Builds before 2026-10-07 named the switch
 `debug.autofill`; `ezapply init` moves it to `debug.enabled`, since unknown keys are dropped and the old one alone
-leaves debug mode off. On is the default because the window is usually in front during a fill anyway (the user is waiting on
-it), and Workday's split dates weren't taken with the window behind another app; off keeps the terminal in front
-and its keyboard focus mid-fill ([the tab in front](mcp-tools.md#forms)). `tex.engine` applies only to `.tex` files
+leaves debug mode off. Builds before focus emulation had `forms.focusBrowser` (bring the browser window to the
+front before a call that changes the page); `ezapply init` removes it, and the schema drops it meanwhile
+([the tab at full speed](mcp-tools.md#forms)). Builds with `ezapply chat` had `context.restartOnCapture` (a new
+posting restarted the terminal's Claude); `ezapply init` removes it too. `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
@@ -95,7 +90,7 @@ to the default for that part, is logged, and shows in `get_form` as `timingIssue
 
 ### `ezapply` / `ezapply.cmd` (workspace launcher, `cli/src/workspace-init.ts`)
 Written by every `ezapply init`, for this OS only. POSIX: `#!/bin/sh` and `exec "<node>" "<cli main.js>" "$@"`
-(mode 755). Windows: `@echo off` and `"<node>" "<cli main.js>" %*`. Lets `./ezapply chat` run from the
+(mode 755). Windows: `@echo off` and `"<node>" "<cli main.js>" %*`. Lets `./ezapply` run from the
 workspace ([cli](components/cli.md#init-workspace-initts)).
 
 ### `debug/<date>-<postingId>/` (`companion/src/forms/debug.ts`)
@@ -111,9 +106,8 @@ folder holds:
   - the `tab` (for an embedded application: the frame's `url` and `site`, its `frameId` and the page's
     `hostUrl`), `posting`, `postingMatch` (verdict and evidence), `application` and `postingMismatch`,
     `extensionVersion`, `browser`, `timing` and
-    `fillTimeoutMs`, `shown` (what `tab.show` did and saw: `activated`, `changesPage`, `focusWindow` (the
-    window was asked to come to the front), `windowFocused` (the extension raised it), `hidden`, `focused`,
-    `reviewPending`),
+    `fillTimeoutMs`, `shown` (what `tab.show` did and saw: `emulated` (focus emulation was on), `changesPage`, `hidden`,
+    `focused`),
     and `queuedMs` (time behind earlier calls on the tab);
   - `bridge`: every request to the extension, with its parameters, time and full result (the adapter's
     answer before the companion slims it), or its error, and for each adapter call (`form.*`) its `trace`
@@ -216,7 +210,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `reviewed.json` | companion | The version of each document the user last answered a review of, with its text ([below](#postingsidreviewedjson-companionsrcdocumentsreviewts)) |
 | `.build/<name>/` | companion | TeX aux files and logs |
 | `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
-| `.previews/<name>-p<n>.png` | companion | rendered pages |
+| `.previews/` | older companions | rendered pages, from the removed `pdf_render`; still hidden from posting listings |
 
 ### `postings/<id>/reviewed.json` (`companion/src/documents/review.ts`)
 `{ schemaVersion: 1, documents: { "<file>": { sha256, at, reviewId, approved, pages?: string[] } } }`, keyed by the
@@ -263,11 +257,12 @@ saying otherwise):
 Logs written while deterministic autofill existed ([removed](status.md#deterministic-autofill-removed)) may also
 hold fills with `auto`, `rule` and `was`, and `add-row` and `add-item` events. Nothing reads those fields now.
 
-Any event can also carry `tabActivated: true` (the companion switched to the application tab before the call),
-`windowFocused: true` (the extension brought the browser window to the front: `forms.focusBrowser`),
-`tabHidden: true` (the page was still hidden, so the browser throttled it) and `windowInBackground: true` (the
+Any event can also carry `focusNotEmulated: true` (focus emulation wasn't on for the call, so the tab ran as the
+browser left it), `tabHidden: true` (the page was still hidden, so the browser throttled it) and `windowInBackground: true` (the
 page was on screen but without focus: the window was behind another app), so a slow step, or a field that wasn't
-taken, can be matched to a hidden tab or a window behind afterwards. They're left out when false. Every event carries `matchedBy`: what tied the tab to this
+taken, can be matched to a hidden tab or a window behind afterwards. They're left out when false. Logs from
+builds before focus emulation may also hold `tabActivated` and `windowFocused` (the tab switched to, the window
+raised). Every event carries `matchedBy`: what tied the tab to this
 posting (`job`, `binding`, `page-reqid`, `tenant`, `title`, or `unconfirmed` for the call that bound it).
 
 ## Profile (`companion/src/profile/schema.ts`)
@@ -367,4 +362,4 @@ The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),
-`activeLabel`. `storage.session` (Firefox): `keepalive` timestamp.
+`activeLabel`.

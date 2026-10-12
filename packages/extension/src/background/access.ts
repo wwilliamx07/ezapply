@@ -2,7 +2,7 @@ import { ext } from "../ext.js";
 
 /**
  * Asking for access to websites when a form call finds it missing. The extension is granted every site at install,
- * but Firefox lets the user withhold that, and Chrome lets them limit it. A form call can't ask itself:
+ * but Chrome lets the user limit that to some sites. A form call can't ask itself:
  * `permissions.request` needs a user gesture, and a call from the companion is none. So it opens a small extension
  * window (`grant.html`) whose Allow access button asks, and waits a while for the grant.
  */

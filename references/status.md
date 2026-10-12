@@ -6,14 +6,15 @@ needs a live run, and open questions. What is built, and how, is on the componen
 ## Decisions
 Each gives the choice and the reason in a line or two; the linked page has the detail.
 
-- **No daemon.** The companion lives inside `./ezapply` or `ezapply chat` and ends with it. Nothing runs in the
+- **No daemon.** The companion lives inside `./ezapply` and ends with it. Nothing runs in the
   background, so there is nothing to start, stop or keep secure while the user isn't applying
   ([architecture](architecture.md#processes-and-lifecycle)).
 - **Pairing without a code.** The extension pairs during a 15-minute window opened from the setup page or by
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
   `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension)).
-- **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation;
-  `ezapply chat` stays for the terminal ([agent](components/agent.md)).
+- **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation.
+  `ezapply chat` (Claude Code in the terminal) was removed once the panel did all it did, so there's one way to
+  run ezapply ([cli](components/cli.md#commands)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
   guard are shared and a site is a registry entry plus a definition ([adapters](components/adapters.md)).
 - **The extension holds every site** (`<all_urls>`) so it can tell a page's site by its body, wherever the
@@ -26,10 +27,20 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Nothing is filled without the model.** See [deterministic autofill removed](#deterministic-autofill-removed).
 - **Documents are approved one by one** before they're attached (by default, enforced by `upload_file`), each by a
   press of its own: what's attached goes to an employer ([documents](components/documents.md#review-before-attaching)).
+- **Layout is linted, not looked at.** `tex_compile` names layout problems from where the text sits; no tool renders
+  a page as an image, which cost more context than the findings on every later turn
+  ([documents](components/documents.md#compile-compile)).
+- **Form tools that change the page return it** (`go_next`, `add_repeatable`, `remove_repeatable`), and long option
+  lists go out as a count: each extra read was a turn re-sending the whole conversation
+  ([forms](mcp-tools.md#forms)).
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
-- **A fresh Claude session per posting,** so finished work isn't re-sent every turn ([cli](components/cli.md#chat-chatts)).
+- **A fresh Claude session per posting,** so finished work isn't re-sent every turn: each posting has its own panel conversation ([agent](components/agent.md)).
 - **Binding an unconfirmed tab trusts the first tab that changes,** with a one-time `postingBound` notice naming the
   page's title, rather than refusing until `posting_activate` ([which posting](mcp-tools.md#forms)).
+- **The reference is written for agents.** A "By task" table says what to read for each kind of change, the
+  few hard rules sit in a `CLAUDE.md` beside the code they govern, it doesn't restate the code (no per-test
+  lists), and a test checks its links and coverage: the agent reads less and still finds the page that matters
+  ([conventions](development.md#conventions)).
 - **Defaults assumed:** resume page size Letter (bundle normalization); contributions to other people's public
   repos are added by URL, with claims limited to the user's own commits.
 
@@ -50,7 +61,7 @@ The plan (`plan.md`) is in git history before 2026-09-27.
 | A daemon started by hand or at login | None (above) |
 | `init`, a daemon start, a pairing code, `claude` | `npm run setup` and the onboarding page; pairing without a code |
 | A content script declared for Workday | Adapters injected into the MAIN world on demand |
-| A Workday adapter, Chrome only | Eight sites on one engine; Chrome and Firefox |
+| A Workday adapter, Chrome only | Eight sites on one engine; Chrome and other Chromium browsers (Firefox was built, then dropped for focus emulation) |
 | One TeX engine (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` ([documents](components/documents.md#tex-engines-texenginests)) |
 | Playwright tests with React harnesses | jsdom tests against behavioural fixtures and live snapshots |
 | Changesets, per-package READMEs, `ezapply migrate`, `docs/adr/` | Migrations in `ezapply init`; this folder |
@@ -59,27 +70,41 @@ The plan (`plan.md`) is in git history before 2026-09-27.
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
 
-- **The side panel:** Chrome's panel and Firefox's sidebar opened by the toolbar button, Capture asking Firefox for
-  access in the click, and a whole application from it with the real Claude Code (setup, a review, question and
+- **The token cuts** (2026-10-12): `go_next`, `add_repeatable` and `remove_repeatable` returning `form`, the
+  `optionCount` cap and the layout lint are tested on fixtures only. Run a tailoring and an application and
+  compare the session's tokens and turns with an earlier one; check the lint's findings against the PDF, and
+  that the agent fills a long dropdown without listing its options first.
+
+- **The side panel:** opened by the toolbar button, and a whole application from it with the real Claude Code (setup, a review, question and
   approval cards, Stop, Reset, long waits).
 - **The review page's per-document approval** in a real browser.
 - **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Fixed since and not re-run:
   the row Delete (found on a saved step), multi-selects that unticked Workday's own tick, a hierarchical prompt's
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school
   lists' late search ([workday](components/sites.md#workday-sitesworkday), [oracle](components/sites.md#oracle-what-was-verified)).
-  Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted.
+  Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted. If
+  it's slower, suspect first the adapter trace's calls, then two retries brought back after a revert
+  (`openListboxRetrying`, and `back()` seeing a move by step index), then the row Delete; every site's `page.job`
+  adds no wait and runs only on reads.
 - **Workday's and Oracle's drivers on the shared ones** (2026-10-11): equal golden schemas and behaviour tests.
   What changed is small: the shared text driver's reformatted-phone and read-only checks on Workday, a checkbox
   group's `multiple` and `remove_items` there, an uploaded file's name matched regardless of case, and Oracle's
   native checkbox groups, which couldn't be filled before ([adapters](components/adapters.md#a-sites-own-drivers)).
-- **Multi-part Workday dates:** focus is the suspect. Compare a run with `forms.focusBrowser` off and the terminal
-  in front against one with it on ([dates](components/sites.md#dates-typed-into-workdays-split-widget)).
+- **Focus emulation** (`chrome.debugger`): tested against a stubbed API only. Check in a real Chrome on Windows,
+  with the application window minimized, covered, and behind the terminal: the page reports visible and focused
+  (`shown.emulated` and `focused` in debug records), a step fills about as fast as with the tab in front, Workday's
+  multi-part dates are taken (focus was the suspect for the run where they weren't), the debugging bar shows
+  during the fill and goes 5 minutes after it (or when ezapply stops), Cancel on the bar comes back on the next
+  call, a screenshot of a minimized tab, and whether a step that loads a new document keeps it
+  ([extension](components/extension.md#focus-emulation-emulationts),
+  [dates](components/sites.md#dates-typed-into-workdays-split-widget)).
 - **Fills slower in debug mode's first live run** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the
   adapter trace will show which waits ran to their maximum; one guess is `afterFieldMaxMs`.
 - **Greenhouse, Lever, Ashby:** fixes after one real Greenhouse and one Ashby application (multi-select ids, lists
   that load as you type, radio and checkbox groups); not tried: Lever uploads, the confirmation pages
   ([sites](components/sites.md#what-was-verified-and-how)).
-- **Phenom:** one run stopped on step 1; question groups, the tab and capture matching are fixed but not re-run;
+- **Phenom:** one run stopped on step 1; the resume's name (read from the download link, not its text), question
+  groups as one field, the tab and capture matching are fixed but not re-run;
   steps 4 to 6 unseen ([phenom](components/sites.md#phenom-sitesphenom)).
 - **Dayforce:** nothing has run live; rc-select's context is the riskiest part ([dayforce](components/sites.md#dayforce-sitesdayforce)).
 - **SAP SuccessFactors:** question radios, a same-named replacement and a re-render during upload fixed after a
@@ -87,17 +112,15 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **Matching tabs to postings:** the first-fill binding and its notice, title matching on real roles, and the
   hand-off checklist on live sections.
 - **The extension in a real browser:** reloaded with `<all_urls>`, `browser_status` with many tabs, embedded
-  applications in cross-origin frames, the access window, bringing the window to the front on Windows, the
-  reconnect alarm after a browser restart, Firefox pairing and keepalive (after the explicit CSP fix).
+  applications in cross-origin frames, the access window, the
+  reconnect alarm after a browser restart, the extension pages' CSP (connecting to the companion).
 - **Debug mode's adapter trace** on a real page: its size through the bridge, the failure screenshot, the export.
 - **Keeping the workspace current:** `ls-remote` against GitHub with the app's token, and the agent following
   `workspace_changes` (including putting a repo off for a set time).
 - **Setup end to end:** a real GitHub login (and connecting an existing app), onboarding's steps against the real
   things, the OS folder dialog, a full onboarding in Claude Code with MiKTeX installed from a hint, and CI's `tex`
-  and `firefox` jobs on GitHub.
-- **`ezapply chat` with a real Claude Code:** `EZAPPLY_CHAT_SESSION` reaching the relay, the terminal clean through
-  captures and builds, and the terminal state after exit on Windows Terminal, PowerShell and macOS.
-- **Opening in the user's browser:** a new tab in the running window, Firefox with a `file://` PDF, a Chrome user
+  job on GitHub.
+- **Opening in the user's browser:** a new tab in the running window, a Chrome user
   with several profiles.
 
 ## Known issues
@@ -109,7 +132,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **The default cover letter test** failed once with MiKTeX and didn't reproduce; capture its `hint` if it recurs.
 
 ## Open questions
-1. **Bindings live in memory,** so a restart of `ezapply chat` loses them; the stored `application` still matches
+1. **Bindings live in memory,** so a restart of `ezapply` loses them; the stored `application` still matches
    by tenant and job. Enough?
 2. **Title matching on real roles:** compare recorded roles with the pages' titles (`FormSchema.job` in debug
    records) and tune `compareTitles` if real pairs come out `unsure` or `other`.

@@ -1,5 +1,5 @@
-import type { Field, FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
-import { cleanLabel, cssEscape, isVisible, norm, slug, text } from "../../engine/dom.js";
+import type { FieldKind, FormSchema, PageAction, PageKind } from "@ezapply/protocol";
+import { cleanLabel, isVisible, norm, slug, text } from "../../engine/dom.js";
 import type { AddButtonSpot, FieldSpot, RowSpot, SectionSpot, WidgetDriver } from "../../engine/types.js";
 import { hintKey, PROFILE_HINTS, SEL } from "./selectors.js";
 

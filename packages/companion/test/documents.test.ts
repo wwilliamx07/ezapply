@@ -13,8 +13,9 @@ import {
 } from "@cantoo/pdf-lib";
 import { createCanvas } from "@napi-rs/canvas";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { lintLayout } from "../src/documents/pdf/lint.js";
 import { parsePageRanges } from "../src/documents/pdf/pages.js";
-import { pdfInfo, pdfText } from "../src/documents/pdf/toolkit.js";
+import { pdfInfo, pdfLines, pdfText } from "../src/documents/pdf/toolkit.js";
 import { DocumentsService } from "../src/documents/service.js";
 import {
   detectTexProgram,
@@ -51,9 +52,9 @@ beforeAll(async () => {
   docs = new DocumentsService(ws, createLogger({ toFile: false, level: "silent" }), {
     file: async (path) => {
       opened.push(path);
-      return "firefox";
+      return "edge";
     },
-    url: async () => "firefox",
+    url: async () => "edge",
   });
   await makePdf(join(root, "postings/p1/cover.pdf"), [612, 792], [["Dear hiring manager", "Cover letter body"]]);
   await makePdf(join(root, "postings/p1/resume.pdf"), [612, 792], [["Jane Doe", "Experience", "Skills"]]);
@@ -78,6 +79,100 @@ describe("parsePageRanges", () => {
     expect(() => parsePageRanges("0", 3)).toThrow(/outside/);
     expect(() => parsePageRanges("2-9", 3)).toThrow(/outside/);
     expect(() => parsePageRanges("a", 3)).toThrow(/not a page/);
+  });
+});
+
+describe("layout lint", () => {
+  /** A Letter page with 72pt margins: text from x 72 to 540. Each entry is drawn at its x, on its own baseline. */
+  async function page(rows: { x?: number; y: number; text: string; right?: string }[]) {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const p = doc.addPage([612, 792]);
+    /** FULL in a row's text: words up to the right margin, without passing it. */
+    const fill = (from: number, text: string) => {
+      const [before = "", after = ""] = text.split("FULL");
+      let words = "built";
+      while (font.widthOfTextAtSize(`${before}${words} and shipped${after}`, 10) < 540 - from) words += " and shipped";
+      return `${before}${words}${after}`;
+    };
+    for (const r of rows) {
+      const x = r.x ?? 72;
+      const text = r.text.includes("FULL") ? fill(x, r.text) : r.text;
+      p.drawText(text, { x, y: r.y, size: 10, font });
+      if (r.right) p.drawText(r.right, { x: 540 - font.widthOfTextAtSize(r.right, 10), y: r.y, size: 10, font });
+    }
+    return pdfLines(await doc.save());
+  }
+
+  it("finds a word left alone on a bullet's last line", async () => {
+    const issues = lintLayout(
+      await page([
+        { y: 700, text: "• FULL" },
+        { x: 82, y: 688, text: "users" },
+        { y: 676, text: "• FULL" },
+        { x: 82, y: 664, text: "a continuation long enough to be a fair share of the line" },
+      ]),
+    );
+    expect(issues).toEqual([expect.objectContaining({ kind: "short-line", page: 1, text: "users" })]);
+  });
+
+  it("leaves a new item, a new sentence and a heading alone", async () => {
+    const issues = lintLayout(
+      await page([
+        { y: 700, text: "FULL" },
+        { y: 688, text: "• Next item" },
+        { y: 676, text: "FULL." },
+        { y: 664, text: "Short." },
+        { y: 652, text: "FULL" },
+        { y: 620, text: "Skills" },
+      ]),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it("finds a right-aligned date out of line with the others", async () => {
+    const issues = lintLayout(
+      await page([
+        { y: 700, text: "Acme Corp", right: "2023 – 2024" },
+        { y: 680, text: "Globex", right: "2021 – 2023" },
+        { y: 660, text: "Initech", right: "2019 – 2021" },
+      ]),
+    );
+    expect(issues).toEqual([]);
+    const shifted = await page([
+      { y: 700, text: "Acme Corp", right: "2023 – 2024" },
+      { y: 680, text: "Globex", right: "2021 – 2023" },
+    ]);
+    const date = shifted[0]?.lines[1]?.spans[1];
+    if (date) {
+      date.x0 -= 4;
+      date.x1 -= 4;
+    }
+    expect(lintLayout(shifted)).toEqual([
+      expect.objectContaining({
+        kind: "ragged-right",
+        text: "2021 – 2023",
+        message: expect.stringMatching(/4\.0pt short of/),
+      }),
+    ]);
+  });
+
+  it("says how much room is left at the page limit, and finds text off the page", async () => {
+    const top = await page([
+      { y: 710, text: "Jane Doe" },
+      { y: 696, text: "Experience" },
+      { y: 682, text: "Skills" },
+    ]);
+    expect(lintLayout(top, { pageLimit: 1 })).toEqual([
+      expect.objectContaining({ kind: "underfilled", message: expect.stringMatching(/^About \d+ lines are free/) }),
+    ]);
+    expect(lintLayout(top, { pageLimit: 2 })).toEqual([]);
+    expect(lintLayout(top)).toEqual([]);
+    const off = await page([
+      { y: 700, text: "Jane Doe" },
+      { x: 560, y: 680, text: "a line that runs past the edge" },
+    ]);
+    expect(lintLayout(off)).toEqual([expect.objectContaining({ kind: "off-page" })]);
   });
 });
 
@@ -152,12 +247,6 @@ describe("DocumentsService PDFs", () => {
     expect((await pdfText(result.output, "2"))[0]?.text).toContain("github.com/jane");
   });
 
-  it("renders a page to PNG and saves a preview", async () => {
-    const { png, savedTo } = await docs.render("postings/p1/resume.pdf", 1, 1);
-    expect(png.subarray(1, 4).toString()).toBe("PNG");
-    expect((await stat(savedTo)).size).toBe(png.length);
-  });
-
   it("extracts text in reading order", async () => {
     const [page] = await docs.text("postings/p1/resume.pdf");
     expect(page?.text).toBe("Jane Doe\nExperience\nSkills");
@@ -183,7 +272,7 @@ describe("DocumentsService PDFs", () => {
   it("opens files for the user through the opener, only from allowed folders", async () => {
     expect(await docs.open("postings/p1/resume.pdf")).toEqual({
       opened: join(root, "postings/p1/resume.pdf"),
-      openedIn: "firefox",
+      openedIn: "edge",
     });
     expect(opened).toEqual([join(root, "postings/p1/resume.pdf")]);
     await expect(docs.open("profile/profile.yaml")).rejects.toMatchObject({ code: "path_not_allowed" });
@@ -319,6 +408,17 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     expect(long.hint).toMatch(/limit is 1\. \d+ lines run past it/);
     expect(long.overflow?.text).toContain("Two");
     expect(long.overflow?.lines).toBeGreaterThanOrEqual(1);
+    expect(long.lint).toBeUndefined();
+
+    // Within the limit, layout issues come back as lint, and the hint points to them.
+    const lines = Array.from({ length: 6 }, (_, i) => `Line ${i + 1} of the resume.\\par`).join("\n");
+    await writeFile(
+      join(root, "postings/p2/resume.tex"),
+      `\\documentclass{article}\\pagestyle{empty}\\begin{document}\n${lines}\n\\end{document}\n`,
+    );
+    const short = await docs.compile("postings/p2/resume.tex");
+    expect(short.lint).toEqual([expect.objectContaining({ kind: "underfilled", page: 1 })]);
+    expect(short.hint).toMatch(/1 layout issue in `lint`/);
   }, 180_000);
 
   it("reports errors with line numbers", async () => {

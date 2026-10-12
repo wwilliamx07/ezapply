@@ -36,7 +36,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "Read the current application page (`adapter` names its site): pageKind " +
         "(posting, auth, start-choice, step, review, confirmation), step, " +
         "and fields by section (id, label, kind, current value, options, error, profile hint; `required` only when " +
-        "true; dropdowns and typeaheads list options on demand). Also add buttons with their section, removable " +
+        "true; dropdowns and typeaheads list options on demand; a list too long to send gives `optionCount`, and " +
+        "fill_fields still matches its options). Also add buttons with their section, removable " +
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
         "`posting` (the posting this is credited to). Call at the start of every step and after changes. " +
         "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user. " +
@@ -185,14 +186,27 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
     {
       title: "Add a repeatable row",
       description:
-        "Press a button from get_form.addButtons (each names its `section`), then call get_form again. Its `kind` " +
-        "says what it does: `row` adds a row of fields; `form` opens an inline form: fill it, then press its `save` " +
-        "button the same way, which adds the item (an error says what the page wants); `save` also saves a form " +
-        "that is part of the page; `edit` opens a saved item's form again.",
-      inputSchema: { addButtonId: z.string(), tabId },
+        "Press buttons from get_form.addButtons (each names its `section`), in order: every row a step needs in " +
+        "one call, repeating an id for another row. Returns `pressed`, `failed` (the button that failed and why; " +
+        "the ones after it weren't pressed) and `form`: the step's empty fields as get_form gives them, so the new " +
+        "rows can be filled without another get_form. A button's `kind` says what it does: `row` adds a row of " +
+        "fields; `form` opens an inline form: fill it, then press its `save` button the same way, which adds the " +
+        "item (an error says what the page wants); `save` also saves a form that is part of the page; `edit` opens " +
+        "a saved item's form again.",
+      inputSchema: {
+        addButtonId: z.string().optional().describe("One button."),
+        addButtonIds: z.array(z.string()).min(1).optional().describe("Several presses, in order."),
+        tabId,
+      },
     },
-    tool(s.log, "add_repeatable", ({ addButtonId, tabId }: { addButtonId: string; tabId?: number }) =>
-      s.forms.addRepeatable(addButtonId, tabId),
+    tool(
+      s.log,
+      "add_repeatable",
+      ({ addButtonId, addButtonIds, tabId }: { addButtonId?: string; addButtonIds?: string[]; tabId?: number }) => {
+        const ids = addButtonIds ?? (addButtonId ? [addButtonId] : []);
+        if (ids.length === 0) throw new EzError(ErrorCode.BadRequest, "Give addButtonId or addButtonIds.");
+        return s.forms.addRepeatable(ids, tabId, session);
+      },
     ),
   );
 
@@ -203,7 +217,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       description:
         "Delete a repeatable row or saved item, by the id of a section get_form marks `removable` (e.g. a work " +
         "entry carried over from the user's last application that the profile doesn't have). Field ids of later " +
-        "rows change afterwards: call get_form again.",
+        "rows change afterwards: the result's `form` is the step as get_form gives it, with the new ids.",
       inputSchema: {
         sectionId: z.string(),
         reason: z.string().optional().describe("Why, for the log, e.g. 'not in the profile'."),
@@ -214,7 +228,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       s.log,
       "remove_repeatable",
       ({ sectionId, reason, tabId }: { sectionId: string; reason?: string; tabId?: number }) =>
-        s.forms.removeRepeatable(sectionId, reason, tabId),
+        s.forms.removeRepeatable(sectionId, reason, tabId, session),
     ),
   );
 
@@ -225,13 +239,14 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       description:
         "Press Next / Save and Continue. Refuses on the review page and on any Submit button: the user always " +
         "submits (with `lastPage` in get_form, Submit is the only way on: fill every field, then hand over). " +
-        "Returns whether the step advanced (its index, title or page kind changed), the new " +
-        "pageKind/step, validation errors if it did not, and notices such as upload confirmations as `messages`. " +
-        "Returns once the new step shows its fields. At the review page, `notAttached` lists approved documents " +
-        "never attached: go back and attach them before handing off.",
+        "Returns whether the step advanced (its index, title or page kind changed), `checklist` (what still looked " +
+        "off on the step just left), and notices such as upload confirmations as `messages`. Advanced: `form` is " +
+        "the new page as get_form gives it, once it shows its fields (no get_form needed); at the review page its " +
+        "`notAttached` lists approved documents never attached: go back and attach them before handing off. Not " +
+        "advanced: the page's pageKind/step and the validation errors.",
       inputSchema: { tabId },
     },
-    tool(s.log, "go_next", ({ tabId }: { tabId?: number }) => s.forms.next(tabId)),
+    tool(s.log, "go_next", ({ tabId }: { tabId?: number }) => s.forms.next(tabId, session)),
   );
 
   server.registerTool(

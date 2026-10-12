@@ -90,7 +90,7 @@ type Distro = "miktex" | "texlive" | "unknown";
 let distroCache: Promise<Distro> | undefined;
 
 /**
- * MiKTeX and TeX Live spell some options differently. Only a definite answer is remembered: an `ezapply chat`
+ * MiKTeX and TeX Live spell some options differently. Only a definite answer is remembered: an `ezapply`
  * started before TeX was installed finds out once it is.
  */
 function distro(): Promise<Distro> {

@@ -12,21 +12,18 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 3. It also writes the `ezapply` launcher into the workspace, and prints: `cd` into the workspace, run
    `./ezapply` (`.\ezapply` on Windows). That's how ezapply is run from then on ([cli](components/cli.md#ezapply-panelts)):
    it hosts the companion, which starts Claude Code headless for the side panel, and ezapply runs only while it
-   does. It opens the setup page while setup isn't finished. `./ezapply chat` runs Claude Code in the terminal
-   instead (say "set me up" there). After an update, a running ezapply must be stopped and started again.
+   does. It opens the setup page while setup isn't finished. After an update, a running ezapply must be stopped and started again.
 
 **On the setup page** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, steps in any order;
 [ui](components/ui.md#the-onboarding-page-onboard)):
 1. Under `ezapply`, the setup page opens when ezapply starts while setup isn't finished, or from the panel's
-   Setup; what needs Claude goes to the panel's agent as messages. Under `ezapply chat`, Claude calls
-   `onboarding {}`: the companion opens the setup page in the user's browser (or Claude gives the link) and the call
-   waits for work from it ([tasks](components/ui.md#the-agents-side-tasks)).
+   Setup; what needs Claude goes to the panel's agent as messages ([tasks](components/ui.md#the-agents-side-tasks)).
+   Asked to set the user up, Claude calls `onboarding {}`, which opens the page (or gives Claude the link).
 2. The page shows the `workspace_check` items as steps, done ones ticked: `tex`, `extension`, `github_login`,
    `repos_selected`, `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank`
    (required), and `preferences`, `library` (optional). It opens on the first required step not done.
 3. **TeX:** if missing, the page shows the install command for this OS and hands Claude an `install-tex` task;
-   Claude runs it once the user approves it (an approval card in the panel, or the terminal under `ezapply
-   chat`). No restart is needed.
+   Claude runs it once the user approves it (an approval card in the panel). No restart is needed.
 4. **Extension:** the page gives the steps and folder for the user's browser and opens the pairing window
    ([flow 2](#2-pairing-the-extension)); it turns green when the extension connects.
 5. **GitHub:** a new app or an existing one, then the `/github/` flow in a new tab, as `github_login` runs it:
@@ -68,13 +65,12 @@ for the rest of the chat ([details](components/companion.md#keeping-the-workspac
 
 ## 2. Pairing the extension
 On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:
-1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns, per browser,
-   the page to open, the steps, and the path to load (`packages/extension/dist` for Chrome, the manifest in
-   `dist-firefox` for Firefox), plus a hint if the extension isn't built.
-2. Claude relays that for the user's browser. The user loads the unpacked extension: the one manual step.
+1. Claude calls `extension_pair`. The companion opens a 15-minute pairing window and returns the page to open,
+   the steps, and the folder to load (`packages/extension/dist`, for Chrome and other Chromium browsers), plus a
+   hint if the extension isn't built.
+2. Claude relays that. The user loads the unpacked extension: the one manual step.
 3. The extension has no pairing code yet, so it connects to the default port and sends `hello` with an
-   empty code. Because the window is open, the companion accepts it, pins its id (Chrome extension id or
-   Firefox install UUID), closes the window, and returns the real code in `welcome`. The extension stores
+   empty code. Because the window is open, the companion accepts it, pins its extension id, closes the window, and returns the real code in `welcome`. The extension stores
    it and uses it from then on.
 4. `extension_pair_wait` returns once the extension is connected. The badge turns green.
 
@@ -84,7 +80,7 @@ non-default ports.
 
 ## 3. Capturing a posting ("Capture")
 1. The user presses **Capture** in the side panel (or Alt+Shift+P) on any `http(s)` page. The extension holds
-   every site from the install; where the user withheld that (Firefox) or limited it (Chrome), the click asks for it again
+   every site from the install; where the user limited that, the click asks for it again
    ([access](components/extension.md#access-to-websites)).
 2. The extension injects `capturePage` into the tab's frames it may read (every frame; with access withheld,
    the tab's own origin by the click's `activeTab` grant). Each returns the body HTML, a visible-only copy (hidden subtrees removed by walking
@@ -102,18 +98,12 @@ non-default ports.
    corrected earlier), and makes it the active posting.
 5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>". The side panel shows the posting and its
    conversation (a new one, or the one it had).
-6. **Under `ezapply`, nothing restarts:** each posting has its own conversation with the agent
-   ([agent](components/agent.md)), so the next application starts clean and the earlier one can be picked up
-   again. **Under `ezapply chat`, a fresh Claude session.** The companion tells `ezapply chat` that the active posting changed. If the
-   running session has used a tool (and none is running, or as soon as the running one ends), it ends that Claude and starts a new one in the
-   same terminal, with one line saying so; the user types their next request there. So the earlier
-   application (or the onboarding, at the first capture) isn't re-sent with every turn of the next one. A
-   session that hasn't done anything, or a re-capture of the same posting, keeps going. Off with
-   `context.restartOnCapture: false` in `ezapply.config.json`.
+6. **Nothing restarts:** each posting has its own conversation with the agent ([agent](components/agent.md)), so
+   the next application starts clean, the earlier one isn't re-sent with every turn of it, and the earlier one can
+   be picked up again.
 
 **Requests (flows 4 to 7)** come from the side panel: its buttons send them in words (Tailor documents, Fill
-form), or the user types them in its chat bar; under `ezapply chat`, in the terminal. The skills run the same
-either way. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
+form), or the user types them in its chat bar. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
 cards, and its reports in the panel's conversation ([ui](components/ui.md#the-side-panel-srcpanel)).
 
 ## 4. Tailoring the resume ("tailor my resume")
@@ -131,7 +121,8 @@ The `ezapply-resume` skill:
    profile entries, and gaps (never presented as skills).
 4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet.
 5. Loop: `tex_compile` (must be exactly one page; `*resume*`/`*cv*` files are checked against the page
-   limit, and `overflow` says how much ran over) → `pdf_render` to look → `pdf_text` for ATS order → self-check each bullet against its evidence.
+   limit, and `overflow` says how much ran over; within it, `lint` names layout problems) → fix what `lint`
+   lists → `pdf_text` for ATS order → self-check each bullet against its evidence.
 6. Report the changes and gaps in a few lines; `tex_diff` on request. Then the attach mode decides: see
    [flow 8](#8-review-and-attach).
 
@@ -139,7 +130,7 @@ The `ezapply-resume` skill:
 The `ezapply-cover-letter` skill: same inputs plus `templates/cover/format.md` if the user supplied an example.
 Copy the template to `postings/<id>/cover.tex`, fill the per-letter fields, write the body between the
 `% BODY START` / `% BODY END` markers (opening, two evidence paragraphs, close, 250–380 words unless
-`format.md` says otherwise), compile to one page, render, report.
+`format.md` says otherwise), compile to one page and fix what `lint` lists, report.
 
 ## 6. Bundle ("put them in one PDF")
 The `ezapply-bundle` skill (also triggered by "all files in one PDF" in the recorded requirements): record `bundleRequired`, order (posting's order, else cover → resume → extras),
@@ -158,12 +149,12 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    page's link, or else the first fill binds the tab to it and Claude tells the user once (`postingBound`). A tab
    of another posting (another employer, another requisition, a tab bound to another posting) is read with
    `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude stops to
-   sort it out with the user (`posting_activate { id, tabId }` when the user says the tab is right). Before each form call the companion
-   brings that tab to the front of its window, and before a call that changes the page the browser window too
-   (`forms.focusBrowser`, on by default); neither while a review page waits for the user. If the tab is still
-   hidden (a minimized window), results carry `tabHidden` and Claude tells the user once to keep it visible,
-   since the browser slows hidden tabs. If the window stayed behind another app, results of calls that change
-   the page carry `browserBehind`, which Claude passes on when a field (a date) isn't taken.
+   sort it out with the user (`posting_activate { id, tabId }` when the user says the tab is right). Before each form call the extension
+   turns on focus emulation for that tab, so it runs at full speed and focused wherever it is (Chrome shows its
+   debugging bar meanwhile). Where that can't run and the tab is hidden, results carry `tabHidden` and Claude
+   tells the user once to keep it visible, since the browser slows hidden tabs; where the window is behind
+   another app, results of calls that change the page carry `browserBehind`, which Claude passes on when a
+   field (a date) isn't taken.
 2. `get_form`. The first read of a site's page in the session carries that site's `siteNotes`, which Claude
    follows for the application ([site notes](mcp-tools.md#site-notes)). Then by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and answers Claude's card ("Signed in") when done; `start-choice` → `page_action apply_manually` (on
@@ -175,12 +166,12 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    its `save.<block>` button, one entry at a time.
    Dayforce's employment and education records are added the same way, and its Personal Information is saved
    with its own Update (`save.personal-information`); its Submit step is the review page.
-3. Each step: `get_form` (or the step `go_next` returned), then Claude decides every field (profile facts via
+3. Each step: `get_form` (or the `form` `go_next` returned), then Claude decides every field (profile facts via
    hints and labels, read as written: a level on a numeric scale takes a number; screening questions matched to the answer bank
    by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    on one `ask_user` card per step, with Claude's suggestion where it has one (in chat without a panel), and a resolved miss or a new answer offered for saving to the answer bank; the
-   skills that fit the role, not necessarily all), `add_repeatable` until each list's rows or items match the
-   profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a
+   skills that fit the role, not necessarily all), one `add_repeatable { addButtonIds }` for every row or item
+   missing from each list against the profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a
    `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
    field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
    doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in

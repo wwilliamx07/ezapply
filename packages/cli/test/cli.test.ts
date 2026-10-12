@@ -32,7 +32,7 @@ describe("ezapply command errors", () => {
 
   it("explains a damaged config.json and what to do", async () => {
     await writeFile(join(appDir, "config.json"), "{ not json");
-    const r = ezapply("status");
+    const r = ezapply("debug", "report");
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/config\.json is invalid: not valid JSON/);
     expect(r.stderr).toMatch(/run `ezapply init`/);
@@ -40,16 +40,12 @@ describe("ezapply command errors", () => {
   });
 });
 
-describe("no daemon", () => {
-  it("has no commands to run ezapply in the background, and status points at ezapply chat", () => {
-    for (const command of ["start", "stop", "restart", "daemon", "pair"]) {
+describe("commands", () => {
+  it("has no daemon commands, no chat and no status (doctor says whether ezapply runs)", () => {
+    for (const command of ["start", "stop", "restart", "daemon", "pair", "chat", "status"]) {
       const r = ezapply(command);
       expect(r.status, command).toBe(2);
       expect(r.stderr).toMatch(/Unknown command/);
     }
-    expect(ezapply("init", "--workspace", join(appDir, "ws"), "--port", "1").status).toBe(0);
-    const r = ezapply("status");
-    expect(r.status).toBe(1);
-    expect(r.stdout).toMatch(/isn't running.*ezapply chat/);
   });
 });

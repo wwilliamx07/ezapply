@@ -1,4 +1,4 @@
-// Run by quiet.test.ts as `ezapply chat` runs the companion: with the console quieted and the crash guard on,
+// Run by quiet.test.ts as `ezapply` runs the companion: with the console quieted and the crash guard on,
 // it prints through every channel a library might use, extracts a posting whose CSS doesn't parse (jsdom),
 // and throws from a timer and a promise. Nothing of it may reach stdout or stderr, and the process lives on.
 import { writeFileSync } from "node:fs";

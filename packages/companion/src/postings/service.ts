@@ -146,8 +146,8 @@ export class PostingsService {
   }
 
   /**
-   * Call `fn` after a capture or posting_activate sets the active posting (`ezapply chat` restarts Claude
-   * on a new one). Returns the function that stops it.
+   * Call `fn` after a capture or posting_activate sets the active posting (the panel follows it). Returns the
+   * function that stops it.
    */
   onActiveChange(fn: () => void): () => void {
     this.activeListeners.add(fn);

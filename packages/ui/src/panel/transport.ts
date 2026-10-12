@@ -29,7 +29,7 @@ export type CaptureOutcome = { ok: true; postingId: string; label: string } | { 
 export interface PanelTransport {
   call<K extends PanelMethod>(method: K, params: PanelParams<K>): Promise<PanelResult<K>>;
   /**
-   * Capture the window's current tab as the posting (Capture). Called inside the click, since Firefox asks
+   * Capture the window's current tab as the posting (Capture). Called inside the click, since Chrome asks
    * for the extension's access to websites only during the user's gesture.
    */
   capture(): Promise<CaptureOutcome>;

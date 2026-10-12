@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Services } from "../../services.js";
 import { tool } from "../result.js";
 
-/** `ezapply chat` just started and the paired extension hasn't reconnected (and wasn't waited for). */
+/** `ezapply` just started and the paired extension hasn't reconnected (and wasn't waited for). */
 const RECONNECTING =
   "The browser extension hasn't reconnected since ezapply started. A posting the user captured while " +
   "ezapply wasn't running arrives once it does (within about 30 s of the browser being open): if the user just " +

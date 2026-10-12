@@ -60,7 +60,8 @@ async function mcp(): Promise<Client> {
 }
 
 async function call(client: Client, args: Record<string, unknown>) {
-  const res = await client.callTool({ name: "onboarding", arguments: args });
+  // Without a panel agent, the agent waits in the call for the page's tasks.
+  const res = await client.callTool({ name: "onboarding", arguments: { wait: true, ...args } });
   return JSON.parse((res.content as { text: string }[])[0]?.text ?? "null");
 }
 
@@ -157,7 +158,7 @@ describe("onboarding on a page", () => {
 
     // Nothing more: the call says to wait again.
     const idle = await call(client, { taskId: "t2", result: { ok: false, note: "No access." }, timeoutSeconds: 5 });
-    expect(idle).toMatchObject({ waiting: true, hint: expect.stringMatching(/onboarding \{\}/) });
+    expect(idle).toMatchObject({ waiting: true, hint: expect.stringMatching(/onboarding \{ wait: true \}/) });
 
     const done = call(client, { timeoutSeconds: 30 });
     await new Promise((r) => setTimeout(r, 100));
@@ -205,7 +206,7 @@ describe("onboarding on a page", () => {
     expect(r).toMatchObject({
       openedBrowser: false,
       tell: expect.stringContaining(r.url),
-      hint: "Then wait for its tasks: onboarding {}.",
+      hint: "Then wait for its tasks: onboarding { wait: true }.",
     });
     await client.close();
   });

@@ -2,7 +2,7 @@ import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
-import { rawTool, tool } from "../result.js";
+import { tool } from "../result.js";
 
 const PATH_NOTE = "Paths may be absolute or relative to the workspace root.";
 
@@ -14,7 +14,9 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       description:
         "Compile a .tex file (under postings/ or templates/) to a PDF next to it, without shell escape. Returns the " +
         "PDF, page count, and diagnostics with line numbers (overfull boxes, missing glyphs). *resume*/*cv* files are " +
-        "checked against the page limit; over it, `overflow` gives the lines past it and their text. Successful builds are snapshotted to .history/. Engine: the file's " +
+        "checked against the page limit; over it, `overflow` gives the lines past it and their text. Within it, " +
+        "`lint` lists layout problems: a word or two alone on a bullet's last line, right-aligned dates out of " +
+        "line, free lines at the bottom of the last page at the limit, text off the page. Successful builds are snapshotted to .history/. Engine: the file's " +
         `\`% !TEX program\` comment, else tex.engine (engine, engineFrom say which). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),
@@ -38,31 +40,6 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
     tool(s.log, "tex_diff", ({ oldPath, newPath }: { oldPath: string; newPath: string }) =>
       s.documents.diff(oldPath, newPath),
     ),
-  );
-
-  server.registerTool(
-    "pdf_render",
-    {
-      title: "Render PDF page",
-      description:
-        "Render one PDF page to an image so you can check layout visually (alignment, overflow, awkward breaks). " +
-        `A PNG copy is saved to .previews/ next to the PDF. ${PATH_NOTE}`,
-      inputSchema: {
-        path: z.string(),
-        page: z.number().int().min(1).default(1),
-        scale: z.number().min(0.5).max(3).default(1.5).describe("1.0 = 72 dpi."),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    rawTool(s.log, "pdf_render", async ({ path, page, scale }: { path: string; page: number; scale: number }) => {
-      const { png, savedTo } = await s.documents.render(path, page, scale);
-      return {
-        content: [
-          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
-          { type: "text", text: JSON.stringify({ page, savedTo }) },
-        ],
-      };
-    }),
   );
 
   server.registerTool(

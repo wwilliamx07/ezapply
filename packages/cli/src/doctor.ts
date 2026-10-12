@@ -6,7 +6,6 @@ import {
   createLogger,
   GitHubService,
   githubDetail,
-  HEALTH_MODE,
   installCommand,
   KeyringStore,
   loadAppConfig,
@@ -49,23 +48,18 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
     );
     const agent = await agentFileStatus(config.workspace);
     add("agent file", agent.done, agent.detail);
-    // Not running is normal outside a chat: the companion lives inside `ezapply chat`.
+    // Not running is fine: doctor is usually run while ezapply is stopped, or from another terminal.
     const health = await fetchHealth(config);
-    const legacy = health !== null && health.mode !== HEALTH_MODE;
     add(
       "ezapply",
-      !legacy,
-      !health
-        ? "not running (it runs while `ezapply` or `ezapply chat` is open)"
-        : legacy
-          ? `a background daemon from an earlier build holds port ${config.port}; \`ezapply chat\` stops it`
-          : `v${health.version} running on port ${config.port}`,
+      true,
+      health ? `v${health.version} running on port ${config.port}` : "not running (it runs while `ezapply` is open)",
     );
-    if (health && !legacy) {
+    if (health) {
       add(
         "protocol",
         health.protocolVersion === PROTOCOL_VERSION,
-        `running v${health.protocolVersion}, cli v${PROTOCOL_VERSION}${health.protocolVersion === PROTOCOL_VERSION ? "" : " (exit the chat and start it again)"}`,
+        `running v${health.protocolVersion}, cli v${PROTOCOL_VERSION}${health.protocolVersion === PROTOCOL_VERSION ? "" : " (stop ezapply and start it again)"}`,
       );
       add(
         "extension",

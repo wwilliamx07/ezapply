@@ -191,7 +191,7 @@ through juic's component registry and the attachment view's upload popup
 ([sites](sites.md#the-paginated-picklist-through-its-component)). Each such driver holds everything about its
 widget: how it's recognised, read, listed, searched, filled and cleared.
 
-**Why Workday and Oracle were reworked (2026-10-11).** When they moved onto the engine, their fillers and readers
+**Why Workday and Oracle were reworked.** When they moved onto the engine, their fillers and readers
 moved unchanged: each "driver" handed its kind back to one `fillField` switch and to `currentValue` and
 `knownOptions` switches, the kind was decided twice (the drivers' `is` and `fieldKind` / `rowKind`), and their
 text, radio, checkbox, checkbox-group and file code were copies of the shared drivers, which had drifted apart (the
@@ -342,7 +342,7 @@ into the page's main world as the extension does, and calls the adapter's method
 - **No bot-protection workarounds.** A site that blocks headless browsers or shows a challenge (SmartRecruiters'
   DataDome, iCIMS) is built from pages the user saves from a real session instead.
 
-The script hardcodes this machine's paths, so it stays out of the repo until `todo.md`'s "Agents that try to
+The script hardcodes this machine's paths, so it stays out of the repo until the todo's "Agents that try to
 break a new adapter" gives it a home.
 
 **Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's

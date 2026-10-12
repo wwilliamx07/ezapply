@@ -2,11 +2,9 @@ import { format } from "node:util";
 import type { Logger } from "@ezapply/companion";
 
 /**
- * Under `ezapply chat` the terminal belongs to Claude Code, and anything else written to it lands in the
- * middle of Claude's screen. Libraries the companion uses may still print (pdfjs through console.log, a
- * dependency's warning on stderr), so send the console and stderr to the log. stdout itself is left alone:
- * the wrapper prints its restart line there, while no Claude is running. Claude writes to the terminal it
- * inherited, not through these streams, so it's unaffected.
+ * `ezapply`'s terminal shows only its own few lines. Libraries the companion uses may still print (pdfjs
+ * through console.log, a dependency's warning on stderr), so send the console and stderr to the log. stdout
+ * itself is left alone: ezapply's own lines go there.
  */
 export function quietProcess(log: Logger): void {
   const to =
@@ -29,8 +27,8 @@ export function quietProcess(log: Logger): void {
 }
 
 /**
- * A bug in companion code must not end `ezapply chat`: that would take Claude's tools away mid-session (and
- * the terminal with it). Log it and keep serving. Node discourages carrying on after an uncaught exception,
+ * A bug in companion code must not end `ezapply`: that would take Claude's tools and the extension's
+ * connection away mid-session. Log it and keep serving. Node discourages carrying on after an uncaught exception,
  * but the alternative here is worse: every error the companion can expect is already caught per request.
  */
 export function guardProcess(log: Logger): void {

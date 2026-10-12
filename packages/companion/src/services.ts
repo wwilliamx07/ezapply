@@ -43,6 +43,6 @@ export interface Services {
   opener: Opener;
   /** The UI package's pages and assets (served at /ui/). */
   ui: UiAssets;
-  /** The extension package folder (holds dist/ and dist-firefox/), when known. */
+  /** The extension package folder (holds dist/), when known. */
   extensionDir?: string;
 }

@@ -40,14 +40,14 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
     {
       title: "Pair the browser extension",
       description:
-        "Open pairing for 15 minutes and return what the user must do to load the extension (Chrome or Firefox). " +
+        "Open pairing for 15 minutes and return what the user must do to load the extension (Chrome or another Chromium browser). " +
         "Once loaded, it connects and pairs by itself, with no code. Relay `tell`, then call extension_pair_wait. " +
-        "Pass replace: true to forget the currently paired extension first (switching browsers, or a reinstalled " +
-        "Firefox add-on that won't connect).",
+        "Pass replace: true to forget the currently paired extension first (switching browsers, or a copy loaded " +
+        "again from another folder, which gets a new id).",
       inputSchema: { replace: z.boolean().optional() },
     },
     tool(s.log, "extension_pair", async ({ replace }: { replace?: boolean }) => {
-      const { connected, status, chrome, firefox, built } = await startPairing(s, replace);
+      const { connected, status, chrome, built } = await startPairing(s, replace);
       if (connected) return { connected: true, extension: status };
       return {
         connected: false,
@@ -58,19 +58,11 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
           steps: "Turn on Developer mode (top right), click Load unpacked, and choose this folder.",
           folder: chrome,
         },
-        firefox: {
-          page: "about:debugging#/runtime/this-firefox",
-          steps:
-            "Click Load Temporary Add-on and choose this file. Firefox removes it when it closes; load it again and " +
-            "call extension_pair next time. Firefox may withhold its access to websites: if its options page says it has " +
-            "none, click Grant access (a form call that finds it missing opens a small ezapply window asking for it).",
-          manifest: firefox,
-        },
         ...(built
           ? {}
           : { hint: "The extension isn't built. Ask the user to run `npm run setup` in the ezapply repo first." }),
         tell:
-          "Ask which browser they use, then give them that browser's page, steps and path (paths are copyable). " +
+          "Give them the page, steps and folder (paths are copyable; Edge's page is edge://extensions). " +
           (status.paired
             ? "An extension is already paired: if it's installed, they only need to open the browser. For a different copy, call extension_pair with replace: true."
             : "It pairs by itself once loaded."),

@@ -38,11 +38,12 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 1. `tex_compile { path }`. Fix errors first. Treat overfull boxes and missing glyphs as defects.
 2. It must be **exactly one page**. On overflow, `overflow` says how many lines spilled over and which:
    cut about that much in one pass, tightening wording first, then dropping the weakest bullet. Never
-   shrink fonts, margins or spacing below the template's. If it's clearly under a page, consider adding
-   the next strongest evidence-backed bullet.
-3. `pdf_render { path, page? }` page 1 and look at it: alignment, orphaned lines, uneven sections.
-4. `pdf_text { path, pages? }`: headings intact, sensible reading order, key terms present as plain text.
-5. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
+   shrink fonts, margins or spacing below the template's.
+3. Within the page, fix what `lint` lists: a word or two alone on a bullet's last line (cut a few words, or
+   say a little more), a right-aligned date out of line. `underfilled` means room is left: add the next
+   strongest evidence-backed bullet.
+5. `pdf_text { path, pages? }`: headings intact, sensible reading order, key terms present as plain text.
+6. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
 
 ## Report
 Give 3–6 lines: what changed and why, plus any gaps you did not claim, and the PDF path. Then follow the

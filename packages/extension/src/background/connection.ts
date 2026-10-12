@@ -12,12 +12,10 @@ import {
   type ResultOf,
   RpcPeer,
 } from "@ezapply/protocol";
-import { ext, isFirefox } from "../ext.js";
 import { detectBrowser } from "./browser-id.js";
 import { type ConnState, DEFAULT_PORT, type Settings, store } from "./settings.js";
 
 // Chrome keeps the MV3 service worker alive while WebSocket traffic flows at least every 30s.
-// Firefox's event page ignores socket traffic and idles out after 30s without an extension event.
 const KEEPALIVE_MS = 20_000;
 // Retries after a drop wait 1, 2, 4, then 5 s each: ezapply is noticed within 5 s of starting.
 const MAX_BACKOFF_MS = 5_000;
@@ -119,11 +117,7 @@ export class CompanionConnection {
             handlers: this.handlers,
             idPrefix: "e",
           });
-          this.keepalive = setInterval(() => {
-            send({ kind: "ping", t: Date.now() });
-            // The write fires storage.onChanged back into this page, which resets Firefox's idle timer.
-            if (isFirefox) void ext.storage.session.set({ keepalive: Date.now() });
-          }, KEEPALIVE_MS);
+          this.keepalive = setInterval(() => send({ kind: "ping", t: Date.now() }), KEEPALIVE_MS);
           if (msg.pairingToken) {
             this.active = { port: settings.port, pairingToken: msg.pairingToken };
             await store.saveSettings(this.active);
@@ -161,7 +155,7 @@ export class CompanionConnection {
         return;
       }
       if (ev.code === CloseCode.Replaced) return;
-      // The companion runs inside `ezapply chat`: not reachable, or closed, means no chat is open.
+      // The companion runs inside `ezapply`: not reachable, or closed, means it isn't running.
       await this.setState({
         state: "disconnected",
         reason: "ezapply isn't running: start it with ./ezapply in your workspace (Capture still works)",

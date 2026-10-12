@@ -50,7 +50,7 @@ describe("Claude Code config", () => {
     expect(await read()).toMatchObject({ autoMemoryEnabled: false, model: "opus" });
   });
 
-  it("writes a launcher so `ezapply chat` runs from the workspace", async () => {
+  it("writes a launcher so `ezapply` runs from the workspace", async () => {
     const report = await initWorkspace(config);
     const launcher = join(config.workspace, process.platform === "win32" ? "ezapply.cmd" : "ezapply");
     expect(report.created.concat(report.updated)).toContain(launcher);
@@ -169,5 +169,25 @@ describe("ezapply.config.json", () => {
     await writeFile(path, JSON.stringify({ ...cur, debug: { autofill: true, enabled: false } }));
     await initWorkspace(config);
     expect(JSON.parse(await readFile(path, "utf8")).debug).toEqual({ enabled: false });
+  });
+
+  it("removes forms.focusBrowser, which focus emulation replaced", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, "ezapply.config.json");
+    const cur = JSON.parse(await readFile(path, "utf8"));
+    await writeFile(path, JSON.stringify({ ...cur, forms: { focusBrowser: "off" } }));
+    const report = await initWorkspace(config);
+    expect(report.updated).toContain(`${path} (forms.focusBrowser removed (focus emulation replaced it))`);
+    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty("forms");
+  });
+
+  it("removes context.restartOnCapture, which only `ezapply chat` read", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, "ezapply.config.json");
+    const cur = JSON.parse(await readFile(path, "utf8"));
+    await writeFile(path, JSON.stringify({ ...cur, context: { restartOnCapture: false } }));
+    const report = await initWorkspace(config);
+    expect(report.updated).toContain(`${path} (context.restartOnCapture removed (\`ezapply chat\` is gone))`);
+    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty("context");
   });
 });

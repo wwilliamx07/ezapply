@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,24 +6,21 @@ import { parseArgs } from "node:util";
 import {
   type AppConfig,
   appConfigPath,
-  appDir,
-  CHAT_SESSION_HEADER,
   COMPANION_VERSION,
   createLogger,
   DEFAULT_PORT,
-  HEALTH_MODE,
-  LEGACY_STATE_FILE,
+  findClaude,
   loadAppConfig,
   MCP_PATH,
   newPairingToken,
   newToken,
+  SESSION_ENV,
+  SESSION_HEADER,
   saveAppConfig,
 } from "@ezapply/companion";
 import { ErrorCode, EzError } from "@ezapply/protocol";
-import { CHAT_SESSION_ENV, findClaude, hostChat } from "./chat.js";
 import { runDebug } from "./debug.js";
 import { runDoctor } from "./doctor.js";
-import { fetchHealth } from "./health.js";
 import { runMcpRelay } from "./mcp-relay.js";
 import { hostPanel } from "./panel.js";
 import { guardProcess, quietProcess } from "./quiet.js";
@@ -36,14 +32,10 @@ const EXTENSION_DIR = resolve(dirname(CLI_MAIN), "..", "..", "extension");
 const USAGE = `ezapply ${COMPANION_VERSION}
 
 Usage:
-  ezapply                                            Run ezapply for the browser's side panel (how you use
-                                                     ezapply); Ctrl+C stops it
-  ezapply chat [claude args…]                        Run ezapply with Claude Code in this terminal instead; a
-                                                     newly captured posting starts a fresh session
+  ezapply                                            Run ezapply for the browser's side panel; Ctrl+C stops it
   ezapply help                                       This list
   ezapply init [--workspace <dir>] [--port <n>]      Create or refresh the workspace and local config
-  ezapply status                                     Check whether ezapply is running
-  ezapply doctor                                     Diagnose the whole setup
+  ezapply doctor                                     Diagnose the whole setup, and whether ezapply is running
   ezapply debug on|off|report|clean|export           Debug mode: record every form call under debug/
   ezapply mcp                                        MCP server on stdio (Claude Code runs this)
 `;
@@ -51,12 +43,8 @@ Usage:
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
-    case "chat":
-      return cmdChat(rest);
     case "init":
       return cmdInit(rest);
-    case "status":
-      return cmdStatus();
     case "doctor":
       return runDoctor();
     case "debug":
@@ -92,8 +80,6 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
     workspace: resolve(opts.workspace ?? existing?.workspace ?? join(homedir(), "ezapply-home")),
   };
   await saveAppConfig(config);
-  // What the background daemon of earlier builds remembered between runs; nothing reads it now.
-  await rm(join(appDir(), LEGACY_STATE_FILE), { force: true });
   return { config, report: await initWorkspace(config) };
 }
 
@@ -130,7 +116,7 @@ async function cmdInit(args: string[]): Promise<number> {
     `  ${process.platform === "win32" ? ".\\ezapply" : "./ezapply"}`,
     "A setup page opens in your browser for what's missing (TeX, the browser extension, GitHub, your resume), and",
     "Claude does the parts that need it. From then on you work in the ezapply panel (the toolbar button in your",
-    "browser); ezapply runs while that command does. To use Claude in a terminal instead, add `chat` to it.",
+    "browser); ezapply runs while that command does.",
     "If ezapply is running now, stop it and start it again to use this build.",
     "",
   ];
@@ -154,42 +140,7 @@ async function cmdPanel(): Promise<number> {
   return hostPanel({ config, claude, extensionDir: EXTENSION_DIR, log, onStarted: () => quietProcess(log) });
 }
 
-/**
- * ezapply in the workspace: the companion in this process and Claude Code as its child, restarted with a
- * fresh session when the user captures another posting (see chat.ts). Ctrl+C belongs to Claude: the wrapper
- * ignores it and ends when Claude does.
- */
-async function cmdChat(args: string[]): Promise<number> {
-  const config = await requireConfig();
-  const claude = findClaude();
-  if (!claude) {
-    process.stderr.write(
-      "Claude Code isn't on PATH. Install it (https://code.claude.com/docs), or point EZAPPLY_CLAUDE at it.\n",
-    );
-    return 1;
-  }
-  const log = createLogger();
-  guardProcess(log);
-  process.on("SIGINT", () => {});
-  return hostChat({
-    config,
-    claude,
-    args,
-    extensionDir: EXTENSION_DIR,
-    log,
-    onStarted: (handle) => {
-      // From here the terminal is Claude's.
-      quietProcess(log);
-      const end = () => {
-        void handle.close().finally(() => process.exit(129));
-      };
-      process.on("SIGTERM", end);
-      process.on("SIGHUP", end);
-    },
-  });
-}
-
-/** Claude Code's MCP server: relay stdio to the companion inside `ezapply chat`. Nothing else may use stdout. */
+/** Claude Code's MCP server: relay stdio to the companion inside `ezapply`. Nothing else may use stdout. */
 async function cmdMcp(): Promise<number> {
   const config = await loadAppConfig();
   if (!config) {
@@ -201,30 +152,9 @@ async function cmdMcp(): Promise<number> {
     output: process.stdout,
     url: `http://${config.host}:${config.port}${MCP_PATH}`,
     token: config.mcpToken,
-    // Under `ezapply chat`, name the session so the wrapper knows when it's safe to restart it.
-    ...(process.env[CHAT_SESSION_ENV] ? { headers: { [CHAT_SESSION_HEADER]: process.env[CHAT_SESSION_ENV] } } : {}),
+    // The panel's agent names its conversation, so the tools know which one a call comes from.
+    ...(process.env[SESSION_ENV] ? { headers: { [SESSION_HEADER]: process.env[SESSION_ENV] } } : {}),
   });
-  return 0;
-}
-
-async function cmdStatus(): Promise<number> {
-  const config = await requireConfig();
-  const health = await fetchHealth(config);
-  if (!health) {
-    process.stdout.write("ezapply isn't running. It runs while `ezapply` (or `ezapply chat`) is open.\n");
-    return 1;
-  }
-  if (health.mode !== HEALTH_MODE) {
-    process.stdout.write(
-      `A background daemon from an earlier ezapply build is running on port ${config.port}; ` +
-        "`ezapply chat` stops it when it starts.\n",
-    );
-    return 1;
-  }
-  process.stdout.write(
-    `ezapply ${health.version} is running on ${config.host}:${config.port}; ` +
-      `extension ${health.extensionConnected ? "connected" : "not connected"}.\n`,
-  );
   return 0;
 }
 

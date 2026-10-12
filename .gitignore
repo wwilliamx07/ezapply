@@ -3,6 +3,5 @@ dist/
 *.tsbuildinfo
 coverage/
 .env
-dist-firefox/
 references/.obsidian
 tmp
