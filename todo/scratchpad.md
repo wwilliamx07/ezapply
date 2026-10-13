@@ -1,2 +1,0 @@
-- tailoring/filling need to be in separate conversations no matter the order they occur in
-- send to claude and approve as shown should be one button: Approve Document. Clicking approve document changes the page to the next unapproved document, and clicking it on the last unapproved document sends to claude.

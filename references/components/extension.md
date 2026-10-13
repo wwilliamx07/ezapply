@@ -33,6 +33,7 @@ on the companion's review page.
 | `src/adapters/sites/<site>/` | A definition per site: [Workday](sites.md#workday-sitesworkday), [Oracle Recruiting Cloud](sites.md#oracle-recruiting-cloud-sitesoracle), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
 | `static/manifest.json` | The manifest. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
 | `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and `dist/` |
+| `icons.mjs`, `static/icons/` | The extension's and toolbar button's icons: ezapply's mark (`ui/static/mark.svg`) as 16, 32, 48 and 128 px PNGs |
 
 ## Manifest
 - Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, `sidePanel` and
@@ -62,6 +63,10 @@ import-free subpaths) for
 `chrome120`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
 (so the source map stays exact). Any change to the adapter therefore replaces older copies in open tabs,
 with no version number to remember to bump.
+
+**Icons.** Chrome takes PNGs for an extension's icons, not SVG, so `npm run icons -w @ezapply/extension` draws the
+mark at four times each size with `@napi-rs/canvas` (installed with pdf.js) and scales it down, and the PNGs are
+committed: the build only copies them, needing no rasterizer. Run it again after changing the mark.
 
 The output is `dist/`, loaded in Chrome with Load unpacked (`background.service_worker`,
 `minimum_chrome_version: 120`). It stays at the same path because Chrome derives an unpacked extension's id from

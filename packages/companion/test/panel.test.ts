@@ -160,7 +160,7 @@ describe("the side panel over the bridge", () => {
     });
     expect((await peer.request("panel.state", {})).agent.settings.model).toBe("opus");
     await expect(peer.request("panel.settings", { permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
-    const conv = await peer.request("panel.conversation", { key: id });
+    const conv = await peer.request("panel.conversation", { key: `${id}/tailor` });
     expect(conv.posting?.requirements).toEqual(["One PDF with resume and cover letter", "Cover letter required"]);
     expect(conv.documents).toEqual([
       { file: "cover.pdf", state: "draft" },
@@ -171,6 +171,13 @@ describe("the side panel over the bridge", () => {
       key: "general",
       documents: [],
     });
+    // The application's conversation shows the same posting and documents.
+    expect(await peer.request("panel.conversation", { key: `${id}/fill` })).toMatchObject({
+      key: `${id}/fill`,
+      posting: { id },
+      documents: conv.documents,
+    });
+    await expect(peer.request("panel.conversation", { key: id })).rejects.toThrow(/Not a conversation/);
   });
 
   it("tells what a tab is to the active posting", async () => {
@@ -202,16 +209,16 @@ describe("the side panel over the bridge", () => {
     const other = await capture(); // same URL: the same posting, still one
     expect(other).toBe(id);
     await ext.peer.request("panel.watch", { open: 1 });
-    await ext.peer.request("panel.send", { key: id, text: "tailor my resume" });
+    await ext.peer.request("panel.send", { key: `${id}/tailor`, text: "tailor my resume" });
     await waitFor(async () => (ext.updates.some((u) => u.event?.event.kind === "turnEnd") ? true : null), 10_000);
     const kinds = ext.updates.filter((u) => u.event).map((u) => u.event?.event.kind);
     expect(kinds).toEqual(["user", "user", "text", "turnEnd"]);
     expect(ext.updates.find((u) => u.event?.event.kind === "text")?.event).toMatchObject({
-      conversation: id,
+      conversation: `${id}/tailor`,
       event: { text: "echo: tailor my resume" },
     });
     expect(ext.updates.some((u) => u.changed)).toBe(true);
-    const conv = await ext.peer.request("panel.conversation", { key: id });
+    const conv = await ext.peer.request("panel.conversation", { key: `${id}/tailor` });
     expect(conv.events.map((e) => e.kind)).toEqual(["user", "text", "turnEnd"]);
     expect(conv.totalCostUsd).toBe(0.01);
   });
@@ -259,16 +266,16 @@ describe("the side panel over the bridge", () => {
     ).rejects.toThrow(/No document/);
   });
 
-  it("deletes a posting: its folder and conversation go, and it's no longer the active posting", async () => {
+  it("deletes a posting: its folder and conversations go, and it's no longer the active posting", async () => {
     const ext = await extension();
     const id = await capture();
     await handle.services.postings.activate(id);
-    await ext.peer.request("panel.send", { key: id, text: "hello" });
-    await waitFor(async () => ((await handle.services.agent.history(id)).length >= 3 ? true : null), 10_000);
+    await ext.peer.request("panel.send", { key: `${id}/fill`, text: "hello" });
+    await waitFor(async () => ((await handle.services.agent.history(`${id}/fill`)).length >= 3 ? true : null), 10_000);
     await ext.peer.request("panel.deletePosting", { postingId: id });
     expect(existsSync(join(dir, "ws", "postings", id))).toBe(false);
     expect(existsSync(join(dir, "ws", "agent", id))).toBe(false);
-    expect(await handle.services.agent.history(id)).toEqual([]);
+    expect(await handle.services.agent.history(`${id}/fill`)).toEqual([]);
     const state = await ext.peer.request("panel.state", {});
     expect(state.activePostingId).toBeNull();
     expect(state.postings).toEqual([]);

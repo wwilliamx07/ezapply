@@ -50,9 +50,6 @@ body {
     gap: 0;
     font-size: 0;
   }
-  .ez-panel-head .ez-brand-mark {
-    font-size: 14px;
-  }
 }
 @media (max-width: 360px) {
   .ez-panel-head .ez-brand {
@@ -78,6 +75,39 @@ body {
 }
 .ez-dot-danger {
   background: var(--danger);
+}
+/* A posting's two conversations, under the header: its documents' and its application's. */
+.ez-panel-parts {
+  display: flex;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ez-panel-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ez-panel-part:hover {
+  color: var(--text);
+}
+.ez-panel-part-on {
+  border-bottom-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.ez-panel-part .ez-dot {
+  width: 7px;
+  height: 7px;
 }
 .ez-panel-menu,
 .ez-split-menu {

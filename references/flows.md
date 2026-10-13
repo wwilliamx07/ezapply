@@ -97,13 +97,14 @@ non-default ports.
    and visible captures, runs extraction to `posting.md`, writes `meta.json` (keeping fields Claude
    corrected earlier), and makes it the active posting.
 5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>". The side panel shows the posting and its
-   conversation (a new one, or the one it had).
-6. **Nothing restarts:** each posting has its own conversation with the agent ([agent](components/agent.md)), so
-   the next application starts clean, the earlier one isn't re-sent with every turn of it, and the earlier one can
-   be picked up again.
+   conversations (new ones, or the ones it had).
+6. **Nothing restarts:** each posting has its own conversations with the agent, one for its documents and one for
+   its application ([agent](components/agent.md#conversations-servicets)), so the next application starts clean,
+   the earlier one isn't re-sent with every turn of it, and the earlier one can be picked up again.
 
 **Requests (flows 4 to 7)** come from the side panel: its buttons send them in words (Tailor documents, Fill
-form), or the user types them in its chat bar. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
+form), or the user types them in its chat bar. Tailoring (flows 4 to 6, and revising after a review) runs in the
+posting's documents conversation and filling (flow 7) in its application conversation, whichever comes first. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
 cards, and its reports in the panel's conversation ([ui](components/ui.md#the-side-panel-srcpanel)).
 
 ## 4. Tailoring the resume ("tailor my resume")

@@ -224,7 +224,7 @@ refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the a
 hand needs it first.
 
 - **The repos are checked once per chat** (a run of `ezapply`), in the background from startup, and the heads kept
-  for it: every posting gets its own conversation, and a check per conversation would repeat for nothing.
+  for it: every posting gets its own conversations, and a check per conversation would repeat for nothing.
   `workspace_changes { refresh: true }` runs it again. Repos put off with a running timer are skipped. `ls-remote` only, never a fetch, so nothing in
   `repo-cache/` changes before the user agrees (re-indexing fetches anyway). Four repos at a time, 10 s each,
   through the same hardened git invocation as `repo_sync` (HTTPS only, the token in git's environment). A repo

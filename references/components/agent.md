@@ -12,13 +12,13 @@ It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Cod
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` (the header's value, if it's 8–64 letters, digits and dashes) |
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` (the header's value, if it's 8–64 letters, digits and dashes) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
-| `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, the permission mode and model |
+| `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, forgetting a posting's, the permission mode and model |
 | `agent/needs.ts` | `NeedsYou`: the cards (questions and approvals) waiting on the user |
 | `mcp/tools/agent.ts` | `ask_user` and `permission_ask` ([mcp-tools](../mcp-tools.md#the-panel)) |
-| `protocol/src/panel.ts` | The shared types: `AgentEvent`, `AskSpec` and its checks (`askSpecProblems`, `askAnswerProblems`), `Card`, `AgentStatus`, `GENERAL_CONVERSATION`; the panel's bridge methods (`PanelMethods`), `PanelState`, `PanelConversation`, `PanelTab`, `PanelUpdate` |
+| `protocol/src/panel.ts` | The shared types: `AgentEvent`, `AskSpec` and its checks (`askSpecProblems`, `askAnswerProblems`), `Card`, `AgentStatus`, the conversation keys (`GENERAL_CONVERSATION`, `ConversationPart`, `conversationKey`, `postingConversation`); the panel's bridge methods (`PanelMethods`), `PanelState`, `PanelConversation`, `PanelTab`, `PanelUpdate` |
 
 **Why headless Claude Code, and why this way.** *Rejected:* the Claude Agent SDK (the same harness as a library and
 a dependency; its `canUseTool` callback is the host protocol `--permission-prompt-tool` gives the CLI); an agent
@@ -45,7 +45,7 @@ reached.
 | `--permission-mode <mode>` `--model <alias>` `--effort <level>` | The panel's settings ([below](#permission-mode-model-and-effort)), always given, so the user's own Claude Code defaults don't decide them behind the panel |
 | `--permission-prompt-tool mcp__ezapply__permission_ask` | What would prompt in the terminal asks the panel instead ([cards](#cards-needsts)) |
 | `--disallowedTools AskUserQuestion` | Questions go through `ask_user`: Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen questions |
-| `--append-system-prompt <PANEL_PROMPT>` | Where its words go: the user reads them in a narrow panel and never sees a terminal; questions go on `ask_user` cards, commands are approved in the panel. The skills say the rest |
+| `--append-system-prompt <PANEL_PROMPT>` | Where its words go: the user reads them in a narrow panel and never sees a terminal; questions go on `ask_user` cards, commands are approved in the panel. A posting's conversation also gets its part's line (`PART_PROMPTS`, [below](#conversations-servicets)). The skills say the rest |
 | `--session-id <uuid>` / `--resume <uuid>` | A new conversation's session, or the one it had |
 
 Not `--bare`: bare mode skips the workspace's skills, `.mcp.json`, settings and `CLAUDE.md`, and doesn't use a
@@ -84,7 +84,16 @@ tool's arguments cut to 160 characters),
 `agent.test.ts` pins the fields on lines shaped as recorded, with the values replaced.
 
 ## Conversations (`service.ts`)
-One per posting (its id) and one `general`. One process runs at a time: sending to another conversation closes an
+Two per posting, keyed `<posting id>/tailor` (its documents) and `<posting id>/fill` (its application), and one
+`general`. **Why two per posting:** tailoring and filling are separate work, whichever the user starts first, and
+in one conversation each was re-sent with every turn of the other (a long form's reads behind each document edit,
+and the documents' drafting behind each step). What one needs of the other is on disk: the documents and their
+approvals, `notes.md`, the form log. Each part's line in the system prompt (`PART_PROMPTS`) keeps it to its work:
+the tailoring conversation doesn't touch application forms, and the filling one doesn't write or edit documents,
+though it may show the ones there for review and attach them; each tells the user to press the other's button
+for the rest. An older build kept one conversation per posting under the bare id; the first time the service
+reads its file in a run, such a conversation becomes the posting's tailoring one, its logs moved to
+`<posting id>/tailor/`, so its history stays in the panel. One process runs at a time: sending to another conversation closes an
 idle process, and is refused while it works ("Claude is still working in another conversation"), since two agents
 filling forms or editing one posting's files would collide. Sending:
 - starts the conversation's process when none runs, with `--resume` once Claude Code has had its session (it
@@ -102,9 +111,9 @@ and a notice. Claude Code stopping mid-turn is a notice with the first line it w
 of a process is checked for the `ezapply` MCP server: anything but `connected` is an error notice ("Run `ezapply
 init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
 
-**Forget** (`forget(key)`, when the panel deletes a posting) ends the conversation's process, withdraws its open
-cards, removes it from `conversations.json` and deletes its folder of logs (`agent/<key>/`). Nothing is kept for
-`claude --resume`, since the posting it was about is gone.
+**Forget** (`forgetPosting(id)`, when the panel deletes a posting) ends the process of either of the posting's
+conversations, withdraws their open cards, removes them from `conversations.json` and deletes the posting's folder
+of logs (`agent/<id>/`). Nothing is kept for `claude --resume`, since the posting they were about is gone.
 
 ## Permission mode, model and effort
 Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { permissionMode, model, effort }`,
@@ -168,14 +177,14 @@ own and no web page can reach it.
 |---|---|
 | `panel.watch { open }` | How many panels are open, sent by the extension on every change and on connecting. While more than none, cards are shown (`NeedsYou.watch`) and updates pushed; the extension disconnecting ends it |
 | `panel.state` | `PanelState`: the agent's status, the active posting, the 20 newest postings, the open cards, and setup (`workspace_check`'s required steps left; kept 30 s, as it runs TeX and GitHub checks) |
-| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for a posting its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes, `attached` from an upload in the form log), and a review waiting on the user |
+| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for either of a posting's conversations its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes, `attached` from an upload in the form log), and a review waiting on the user |
 | `panel.tab { tabId, url, title, site }` | What the tab is to the active posting: its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page |
-| `panel.send { key, text }` | The user's message; a posting's conversation makes its posting active first, since the skills work on the active one |
-| `panel.stop`, `panel.reset { key }` | Stop the turn; a new conversation for the posting |
+| `panel.send { key, text }` | The user's message to a conversation (`general`, or a posting's `tailor` or `fill`); a posting's makes its posting active first, since the skills work on the active one |
+| `panel.stop`, `panel.reset { key }` | Stop the turn; a new session for the conversation |
 | `panel.settings { permissionMode?, model?, effort? }` | Change the agent's settings ([above](#permission-mode-model-and-effort)); returns them. `panel.state` carries them as `agent.settings` |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
 | `panel.activate { postingId }` | Make a posting active (the panel's picker) |
-| `panel.deletePosting { postingId }` | Delete a posting for good: its conversation (`forget`), then its folder (`PostingsService.delete`). Refused while it has a review open |
+| `panel.deletePosting { postingId }` | Delete a posting for good: its conversations (`forgetPosting`), then its folder (`PostingsService.delete`). Refused while it has a review open |
 | `panel.deleteDocument { postingId, file }` | Delete one of the PDFs the panel lists for the posting, and nothing else (any other name is `not_found`). The `.tex` source stays, so Claude can build it again. Refused while the PDF is in an open review |
 | `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |
 

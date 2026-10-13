@@ -22,6 +22,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
+| — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~M | The token cuts' live run in `references/status.md` |
 | 1 | [Minimal reliance on agent performance](less-agent-reliance/overview.md) | — | ~L | — |
 | 2 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | — | ~M | Minimal reliance on agent performance |
 | 3 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~M | Remove the onboarding and repos skills |
@@ -52,7 +53,7 @@ Why this order:
 
 ## Groups
 
-- **The agent:** Minimal reliance on agent performance, Remove the onboarding and repos
+- **The agent:** Cut the tokens a panel conversation spends, Minimal reliance on agent performance, Remove the onboarding and repos
   skills, Refactor the skills, A writing spec for claims, Compatibility with various agents.
 - **Adapter building:** One directory per adapter, Agents that try to break a new adapter, Application forms on an
   employer's own page.

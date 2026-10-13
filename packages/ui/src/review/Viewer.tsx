@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Button, Icon } from "../components/ui.js";
 import "./textlayer.css";
 import "./viewer.css";
+import { linkLabel } from "../lib/links.js";
 import { itemsOf, type LoadedPage, type LoadedPdf } from "../lib/pdf.js";
 import type { ChangeMark } from "./changes.js";
 import { expandToWords, mergeRects } from "./selection.js";
@@ -57,7 +58,8 @@ const GUTTER = 48;
  * A PDF the way pdf.js draws it: each page on a canvas (drawn once it's near the view, again at a new zoom), with
  * pdf.js's text layer over it, so text can be selected, commented on and found with the browser's own find
  * (every page's text layer is there from the start). Over that, the marks: what changed since the last review,
- * and the user's comments.
+ * and the user's comments; and the PDF's links, which open (a web address in a new tab, a place in the PDF by
+ * scrolling to its page), so the user sees they were kept.
  */
 export function Viewer(props: Props) {
   const { pdf, comments, changes, showChanges, active, jump } = props;
@@ -255,6 +257,7 @@ export function Viewer(props: Props) {
               pending={selected?.page === i ? selected.rects : null}
               active={active}
               onActivate={props.onActivate}
+              onGoTo={goTo}
             />
           ))}
           {selected && !editing ? (
@@ -324,6 +327,7 @@ interface PageProps {
   pending: PageRect[] | null;
   active: string | null;
   onActivate(id: string): void;
+  onGoTo(page: number): void;
 }
 
 interface Box {
@@ -335,13 +339,13 @@ interface Box {
 
 const textContents = new WeakMap<LoadedPage, Promise<TextContent>>();
 
-function PageView({ index, page, scale, root, changes, comments, pending, active, onActivate }: PageProps) {
+function PageView({ index, page, scale, root, changes, comments, pending, active, onActivate, onGoTo }: PageProps) {
   const el = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const text = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(index < 2);
   const [spans, setSpans] = useState<HTMLElement[] | null>(null);
-  const [boxes, setBoxes] = useState<{ id: string; kind: "added" | "removed"; title: string; boxes: Box[] }[]>([]);
+  const [boxes, setBoxes] = useState<{ id: string; kind: "added" | "removed"; title?: string; boxes: Box[] }[]>([]);
   const width = Math.floor(page.width * scale);
   const height = Math.floor(page.height * scale);
 
@@ -411,11 +415,11 @@ function PageView({ index, page, scale, root, changes, comments, pending, active
     const origin = node.getBoundingClientRect();
     const out: typeof boxes = [];
     for (const mark of changes) {
-      const title = mark.change.removed ? `Was: ${mark.change.removed}` : "Added";
       const added = mark.added.filter((s) => s.page === index);
       if (added.length) {
+        // No title: the highlight lets the mouse through to the text under it, so it can be selected.
         const bs = added.flatMap((s) => measure(page, spans, s.start, s.end, origin));
-        if (bs.length) out.push({ id: mark.id, kind: "added", title, boxes: bs });
+        if (bs.length) out.push({ id: mark.id, kind: "added", boxes: bs });
       } else if (mark.removedAt?.page === index) {
         const { offset, after } = mark.removedAt;
         const b = measure(page, spans, after ? offset - 1 : offset, after ? offset : offset + 1, origin)[0];
@@ -495,6 +499,37 @@ function PageView({ index, page, scale, root, changes, comments, pending, active
             style={{ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) }}
           />
         ))}
+      </div>
+      <div className="ez-links">
+        {page.links.map((l, j) => {
+          const style = { left: pct(l.rect.x), top: pct(l.rect.y), width: pct(l.rect.w), height: pct(l.rect.h) };
+          const label = linkLabel(l);
+          return l.url ? (
+            <a
+              // biome-ignore lint/suspicious/noArrayIndexKey: a page's links don't move
+              key={j}
+              className="ez-link"
+              style={style}
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={label}
+            >
+              <span className="ez-sr-only">{`Opens ${label}`}</span>
+            </a>
+          ) : (
+            <button
+              // biome-ignore lint/suspicious/noArrayIndexKey: a page's links don't move
+              key={j}
+              type="button"
+              className="ez-link"
+              style={style}
+              title={`Go to ${label.toLowerCase()}`}
+              aria-label={`Link: go to ${label.toLowerCase()}`}
+              onClick={() => l.page !== undefined && onGoTo(l.page)}
+            />
+          );
+        })}
       </div>
     </div>
   );

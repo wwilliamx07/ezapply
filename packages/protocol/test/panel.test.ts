@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type AskSpec, askAnswerProblems, askSpecProblems } from "../src/panel.js";
+import {
+  type AskSpec,
+  askAnswerProblems,
+  askSpecProblems,
+  conversationKey,
+  postingConversation,
+} from "../src/panel.js";
 
 const yesNo = [{ value: "Yes" }, { value: "No" }];
 
@@ -92,5 +98,17 @@ describe("ask_user's questions", () => {
     expect(askAnswerProblems(spec, { one: { value: "" }, many: { value: ["No"] } })).toEqual([
       "one: an answer is needed",
     ]);
+  });
+});
+
+describe("conversation keys", () => {
+  it("names a posting's tailoring and filling conversations, and nothing else", () => {
+    expect(conversationKey("2026-01-01_acme_dev", "fill")).toBe("2026-01-01_acme_dev/fill");
+    expect(postingConversation("2026-01-01_acme_dev/tailor")).toEqual({
+      postingId: "2026-01-01_acme_dev",
+      part: "tailor",
+    });
+    for (const key of ["general", "p1", "p1/other", "../x/fill", "./fill", "a/b/fill", "p1/fill/"])
+      expect(postingConversation(key)).toBeNull();
   });
 });

@@ -1,18 +1,32 @@
 import type { ReviewPageFile } from "@ezapply/protocol";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Icon } from "../components/ui.js";
+import { linkLabel } from "../lib/links.js";
 import type { ChangeMark } from "./changes.js";
 import type { Decision, DraftComment } from "./draft.js";
 
+/** A web, mail or phone link in the document, with the page it's first on (0-based). */
+export interface DocLink {
+  url: string;
+  page: number;
+}
+
 interface Props {
   file: ReviewPageFile;
+  /** The document's links; null while the PDF loads or when it can't be read. */
+  links: DocLink[] | null;
   /** What changed since the last review; null while the PDF loads or when there's no earlier version to compare. */
   changes: ChangeMark[] | null;
   comments: DraftComment[];
   request: string;
   decision: Decision;
+  /** No other document is left to decide: the button sends the answer. */
+  last: boolean;
+  sending: boolean;
   active: string | null;
-  onApprove(approved: boolean): void;
+  /** Approve it (unless it asks for changes) and move on to the next document to decide, or send on the last. */
+  onAdvance(): void;
+  onUndo(): void;
   onRequest(text: string): void;
   onEditComment(id: string, note: string): void;
   onRemoveComment(id: string): void;
@@ -36,22 +50,65 @@ export function Panel(props: Props) {
 
       <div className="ez-approve">
         {decision === "approved" ? (
-          <Button variant="ghost" size="sm" onClick={() => props.onApprove(false)}>
-            Undo approval
+          <Button className="ez-btn-undo" onClick={props.onUndo} disabled={props.sending}>
+            <Icon name="undo" size={17} /> Undo approval
           </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={() => props.onApprove(true)}
-            disabled={decision === "changes"}
-            title={decision === "changes" ? "Remove the comments and the request to approve it as shown" : undefined}
-          >
-            <Icon name="check" size={17} /> Approve as shown
+        ) : null}
+        {decision !== "approved" || props.last ? (
+          <Button variant="primary" onClick={props.onAdvance} disabled={props.sending}>
+            {props.last ? (
+              <>
+                <Icon name="send" size={17} /> Send to Claude
+              </>
+            ) : decision === "changes" ? (
+              <>
+                <Icon name="send" size={17} /> Request Changes
+              </>
+            ) : (
+              <>
+                <Icon name="check" size={17} /> Approve Document
+              </>
+            )}
           </Button>
-        )}
+        ) : null}
+        {props.last ? (
+          <p className="ez-help">
+            {decision === "open"
+              ? "The last document to decide: sending approves it as shown."
+              : decision === "changes"
+                ? "The last document to decide: sending asks for its changes."
+                : "Every document is decided."}
+          </p>
+        ) : null}
       </div>
 
       <Checks file={file} />
+
+      {props.links ? (
+        <section className="ez-section" aria-labelledby="ez-links">
+          <h3 id="ez-links">
+            Links {props.links.length ? <span className="ez-count">{props.links.length}</span> : null}
+          </h3>
+          {props.links.length === 0 ? (
+            <p className="ez-help">No web or email links in this document.</p>
+          ) : (
+            <>
+              <p className="ez-help">Kept in the PDF: each opens from here and from the document.</p>
+              <ul className="ez-linklist">
+                {props.links.map((l) => (
+                  <li key={l.url}>
+                    <Icon name="link" size={15} />
+                    <a href={l.url} target="_blank" rel="noopener noreferrer" title={l.url}>
+                      {linkLabel({ url: l.url })}
+                    </a>
+                    <span className="ez-muted">p. {l.page + 1}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
 
       <section className="ez-section" aria-labelledby="ez-since">
         <h3 id="ez-since">Since you last reviewed it</h3>

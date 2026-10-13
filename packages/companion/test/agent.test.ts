@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NeedsYou } from "../src/agent/needs.js";
-import { agentArgs, type ClaudeCommand, sessionId } from "../src/agent/process.js";
+import { agentArgs, type ClaudeCommand, PANEL_PROMPT, PART_PROMPTS, sessionId } from "../src/agent/process.js";
 import { AgentService } from "../src/agent/service.js";
 import { readStreamLine, toolSummary } from "../src/agent/stream.js";
 import { MemoryStore } from "../src/github/secrets.js";
@@ -201,6 +201,13 @@ describe("reading Claude Code's stream-json", () => {
     expect(chosen).toContain("--permission-mode default --model opus --effort max --permission-prompt-tool");
   });
 
+  it("keeps a posting's tailoring and filling conversations to their part in the system prompt", () => {
+    const prompt = (args: string[]) => args[args.indexOf("--append-system-prompt") + 1] as string;
+    expect(prompt(agentArgs("abc", false))).toBe(PANEL_PROMPT);
+    expect(prompt(agentArgs("abc", false, undefined, "tailor"))).toBe(`${PANEL_PROMPT} ${PART_PROMPTS.tailor}`);
+    expect(prompt(agentArgs("abc", true, undefined, "fill"))).toBe(`${PANEL_PROMPT} ${PART_PROMPTS.fill}`);
+  });
+
   it("accepts only plain session ids from the relay's header", () => {
     expect(sessionId("0b7c7f1e-4a52-4b8e-9d0e-6d4f3c2a1b00")).toBe("0b7c7f1e-4a52-4b8e-9d0e-6d4f3c2a1b00");
     expect(sessionId(["session-one-x", "session-two-x"])).toBe("session-one-x");
@@ -250,44 +257,44 @@ describe("the agent service", () => {
   it("relays a turn: the message (taken once Claude has it), Claude's text, the turn's cost; and keeps it as history", async () => {
     make();
     expect(agent.state()).toEqual({ status: "idle", queued: 0 });
-    await agent.send("2026-01-01_acme_dev", "hello there");
-    await after("2026-01-01_acme_dev", 1);
+    await agent.send("2026-01-01_acme_dev/fill", "hello there");
+    await after("2026-01-01_acme_dev/fill", 1);
     const kinds = events.map(([, e]) => e.kind);
     expect(kinds).toEqual(["user", "user", "text", "turnEnd"]);
     expect(events[1]?.[1]).toMatchObject({ kind: "user", text: "hello there", taken: true });
     expect(events[2]?.[1]).toMatchObject({ kind: "text", text: "echo: hello there" });
     expect(events[3]?.[1]).toMatchObject({ kind: "turnEnd", ok: true, totalCostUsd: 0.01 });
-    expect(agent.state()).toEqual({ status: "idle", conversation: "2026-01-01_acme_dev", queued: 0 });
-    await waitFor(async () => ((await agent.history("2026-01-01_acme_dev")).length === 3 ? true : null), 5000);
-    const history = await agent.history("2026-01-01_acme_dev");
+    expect(agent.state()).toEqual({ status: "idle", conversation: "2026-01-01_acme_dev/fill", queued: 0 });
+    await waitFor(async () => ((await agent.history("2026-01-01_acme_dev/fill")).length === 3 ? true : null), 5000);
+    const history = await agent.history("2026-01-01_acme_dev/fill");
     expect(history.map((e) => e.kind)).toEqual(["user", "text", "turnEnd"]);
     expect(history[0]).toMatchObject({ taken: true });
-    expect(await agent.cost("2026-01-01_acme_dev")).toBe(0.01);
+    expect(await agent.cost("2026-01-01_acme_dev/fill")).toBe(0.01);
   });
 
   it("keeps one process per conversation, resumes a conversation's session, and refuses to switch while working", async () => {
     make();
-    await agent.send("p1", "one");
-    await after("p1", 1);
-    await agent.send("p1", "two");
-    await after("p1", 2);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
+    await agent.send("p1/tailor", "two");
+    await after("p1/tailor", 2);
     expect((await starts()).length).toBe(1);
     const first = (await starts())[0] as string[];
     const session = first[first.indexOf("--session-id") + 1] as string;
 
     await agent.send("general", "other");
     await after("general", 1);
-    await agent.send("p1", "three");
-    await after("p1", 3);
+    await agent.send("p1/tailor", "three");
+    await after("p1/tailor", 3);
     const all = await starts();
     expect(all).toHaveLength(3);
     expect(all[2]?.slice(-2)).toEqual(["--resume", session]);
 
-    await agent.send("p1", "slow");
+    await agent.send("p1/tailor", "slow");
     await waitFor(async () => (agent.state().status === "working" ? true : null), 5000);
     await expect(agent.send("general", "now")).rejects.toThrow(/another conversation/);
     expect(agent.stop()).toBe(true);
-    await after("p1", 4);
+    await after("p1/tailor", 4);
     expect(events.filter(([, e]) => e.kind === "turnEnd").at(-1)?.[1]).toMatchObject({ ok: false, interrupted: true });
     expect(events.some(([, e]) => e.kind === "toolDone" && !e.ok)).toBe(true);
     expect(agent.state().status).toBe("idle");
@@ -295,26 +302,68 @@ describe("the agent service", () => {
 
   it("starts a new session on Reset, keeping the old one as earlier, with an empty history", async () => {
     make();
-    await agent.send("p1", "one");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
     const before = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
-    await agent.reset("p1");
-    expect(await agent.history("p1")).toEqual([]);
-    await agent.send("p1", "fresh");
-    await after("p1", 2);
+    await agent.reset("p1/tailor");
+    expect(await agent.history("p1/tailor")).toEqual([]);
+    await agent.send("p1/tailor", "fresh");
+    await after("p1/tailor", 2);
     const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
-    const c = file.conversations.p1;
-    expect(c.sessionId).not.toBe(before.conversations.p1.sessionId);
-    expect(c.earlier).toEqual([expect.objectContaining({ sessionId: before.conversations.p1.sessionId })]);
+    const c = file.conversations["p1/tailor"];
+    expect(c.sessionId).not.toBe(before.conversations["p1/tailor"].sessionId);
+    expect(c.earlier).toEqual([expect.objectContaining({ sessionId: before.conversations["p1/tailor"].sessionId })]);
     const last = (await starts()).at(-1) as string[];
     expect(last.slice(-2)).toEqual(["--session-id", c.sessionId]);
+  });
+
+  it("gives a posting's filling and tailoring their own sessions, whichever comes first, and forgets both", async () => {
+    make();
+    await agent.send("p1/fill", "fill it");
+    await after("p1/fill", 1);
+    await agent.send("p1/tailor", "tailor it");
+    await after("p1/tailor", 1);
+    const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
+    expect(file.conversations["p1/fill"].sessionId).not.toBe(file.conversations["p1/tailor"].sessionId);
+    const [first, second] = await starts();
+    expect(first?.join(" ")).toContain(PART_PROMPTS.fill);
+    expect(second?.join(" ")).toContain(PART_PROMPTS.tailor);
+    expect(
+      (await agent.history("p1/fill")).filter((e) => e.kind === "user").map((e) => e.kind === "user" && e.text),
+    ).toEqual(["fill it"]);
+    await expect(agent.send("p1", "hi")).rejects.toThrow(/Not a conversation/);
+
+    await agent.forgetPosting("p1");
+    const after2 = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
+    expect(after2.conversations).toEqual({});
+    await expect(
+      readFile(join(dir, "agent", "p1", "fill", `${file.conversations["p1/fill"].sessionId}.jsonl`)),
+    ).rejects.toThrow();
+  });
+
+  it("moves an older build's one conversation per posting to the posting's tailoring conversation", async () => {
+    const said: AgentEvent = { kind: "user", at: AT, id: "m1", text: "earlier", taken: true };
+    await mkdir(join(dir, "agent", "p1"), { recursive: true });
+    await writeFile(
+      join(dir, "agent", "conversations.json"),
+      JSON.stringify({ schemaVersion: 1, conversations: { p1: { sessionId: "s-old", startedAt: AT, started: true } } }),
+    );
+    await writeFile(
+      join(dir, "agent", "p1", "s-old.jsonl"),
+      `${JSON.stringify(said)}
+`,
+    );
+    make();
+    expect(await agent.history("p1/tailor")).toEqual([said]);
+    const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
+    expect(Object.keys(file.conversations)).toEqual(["p1/tailor"]);
   });
 
   it("keeps the permission mode and model, starts with them, and switches a running conversation at once", async () => {
     make();
     expect(await agent.settings()).toEqual({ permissionMode: "auto", model: "sonnet", effort: "medium" });
-    await agent.send("p1", "one");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
     expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({
       permissionMode: "plan",
       model: "sonnet",
@@ -341,34 +390,34 @@ describe("the agent service", () => {
     events = [];
     make();
     expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "haiku", effort: "medium" });
-    await agent.send("p1", "two");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "two");
+    await after("p1/tailor", 1);
     expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku --effort medium");
     expect(await switches()).toHaveLength(2);
   });
 
   it("restarts the conversation's process for a new effort: at once when idle, after the turn while working", async () => {
     make();
-    await agent.send("p1", "one");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
     await agent.setSettings({ effort: "high" });
     expect(agent.state()).toEqual({ status: "idle", queued: 0 });
-    await agent.send("p1", "two");
-    await after("p1", 2);
+    await agent.send("p1/tailor", "two");
+    await after("p1/tailor", 2);
     const session = (await starts())[0]?.at(-1) as string;
     expect((await starts()).at(-1)?.join(" ")).toContain(`--effort high`);
     expect((await starts()).at(-1)?.slice(-2)).toEqual(["--resume", session]);
 
     // While it works, the process stays until the turn ends.
-    await agent.send("p1", "slow");
+    await agent.send("p1/tailor", "slow");
     await waitFor(async () => (agent.state().status === "working" ? true : null), 5000);
     await agent.setSettings({ effort: "low" });
     expect(agent.state().status).toBe("working");
     agent.stop();
-    await after("p1", 3);
+    await after("p1/tailor", 3);
     await waitFor(async () => (agent.state().conversation === undefined ? true : null), 5000);
-    await agent.send("p1", "three");
-    await after("p1", 4);
+    await agent.send("p1/tailor", "three");
+    await after("p1/tailor", 4);
     expect(await starts()).toHaveLength(3);
     expect((await starts()).at(-1)?.join(" ")).toContain(`--effort low`);
     expect(await switches()).toEqual([]);
@@ -386,8 +435,8 @@ describe("the agent service", () => {
 
   it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {
     make({ STUB_REFUSE_SWITCH: "1" });
-    await agent.send("p1", "one");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
     await agent.setSettings({ permissionMode: "plan" });
     await waitFor(async () => (events.some(([, e]) => e.kind === "notice") ? true : null), 5000);
     expect(events.find(([, e]) => e.kind === "notice")?.[1]).toMatchObject({
@@ -399,26 +448,26 @@ describe("the agent service", () => {
 
   it("starts afresh when a session can't be resumed, and says so", async () => {
     make();
-    await agent.send("p1", "one");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
     await agent.close();
     make({ STUB_FAIL_RESUME: "1" });
-    await agent.send("p1", "again");
-    await after("p1", 2);
+    await agent.send("p1/tailor", "again");
+    await after("p1/tailor", 2);
     expect(events.some(([, e]) => e.kind === "notice" && /couldn't be reopened/.test(e.text))).toBe(true);
     expect(events.some(([, e]) => e.kind === "text" && e.text === "echo: again")).toBe(true);
   });
 
   it("tells the user when Claude Code stops mid-turn, or runs without ezapply's tools", async () => {
     make({ STUB_MCP_STATUS: "failed" });
-    await agent.send("p1", "hi");
-    await after("p1", 1);
+    await agent.send("p1/tailor", "hi");
+    await after("p1/tailor", 1);
     expect(
       events.some(
         ([, e]) => e.kind === "notice" && e.level === "error" && /tools aren't connected.*failed/.test(e.text),
       ),
     ).toBe(true);
-    await agent.send("p1", "crash");
+    await agent.send("p1/tailor", "crash");
     await waitFor(
       async () => (events.some(([, e]) => e.kind === "notice" && /stopped unexpectedly/.test(e.text)) ? true : null),
       5000,
@@ -432,29 +481,29 @@ describe("the agent service", () => {
   it("is unavailable without Claude Code, and refuses empty messages and odd conversation names", async () => {
     make({}, false);
     expect(agent.state().status).toBe("unavailable");
-    await expect(agent.send("p1", "hi")).rejects.toThrow(/isn't available/);
+    await expect(agent.send("p1/tailor", "hi")).rejects.toThrow(/isn't available/);
     make();
-    await expect(agent.send("p1", "  ")).rejects.toThrow(/empty/);
+    await expect(agent.send("p1/tailor", "  ")).rejects.toThrow(/empty/);
     await expect(agent.send("../x", "hi")).rejects.toThrow(/Not a conversation/);
   });
 
   it("answers the open card with a message typed into its conversation, and records cards in the conversation", async () => {
     make();
-    await agent.send("p1", "one");
-    await after("p1", 1);
-    const card = needs.ask({ title: "Step 2", questions: [{ id: "q", prompt: "Why us?", type: "text" }] }, "p1");
+    await agent.send("p1/tailor", "one");
+    await after("p1/tailor", 1);
+    const card = needs.ask({ title: "Step 2", questions: [{ id: "q", prompt: "Why us?", type: "text" }] }, "p1/tailor");
     const waiting = needs.waitAsk(card.id, 5000);
-    await agent.send("p1", "I'll say it here instead");
+    await agent.send("p1/tailor", "I'll say it here instead");
     expect(await waiting).toEqual({ replied: "I'll say it here instead" });
     expect(events.at(-1)?.[1]).toMatchObject({ kind: "card", title: "Step 2", outcome: "replied in the chat" });
 
-    const decision = needs.permission({ toolName: "Bash", input: { command: "winget install x" } }, "p1");
-    await agent.send("p1", "use the other installer");
+    const decision = needs.permission({ toolName: "Bash", input: { command: "winget install x" } }, "p1/tailor");
+    await agent.send("p1/tailor", "use the other installer");
     expect(await decision).toEqual({
       behavior: "deny",
       message: "The user denied this in the ezapply panel: use the other installer",
     });
-    expect(turns("p1")).toBe(1); // neither message went to Claude
+    expect(turns("p1/tailor")).toBe(1); // neither message went to Claude
   });
 });
 
@@ -486,7 +535,7 @@ describe("cards", () => {
           { id: "note", prompt: "Anything else?", type: "text", required: false },
         ],
       },
-      "p1",
+      "p1/tailor",
     );
     expect(needs.list()).toEqual([card]);
     expect(() => needs.answer(card.id, { auth: { value: "Maybe" } })).toThrow(
@@ -503,10 +552,10 @@ describe("cards", () => {
     });
     await expect(needs.waitAsk(card.id, 10)).rejects.toThrow(/No question card/);
 
-    const open = needs.ask({ title: "Later", questions: [{ id: "q", prompt: "?", type: "text" }] }, "p1");
+    const open = needs.ask({ title: "Later", questions: [{ id: "q", prompt: "?", type: "text" }] }, "p1/tailor");
     expect(await needs.waitAsk(open.id, 10)).toBeNull();
-    const perm = needs.permission({ toolName: "Bash", input: { command: "rm -r x" } }, "p1");
-    needs.withdraw("p1");
+    const perm = needs.permission({ toolName: "Bash", input: { command: "rm -r x" } }, "p1/tailor");
+    needs.withdraw("p1/tailor");
     expect(await perm).toEqual({ behavior: "deny", message: "The conversation was reset." });
     expect(needs.list()).toEqual([]);
     expect(changes.at(-1)).toBe(0);
@@ -579,7 +628,7 @@ describe("ask_user and permission_ask over MCP", () => {
   }
 
   it("asks a panel conversation's questions on a card and returns the answers", async () => {
-    const session = await conversation("p1");
+    const session = await conversation("p1/tailor");
     const c = await client(session);
     const { needs } = handle.services;
     const asked = call(c, "ask_user", {
@@ -598,7 +647,7 @@ describe("ask_user and permission_ask over MCP", () => {
     });
     await waitFor(async () => (needs.list().length === 1 ? true : null), 5000);
     const card = needs.list()[0];
-    expect(card).toMatchObject({ kind: "ask", conversation: "p1", spec: { title: "Acme, step 3" } });
+    expect(card).toMatchObject({ kind: "ask", conversation: "p1/tailor", spec: { title: "Acme, step 3" } });
     needs.answer(card?.id as string, { salary: { value: "Open to discussion" }, relocate: { value: "No" } });
     expect(await asked).toEqual({
       done: true,
@@ -640,7 +689,7 @@ describe("ask_user and permission_ask over MCP", () => {
   });
 
   it("asks the panel to approve a tool call, and denies when no panel can", async () => {
-    const session = await conversation("p1");
+    const session = await conversation("p1/tailor");
     const c = await client(session);
     const { needs } = handle.services;
     const asked = call(c, "permission_ask", {
@@ -653,7 +702,7 @@ describe("ask_user and permission_ask over MCP", () => {
       kind: "permission",
       toolName: "Bash",
       description: "Make a folder",
-      conversation: "p1",
+      conversation: "p1/tailor",
     });
     needs.decide(needs.list()[0]?.id as string, false, "not that folder");
     expect(await asked).toEqual({

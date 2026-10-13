@@ -68,6 +68,29 @@
   z-index: 2;
   pointer-events: none;
 }
+/* The PDF's links, over everything on the page: marked faintly so the user sees they're there, and openable. */
+.ez-links {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.ez-link {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1.5px solid var(--link-line);
+  border-radius: 2px;
+  background: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.ez-link:hover,
+.ez-link:focus-visible {
+  background: var(--link-hover);
+}
 .ez-mark {
   position: absolute;
   display: block;
@@ -94,7 +117,8 @@
   border: 4px solid transparent;
   border-top-color: var(--del);
 }
-.ez-mark-added,
+/* Inserted words stay selectable through their highlight, so they can be commented on like any other; only the
+   thin removal marker takes the mouse, to show its words on hover. */
 .ez-mark-removed {
   pointer-events: auto;
   cursor: help;

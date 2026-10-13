@@ -81,3 +81,5 @@ await writeFile(join(dist, "manifest.json"), `${JSON.stringify(manifest, null, 2
 await cp(join(root, "static/options.html"), join(dist, "options.html"));
 await cp(join(root, "static/grant.html"), join(dist, "grant.html"));
 await cp(join(root, "static/panel.html"), join(dist, "panel.html"));
+// ezapply's mark as PNGs (icons.mjs makes them from the UI package's mark.svg).
+await cp(join(root, "static/icons"), join(dist, "icons"), { recursive: true });

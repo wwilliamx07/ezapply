@@ -1,5 +1,5 @@
 /* The review page: documents on the left, the viewer in the middle, the document's panel on the right, and the
-   Send bar along the bottom. On a narrow window the documents become a row of tabs and the panel goes under the
+   counts along the bottom. On a narrow window the documents become a row of tabs and the panel goes under the
    viewer. */
 .ez-review {
   display: grid;
@@ -108,12 +108,53 @@
 }
 .ez-approve {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 6px;
   margin-bottom: 12px;
 }
-.ez-approve .ez-btn-primary {
+.ez-approve .ez-help {
+  margin: 0;
+  width: 100%;
+}
+/* Undo approval: the same size and place as Approve Document, in the accent's soft tint rather than its fill, so
+   it reads as the way back from it, not as the next step. */
+.ez-btn-undo {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.ez-btn-undo:hover:not(:disabled) {
+  background: var(--accent-soft);
+  filter: brightness(0.96);
+}
+.ez-approve .ez-btn-primary,
+.ez-approve .ez-btn-undo {
   width: 100%;
   justify-content: center;
+}
+.ez-linklist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ez-linklist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+.ez-linklist a {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-text);
 }
 .ez-section {
   padding: 14px 0;

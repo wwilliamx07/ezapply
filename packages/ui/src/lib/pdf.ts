@@ -1,6 +1,8 @@
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type PDFPageProxy } from "pdfjs-dist";
+import { linkRect, type PdfLink, safeLinkUrl } from "./links.js";
 import { joinItems, type TextItem } from "./text.js";
 
+export type { PdfLink } from "./links.js";
 export { itemsOf, type TextItem } from "./text.js";
 
 declare const __PDF_WORKER__: string;
@@ -19,6 +21,8 @@ export interface LoadedPage {
   text: string;
   /** Where each item starts in `text`. */
   itemStarts: number[];
+  /** Its links, so the viewer can open them and the review can list them. */
+  links: PdfLink[];
 }
 
 export interface LoadedPdf {
@@ -46,7 +50,44 @@ export async function loadPdf(url: string): Promise<LoadedPdf> {
     const items: TextItem[] = [];
     for (const item of content.items) if ("str" in item) items.push({ str: item.str, hasEOL: item.hasEOL });
     const { text, itemStarts } = joinItems(items);
-    pages.push({ proxy, width: viewport.width, height: viewport.height, items, text, itemStarts });
+    const links = await linksOf(doc, proxy, viewport).catch(() => []);
+    pages.push({ proxy, width: viewport.width, height: viewport.height, items, text, itemStarts, links });
   }
   return { doc, pages };
+}
+
+/**
+ * A page's link annotations: a web, mail or phone address (`safeLinkUrl`), or a place in the same PDF resolved to
+ * its page. Anything else (a script, a file, a form action) is left out.
+ */
+async function linksOf(
+  doc: PDFDocumentProxy,
+  proxy: PDFPageProxy,
+  viewport: ReturnType<PDFPageProxy["getViewport"]>,
+): Promise<PdfLink[]> {
+  const out: PdfLink[] = [];
+  for (const a of await proxy.getAnnotations({ intent: "display" })) {
+    if (a.subtype !== "Link" || !Array.isArray(a.rect)) continue;
+    const [x1, y1] = viewport.convertToViewportPoint(a.rect[0], a.rect[1]);
+    const [x2, y2] = viewport.convertToViewportPoint(a.rect[2], a.rect[3]);
+    const rect = linkRect([x1, y1, x2, y2], viewport.width, viewport.height);
+    if (!rect) continue;
+    const url = safeLinkUrl(a.url ?? a.unsafeUrl);
+    if (url) {
+      out.push({ rect, url });
+      continue;
+    }
+    const page = a.dest ? await pageOf(doc, a.dest).catch(() => undefined) : undefined;
+    if (page !== undefined) out.push({ rect, page });
+  }
+  return out;
+}
+
+/** The 0-based page a destination (named, or explicit) points at. */
+async function pageOf(doc: PDFDocumentProxy, dest: unknown): Promise<number | undefined> {
+  const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
+  const ref = Array.isArray(explicit) ? explicit[0] : undefined;
+  if (typeof ref === "number") return ref;
+  if (ref && typeof ref === "object") return doc.getPageIndex(ref as Parameters<PDFDocumentProxy["getPageIndex"]>[0]);
+  return undefined;
 }

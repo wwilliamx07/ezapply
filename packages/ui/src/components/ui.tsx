@@ -52,12 +52,19 @@ export function Banner({
   );
 }
 
+/** ezapply's mark: "ez" drawn in strokes on the accent. `static/mark.svg` is the same drawing, for icons. */
+export const MARK = {
+  background: "#3b5bdb",
+  path: "M13 33H31M31 33A9 9 0 1 0 28.89 38.79M37 24H51L37 42H51",
+};
+
 export function Brand() {
   return (
     <span className="ez-brand">
-      <span className="ez-brand-mark" aria-hidden="true">
-        e
-      </span>
+      <svg className="ez-brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill={MARK.background} />
+        <path d={MARK.path} fill="none" stroke="#ffffff" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
       ezapply
     </span>
   );
@@ -82,6 +89,10 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  undo: <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />,
+  link: (
+    <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+  ),
   plus: <path d="M12 5v14M5 12h14" />,
   comment: <path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />,
   edit: (

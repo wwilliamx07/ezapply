@@ -5,11 +5,14 @@ import {
   AgentPermissionMode,
   type AgentSettings,
   type Card,
+  type ConversationPart,
+  conversationKey,
   GENERAL_CONVERSATION,
   type PanelConversation,
   type PanelPosting,
   type PanelState,
   type PanelTab,
+  postingConversation,
 } from "@ezapply/protocol";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Banner, Brand, Button, Icon } from "../components/ui.js";
@@ -54,20 +57,32 @@ export const EFFORTS: Record<AgentEffort, string> = {
   max: "Max effort",
 };
 
+/** A posting's two conversations, as the panel's switch names them. */
+export const PARTS: Record<ConversationPart, { label: string; what: string }> = {
+  tailor: { label: "Documents", what: "The conversation that tailors this posting's documents" },
+  fill: { label: "Application", what: "The conversation that fills this posting's application" },
+};
+
 /**
  * The extension's side panel: everything the user does with ezapply after setup ("Everything in the browser"). It
- * shows the active posting's conversation with the agent, its documents and what the current tab is, the cards
- * waiting on the user, and a chat bar; the buttons send the same requests typing would.
+ * shows one of the active posting's conversations with the agent (its documents' or its application's), its
+ * documents and what the current tab is, the cards waiting on the user, and a chat bar; the buttons send the same
+ * requests typing would, each to its own conversation.
  */
 export function PanelApp({ transport }: { transport: PanelTransport }) {
   const [conn, setConn] = useState<ConnectionState>({ state: "connecting" });
   const [state, setState] = useState<PanelState | null>(null);
-  /** The conversation picked in the panel; null follows the active posting. */
+  /** The posting picked in the panel (or the general conversation); null follows the active posting. */
   const [picked, setPicked] = useState<string | null>(null);
+  /** The posting's conversation picked in the panel; null shows the one Claude works in, else its documents'. */
+  const [part, setPart] = useState<ConversationPart | null>(null);
   const [conv, setConv] = useState<PanelConversation | null>(null);
   const [tab, setTab] = useState<TabInfo>(null);
   const [error, setError] = useState<string | null>(null);
-  const selected = picked ?? state?.activePostingId ?? GENERAL_CONVERSATION;
+  const postingId = picked ?? state?.activePostingId ?? GENERAL_CONVERSATION;
+  const running = postingConversation(state?.agent.conversation ?? "");
+  const shownPart = part ?? (running?.postingId === postingId ? running.part : "tailor");
+  const selected = postingId === GENERAL_CONVERSATION ? postingId : conversationKey(postingId, shownPart);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
@@ -129,10 +144,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   const posting = conv?.posting;
   const labelOf = useMemo(() => labeller(state?.postings ?? []), [state?.postings]);
 
-  const send = async (text: string) => {
+  const send = async (text: string, key = selected) => {
     setError(null);
     try {
-      await transport.call("panel.send", { key: selected, text });
+      await transport.call("panel.send", { key, text });
     } catch (err) {
       fail(err);
       throw err;
@@ -146,12 +161,19 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       else setPicked(null);
     });
   };
+  /** A request from a button: to the posting's conversation for it, which the panel then shows. */
+  const request = (to: ConversationPart, text: string) => {
+    setPart(to);
+    void send(text, conversationKey(postingId, to)).catch(() => {});
+  };
   const pick = (key: string) => {
     setPicked(key);
+    setPart(null);
     if (key !== GENERAL_CONVERSATION) void transport.call("panel.activate", { postingId: key }).catch(fail);
   };
   const reset = async () => {
-    if (!window.confirm("Start a new conversation for this posting? Claude forgets this one; the documents stay."))
+    const which = PARTS[shownPart].label.toLowerCase();
+    if (!window.confirm(`Start a new ${which} conversation for this posting? Claude forgets this one; the files stay.`))
       return;
     await transport.call("panel.reset", { key: selected }).catch(fail);
     await refreshConv().catch(fail);
@@ -168,6 +190,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     try {
       await transport.call("panel.deletePosting", { postingId: posting.id });
       setPicked(null);
+      setPart(null);
       await refreshState();
     } catch (err) {
       fail(err);
@@ -175,7 +198,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   };
   const deleteDocument = async (file: string) => {
     if (!window.confirm(`Delete ${file} for good? Its LaTeX source stays, so Claude can build it again.`)) return;
-    await transport.call("panel.deleteDocument", { postingId: selected, file }).catch(fail);
+    await transport.call("panel.deleteDocument", { postingId, file }).catch(fail);
     await refreshConv().catch(fail);
   };
 
@@ -215,7 +238,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         <select
           className="ez-select ez-panel-picker"
           aria-label="Posting"
-          value={selected}
+          value={postingId}
           disabled={!connected}
           onChange={(e) => pick(e.target.value)}
         >
@@ -283,9 +306,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                       type="button"
                       className="ez-linklike"
                       onClick={() =>
-                        void transport
-                          .call("panel.open", { what: "file", postingId: selected, file: d.file })
-                          .catch(fail)
+                        void transport.call("panel.open", { what: "file", postingId, file: d.file }).catch(fail)
                       }
                     >
                       <Icon name="file" size={15} /> {d.file}
@@ -331,7 +352,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                   disabled={!connected}
                   className="ez-panel-danger"
                   onClick={reset}
-                  title="A new conversation for this posting"
+                  title={`A new ${PARTS[shownPart].label.toLowerCase()} conversation for this posting`}
                 >
                   Reset Conversation
                 </Button>
@@ -388,6 +409,27 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         </Banner>
       ) : null}
 
+      {posting ? (
+        <div className="ez-panel-parts" role="tablist" aria-label="Conversation">
+          {(Object.keys(PARTS) as ConversationPart[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={p === shownPart}
+              className={p === shownPart ? "ez-panel-part ez-panel-part-on" : "ez-panel-part"}
+              title={PARTS[p].what}
+              onClick={() => setPart(p)}
+            >
+              {PARTS[p].label}
+              {working && agent?.conversation === conversationKey(postingId, p) ? (
+                <span className="ez-dot ez-dot-ok" role="img" aria-label="Claude is working here" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
         <Conversation events={conv?.events ?? []} />
@@ -424,14 +466,14 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           <TailorButton
             disabled={!connected || !posting || working}
             why={!posting ? "Capture a posting first" : busyWhy}
-            onPick={(text) => void send(text).catch(() => {})}
+            onPick={(text) => request("tailor", text)}
           />
           <FillButton
             disabled={!connected || !posting || working}
             why={!posting ? "Capture a posting first" : busyWhy}
             tab={tab}
             application={posting?.application}
-            onFill={(tabId) => void send(REQUESTS.fill(tabId)).catch(() => {})}
+            onFill={(tabId) => request("fill", REQUESTS.fill(tabId))}
             onOpen={(url) => void transport.openTab(url).catch(fail)}
           />
         </div>
@@ -473,12 +515,17 @@ export function withEvent(events: AgentEvent[], event: AgentEvent): AgentEvent[]
   return [...events, event];
 }
 
+/** A posting's name, or a conversation's: the posting's with its part ("Acme: Developer · Application"). */
 function labeller(postings: PanelPosting[]) {
   const byId = new Map(postings.map((p) => [p.id, p]));
-  return (id: string) => {
-    if (id === GENERAL_CONVERSATION) return "General";
+  const name = (id: string) => {
     const p = byId.get(id);
     return p ? [p.company, p.role].filter(Boolean).join(": ") || p.id : id;
+  };
+  return (key: string) => {
+    if (key === GENERAL_CONVERSATION) return "General";
+    const c = postingConversation(key);
+    return c ? `${name(c.postingId)} · ${PARTS[c.part].label}` : name(key);
   };
 }
 

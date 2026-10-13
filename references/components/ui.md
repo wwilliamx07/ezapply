@@ -21,10 +21,12 @@ extension already builds with it; no dev server or framework build is needed.
 | Path | Role |
 |---|---|
 | `build.mjs` | The build: pdf.js's worker and data files copied in, the two pages and the base stylesheet bundled, `manifest.json` written, the favicon |
+| `static/mark.svg` | ezapply's mark ("ez" in white strokes on the accent): the favicon, and the source of the extension's icons ([extension](extension.md#builds-npm-run-build--w-ezapplyextension)) |
 | `src/styles/base.css` | Tokens (light and dark by `prefers-color-scheme`), plain elements, the shared components' classes, full-window pages, and the companion's plain pages (`.ez-plain`) |
-| `src/components/ui.tsx` | `Button`, `Badge`, `Spinner`, `Banner`, `Brand`, `MessagePage`, `Icon` (a small inline SVG set) |
+| `src/components/ui.tsx` | `Button`, `Badge`, `Spinner`, `Banner`, `Brand` (the mark drawn inline from `MARK`, and the wordmark), `MessagePage`, `Icon` (a small inline SVG set) |
 | `src/lib/api.ts` | `pageBase` (from `#root`'s `data-base`), `dropTokenFromUrl`, `getJson`, `postJson`, `subscribe` (Server-Sent Events), `OfflineError` |
-| `src/lib/pdf.ts` | pdf.js set up from `/ui/` (worker, fonts, maps, decoders), `loadPdf`: every page's size and text items read up front |
+| `src/lib/pdf.ts` | pdf.js set up from `/ui/` (worker, fonts, maps, decoders), `loadPdf`: every page's size, text items and links read up front |
+| `src/lib/links.ts` | `PdfLink`, `safeLinkUrl` (only web, mail and phone addresses), `linkRect` (a link's place as fractions of the page), `linkLabel` |
 | `src/lib/text.ts` | `joinItems` (a page's text as the companion's `pdf_text` builds it), `itemsOf` (a stretch of that text → the parts of the text items it covers) |
 | `src/review/` | The review page: `App.tsx`, `Viewer.tsx` (the PDF viewer, shared with onboarding), `Panel.tsx`, `changes.ts`, `draft.ts`, `selection.ts`, `review.css`, `viewer.css`, `textlayer.css` |
 | `src/onboard/` | The onboarding page: `App.tsx`, `state.ts`, `parts.tsx`, `steps-setup.tsx`, `steps-documents.tsx`, `ProfileStep.tsx`, `onboard.css` |
@@ -41,7 +43,8 @@ extension already builds with it; no dev server or framework build is needed.
   to `dist/pdfjs/`.
 - **`manifest.json`:** `{ worker, base, pages: { review: { js, css }, onboard: { js, css } } }`. The companion
   reads it on every use, so a rebuild while a chat is open is served at once.
-- **`favicon.svg`:** ezapply's mark, linked by every page.
+- **`favicon.svg`:** `static/mark.svg` copied, linked by every page. `Brand` draws the same mark inline (`MARK`),
+  so the header needs no request; a test keeps the two the same.
 - The root `npm run build` builds it after the extension; `npm run typecheck` checks it (`tsc -p
   packages/ui/tsconfig.json`).
 - **Nothing from outside:** no CDN, no web fonts (the system font stack). The pages work offline and nothing about
@@ -60,8 +63,8 @@ extension already builds with it; no dev server or framework build is needed.
   position elements with them); images from the companion, `data:` and `blob:` (rendered pages); fonts from the
   companion and `data:`; connections and workers to the companion only; `frame-ancestors`, `base-uri` and
   `form-action` none. No inline script, so no nonce. Plus `X-Frame-Options: DENY` and no referrer.
-- **The companion's own pages** (`htmlPage`, `util/html.ts`) link the base stylesheet and the favicon when the UI
-  is built (`useStylesheet`, set in `main.ts`), else a few inline rules. Their CSP allows the companion's own
+- **The companion's own pages** (`htmlPage`, `util/html.ts`) link the base stylesheet and the favicon, and show
+  the mark beside the name, when the UI is built (`useStylesheet`, set in `main.ts`), else a few inline rules. Their CSP allows the companion's own
   stylesheets and images.
 
 ## How a page talks to the companion
@@ -110,7 +113,10 @@ to bottom:
    (item 3), its button showing how many documents the posting has (amber while any isn't approved); a menu with
    Setup (opens the setup page) and Extension settings (the extension's options page: its port and pairing, opened
    by the panel itself). No log view: the conversation shows every tool call, and the form log is in the posting's
-   folder.
+   folder. Under the header, for a posting, a switch between its two conversations, **Documents** and
+   **Application** ([agent](agent.md#conversations-servicets)), a dot on the one Claude works in. The panel shows
+   the one picked there, else the one Claude works in for this posting, else Documents; choosing another posting
+   starts over from that rule.
 2. **When it can't work:** not running ("Start it in your workspace: `./ezapply`"), not paired, or the
    connection's error, as a banner; the rest is shown but disabled. Setup not finished is a banner of its own with
    **Continue setup** (the steps left are named); the rest stays usable, since setup's own tasks go to the agent.
@@ -118,9 +124,9 @@ to bottom:
    **documents**, the posting's PDFs, each **approved** (approved or attached) or **waiting for your review**
    (draft, under review, changes asked), the name opening the PDF and **Review** bringing a waiting review's tab back ("No documents
    yet." before there are any), an approved document with a **trash** button that deletes the PDF (asks first; its
-   LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new conversation for the posting;
-   the documents stay); and **Delete posting** (red when hovered; asks first; disabled while Claude works),
-   which deletes the posting's folder and its conversation for good, after which the panel follows the active
+   LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
+   shown, documents or application; the files stay); and **Delete posting** (red when hovered; asks first; disabled
+   while Claude works), which deletes the posting's folder and both its conversations for good, after which the panel follows the active
    posting again (none). For the general conversation, a line saying there's no posting. The panel
    shows only approved or not because approving is the one thing the user does with a document. The finer states
    (`DocumentState`) and the posting's status (`PostingStatus`: drafting, attached, …) are still kept and used by
@@ -147,7 +153,9 @@ to bottom:
    preferences call for one), with a menu (opening upwards) for the resume only, the cover letter only, or one PDF;
    **Fill form** on the application's tab, or **Open the application** when the tab isn't it and the posting knows
    its address. Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it
-   up either way; Fill form names the tab (`tabId`). They're disabled, with why in their title, without a posting
+   up either way; Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
+   and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
+   conversation shown. They're disabled, with why in their title, without a posting
    or while Claude works.
 8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
@@ -175,15 +183,24 @@ What it's for and how approvals work: [documents](documents.md#review-before-att
 
 **Layout.** The documents on the left (name, pages, whether it changed since the last review, and Approved,
 Changes or To decide), the selected one in the viewer, its panel on the right, and a bar along the bottom with the
-count approved, with changes and still to decide, and Send to Claude, disabled while any document is undecided.
-**Why no "Approve all":** what's attached goes to an employer, so each document is approved by a press of its
-own rather than by leaving it untouched. Below 900 px the
+count approved, with changes and still to decide (and the sending, or why it failed). There's no separate Send
+button: the panel's one button moves through the documents and sends after the last (below). **Why no "Approve
+all":** what's attached goes to an employer, so each document is approved by a press of its own rather than by
+leaving it untouched. Below 900 px the
 documents become a row of tabs and the panel goes under the viewer. Every grid item has `min-width: 0`, so a row
 that scrolls sideways never widens the page.
 
-**The panel:** Approve as shown (Undo approval once approved; disabled while the document asks for changes), which
-also moves to the next document still to decide; the checks (pages, over the resume page limit, the text layer an applicant-tracking system reads,
-encryption); since the last review (first time, unchanged since you approved it or asked for changes, or the list
+**The panel:** one button that decides the document and moves on: **Approve Document**, or **Request Changes**
+once it has a comment or a request. Either goes to the next document still to decide (after this one, then from
+the top). On the last one left it reads **Send to Claude** and sends the answer, with a line under it saying what
+that does to this document (approves it as shown, or asks for its changes). An approved document shows **Undo
+approval** in its place, the same size and shape but in the accent's soft tint instead of its fill, so it reads as
+the way back rather than the next step; once every document is decided (a send that failed, or the user went back
+to one), **Send to Claude** under it. *Why one button:* approving and sending were two presses in two places, and
+the last approval was always followed by the send. The checks (pages, over the resume page limit, the text layer
+an applicant-tracking system reads, encryption); the document's **links** (each web, mail or phone address once,
+with the page it's first on, openable from the list; "No web or email links" when there are none), so a link the
+build dropped is noticed before the document goes to an employer; since the last review (first time, unchanged since you approved it or asked for changes, or the list
 of changes, each pressed to show it on the page); the comments (each with its number, the quoted words, the note,
 edit and remove); and "Anything else to change?" for the whole document. A comment or a request asks for changes
 and takes back an approval, so removing them afterwards leaves the document to decide again rather than approved.
@@ -208,6 +225,11 @@ from the start. **Why pdf.js, not the browser's viewer:** the same in every brow
 - **Toolbar:** page n of m (the page a third of the way down the view), zoom out and in (steps from 50 % to
   300 %), Fit width (the default: the widest page across the viewer), Changes (when there are any), Download.
   Keys, outside a text field: ← and → go a page, + and − zoom, 0 fits the width.
+- **Links:** the PDF's link annotations (`lib/links.ts`, read with each page in `loadPdf`), drawn over the text
+  with a faint underline and a tint on hover, the address in their title. A web, mail or phone address opens in a
+  new tab (`noopener noreferrer`); a link to a place in the same PDF scrolls to its page. Any other kind
+  (`javascript:`, `file:`, a launch or form action) isn't drawn: a link's address can come from a posting or a
+  template, and the page is served from the companion's origin.
 - **Commenting:** text selected on one page (by mouse, or by keyboard with caret browsing) offers a Comment
   button by the selection. A selection that starts or ends inside a word takes the whole word, so the agent gets
   "building", not "uilding". The comment keeps the quoted words (spaces collapsed, at most 600 characters) and
@@ -217,7 +239,8 @@ from the start. **Why pdf.js, not the browser's viewer:** the same in every brow
   `onComment` (onboarding's previews) text can be selected but not commented on.
 - **Changes since the last review:** inserted words highlighted on the text layer, a removal as a red marker
   where the words were (its words on hover), measured on the text layer's spans with DOM ranges after each
-  render.
+  render. The highlight lets the mouse through (`pointer-events: none`), so inserted words can be selected and
+  commented on like the rest; what they replaced is in the panel's list of changes.
 
 ### What changed since the last review (`changes.ts`, `protocol/src/textdiff.ts`)
 The companion keeps the text of each document when the user answers a review

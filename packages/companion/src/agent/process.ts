@@ -6,6 +6,7 @@ import {
   type AgentModel,
   type AgentPermissionMode,
   type AgentSettings,
+  type ConversationPart,
   DEFAULT_AGENT_SETTINGS,
 } from "@ezapply/protocol";
 import { readStreamLine, type StreamItem } from "./stream.js";
@@ -57,6 +58,8 @@ export interface AgentProcessOptions {
   resume: boolean;
   /** The permission mode, model and effort it starts with (the panel's settings). */
   settings?: AgentSettings;
+  /** A posting's conversation: which part, for its line of the system prompt (`PART_PROMPTS`). */
+  part?: ConversationPart;
   env?: NodeJS.ProcessEnv;
   onItem: (item: StreamItem) => void;
   onExit: (code: number | null, stderrTail: string) => void;
@@ -73,12 +76,14 @@ export interface AgentProcessOptions {
  * - `--permission-prompt-tool`: what would prompt in the terminal asks the panel instead.
  * - `--disallowedTools AskUserQuestion`: questions go through `ask_user`, which holds a whole step's questions
  *   and text answers; Claude Code's own tool holds four questions of four options.
+ * - `--append-system-prompt`: `PANEL_PROMPT`, and for a posting's conversation its part's line (`PART_PROMPTS`).
  * - Not `--bare`: bare mode skips the workspace's skills, `.mcp.json` and settings, and the subscription login.
  */
 export function agentArgs(
   sessionId: string,
   resume: boolean,
   settings: AgentSettings = DEFAULT_AGENT_SETTINGS,
+  part?: ConversationPart,
 ): string[] {
   return [
     "-p",
@@ -99,7 +104,7 @@ export function agentArgs(
     "--disallowedTools",
     "AskUserQuestion",
     "--append-system-prompt",
-    PANEL_PROMPT,
+    part ? `${PANEL_PROMPT} ${PART_PROMPTS[part]}` : PANEL_PROMPT,
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
   ];
 }
@@ -115,6 +120,23 @@ export const PANEL_PROMPT =
   "in the panel's chat. Commands that need approval are approved on the panel. Keep messages short: the panel is " +
   "narrow.";
 
+/**
+ * A posting's two conversations, one for its documents and one for its application, whichever the user starts
+ * first: each line keeps its conversation to its part, and sends the user to the other for the rest.
+ */
+export const PART_PROMPTS: Record<ConversationPart, string> = {
+  tailor:
+    "This conversation prepares the active posting's documents (resume, cover letter, bundle) and their review. " +
+    "Its application is filled in a separate conversation: don't fill, read or navigate application forms here. " +
+    "When the user wants the application filled, tell them to press Fill form in the panel.",
+  fill:
+    "This conversation fills the active posting's application. Its documents are written in a separate " +
+    "conversation: don't write or edit a resume, cover letter or bundle here; you may show the ones already there " +
+    "for review and attach them. When a document is missing, or the user asks for changes to one, tell them to " +
+    "press Tailor documents in the panel (with their changes, if they asked for any), and fill the rest of the " +
+    "form meanwhile.",
+};
+
 /** One conversation's Claude Code process: messages in, stream items out. */
 export class AgentProcess {
   private readonly child: ChildProcess;
@@ -124,7 +146,7 @@ export class AgentProcess {
 
   constructor(private readonly opts: AgentProcessOptions) {
     const { file, shell } = opts.claude;
-    const args = [...opts.claude.args, ...agentArgs(opts.sessionId, opts.resume, opts.settings)];
+    const args = [...opts.claude.args, ...agentArgs(opts.sessionId, opts.resume, opts.settings, opts.part)];
     const env: NodeJS.ProcessEnv = { ...(opts.env ?? process.env), [SESSION_ENV]: opts.sessionId };
     // A long MCP call (ask_user, a review) must hold the turn, which is -p's default; the user's own setting
     // to background such calls would end the turn with the question open.

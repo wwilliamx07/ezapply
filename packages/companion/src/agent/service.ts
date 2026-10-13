@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, rm } from "node:fs/promises";
-import { dirname } from "node:path";
+import { appendFile, mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   AgentEffort,
   type AgentEvent,
@@ -12,6 +12,7 @@ import {
   ErrorCode,
   EzError,
   GENERAL_CONVERSATION,
+  postingConversation,
 } from "@ezapply/protocol";
 import { z } from "zod";
 import type { Logger } from "../logger.js";
@@ -78,12 +79,12 @@ interface Live {
 }
 
 /**
- * The agent behind the panel: Claude Code, headless, one process per conversation (a posting's, or the general
- * one), relaying what it does as events. One process runs at a time: switching conversations closes an idle one,
+ * The agent behind the panel: Claude Code, headless, one process per conversation (a posting's two, tailoring its
+ * documents and filling its application, or the general one), relaying what it does as events. One process runs at a time: switching conversations closes an idle one,
  * and refuses while it works, since two agents filling forms or editing one posting's files would collide.
  *
  * On disk, in the workspace's `agent/`: `conversations.json` (each conversation's session, earlier sessions ended
- * by Reset), `<conversation>/<session>.jsonl` (the session's events, for the panel's history) and `settings.json`
+ * by Reset), `<conversation>/<session>.jsonl` (a posting's under `<posting>/<part>/`) (the session's events, for the panel's history) and `settings.json`
  * (the permission mode and model chosen in the panel).
  */
 export class AgentService {
@@ -93,6 +94,7 @@ export class AgentService {
   private fileWrites: Promise<unknown> = Promise.resolve();
   private readonly logWrites = new Map<string, Promise<unknown>>();
   private current: AgentSettings | null = null;
+  private upgraded: Promise<void> | null = null;
 
   constructor(private readonly opts: AgentServiceOptions) {
     opts.needs.onSettled((record, outcome) => {
@@ -134,6 +136,7 @@ export class AgentService {
 
   /** The conversation a Claude Code session belongs to, when it's one of the panel's. */
   async conversationOf(sessionId: string): Promise<string | undefined> {
+    await this.upgrade();
     if (this.live?.sessionId === sessionId) return this.live.key;
     const file = await this.readFile();
     return Object.entries(file.conversations).find(([, c]) => c.sessionId === sessionId)?.[0];
@@ -146,6 +149,7 @@ export class AgentService {
     if (!body) throw new EzError(ErrorCode.BadRequest, "The message is empty.");
     const claude = this.opts.claude;
     if (!claude) throw unavailable();
+    await this.upgrade();
     // While a card of this conversation is open, Claude sits in the tool call that asked, and a message sent to it
     // would wait for that call (up to 10 minutes). So the message answers the card: a question's reply, or a deny
     // whose reason is the message, as typing does at Claude Code's own prompts.
@@ -192,6 +196,7 @@ export class AgentService {
    */
   async reset(key: string): Promise<void> {
     checkKey(key);
+    await this.upgrade();
     if (this.live?.key === key) {
       this.live.process.kill();
       this.live = null;
@@ -202,27 +207,30 @@ export class AgentService {
   }
 
   /**
-   * Forget a conversation for good (its posting was deleted): its process ends, its open cards are withdrawn, and its
-   * record and logs go.
+   * Forget a posting's conversations for good (the posting was deleted): their process ends, their open cards are
+   * withdrawn, and their records and logs go (with a single conversation an older build kept under the bare id).
    */
-  async forget(key: string): Promise<void> {
-    checkKey(key);
-    if (this.live?.key === key) {
+  async forgetPosting(postingId: string): Promise<void> {
+    if (!postingConversation(`${postingId}/tailor`))
+      throw new EzError(ErrorCode.BadRequest, `Not a posting: ${postingId}`);
+    const keys = new Set([postingId, `${postingId}/tailor`, `${postingId}/fill`]);
+    if (this.live && keys.has(this.live.key)) {
       this.live.process.kill();
       this.live = null;
     }
-    this.opts.needs.withdraw(key);
-    await this.updateFile((f) => {
-      const { [key]: _, ...rest } = f.conversations;
-      return { ...f, conversations: rest };
-    });
-    await rm(this.opts.workspace.path(AGENT_DIR, key), { recursive: true, force: true });
+    for (const key of keys) this.opts.needs.withdraw(key);
+    await this.updateFile((f) => ({
+      ...f,
+      conversations: Object.fromEntries(Object.entries(f.conversations).filter(([k]) => !keys.has(k))),
+    }));
+    await rm(this.opts.workspace.path(AGENT_DIR, postingId), { recursive: true, force: true });
     this.stateChanged();
   }
 
   /** A conversation's events so far (its current session), oldest first; a message's latest state wins. */
   async history(key: string, limit = 500): Promise<AgentEvent[]> {
     checkKey(key);
+    await this.upgrade();
     const c = (await this.readFile()).conversations[key];
     if (!c) return [];
     let raw: string;
@@ -252,6 +260,7 @@ export class AgentService {
 
   /** The session's spend so far (Claude Code's estimate), when known. */
   async cost(key: string): Promise<number | undefined> {
+    await this.upgrade();
     return (await this.readFile()).conversations[key]?.totalCostUsd;
   }
 
@@ -305,12 +314,39 @@ export class AgentService {
 
   // ---- internals ----
 
+  /**
+   * Once per run: an older build kept one conversation per posting, under the bare posting id. It becomes the
+   * posting's tailoring conversation, its logs moved to `<posting>/tailor/`, so its history stays in the panel.
+   */
+  private upgrade(): Promise<void> {
+    this.upgraded ??= (async () => {
+      const bare = Object.keys((await this.readFile()).conversations).filter(
+        (k) => k !== GENERAL_CONVERSATION && !k.includes("/") && postingConversation(`${k}/tailor`),
+      );
+      for (const id of bare) {
+        const dir = this.opts.workspace.path(AGENT_DIR, id);
+        const logs = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".jsonl"));
+        await mkdir(join(dir, "tailor"), { recursive: true });
+        for (const n of logs) await rename(join(dir, n), join(dir, "tailor", n));
+        await this.updateFile((f) => {
+          const { [id]: old, ...rest } = f.conversations;
+          const key = `${id}/tailor`;
+          return { ...f, conversations: old && !rest[key] ? { ...rest, [key]: old } : rest };
+        });
+      }
+    })().catch((err) =>
+      this.opts.log.warn({ err: (err as Error).message }, "agent: could not move older conversations"),
+    );
+    return this.upgraded;
+  }
+
   private async start(key: string, claude: ClaudeCommand, fresh = false): Promise<Live> {
     if (fresh || !(await this.readFile()).conversations[key]) await this.updateFile((f) => renewed(f, key));
     const c = (await this.readFile()).conversations[key] as Conversation;
     const sessionId = c.sessionId;
     const resumed = c.started;
     const settings = await this.settings();
+    const part = postingConversation(key)?.part;
     const live: Live = {
       key,
       sessionId,
@@ -330,6 +366,7 @@ export class AgentService {
       sessionId,
       resume: resumed,
       settings,
+      ...(part ? { part } : {}),
       ...(this.opts.env ? { env: this.opts.env } : {}),
       onItem: (item) => this.onItem(live, item),
       onExit: (code, tail) => this.onExit(live, code, tail),
@@ -525,12 +562,10 @@ function withCost(f: ConversationsFile, key: string, sessionId: string, cost: nu
   return { ...f, conversations: { ...f.conversations, [key]: { ...c, totalCostUsd: cost } } };
 }
 
-/** A posting id (a plain folder name) or the general conversation. */
+/** A posting's conversation (`<posting id>/<part>`, the id a plain folder name) or the general one. */
 function checkKey(key: string): void {
-  if (key === GENERAL_CONVERSATION) return;
-  if (!/^[A-Za-z0-9_.-]+$/.test(key) || key.startsWith(".") || key.includes("..")) {
-    throw new EzError(ErrorCode.BadRequest, `Not a conversation: ${key}`);
-  }
+  if (key === GENERAL_CONVERSATION || postingConversation(key)) return;
+  throw new EzError(ErrorCode.BadRequest, `Not a conversation: ${key}`);
 }
 
 function unavailable(): EzError {

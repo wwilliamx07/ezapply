@@ -6,8 +6,28 @@ import { PostingStatus, SiteId } from "./postings.js";
  * does to the panel as events, and what it asks (questions, approvals) as cards the user answers there.
  */
 
-/** A conversation: one per posting (its id), and `general` for work with no posting. */
+/** The conversation for work with no posting. */
 export const GENERAL_CONVERSATION = "general";
+
+/**
+ * A posting has two conversations, whichever comes first: `tailor` writes its documents, `fill` fills its
+ * application. Each keeps its own context, so a long form doesn't crowd the documents' work, or the reverse.
+ */
+export const ConversationPart = z.enum(["tailor", "fill"]);
+export type ConversationPart = z.infer<typeof ConversationPart>;
+
+/** A posting conversation's key: `<posting id>/<part>`. */
+export function conversationKey(postingId: string, part: ConversationPart): string {
+  return `${postingId}/${part}`;
+}
+
+/** The posting and part a conversation key names; null for `general` or a key that isn't one. */
+export function postingConversation(key: string): { postingId: string; part: ConversationPart } | null {
+  const m = /^([\w.-]+)\/(tailor|fill)$/.exec(key);
+  const postingId = m?.[1];
+  if (!postingId || postingId.startsWith(".")) return null;
+  return { postingId, part: m[2] as ConversationPart };
+}
 
 // ---- ask_user: the agent's questions ----
 

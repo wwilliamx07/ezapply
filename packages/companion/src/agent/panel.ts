@@ -12,6 +12,7 @@ import {
   type PanelTab,
   type PanelUpdate,
   type PostingMeta,
+  postingConversation,
   type SiteId,
   siteInfo,
 } from "@ezapply/protocol";
@@ -85,13 +86,14 @@ export class PanelService {
     if (key === GENERAL_CONVERSATION) {
       return { key, documents: [], events, ...(totalCostUsd !== undefined ? { totalCostUsd } : {}) };
     }
-    const meta = await s.postings.get(key);
+    const id = postingOf(key);
+    const meta = await s.postings.get(id);
     const active = await s.postings.activeId();
     const [requirements, application, documents, review] = await Promise.all([
-      this.requirements(key),
-      s.postings.application(key).catch(() => undefined),
-      this.documents(key),
-      s.reviews.openFor(key),
+      this.requirements(id),
+      s.postings.application(id).catch(() => undefined),
+      this.documents(id),
+      s.reviews.openFor(id),
     ]);
     return {
       key,
@@ -130,8 +132,9 @@ export class PanelService {
   async send(key: string, text: string): Promise<{ id: string }> {
     const s = this.s();
     if (key !== GENERAL_CONVERSATION) {
-      await s.postings.get(key);
-      if ((await s.postings.activeId()) !== key) await s.postings.activate(key);
+      const id = postingOf(key);
+      await s.postings.get(id);
+      if ((await s.postings.activeId()) !== id) await s.postings.activate(id);
     }
     return s.agent.send(key, text);
   }
@@ -166,14 +169,14 @@ export class PanelService {
     await s.opener.file(abs);
   }
 
-  /** Delete a posting for good: its folder, and its conversation with the agent. */
+  /** Delete a posting for good: its folder, and its conversations with the agent. */
   async deletePosting(postingId: string): Promise<void> {
     const s = this.s();
     await s.postings.get(postingId);
     if (s.reviews.openFor(postingId)) {
       throw new EzError(ErrorCode.BadRequest, "This posting has a review open. Finish or close it first.");
     }
-    await s.agent.forget(postingId);
+    await s.agent.forgetPosting(postingId);
     await s.postings.delete(postingId);
     this.changed();
   }
@@ -264,6 +267,13 @@ export class PanelService {
     }
     return out;
   }
+}
+
+/** The posting a posting conversation's key names. */
+function postingOf(key: string): string {
+  const c = postingConversation(key);
+  if (!c) throw new EzError(ErrorCode.BadRequest, `Not a conversation: ${key}`);
+  return c.postingId;
 }
 
 function panelPosting(m: PostingMeta, activeId: string | null): PanelPosting {

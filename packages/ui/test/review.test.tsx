@@ -2,6 +2,7 @@
 import type { ReviewPageFile } from "@ezapply/protocol";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { linkLabel, linkRect, safeLinkUrl } from "../src/lib/links.js";
 import { itemsOf, joinItems } from "../src/lib/text.js";
 import { changesSince } from "../src/review/changes.js";
 import { answerOf, type DocDraft, decisionOf } from "../src/review/draft.js";
@@ -120,6 +121,23 @@ describe("the answer", () => {
   });
 });
 
+describe("a PDF's links", () => {
+  it("opens only web, mail and phone addresses", () => {
+    expect(safeLinkUrl("https://github.com/example")).toBe("https://github.com/example");
+    expect(safeLinkUrl("mailto:jane@example.com")).toBe("mailto:jane@example.com");
+    for (const bad of ["javascript:alert(1)", "file:///C:/x", "data:text/html,x", "not a url", undefined, 3])
+      expect(safeLinkUrl(bad)).toBeUndefined();
+  });
+
+  it("places a link by its corners, in any order, as fractions of the page, and drops one with no area", () => {
+    expect(linkRect([60, 120, 160, 100], 200, 400)).toEqual({ x: 0.3, y: 0.25, w: 0.5, h: 0.05 });
+    expect(linkRect([10, 10, 10.5, 30], 200, 400)).toBeNull();
+    expect(linkRect([Number.NaN, 0, 10, 10], 200, 400)).toBeNull();
+    expect(linkLabel({ url: "mailto:jane@example.com" })).toBe("jane@example.com");
+    expect(linkLabel({ page: 1 })).toBe("Page 2");
+  });
+});
+
 describe("the panel", () => {
   const base: ReviewPageFile = {
     index: 0,
@@ -129,12 +147,16 @@ describe("the panel", () => {
     pageLimit: 1,
   };
   const props = {
+    links: null,
     changes: null,
     comments: [],
     request: "",
     decision: "open" as const,
+    last: false,
+    sending: false,
     active: null,
-    onApprove: vi.fn(),
+    onAdvance: vi.fn(),
+    onUndo: vi.fn(),
     onRequest: vi.fn(),
     onEditComment: vi.fn(),
     onRemoveComment: vi.fn(),
@@ -184,16 +206,50 @@ describe("the panel", () => {
     expect(onShow).toHaveBeenCalledWith("c0", 0);
   });
 
-  it("approves the document, and undoes it", () => {
-    const onApprove = vi.fn();
-    const { unmount } = render(<Panel {...props} file={base} onApprove={onApprove} />);
-    fireEvent.click(screen.getByRole("button", { name: "Approve as shown" }));
-    expect(onApprove).toHaveBeenCalledWith(true);
+  it("approves the document with one button, says when that sends the answer, and undoes it", () => {
+    const onAdvance = vi.fn();
+    const onUndo = vi.fn();
+    const { unmount } = render(<Panel {...props} file={base} onAdvance={onAdvance} />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve Document" }));
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/sends your answer to Claude/)).toBeNull();
     unmount();
-    render(<Panel {...props} file={base} decision="approved" onApprove={onApprove} />);
+    const last = render(<Panel {...props} file={base} last onAdvance={onAdvance} />);
+    expect(screen.queryByRole("button", { name: "Approve Document" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send to Claude" }));
+    expect(onAdvance).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/The last document to decide: sending approves it as shown/)).toBeTruthy();
+    last.unmount();
+    const approved = render(<Panel {...props} file={base} decision="approved" onUndo={onUndo} />);
     expect(screen.getByText("Approved")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Approve Document|Send to Claude/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Undo approval" }));
-    expect(onApprove).toHaveBeenCalledWith(false);
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    approved.unmount();
+    // Every document decided (a send that failed): the approved one's button sends again.
+    render(<Panel {...props} file={base} decision="approved" last onAdvance={onAdvance} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send to Claude" }));
+    expect(onAdvance).toHaveBeenCalledTimes(3);
+  });
+
+  it("lists the document's links, each openable, and says when it has none", () => {
+    const { unmount } = render(
+      <Panel
+        {...props}
+        file={base}
+        links={[
+          { url: "https://github.com/example", page: 0 },
+          { url: "mailto:jane@example.com", page: 1 },
+        ]}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "jane@example.com" });
+    expect(link.getAttribute("href")).toBe("mailto:jane@example.com");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(screen.getByText("p. 2")).toBeTruthy();
+    unmount();
+    render(<Panel {...props} file={base} links={[]} />);
+    expect(screen.getByText("No web or email links in this document.")).toBeTruthy();
   });
 
   it("asks for changes once there's a comment, which can be edited and removed", () => {
@@ -211,7 +267,8 @@ describe("the panel", () => {
       />,
     );
     expect(screen.getByText("Changes requested")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Approve as shown" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Approve Document" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Request Changes" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit comment 1" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Comment 1" }), {
       target: { value: "Say invoicing, twice." },

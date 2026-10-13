@@ -19,6 +19,8 @@ const POSTING = {
   url: "https://example-tenant.myworkdayjobs.com/en-US/careers/job/REQ-0000",
   active: true,
 };
+const TAILOR = `${POSTING.id}/tailor`;
+const FILL = `${POSTING.id}/fill`;
 
 function state(over: Partial<PanelState> = {}): PanelState {
   return {
@@ -32,7 +34,7 @@ function state(over: Partial<PanelState> = {}): PanelState {
 }
 function conversation(over: Partial<PanelConversation> = {}): PanelConversation {
   return {
-    key: POSTING.id,
+    key: TAILOR,
     posting: { ...POSTING, requirements: ["One PDF", "Cover letter required"], application: POSTING.url },
     documents: [{ file: "resume.pdf", state: "approved" }],
     events: [],
@@ -55,10 +57,12 @@ function fakeTransport(opts: {
     call: vi.fn(async (method: string, params: unknown) => {
       calls.push([method, params]);
       if (method === "panel.state") return st;
-      // Only the conversation asked for, as the companion: a posting's never stands in for the general one.
+      // Only the conversation asked for, as the companion: a posting's other conversation has its posting and
+      // documents but not its events, and a posting's never stands in for the general one.
       if (method === "panel.conversation") {
         const key = (params as { key: string }).key;
-        return key === cv.key ? cv : { key, documents: [], events: [] };
+        if (key === cv.key) return cv;
+        return key.startsWith(`${POSTING.id}/`) ? { ...cv, key, events: [] } : { key, documents: [], events: [] };
       }
       if (method === "panel.send") return { id: "m1" };
       if (method === "panel.stop") return { stopped: true };
@@ -106,9 +110,25 @@ describe("the side panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Fill form/ }));
     await waitFor(() => expect(t.calls.filter(([m]) => m === "panel.send")).toHaveLength(2));
     expect(t.calls.filter(([m]) => m === "panel.send").map(([, p]) => p)).toEqual([
-      { key: POSTING.id, text: REQUESTS.tailor },
-      { key: POSTING.id, text: REQUESTS.fill(7) },
+      { key: TAILOR, text: REQUESTS.tailor },
+      { key: FILL, text: REQUESTS.fill(7) },
     ]);
+    // Filling shows the application's conversation.
+    expect(screen.getByRole("tab", { name: "Application" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("switches between a posting's documents and application conversations, following the one Claude works in", async () => {
+    const t = fakeTransport({
+      state: state({ agent: { status: "working", conversation: FILL, queued: 0, settings: state().agent.settings } }),
+    });
+    render(<PanelApp transport={t.transport} />);
+    const application = await screen.findByRole("tab", { name: /Application/ });
+    expect(application.getAttribute("aria-selected")).toBe("true");
+    expect(within(application).getByLabelText("Claude is working here")).toBeTruthy();
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.conversation", { key: FILL }]));
+    fireEvent.click(screen.getByRole("tab", { name: "Documents" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.conversation", { key: TAILOR }]));
+    expect(screen.getByText(/Claude is working on Acme: Software Developer · Application/)).toBeTruthy();
   });
 
   it("shows each document as approved or waiting for review", async () => {
@@ -161,7 +181,7 @@ describe("the side panel", () => {
     expect(t.transport.capture).toHaveBeenCalledTimes(1);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: POSTING.id }]), { timeout: 5000 });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: TAILOR }]), { timeout: 5000 });
     confirm.mockRestore();
     fireEvent.click(screen.getByRole("button", { name: "Extension settings" }));
     expect(t.transport.openSettings).toHaveBeenCalledTimes(1);
@@ -213,13 +233,13 @@ describe("the side panel", () => {
     const box = screen.getByLabelText("Message");
     fireEvent.change(box, { target: { value: "make it shorter" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.send", { key: POSTING.id, text: "make it shorter" }]));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.send", { key: TAILOR, text: "make it shorter" }]));
 
     t.push({
       type: "update",
       update: {
         event: {
-          conversation: POSTING.id,
+          conversation: TAILOR,
           event: { kind: "user", at: AT, id: "m1", text: "make it shorter", taken: false },
         },
       },
@@ -229,14 +249,14 @@ describe("the side panel", () => {
       type: "update",
       update: {
         event: {
-          conversation: POSTING.id,
+          conversation: TAILOR,
           event: { kind: "user", at: AT, id: "m1", text: "make it shorter", taken: true },
         },
       },
     });
     t.push({
       type: "update",
-      update: { event: { conversation: POSTING.id, event: { kind: "text", at: AT, text: "Cut **two** bullets." } } },
+      update: { event: { conversation: TAILOR, event: { kind: "text", at: AT, text: "Cut **two** bullets." } } },
     });
     expect(screen.queryByText("waiting for Claude")).toBeNull();
     expect(screen.getByText("two").tagName).toBe("STRONG");
@@ -249,7 +269,7 @@ describe("the side panel", () => {
 
     t.setState(
       state({
-        agent: { status: "working", conversation: POSTING.id, queued: 0, settings: state().agent.settings },
+        agent: { status: "working", conversation: TAILOR, queued: 0, settings: state().agent.settings },
       }),
     );
     t.push({ type: "update", update: { changed: true } });
@@ -262,7 +282,7 @@ describe("the side panel", () => {
     const ask: Card = {
       id: "ask-1",
       kind: "ask",
-      conversation: POSTING.id,
+      conversation: TAILOR,
       createdAt: AT,
       spec: {
         title: "Acme, step 3",
@@ -319,7 +339,7 @@ describe("the side panel", () => {
     const ask: Card = {
       id: "ask-2",
       kind: "ask",
-      conversation: POSTING.id,
+      conversation: TAILOR,
       createdAt: AT,
       spec: {
         title: "Step 1",

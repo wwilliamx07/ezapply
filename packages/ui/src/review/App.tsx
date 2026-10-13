@@ -1,17 +1,18 @@
 import type { ReviewAnswer, ReviewPageFile, ReviewPageState } from "@ezapply/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Banner, Brand, Button, Icon, MessagePage, Spinner } from "../components/ui.js";
+import { Badge, Banner, Brand, Icon, MessagePage, Spinner } from "../components/ui.js";
 import { ApiError, getJson, OfflineError, pageBase, postJson, subscribe } from "../lib/api.js";
 import { type LoadedPdf, loadPdf } from "../lib/pdf.js";
 import { changesSince } from "./changes.js";
 import { answerOf, type Decision, type DocDraft, decisionOf, useDrafts } from "./draft.js";
-import { Panel } from "./Panel.js";
+import { type DocLink, Panel } from "./Panel.js";
 import { type Jump, type Selected, Viewer } from "./Viewer.js";
 
 /**
  * The review page: the documents Claude prepared for one application, each to approve as shown or to send back
- * with comments on passages and a request for the whole. Each is approved on its own, and the answer goes once
- * every document is decided. The companion keeps the bytes shown here, and approving records exactly those.
+ * with comments on passages and a request for the whole. Each is approved on its own, by one button that also moves
+ * on to the next document to decide, and on the last sends the answer. The companion keeps the bytes shown here, and
+ * approving records exactly those.
  */
 export function ReviewApp() {
   const base = useMemo(pageBase, []);
@@ -62,6 +63,16 @@ export function ReviewApp() {
       pdf.pages.map((p) => p.text),
     );
   }, [file, pdf]);
+
+  // The document's web, mail and phone links, each once, with the first page it's on.
+  const links = useMemo<DocLink[] | null>(() => {
+    if (!pdf || pdf instanceof Error) return null;
+    const seen = new Map<string, DocLink>();
+    pdf.pages.forEach((p, page) => {
+      for (const l of p.links) if (l.url && !seen.has(l.url)) seen.set(l.url, { url: l.url, page });
+    });
+    return [...seen.values()];
+  }, [pdf]);
 
   const show = useCallback((id: string, page: number) => {
     setActive(id);
@@ -117,17 +128,19 @@ export function ReviewApp() {
   // Asking for changes takes back an approval, so removing them later leaves the document undecided, not approved.
   const edit = (index: number, change: (d: DocDraft) => DocDraft) =>
     update(index, (d) => ({ ...change(d), approved: false }));
-  const approve = (index: number, yes: boolean) => {
-    update(index, (d) => ({ ...d, approved: yes }));
-    if (!yes) return;
-    // On to the next document still to decide, after this one and then from the top.
-    const next = [...decisions.keys()]
+  // The next document still to decide, after this one and then from the top.
+  const nextOpen = (index: number) =>
+    [...decisions.keys()]
       .map((k) => (index + 1 + k) % decisions.length)
       .find((k) => k !== index && decisions[k] === "open");
-    if (next !== undefined) {
-      setSelected(next);
-      setActive(null);
-    }
+  // The panel's one button: approve the document (unless it asks for changes), then on to the next document to
+  // decide; with none left, the answer goes.
+  const advance = (index: number) => {
+    if (decisions[index] === "open") update(index, (d) => ({ ...d, approved: true }));
+    const next = nextOpen(index);
+    if (next === undefined) return void send();
+    setSelected(next);
+    setActive(null);
   };
 
   const send = async () => {
@@ -229,12 +242,16 @@ export function ReviewApp() {
         <Panel
           key={file.index}
           file={file}
+          links={links}
           changes={changes}
           comments={draft.comments}
           request={draft.request}
           decision={decisions[file.index] ?? "open"}
+          last={nextOpen(file.index) === undefined}
+          sending={sending}
           active={active}
-          onApprove={(yes) => approve(file.index, yes)}
+          onAdvance={() => advance(file.index)}
+          onUndo={() => update(file.index, (d) => ({ ...d, approved: false }))}
           onRequest={(request) => edit(file.index, (d) => ({ ...d, request }))}
           onEditComment={(id, note) =>
             edit(file.index, (d) => ({ ...d, comments: d.comments.map((c) => (c.id === id ? { ...c, note } : c)) }))
@@ -252,18 +269,9 @@ export function ReviewApp() {
           {approved > 0 ? <Badge tone="ok">{approved} approved</Badge> : null}
           {changed > 0 ? <Badge tone="warn">{changed} with changes</Badge> : null}
           {open > 0 ? <Badge>{open} to decide</Badge> : null}
+          {sending ? <Spinner label="Sending to Claude" /> : null}
           {sendError ? <span className="ez-footer-error">{sendError}</span> : null}
         </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={send}
-          disabled={sending || open > 0}
-          title={open > 0 ? "Approve each document, or say what should change, first" : undefined}
-        >
-          {sending ? <Spinner /> : <Icon name="send" size={17} />}
-          Send to Claude
-        </Button>
       </footer>
     </div>
   );

@@ -35,7 +35,7 @@ button{font:inherit;padding:8px 16px;margin-top:12px;cursor:pointer}input{font:i
 textarea{font:inherit;width:100%;box-sizing:border-box;margin:4px 0 10px}fieldset{margin:0 0 24px;border:1px solid #8886}.err{color:#c00}</style>`;
   res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>ezapply: ${escapeHtml(title)}</title>${style}</head>
-<body class="ez-plain"><main class="ez-plain-card${opts.wide ? " ez-plain-wide" : ""}"><p class="ez-brand">ezapply</p>
+<body class="ez-plain"><main class="ez-plain-card${opts.wide ? " ez-plain-wide" : ""}"><p class="ez-brand">${css ? '<img class="ez-brand-mark" src="/ui/favicon.svg" alt="">' : ""}ezapply</p>
 <h1>${escapeHtml(title)}</h1>${body}</main></body></html>`);
 }
 

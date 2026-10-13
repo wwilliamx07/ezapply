@@ -49,7 +49,8 @@ otherwise.
   setup isn't finished. If the port is taken, it says by what and exits. The user works in the extension's side
   panel; the companion starts Claude Code headless when a conversation needs it, one process at a time, and ends
   it when the companion stops ([agent](components/agent.md)). No conversation carries one posting into the next:
-  each posting has its own, so a finished application's conversation isn't re-sent with every turn of the next.
+  each posting has its own two, one tailoring its documents and one filling its application, so neither a finished
+  application nor the other part's work is re-sent with every turn.
 - **Claude Code** runs in the workspace, started by the companion for a panel conversation, with that
   conversation's session id in its environment. Its `.mcp.json` runs `ezapply mcp` (via the absolute path of
   the built CLI and Node) as a stdio MCP server. The user can also run `claude` in the workspace by hand while

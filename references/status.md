@@ -34,7 +34,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   lists go out as a count: each extra read was a turn re-sending the whole conversation
   ([forms](mcp-tools.md#forms)).
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
-- **A fresh Claude session per posting,** so finished work isn't re-sent every turn: each posting has its own panel conversation ([agent](components/agent.md)).
+- **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
+- **One button on the review page** approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
 - **Binding an unconfirmed tab trusts the first tab that changes,** with a one-time `postingBound` notice naming the
   page's title, rather than refusing until `posting_activate` ([which posting](mcp-tools.md#forms)).
 - **The reference is written for agents.** A "By task" table says what to read for each kind of change, the
@@ -70,14 +71,18 @@ The plan (`plan.md`) is in git history before 2026-09-27.
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
 
-- **The token cuts** (2026-10-12): `go_next`, `add_repeatable` and `remove_repeatable` returning `form`, the
-  `optionCount` cap and the layout lint are tested on fixtures only. Run a tailoring and an application and
-  compare the session's tokens and turns with an earlier one; check the lint's findings against the PDF, and
-  that the agent fills a long dropdown without listing its options first.
+- **The token cuts** (2026-10-12): one live Workday application used `go_next`'s and `add_repeatable`'s `form`
+  (one `get_form` in four steps), but still called `list_options` before filling three steps' dropdowns. Not yet
+  checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long list, and the lint's findings against the
+  PDF. What the runs cost, and what to cut next, is in the todo item "Cut the tokens a panel conversation spends".
 
 - **The side panel:** opened by the toolbar button, and a whole application from it with the real Claude Code (setup, a review, question and
   approval cards, Stop, Reset, long waits).
-- **The review page's per-document approval** in a real browser.
+- **The review page's per-document approval** in a real browser, with its one button: on to the next document, and
+  the send on the last one; and a real resume's links (from `hyperref`) drawn where the text is and opening.
+- **A posting's two conversations** with the real Claude Code: the tailoring one leaves forms alone and the filling
+  one leaves the documents' writing to the other, each sending the user to the other's button; and an older
+  workspace's conversation showing under Documents.
 - **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Fixed since and not re-run:
   the row Delete (found on a saved step), multi-selects that unticked Workday's own tick, a hierarchical prompt's
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school

@@ -27,7 +27,7 @@ onboarding calls.
 
 Commands that were removed because something else does their job: `chat` (Claude Code in the terminal as
 ezapply's child, restarted with a fresh session on each new posting) went once the side panel's agent
-([agent](agent.md)) did everything it did, with its own conversation per posting; Claude Code can still be
+([agent](agent.md)) did everything it did, with its own conversations per posting; Claude Code can still be
 run in the workspace while `ezapply` runs, and its relay reaches the same companion. `status` went because
 `doctor` reports the same (running, version, extension connected) along with the rest.
 
@@ -129,8 +129,8 @@ How the user runs ezapply: `hostPanel`, with no command. It and the tests are th
 5. Waits for SIGINT, SIGTERM or SIGHUP (the terminal closing), then closes the companion (the agent's Claude
    Code processes, the extension socket with 1001, the HTTP server and its connections) and exits 0.
 
-The terminal is ezapply's: Ctrl+C stops it. The panel keeps a conversation per posting, so a finished
-application isn't re-sent with every turn of the next one.
+The terminal is ezapply's: Ctrl+C stops it. The panel keeps conversations per posting
+([agent](agent.md#conversations-servicets)), so a finished application isn't re-sent with every turn of the next one.
 
 ## `health.ts`
 `fetchHealth`: `/health` with a 2 s timeout; only counts if it answers `name: "ezapply"`. `doctor` and the

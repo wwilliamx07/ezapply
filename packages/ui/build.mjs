@@ -25,12 +25,8 @@ for (const dir of ["standard_fonts", "cmaps", "iccs", "wasm"]) {
   await cp(join(pdfjsRoot, dir), join(dist, "pdfjs", dir), { recursive: true });
 }
 
-// The tab's icon: ezapply's mark, as the pages draw it.
-await writeFile(
-  join(dist, "favicon.svg"),
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#3b5bdb"/>' +
-    '<text x="16" y="22.5" font-family="system-ui,sans-serif" font-size="19" font-weight="800" fill="#fff" text-anchor="middle">e</text></svg>\n',
-);
+// The tab's icon: ezapply's mark, as the pages draw it (`Brand`) and the extension's icons are made from.
+await cp(join(root, "static/mark.svg"), join(dist, "favicon.svg"));
 
 const result = await build({
   absWorkingDir: root,
