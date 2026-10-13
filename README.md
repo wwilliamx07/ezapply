@@ -13,6 +13,8 @@ ezapply tailors your documents and form answers to the posting, based on your pr
 - **Local.** Everything runs on your machine and only while you have it open. Your data stays there, except
   what you put into an application and what Claude Code sends to Claude.
 
+https://github.com/user-attachments/assets/1fa2bd5b-d626-4942-a056-698a5d9b5907
+
 ## Setup
 
 You need Node 22.12+, Chrome 120+ (or another Chromium browser), and [Claude Code](https://claude.com/claude-code).
