@@ -23,44 +23,47 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~M | The token cuts' live run in `references/status.md` |
-| 1 | [Minimal reliance on agent performance](less-agent-reliance/overview.md) | — | ~L | — |
-| 2 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | — | ~M | Minimal reliance on agent performance |
-| 3 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~M | Remove the onboarding and repos skills |
-| 4 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
-| 5 | [One directory per adapter](adapter-directories/overview.md) | Medium | M–L | — |
-| 6 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
-| 7 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | One directory per adapter; a page saved from a real one |
-| 8 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
-| 9 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
-| 10 | [Compatibility with various agents](agent-compatibility/overview.md) | — | ~L | Minimal reliance on agent performance; Refactor the skills |
-| 11 | [Run multiple applications in parallel](parallel-applications/overview.md) | — | ~L | — |
-| 12 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
-| 13 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 14 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
-| 15 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| — | [Panel and review-page fixes](panel-fixes/overview.md) | — | ~S | — |
+| — | [Form-filling fixes](form-agent-fixes/overview.md) | — | ~M | — |
+| — | [Tailoring edits that fit the page and the text](tailoring-edits/overview.md) | — | ~M | — |
+| — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
+| — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
+| 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | — | ~M | — |
+| 2 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | Remove the onboarding and repos skills |
+| 3 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
+| 4 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
+| 5 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | A page saved from a real one |
+| 6 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
+| 7 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
+| 8 | [Compatibility with various agents](agent-compatibility/overview.md) | — | ~L | Refactor the skills |
+| 9 | [Run multiple applications in parallel](parallel-applications/overview.md) | — | ~L | — |
+| 10 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
+| 11 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
+| 12 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
+| 13 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
 
 Why this order:
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
-  later item. Making flows mechanical comes before refactoring the skills, since it removes some
-  of them (onboarding, repos) and shrinks the rest.
-- **One directory per adapter before the next new site, and before Application forms on an employer's own page**,
-  so neither is built in the old layout and then moved. The generic form also waits for a saved careers page whose
-  application is its own form, with no frame.
+  later item. Removing the onboarding and repos skills comes before refactoring the rest, which moves every other
+  mechanical step into code.
+- **Application forms on an employer's own page** waits for a saved careers page whose application is its own form,
+  with no frame.
 - **The application manager** (tracker, job search, alerts, auto mode) is built in that order, each on the one
   before; auto mode last, and only once the rest has shown the quality holds without the user watching. Running
   applications in parallel comes before it, since auto mode fills many at once.
 
 ## Groups
 
-- **The agent:** Cut the tokens a panel conversation spends, Minimal reliance on agent performance, Remove the onboarding and repos
-  skills, Refactor the skills, A writing spec for claims, Compatibility with various agents.
-- **Adapter building:** One directory per adapter, Agents that try to break a new adapter, Application forms on an
+- **The agent:** Cut the tokens a panel conversation spends, Remove the onboarding and repos skills, Refactor
+  the skills, A writing spec for claims, Compatibility with various agents, Form-filling fixes, Tailoring edits
+  that fit the page and the text.
+- **Adapter building:** Agents that try to break a new adapter, Application forms on an
   employer's own page.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts, Run
-  multiple applications in parallel.
+  multiple applications in parallel, Panel and review-page fixes, Notify the user when the agent needs them.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`), so the manager reads and extends those; it adds no database. Tracker, Job
   search, Job alerts, Auto mode.
-- **Upkeep:** Remove the upgrade shims.
+- **Upkeep:** Remove the upgrade shims, A harness that runs the user flows.

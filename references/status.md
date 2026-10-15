@@ -17,6 +17,13 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   run ezapply ([cli](components/cli.md#commands)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
   guard are shared and a site is a registry entry plus a definition ([adapters](components/adapters.md)).
+- **Everything about a site in one directory** (`packages/sites/src/<site>/`), with a list per side (registry,
+  definitions, notes, readers) so a bundle, the companion and the tests each import only what they need; no other
+  package names a site, which a test scans for. A site's change touches one directory, and the engine (its own
+  package) stays generic ([sites](components/sites.md#the-package)).
+- **A new site needs no protocol bump.** `SiteId` is a string and `hello` carries the extension's site ids; the
+  companion refuses a different list, so two sides built apart still fail at the handshake rather than mid-fill
+  ([protocol](components/protocol.md#changing-the-protocol)).
 - **The extension holds every site** (`<all_urls>`) so it can tell a page's site by its body, wherever the
   employer hosts it ([access](components/extension.md#access-to-websites)).
 - **One adapter change per live run,** so a slowdown or failure points at one change; live filling once got several
@@ -36,6 +43,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
 - **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
 - **One button on the review page** approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
+- **A screening question the profile answers isn't asked in the answer bank** (an entry with a `source` and no
+  answer): the fact has one home, the profile, and a question like the degree needs the posting anyway
+  ([answer bank](components/profile-and-templates.md#answer-bank-profileanswersyaml)).
 - **Binding an unconfirmed tab trusts the first tab that changes,** with a one-time `postingBound` notice naming the
   page's title, rather than refusing until `posting_activate` ([which posting](mcp-tools.md#forms)).
 - **The reference is written for agents.** A "By task" table says what to read for each kind of change, the
@@ -71,6 +81,12 @@ The plan (`plan.md`) is in git history before 2026-09-27.
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
 
+- **The sites package** (2026-10-15): the bundles were compared and hold the same code, and every test passes. Not
+  yet seen live: the extension's `hello` with its site ids accepted by the companion (and a stale extension refused
+  with "Site mismatch"); a posting's company on a provider's host (now from the registry's `providerHosts` and
+  `company`: a Dayforce posting's company now comes from its title or JSON-LD, not the host); and an embedded
+  board's frame recognised by the same hosts when access to websites is withheld.
+
 - **The token cuts** (2026-10-12): one live Workday application used `go_next`'s and `add_repeatable`'s `form`
   (one `get_form` in four steps), but still called `list_options` before filling three steps' dropdowns. Not yet
   checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long list, and the lint's findings against the
@@ -78,6 +94,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 - **The side panel:** opened by the toolbar button, and a whole application from it with the real Claude Code (setup, a review, question and
   approval cards, Stop, Reset, long waits).
+- **Screening questions answered from the profile:** in a live application, the agent computes a sourced question
+  (sponsorship, the degree) from the profile without asking, asks when the profile holds nothing there, and offers
+  to save that reply into the profile rather than the bank.
 - **The review page's per-document approval** in a real browser, with its one button: on to the next document, and
   the send on the last one; and a real resume's links (from `hyperref`) drawn where the text is and opening.
 - **A posting's two conversations** with the real Claude Code: the tailoring one leaves forms alone and the filling
@@ -86,7 +105,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Fixed since and not re-run:
   the row Delete (found on a saved step), multi-selects that unticked Workday's own tick, a hierarchical prompt's
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school
-  lists' late search ([workday](components/sites.md#workday-sitesworkday), [oracle](components/sites.md#oracle-what-was-verified)).
+  lists' late search ([workday](components/sites/workday.md), [oracle](components/sites/oracle.md#oracle-what-was-verified)).
   Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted. If
   it's slower, suspect first the adapter trace's calls, then two retries brought back after a revert
   (`openListboxRetrying`, and `back()` seeing a move by step index), then the row Delete; every site's `page.job`
@@ -102,7 +121,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
   during the fill and goes 5 minutes after it (or when ezapply stops), Cancel on the bar comes back on the next
   call, a screenshot of a minimized tab, and whether a step that loads a new document keeps it
   ([extension](components/extension.md#focus-emulation-emulationts),
-  [dates](components/sites.md#dates-typed-into-workdays-split-widget)).
+  [dates](components/sites/workday.md#dates-typed-into-workdays-split-widget)).
 - **Fills slower in debug mode's first live run** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the
   adapter trace will show which waits ran to their maximum; one guess is `afterFieldMaxMs`.
 - **Greenhouse, Lever, Ashby:** fixes after one real Greenhouse and one Ashby application (multi-select ids, lists
@@ -110,10 +129,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
   ([sites](components/sites.md#what-was-verified-and-how)).
 - **Phenom:** one run stopped on step 1; the resume's name (read from the download link, not its text), question
   groups as one field, the tab and capture matching are fixed but not re-run;
-  steps 4 to 6 unseen ([phenom](components/sites.md#phenom-sitesphenom)).
-- **Dayforce:** nothing has run live; rc-select's context is the riskiest part ([dayforce](components/sites.md#dayforce-sitesdayforce)).
+  steps 4 to 6 unseen ([phenom](components/sites/phenom.md)).
+- **Dayforce:** nothing has run live; rc-select's context is the riskiest part ([dayforce](components/sites/dayforce.md)).
 - **SAP SuccessFactors:** question radios, a same-named replacement and a re-render during upload fixed after a
-  live run, not re-run ([successfactors](components/sites.md#sap-successfactors-sitessuccessfactors)).
+  live run, not re-run ([successfactors](components/sites/successfactors.md)).
 - **Matching tabs to postings:** the first-fill binding and its notice, title matching on real roles, and the
   hand-off checklist on live sections.
 - **The extension in a real browser:** reloaded with `<all_urls>`, `browser_status` with many tabs, embedded
@@ -130,7 +149,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 ## Known issues
 - **"Could not open the dropdown"** on Workday after its own list was read without a choice; the adapter retries
-  once, and nothing records whether the retry ran ([details](components/sites.md#workdays-dropdown-finding-its-listbox)).
+  once, and nothing records whether the retry ran ([details](components/sites/workday.md#workdays-dropdown-finding-its-listbox)).
 - **Unexplained on Workday:** a "Field of Study" search returning only its top level in a step's fill but taken
   when filled alone; language rows (and their levels) empty on coming back to a step.
 - **A `go_next` after the user advanced the step themselves** presses the next step's button.

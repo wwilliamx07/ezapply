@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HOST_PERMISSIONS, SITES } from "@ezapply/protocol/sites";
+import { HOST_PERMISSIONS } from "@ezapply/protocol/sites";
+import { SITES } from "@ezapply/sites";
 import { build } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -49,14 +50,15 @@ await build({
   outfile: join(dist, "grant.js"),
   format: "iife",
 });
-// The site adapters, injected into application pages' MAIN world on demand. Keep them small and self-contained
-// (no zod). ADAPTER_VERSION is a hash of each bundle itself, so any change reaches tabs that hold an older copy
-// without anyone remembering to bump a number. The placeholder has the hash's length, keeping the source map exact.
+// The site adapters (each site's `definition/` in @ezapply/sites), injected into application pages' MAIN world
+// on demand. Keep them small and self-contained (no zod). ADAPTER_VERSION is a hash of each bundle itself, so any
+// change reaches tabs that hold an older copy without anyone remembering to bump a number. The placeholder has the
+// hash's length, keeping the source map exact.
 const VERSION_PLACEHOLDER = "@ADAPTER_VER"; // 12 characters, like the hash
 for (const { id: site } of SITES) {
   const adapter = await build({
     ...common,
-    entryPoints: [join(root, `src/adapters/sites/${site}/main.ts`)],
+    entryPoints: [join(root, `../sites/src/${site}/definition/main.ts`)],
     outfile: join(dist, `${site}-main.js`),
     format: "iife",
     define: { __ADAPTER_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },

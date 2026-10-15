@@ -5,12 +5,10 @@ import {
   EzError,
   type Handlers,
   HOST_PERMISSIONS,
-  isFormSite,
-  SITES,
   type SiteId,
-  siteInfo,
   WithDebug,
 } from "@ezapply/protocol";
+import { isFormSite, SITES, siteInfo } from "@ezapply/sites";
 import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
 import { captureAttached, emulateFocus } from "./emulation.js";
@@ -129,7 +127,7 @@ interface CallOptions {
   debug?: DebugRequest;
 }
 
-/** A debugged call's trace, as the adapter returns it (adapters/engine/trace.ts), and the screenshot added here. */
+/** A debugged call's trace, as the adapter returns it (@ezapply/engine/trace), and the screenshot added here. */
 type Trace = { failedFields?: string[]; screenshot?: string } & Record<string, unknown>;
 
 /**

@@ -85,7 +85,7 @@ otherwise.
   each form call, the one for the tab's site, which the extension tells by what the page shows, else by its URL
   ([telling a page's site](components/extension.md#telling-a-pages-site-framests)). Injection is idempotent: a
   second injection of the same version is a no-op. The extension holds every site (`<all_urls>`) so it can read
-  any page for that ([why](components/protocol.md#the-site-registry-sitests)).
+  any page for that ([why](components/sites.md#the-registry)).
 
 **Why no daemon.** Earlier builds ran the companion as a background daemon: `ezapply mcp` started it on
 demand, it stopped after 15 minutes idle, and the terminal wrapper polled it every second. Since ezapply is
@@ -138,8 +138,9 @@ Formats of every file: [data-formats.md](data-formats.md).
   line plus its hint; only unexpected errors show a stack.
 - **Finding installed tools.** `which()` caches hits only, and on Windows first appends the folders where
   winget installs MiKTeX and Git, so a tool installed mid-session works without a restart.
-- **Versioning.** `PROTOCOL_VERSION` (currently 10) is checked at the bridge handshake; a mismatch is
-  refused with which side to update. Every stored format has a `schemaVersion`. `COMPANION_VERSION`
+- **Versioning.** `PROTOCOL_VERSION` (currently 11) is checked at the bridge handshake; a mismatch is
+  refused with which side to update. The extension also sends its registry's site ids, and a different list is
+  refused, so adding a site needs no bump ([handshake](components/protocol.md#bridge-handshake)). Every stored format has a `schemaVersion`. `COMPANION_VERSION`
   matches the package version (tested).
 - **Wiring.** Services are constructed once in `companion/src/main.ts` and passed explicitly (the
   `Services` object); tools never construct services and there are no module-level singletons besides

@@ -130,7 +130,8 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 3. **The resume is exactly one page.** Tighten wording or drop the weakest bullet; never shrink fonts or
    margins below the template's.
 4. **Ask, don't guess** on EEO, disability, veteran and salary questions the user hasn't answered in
-   `profile/`, and on any answer-bank entry marked `sensitive` or with a `null` answer. You may suggest an answer
+   `profile/`, and on any answer-bank entry marked `sensitive` or with a `null` answer (one with a `source` the
+   profile holds is answered from the profile, not asked). You may suggest an answer
    for them (`proposed`, with its source in `why`, `sensitive: true`); the user still answers. Read
    `profile/answers.yaml` before asking anything it may hold.
 5. **Never submit an application.** Stop at the review page (on a one-page application, once every field is

@@ -5,7 +5,6 @@ import {
   ErrorCode,
   EzError,
   GENERAL_CONVERSATION,
-  isFormSite,
   type PanelConversation,
   type PanelPosting,
   type PanelState,
@@ -14,8 +13,8 @@ import {
   type PostingMeta,
   postingConversation,
   type SiteId,
-  siteInfo,
 } from "@ezapply/protocol";
+import { isFormSite, siteInfo } from "@ezapply/sites";
 import { matchPosting, postingFacts } from "../forms/match.js";
 import type { Services } from "../services.js";
 import { workspaceStatus } from "../status.js";

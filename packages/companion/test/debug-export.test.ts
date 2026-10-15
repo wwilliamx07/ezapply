@@ -1,12 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pageMarkup } from "@ezapply/engine/markup";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pageMarkup } from "../../extension/src/adapters/engine/markup.js";
-import { workday } from "../../extension/src/adapters/sites/workday/site.js";
-import { createWorkdayApi, extractPage } from "../../extension/test/adapters.js";
-import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
+import { installDomShims } from "../../engine/test/shims.js";
+import { workday } from "../../sites/src/workday/definition/site.js";
+import { buildWorkdayStep } from "../../sites/src/workday/test/fixture.js";
+import { createWorkdayApi, extractPage } from "../../sites/test/adapters.js";
 import { debugExport, profileStrings } from "../src/forms/debug-export.js";
 
 const URL = "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply";

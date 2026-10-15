@@ -508,6 +508,7 @@ export class OnboardingService {
         total: answers.exists && answers.valid ? (answers.total ?? 0) : 0,
         answered: answers.exists && answers.valid ? (answers.answered ?? 0) : 0,
         unanswered: answers.exists && answers.valid ? (answers.unanswered ?? []) : [],
+        fromProfile: answers.exists && answers.valid ? (answers.fromProfile ?? []) : [],
       },
       preferences: {
         attachMode: await s.reviews.attachMode(),

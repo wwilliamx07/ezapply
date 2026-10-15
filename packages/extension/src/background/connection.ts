@@ -12,6 +12,7 @@ import {
   type ResultOf,
   RpcPeer,
 } from "@ezapply/protocol";
+import { FORM_SITE_IDS } from "@ezapply/sites";
 import { detectBrowser } from "./browser-id.js";
 import { type ConnState, DEFAULT_PORT, type Settings, store } from "./settings.js";
 
@@ -97,6 +98,7 @@ export class CompanionConnection {
         protocolVersion: PROTOCOL_VERSION,
         extensionVersion: this.extensionVersion,
         pairingToken: settings.pairingToken,
+        sites: [...FORM_SITE_IDS],
         ...(pendingCapture ? { pendingCapture } : {}),
         ...(browser ? { browser } : {}),
       });

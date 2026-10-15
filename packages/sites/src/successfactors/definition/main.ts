@@ -1,0 +1,5 @@
+import { install } from "@ezapply/engine/api";
+import { successfactors } from "./site.js";
+
+/** Entry for the MAIN-world bundle (successfactors-main.js), injected on demand by the service worker. */
+install(successfactors);

@@ -1,4 +1,5 @@
-import { type PostingApplication, type PostingMeta, SITES, sameJob, siteOfUrl } from "@ezapply/protocol";
+import type { PostingApplication, PostingMeta } from "@ezapply/protocol";
+import { SITES, sameJob, siteOfUrl } from "@ezapply/sites";
 
 /**
  * Which application a posting is tied to, found from what was captured. Everything a URL says comes from the

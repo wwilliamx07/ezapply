@@ -284,7 +284,7 @@ function ExampleLetter() {
 
 export function AnswersStep() {
   const { state, act } = useOnboard();
-  const { unanswered, total, answered } = state.answers;
+  const { unanswered, fromProfile, total, answered } = state.answers;
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -299,7 +299,8 @@ export function AnswersStep() {
         you about anything new.
       </StepHead>
       <p className="ez-muted">
-        {answered} of {total} answered.
+        {answered} of {total - fromProfile.length} answered
+        {fromProfile.length ? `; ${fromProfile.length} more come from your profile` : ""}.
       </p>
       {group.length === 0 ? (
         <p>Every question has an answer. You can change them any time in profile/answers.yaml, or ask Claude.</p>
@@ -325,10 +326,6 @@ export function AnswersStep() {
                   </span>
                 ) : q.suggested ? (
                   <span className="ez-help">Suggested; change it if it isn't right for you.</span>
-                ) : q.source ? (
-                  <span className="ez-help">
-                    Usually taken from your profile ({q.source.replace(/^profile\./, "")}).
-                  </span>
                 ) : null}
               </li>
             ))}
@@ -364,6 +361,27 @@ export function AnswersStep() {
           <ErrorNote error={error} />
         </>
       )}
+      {fromProfile.length ? (
+        <section className="ob-section">
+          <h3>From your profile</h3>
+          <p className="ez-help">
+            Claude answers these from your profile for each job, so you don't answer them twice. Change them under Your
+            profile.
+          </p>
+          <ul className="ob-from-profile">
+            {fromProfile.map((q) => (
+              <li key={q.id} className="ob-from-item">
+                <span>{q.canonical}</span>
+                {q.value ? (
+                  <span className="ob-from-value">{q.value}</span>
+                ) : (
+                  <span className="ez-help">Not in your profile yet: Claude asks when a form needs it.</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }

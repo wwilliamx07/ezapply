@@ -63,7 +63,7 @@ Details: [profile-and-templates.md](components/profile-and-templates.md).
 | Tool | Input | Does |
 |---|---|---|
 | `profile_check` | — | Validate `profile.yaml`: errors with paths, or commonly-needed fields still missing |
-| `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions and sources; sensitive ids; `notProfileSources { ids, hint }` when an entry's `source` isn't a profile path (agents have written `source: user`) |
+| `answers_check` | — | Validate `answers.yaml`; counts; unanswered entries with suggestions; `fromProfile`, the entries answered from the profile, each with its `source` and the profile's `value` there (absent when it holds none); sensitive ids; `notProfileSources { ids, hint }` when an entry's `source` isn't a profile path (agents have written `source: user`) |
 | `template_import` | `source` (absolute: a folder or a single `.tex` file, outside the workspace or in `library/`), `kind` (`resume`/`cover`), `main?`, `replace?` | Copy a LaTeX project into `templates/<kind>/` and watch the source for edits (`template-source`); a source in a Claude scratchpad is refused; replaces the default cover without asking, anything else needs `replace`; the old one goes to `templates/.old/`. Adds `% !TEX program = pdflatex` to a pdfTeX-only main file and reports it in `texProgram`. `contentFiles` lists the `.tex` files the main file `\input`s (tailored copies need them) |
 | `template_import_example` | `sourcePath` (absolute) | Copy a sample cover letter (PDF, PNG/JPG/WebP, TXT, MD; ≤20 MB) into `templates/cover/example/`; Word → hint to export PDF |
 | `template_set_main` | `kind`, `main` (relative to `templates/<kind>/`, must stay inside it and end in `.tex`) | Record the main file and its `contentFiles`; marks a non-imported template `custom`. Returns `{ kind, main, contentFiles }` |
@@ -99,8 +99,8 @@ the tool descriptions explain once for every site. **The tool descriptions never
 
 ### Site notes
 What a site does differently that no fact says (a document it needs first, a removal that reaches the candidate's
-profile on the site, a choice that's the user's) is in its notes, `SITE_NOTES` in `companion/src/forms/sites/`, one
-module per site, keyed by every registry site (a site without notes doesn't compile). `get_form` gives
+profile on the site, a choice that's the user's) is in its notes, `SITE_NOTES` (`@ezapply/sites/notes`), each site's
+`notes.ts` in [its directory](components/sites.md#the-package), keyed by every registry site (a site without notes doesn't compile). `get_form` gives
 them as `siteNotes`, first in the result, the first time a page of that site is read in a
 Claude session, and never again in that session. The session is the one the MCP relay names in its requests
 (`x-ezapply-session`, a panel conversation's Claude Code session), passed to the form tools when the
@@ -195,7 +195,7 @@ context was compacted may have lost them: the notes are short, and the generic s
   many times slower (in one live run 16 fields took 6.7 s, then with the review page in front of the form 4 dates
   took 28 s), past the companion's timeout, and Workday's dates weren't taken
   ([focus emulation](components/extension.md#focus-emulation-emulationts),
-  [Workday's dates](components/sites.md#dates-typed-into-workdays-split-widget)).
+  [Workday's dates](components/sites/workday.md#dates-typed-into-workdays-split-widget)).
   - **When focus emulation can't run** (another debugger holds the tab, a policy forbids the debugger, an older
     extension), the page runs as the browser leaves it, and every logged event of the call gets
     `focusNotEmulated: true`. Nothing is brought to the front any more: earlier builds switched to the tab and

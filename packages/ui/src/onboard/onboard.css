@@ -402,6 +402,24 @@
   color: var(--text-3);
   font-size: 0.875rem;
 }
+/* Screening questions the profile answers: each question, then what the profile holds. */
+.ob-from-profile {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ob-from-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ob-from-value {
+  color: var(--text-2);
+  font-weight: 600;
+}
 
 /* Library */
 .ob-drop {

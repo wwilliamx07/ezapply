@@ -8,14 +8,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./oracle": {
-      "types": "./dist/oracle.d.ts",
-      "default": "./dist/oracle.js"
-    },
-    "./workday": {
-      "types": "./dist/workday.d.ts",
-      "default": "./dist/workday.js"
-    },
     "./sites": {
       "types": "./dist/sites.d.ts",
       "default": "./dist/sites.js"

@@ -39,6 +39,32 @@ describe("answer bank", () => {
     expect(check.unanswered?.find((u) => u.id === "gov_official_relationship")).toMatchObject({ suggested: "No" });
   });
 
+  it("answers a question with a profile source from the profile, not as a screening question", async () => {
+    await writeFile(
+      join(root, "ws/profile/profile.yaml"),
+      [
+        "schemaVersion: 1",
+        "identity: { firstName: Jane, lastName: Doe }",
+        "contact: { email: jane@example.com }",
+        "workAuthorization: { authorizedIn: [United States, Canada], requiresSponsorshipNow: false }",
+        "languages: [{ language: English, proficiency: native }]",
+      ].join("\n"),
+    );
+    const check = await svc.checkAnswers();
+    const ids = check.unanswered?.map((u) => u.id) ?? [];
+    expect(ids).not.toContain("sponsorship_now");
+    expect(ids).toContain("age_18_plus");
+    const from = Object.fromEntries((check.fromProfile ?? []).map((q) => [q.id, q.value]));
+    expect(from).toMatchObject({
+      authorized_to_work: "United States, Canada",
+      sponsorship_now: "No",
+      english_fluent: "English",
+    });
+    expect(from.sponsorship_future).toBeUndefined();
+    expect(check.answered).toBe(0);
+    await rm(join(root, "ws/profile/profile.yaml"));
+  });
+
   it("says when a source isn't a profile path (who gave an answer isn't a source)", async () => {
     await writeFile(
       join(root, "ws/profile/answers.yaml"),

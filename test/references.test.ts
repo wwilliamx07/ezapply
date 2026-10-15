@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { SITES } from "../packages/protocol/src/sites.js";
+import { SITES } from "../packages/sites/src/registry.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REFS = join(ROOT, "references");
@@ -99,11 +99,13 @@ describe("references", () => {
     expect(documented.filter((t) => !registered.includes(t))).toEqual([]);
   });
 
-  it("gives every registry site a section on the sites page", () => {
-    const sites = read(join(REFS, "components", "sites.md"));
-    expect(
-      SITES.filter((s) => !new RegExp(`^## .*\\(\`sites/${s.id}/\`\\)`, "m").test(sites)).map((s) => s.id),
-    ).toEqual([]);
+  it("gives every registry site its page, titled with its directory, and no other site a page", () => {
+    const dir = join(REFS, "components", "sites");
+    const pages = readdirSync(dir).map((f) => f.replace(/\.md$/, ""));
+    expect(pages.sort()).toEqual(SITES.map((s) => s.id).sort());
+    const title = (id: string) => read(join(dir, `${id}.md`)).split("\n")[0] ?? "";
+    const titled = (id: string) => /^# /.test(title(id)) && title(id).includes(`(\`packages/sites/src/${id}/\`)`);
+    expect(SITES.map((s) => s.id).filter((id) => !titled(id))).toEqual([]);
   });
 
   it("names every shipped skill on the workspace page", () => {

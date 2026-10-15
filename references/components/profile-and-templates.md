@@ -32,8 +32,20 @@ Stored answers to screening questions.
   `{ default, byCompany }`), `suggested` (never used on a form until confirmed), `source` (a profile path the answer is computed from,
   `profile.…`; not who gave it, which `answers_check` reports as `notProfileSources`), `sensitive`
   (always ask even when answered), `variants` (other wordings seen), `notes`.
+- **Answered from the profile.** An entry with a `profile.` `source` and no `answer` of its own is answered from
+  that path, per posting, so it is never a screening question to answer: `answers_check` lists it under
+  `fromProfile` with what the profile holds there (`profileValueText`: Yes/No, a list joined, a list of entries by
+  each one's first text), not under unanswered, and onboarding's screening step shows it read-only. While filling,
+  the agent computes it for the posting (its country, its required degree) and asks only when the profile has
+  nothing there, offering to save the reply into the profile. A fixed `answer` on such an entry wins over the
+  source. The seeded ones with a source cover authorization, sponsorship, relocation, travel, start date, degree
+  and English, among others.
+
+  *Why:* onboarding asked those questions in both the profile form and the screening step, so the same fact was
+  given twice and could disagree. The profile is where a fact like sponsorship lives; the bank only says which
+  questions read it. A degree question needs the posting, so a fixed answer copied from the profile would be wrong.
 - `answers_check` validates it (unique ids) and lists unanswered entries. The checklist counts the bank as
-  done when only sensitive questions are unanswered.
+  done when every unanswered entry is sensitive.
 - **Saving while filling** (`ezapply-apply`, "Save what got resolved"): when a stored answer matched none of
   a field's options and the user (or the agent's judgment, then confirmed) picked one, or the user answered a
   question the bank lacked, the agent offers to save it. It edits the entry that already covers the question:

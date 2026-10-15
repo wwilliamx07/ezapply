@@ -22,6 +22,7 @@ const ANSWERS_HEADER = `Screening-question answer bank. Used to fill application
   answer:     the confirmed answer ("Yes", "No", or text). null = ask me every time.
               { default: ..., byCompany: { "Acme": "Yes" } } for company-specific answers.
   suggested:  a proposed default. Not used on forms until copied into answer.
+  source:     a profile path (profile.…): while answer is null, the answer comes from your profile.
   sensitive:  always ask, even when an answer exists.
   variants:   other wordings of the same question seen on forms (Claude adds these).`;
 
@@ -77,7 +78,11 @@ export class ProfileService {
     if (!a.exists) return { exists: false };
     if (!a.valid) return { exists: true, valid: false, errors: a.errors };
     const entries = a.value.entries;
-    const unanswered = entries.filter((e) => !isAnswered(e));
+    // An entry with a profile path and no answer of its own is answered from the profile, per posting (a degree
+    // question needs the posting's degree), so it isn't asked as a screening question: the profile owns the fact.
+    const profile = await this.rawProfile();
+    const byProfile = entries.filter((e) => !isAnswered(e) && e.source?.startsWith("profile."));
+    const unanswered = entries.filter((e) => !isAnswered(e) && !byProfile.includes(e));
     // `source` names the profile path an answer is computed from. Agents have used it to record who gave the
     // answer (`source: user`); say so, since only a profile path says what to compute the answer from.
     const notProfile = entries.filter((e) => e.source && !e.source.startsWith("profile."));
@@ -85,15 +90,19 @@ export class ProfileService {
       exists: true,
       valid: true,
       total: entries.length,
-      answered: entries.length - unanswered.length,
+      answered: entries.length - unanswered.length - byProfile.length,
       sensitive: entries.filter((e) => e.sensitive).map((e) => e.id),
       unanswered: unanswered.map((e) => ({
         id: e.id,
         canonical: e.canonical,
         ...(e.suggested ? { suggested: e.suggested } : {}),
-        ...(e.source ? { source: e.source } : {}),
         sensitive: e.sensitive,
       })),
+      fromProfile: byProfile.map((e) => {
+        const source = e.source as string;
+        const value = profileValueText(profile, source.slice("profile.".length));
+        return { id: e.id, canonical: e.canonical, source, ...(value ? { value } : {}) };
+      }),
       notProfileSources: notProfile.length
         ? {
             ids: notProfile.map((e) => e.id),
@@ -317,6 +326,24 @@ export function formatPreferences(prefs: Record<PreferenceKey, string>, extra = 
     ([k, t]) => `## ${t}\n\n${prefs[k].trim()}\n`,
   );
   return [`# Preferences\n`, ...sections, ...(extra.trim() ? [`${extra.trim()}\n`] : [])].join("\n");
+}
+
+/** What the profile holds at a dotted path, as a short line for the page; undefined when it holds nothing. */
+export function profileValueText(profile: Record<string, unknown> | undefined, path: string): string | undefined {
+  let v: unknown = profile;
+  for (const key of path.split(".")) v = v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined;
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return v.trim() || undefined;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return undefined;
+    // A list of entries (languages, education) by each one's first text: its language, its school.
+    const names = v.map((x) =>
+      typeof x === "string" ? x : Object.values((x ?? {}) as object).find((y) => typeof y === "string"),
+    );
+    return names.every(Boolean) ? names.join(", ") : `${v.length} listed`;
+  }
+  return v && typeof v === "object" && Object.keys(v).length ? "set" : undefined;
 }
 
 export function isAnswered(e: AnswerEntry): boolean {

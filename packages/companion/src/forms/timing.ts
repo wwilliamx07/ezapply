@@ -1,14 +1,6 @@
 import { readFile } from "node:fs/promises";
-import {
-  FORM_SITE_IDS,
-  resolveTiming,
-  SITES,
-  STANDARD_WAITS,
-  siteInfo,
-  TIMING_DOCS,
-  type Timing,
-  type TimingKey,
-} from "@ezapply/protocol";
+import { resolveTiming, STANDARD_WAITS, TIMING_DOCS, type Timing, type TimingKey } from "@ezapply/protocol";
+import { FORM_SITE_IDS, SITES, siteInfo } from "@ezapply/sites";
 import { parse } from "yaml";
 import type { Workspace } from "../workspace/workspace.js";
 
@@ -32,9 +24,10 @@ export interface LoadedTiming {
  * next call without a restart. Each site owns its waits (its registry entry); the file overrides them: a top-level
  * key for every site, a key under the site's own name (`workday:`, `oracle:`) for that site only, winning over the
  * top-level one. A missing file means the site's own waits; anything wrong in it (bad YAML, an unknown key, a value
- * out of range) falls back for that part and is reported, never failing the call.
+ * out of range) falls back for that part and is reported, never failing the call. Without a site, the standard waits
+ * and the top-level keys alone.
  */
-export async function loadTiming(ws: Workspace, site = "workday"): Promise<LoadedTiming> {
+export async function loadTiming(ws: Workspace, site?: string): Promise<LoadedTiming> {
   const issues: string[] = [];
   let raw: unknown = null;
   try {
@@ -71,7 +64,7 @@ export async function loadTiming(ws: Workspace, site = "workday"): Promise<Loade
     }
     return out;
   };
-  const section = file[site];
+  const section = site ? file[site] : undefined;
   const own =
     section && typeof section === "object" && !Array.isArray(section) ? (section as Record<string, unknown>) : {};
   if (section !== undefined && section !== null && own !== section) {
@@ -80,7 +73,7 @@ export async function loadTiming(ws: Workspace, site = "workday"): Promise<Loade
   const overrides = { ...waits(file, ""), ...waits(own, `${site}.`) };
   const scale = number(file, "scale", 0.1, 10) ?? 1;
   const fillTimeoutSeconds = number(file, "fillTimeoutSeconds", 10, 600) ?? DEFAULT_FILL_TIMEOUT_SECONDS;
-  const base: Timing = siteInfo(site)?.waits ?? { ...STANDARD_WAITS };
+  const base: Timing = (site && siteInfo(site)?.waits) || { ...STANDARD_WAITS };
   return { timing: resolveTiming(base, overrides, scale), fillTimeoutMs: fillTimeoutSeconds * 1000, issues };
 }
 
@@ -100,7 +93,7 @@ export function timingFileTemplate(): string {
     "# ezapply autofill timing: how long the form adapters wait, in milliseconds.",
     "#",
     "# Each job site has its own waits (the defaults below). A key at the top level changes it on every site; a",
-    `# key under a site's name changes it there only, e.g. "workday:" then "  dropdownOpenMs: 400". Sites: ${SITES.map((s) => s.id).join(", ")}.`,
+    `# key under a site's name changes it there only, e.g. "${SITES[0]?.id}:" then "  dropdownOpenMs: 400". Sites: ${SITES.map((s) => s.id).join(", ")}.`,
     "# Read on every form call: save, and the next call uses it (no restart). Uncomment a line to change it.",
     "# Most waits end as soon as what they wait for happens and cost their full length only when it doesn't.",
     '# A "quiet" wait ends once the page has stopped changing for that long; its "max" ends it regardless.',

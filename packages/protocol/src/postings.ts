@@ -3,17 +3,12 @@ import { z } from "zod";
 export const PostingStatus = z.enum(["captured", "drafting", "attached", "filled", "submitted", "archived"]);
 export type PostingStatus = z.infer<typeof PostingStatus>;
 
-export const SiteId = z.enum([
-  "workday",
-  "oracle",
-  "greenhouse",
-  "lever",
-  "ashby",
-  "phenom",
-  "dayforce",
-  "successfactors",
-  "generic",
-]);
+/**
+ * A site's id: a registry entry's (`@ezapply/sites`), or `generic` for a page of no site ezapply knows. A string on
+ * the wire, which each side checks against its own registry (`isFormSite`): the protocol knows no site, and the two
+ * sides' lists are compared once, in `hello`.
+ */
+export const SiteId = z.string().min(1).max(64);
 export type SiteId = z.infer<typeof SiteId>;
 
 /** What the extension sends when the user presses "Capture". */

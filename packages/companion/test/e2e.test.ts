@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -8,25 +7,25 @@ import {
   type BridgeMessage,
   CompanionApi,
   type DebugRequest,
-  detectSite,
   ErrorCode,
   ExtensionApi,
   EzError,
   type Handlers,
-  isFormSite,
   PROTOCOL_VERSION,
   parseBridgeMessage,
   RpcPeer,
   WithDebug,
 } from "@ezapply/protocol";
+import { detectSite, FORM_SITE_IDS, isFormSite } from "@ezapply/sites";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createGreenhouseApi, createOracleApi, createWorkdayApi } from "../../extension/test/adapters.js";
-import { buildOracleApplication } from "../../extension/test/oracle-fixture.js";
-import { buildWorkdayStep, installDomShims } from "../../extension/test/workday-fixture.js";
+import { installDomShims } from "../../engine/test/shims.js";
+import { buildOracleApplication } from "../../sites/src/oracle/test/fixture.js";
+import { buildWorkdayStep } from "../../sites/src/workday/test/fixture.js";
+import { createGreenhouseApi, createOracleApi, createWorkdayApi, savedPage } from "../../sites/test/adapters.js";
 import type { AppConfig } from "../src/config/app.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
@@ -165,17 +164,7 @@ function adapterPage(url: () => string) {
       buildOracleApplication(doc);
       return createOracleApi(doc, url);
     case "greenhouse": {
-      const saved = join(
-        import.meta.dirname,
-        "..",
-        "..",
-        "extension",
-        "test",
-        "fixtures",
-        "live",
-        "greenhouse-apply.html",
-      );
-      doc.documentElement.innerHTML = readFileSync(saved, "utf8").replace(/^<!--[\s\S]*?-->\s*/, "");
+      doc.documentElement.innerHTML = savedPage("greenhouse", "greenhouse-apply");
       return createGreenhouseApi(doc, url);
     }
     default:
@@ -186,7 +175,7 @@ function adapterPage(url: () => string) {
 
 /**
  * The browser side of the form tools: each tab runs the real adapter for its site on the shared jsdom fixture
- * (extension/test/workday-fixture.ts, oracle-fixture.ts), and the handlers call it the way the extension's
+ * (`sites/src/workday/test/fixture.ts`, `sites/src/oracle/test/fixture.ts`), and the handlers call it the way the extension's
  * forms.ts does. One model of each site serves both the adapter's tests and these. `calls` records every
  * request in order. `tabShow: false` plays an extension built before `tab.show`.
  */
@@ -287,6 +276,8 @@ function fakeExtension(
     origin?: string;
     token?: string;
     protocolVersion?: number;
+    /** The sites the extension says it was built with (default: the companion's). */
+    sites?: string[];
     pendingCapture?: boolean;
     browser?: { name: string; version?: string };
     tabs?: FakeTab[];
@@ -313,6 +304,7 @@ function fakeExtension(
           protocolVersion: opts.protocolVersion ?? PROTOCOL_VERSION,
           extensionVersion: "9.9.9",
           pairingToken: opts.token ?? PAIRING,
+          sites: opts.sites ?? [...FORM_SITE_IDS],
           ...(opts.pendingCapture ? { pendingCapture: true } : {}),
           ...(opts.browser ? { browser: opts.browser } : {}),
         }),
@@ -389,6 +381,17 @@ describe("extension bridge", () => {
   it("rejects a protocol mismatch", async () => {
     const { outcome } = fakeExtension({ protocolVersion: PROTOCOL_VERSION + 1 });
     expect(await outcome).toMatchObject({ welcomed: false, closeCode: 4002 });
+  });
+
+  it("rejects an extension built with other sites, or saying none, as one of another version", async () => {
+    expect(await fakeExtension({ sites: [...FORM_SITE_IDS, "newsite"] }).outcome).toMatchObject({
+      welcomed: false,
+      closeCode: 4002,
+    });
+    expect(await fakeExtension({ sites: FORM_SITE_IDS.slice(1) }).outcome).toMatchObject({ closeCode: 4002 });
+    expect(await fakeExtension({ sites: [] }).outcome).toMatchObject({ closeCode: 4002 });
+    // The order is the extension's detection order, not part of the match.
+    expect((await fakeExtension({ sites: [...FORM_SITE_IDS].reverse() }).outcome).welcomed).toBe(true);
   });
 
   it("rejects non-extension origins", async () => {

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { SiteId } from "./postings.js";
-import { FORM_SITE_IDS, siteInfo, siteOfUrl } from "./sites.js";
 
 /**
  * Browsers the companion can open pages and files in. The extension reports which one it runs in, so what
@@ -51,41 +50,3 @@ export const BrowserStatus = z.object({
   tabs: z.array(TabInfo),
 });
 export type BrowserStatus = z.infer<typeof BrowserStatus>;
-
-/** Site detection shared by the extension and the companion: the registry's site for the URL, else generic. */
-export function detectSite(url: string): SiteId {
-  return siteOfUrl(url)?.id ?? "generic";
-}
-
-/** The sites whose application forms ezapply reads and fills, each with its own adapter: the registry. */
-export const FORM_SITES: readonly SiteId[] = FORM_SITE_IDS;
-
-export function isFormSite(site: SiteId): boolean {
-  return FORM_SITES.includes(site);
-}
-
-/** The tenant an application or posting URL belongs to on its site (a Workday tenant, an Oracle career site). */
-export function siteTenant(url: string): string | undefined {
-  return siteOfUrl(url)?.tenant(url);
-}
-
-/**
- * The job an application or posting URL is for, lowercased (a Workday requisition, an Oracle job id), as its
- * site reads it. Undefined when the URL doesn't name one. Two postings at one company share a tenant; this tells
- * their applications apart.
- */
-export function siteJob(url: string): string | undefined {
-  return siteOfUrl(url)?.job(url);
-}
-
-/**
- * Whether two job ids name the same job: equal, or one is the other with Workday's posting suffix (`jr1000001`
- * and `jr1000001-1`: the requisition, and its first posting), or by the site's own rule when `site` names one with
- * one (`SiteInfo.sameJob`).
- */
-export function sameJob(a: string, b: string, site?: string): boolean {
-  const x = a.toLowerCase();
-  const y = b.toLowerCase();
-  if (x === y || x.startsWith(`${y}-`) || y.startsWith(`${x}-`)) return true;
-  return Boolean(site && siteInfo(site)?.sameJob?.(x, y));
-}

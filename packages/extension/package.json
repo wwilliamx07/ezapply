@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ezapply/protocol": "0.1.0",
+    "@ezapply/sites": "0.1.0",
     "zod": "^4.6.5",
     "@ezapply/ui": "0.1.0",
     "react": "^19.3.0",

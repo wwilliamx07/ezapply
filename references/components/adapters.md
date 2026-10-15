@@ -1,4 +1,4 @@
-# Adapters: one engine, a definition per site (`packages/extension/src/adapters/`)
+# Adapters: one engine, a definition per site (`packages/engine/`)
 
 An adapter reads a job site's application page into a [`FormSchema`](protocol.md#form-schema) and fills it for
 Claude. There is one engine, written once, and a **site definition** per site that says what differs: where the
@@ -6,24 +6,26 @@ fields, their prompts and the buttons are, which widgets the site uses, how its 
 long it waits. Every site's adapter has the same API, so the background, the companion, the MCP tools and the
 skills treat them all alike.
 
-| Path | Role |
-|---|---|
-| `engine/types.ts` | `SiteDefinition` and its parts (`PageRules`, `RepeatRules`, `FillRules`, `SiteWaits`, `Messages`), `FieldSpot`, `RowSpot`, `AddButtonSpot`, `WidgetDriver` |
-| `engine/extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
-| `engine/api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
-| `engine/standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
-| `engine/dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
-| `engine/timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
-| `engine/guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
-| `engine/trace.ts` | Debug mode's trace ([below](#debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
-| `engine/markup.ts` | Debug mode's markup snapshots: `cleanMarkup`, `pageMarkup`, `failureMarkup` |
-| `widgets/` | Shared drivers ([below](#shared-drivers-widgets)) |
-| `sites/<site>/site.ts` | The site's definition; `main.ts` is its bundle entry (`install(site)`) |
-| `sites/index.ts` | `SITE_DEFINITIONS`: every definition by site id (the conformance test checks one exists per registered site) |
+The engine is its own package, `@ezapply/engine`, with no build: its `package.json` exports its sources
+(`@ezapply/engine/dom`, `@ezapply/engine/widgets/native`), which each site's bundle compiles in. It names no site; the
+definitions are in [the sites package](sites.md#the-package), each in `<site>/definition/`.
 
-Every site, and what it does differently, is in [sites](sites.md): [Workday](sites.md#workday-sitesworkday) and
-[Oracle](sites.md#oracle-recruiting-cloud-sitesoracle) (`page.ts`, `selectors.ts`, `widgets.ts` and a file per widget of
-their own beside `site.ts`), Greenhouse, Lever, Ashby, Phenom and Dayforce (a `site.ts` each, on shared drivers), and
+| Path (`packages/engine/src/`) | Role |
+|---|---|
+| `types.ts` | `SiteDefinition` and its parts (`PageRules`, `RepeatRules`, `FillRules`, `SiteWaits`, `Messages`), `FieldSpot`, `RowSpot`, `AddButtonSpot`, `WidgetDriver` |
+| `extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
+| `api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
+| `standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
+| `dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
+| `timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
+| `guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
+| `trace.ts` | Debug mode's trace ([below](#debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
+| `markup.ts` | Debug mode's markup snapshots: `cleanMarkup`, `pageMarkup`, `failureMarkup` |
+| `widgets/` | Shared drivers ([below](#shared-drivers-widgets)) |
+
+Every site, and what it does differently, is in [sites](sites.md): [Workday](sites/workday.md) and
+[Oracle](sites/oracle.md) (`page.ts`, `selectors.ts`, `widgets.ts` and a file per widget of
+their own beside `site.ts` in `definition/`), Greenhouse, Lever, Ashby, Phenom and Dayforce (a `site.ts` each, on shared drivers), and
 SAP SuccessFactors (a `site.ts`, with its picklist and attachment drivers in `widgets.ts`).
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
@@ -49,7 +51,7 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 
 | Part | Says |
 |---|---|
-| `info` | The site's [registry entry](protocol.md#the-site-registry-sitests): id, tenant, its waits |
+| `info` | The site's [registry entry](sites.md#the-registry): id, tenant, its waits |
 | `widgets` | Its drivers. A field whose spot names none gets the first that recognises its container, so the more specific go first |
 | `fields(doc)` | Every field in page order, as `FieldSpot`s: container, driver (optional), key, prompt (`label`), section title, required, and optionally automation id, help, error, profile hint |
 | `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save, or a form that's part of the step), `edit` (opens a saved item's form again) |
@@ -112,7 +114,7 @@ folder ([building adapters](../building-adapters.md#principles)).
 A `WidgetDriver` is one kind of widget: `kind`, `is(container)`, `value`, and optionally `options`,
 `lazyOptions`, `dateParts`, `multiple`, `fill(container, value)`, `list`, `search`, `remove`,
 `upload`. Every fill acts, waits, reads back, and returns `{ ok, readBack, error?, availableOptions?, unmatched? }`.
-Options are matched by `matchOption` (`engine/dom.ts`), case-insensitive: the option itself; the option without its
+Options are matched by `matchOption` (`dom.ts`), case-insensitive: the option itself; the option without its
 trailing parenthetical, or the parenthetical alone ("Python" for "Python (Programming Language)"); a prefix either
 way; a substring. Each rule after the exact one must single out one label, so "Yes" picks "Yes, I will require
 sponsorship" only when no other option begins so, and "Canada" takes Greenhouse's "Canada +1" and Dayforce's
@@ -133,7 +135,7 @@ stricter mode that took only exact wordings served deterministic autofill and we
 | `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
 | `toggleButtonsDriver(selector \| { buttons?, label?, pressed?, multiple? })` (`buttons.ts`) | A choice of toggle buttons (Ashby's Yes / No; Oracle's pills, by their own label and pressed class), as a radio; with `multiple`, a checkbox group that `remove_items` unpresses. A button is pressed only when it must change (a pressed toggle may unpress itself), with React's `onClick` as the fallback |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
-| `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites.md#sap-successfactors-sitessuccessfactors)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
+| `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites/successfactors.md)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
 | `fileDriver({ input?, names, entries?, dropZone?, reactDrop?, removeButton?, confirmRemoval?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field (or the site's `dropZone`, through its React `onDrop` first with `reactDrop`). Done only when the page shows a **new** file of that name: one more of that name, or, with `entries`, an element that wasn't there before, so a same-named file the page replaces counts. A field without an input that already holds a file says to remove it first. Removed by its own button, confirming a dialog when the site gives `confirmRemoval` |
 
 **The combobox types a key too.** Lever's location field searches on keyup, not on input (seen live): setting
@@ -188,7 +190,7 @@ A widget no shared driver handles gets a driver in the site's folder: Workday's 
 (typeahead with nested menus), split date and drop zone; Oracle's cx-select, date lists, pills and attachment
 buttons; SuccessFactors' paginated picklist and attachment fields, both components of its own framework (juic), driven
 through juic's component registry and the attachment view's upload popup
-([sites](sites.md#the-paginated-picklist-through-its-component)). Each such driver holds everything about its
+([sites](sites/successfactors.md#the-paginated-picklist-through-its-component)). Each such driver holds everything about its
 widget: how it's recognised, read, listed, searched, filled and cleared.
 
 **Why Workday and Oracle were reworked.** When they moved onto the engine, their fillers and readers
@@ -202,7 +204,7 @@ golden schemas and every behaviour test stayed equal. One fix came with it: an O
 checkboxes (not pills) was filled as pills, so no option ever matched; it now uses the shared checkbox group.
 
 ## Waits, owned by the site
-Each site owns its waits. Its registry entry (`SiteInfo.waits`, in `protocol/src/sites.ts`) gives every named wait
+Each site owns its waits. Its registry entry (`SiteInfo.waits`, in its `registry.ts`) gives every named wait
 a value; today every site starts from `STANDARD_WAITS`, measured on Workday. Its definition's `waits` say what to
 wait for after each field, row, step move and page action: `standardWaits` settles the page for as long as the
 waits say; Workday's `afterStep` also waits (up to `stepFieldsMs`) for the new step's fields, since Workday moves
@@ -217,7 +219,7 @@ site's own, since `T` lives on in the page between calls. `scale` multiplies the
 it sets is used as written.
 
 Every wait (about 50: after each field, a dropdown's open and close, a search, a date's parts, uploads, rows, steps)
-is a named value in `T` (`engine/timing.ts`), and `TIMING_DOCS` (`protocol/src/timing.ts`) says what each is for. Of
+is a named value in `T` (`engine/src/timing.ts`), and `TIMING_DOCS` (`protocol/src/timing.ts`) says what each is for. Of
 the poll intervals only `waitFor`'s default is configurable (`pollMs`); waits with their own interval (search
 results 100 ms, uploads 200 and 250 ms, a step's fields 150 ms) keep it.
 
@@ -298,21 +300,21 @@ its hooks come off after 15 minutes regardless.
   its Submit and that `next` doesn't press it.
 
 ## Tests
-- **Golden schemas** (`golden.test.ts`, `test/golden/*.json`): `getForm()` of every Workday and Oracle fixture state
+- **Golden schemas** (`<site>/test/golden.test.ts` and `golden/*.json`, for Workday and Oracle): `getForm()` of every Workday and Oracle fixture state
   and live snapshot, written before the two moved onto the engine. The ported adapters give the same JSON, apart
   from the new schema facts. `UPDATE_GOLDEN=1` rewrites them after an intended change.
-- **Conformance** (`sites.test.ts`), for every registry site on a page of it (Workday's and Oracle's fixtures,
-  the others' saved live pages): a definition, a bundle entry and a page exist; every wait is set; every field has
+- **Conformance** (`sites/test/conformance.test.ts`), for every registry site on the page its `test/page.ts` builds
+  (Workday's and Oracle's fixtures, the others' saved live pages): a definition, a bundle entry and a page exist; every wait is set; every field has
   a prompt and a kind; ids are the same on two reads; the guard blocks Submit by click and by Enter, and `next`
   never presses it.
-- **Signatures** (`sites.test.ts`): every saved live page of every site matches its own site's
-  [signature](protocol.md#the-site-registry-sitests) and no other's, and a careers page that only links to
-  boards, loads their embed scripts, frames them or has a form of its own matches none. A new site adds its saved
-  pages to `SAVED` there.
-- **Drivers** (`widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
+- **Signatures** (`conformance.test.ts` and `registry.test.ts`): every saved live page of every site matches its own site's
+  [signature](sites.md#the-registry) and no other's, and a careers page that only links to
+  boards, loads their embed scripts, frames them or has a form of its own matches none. The saved pages are found from each
+  site's `fixtures/`.
+- **Drivers** (`engine/test/widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
   fiber), Ant Design's Select on a model of rc-select's context (labels that are React elements, a disabled list), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, a month
   picker that ignores typing, and a UI5 date picker heard through its change event.
-- **Sites from live pages** (`sites-live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
+- **Sites from live pages** (each site's `test/live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
   application and Phenom step, and Phenom's `next` refusing step 1 without a resume; Dayforce's Candidate Info
   step, its Submit told by hook and words, its posting and confirmation told apart from its scripts' messages, and
   its records (markup from the portal's scripts, inside the saved page): an open one as a section with its Update, a
@@ -323,8 +325,8 @@ its hooks come off after 15 minutes regardless.
   through its component, a disabled list refused, a row removed, documents uploaded beside others and replaced, an
   optional one removed after its dialog and a required one refused.
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
-  definitions (`test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
-- **The debug trace** (`trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,
+  definitions (`sites/test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
+- **The debug trace** (`sites/test/trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,
   and every hook comes off when the trace is taken; a filled dropdown's trace has the press, the listbox read, the
   match and its named waits with planned and actual times; a wait the companion shortened keeps its name; a failed
   field is saved with its section and the list it read, and the page before and after; the date's second entry and
@@ -349,4 +351,4 @@ break a new adapter" gives it a home.
 system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the
 live page directly (not the built bundle) with placeholder values and a placeholder resume, saved each step, and
 stopped after step 3 without reaching Review. The definition was then built from the saved steps
-([sites](sites.md#phenom-sitesphenom)).
+([sites](sites/phenom.md)).

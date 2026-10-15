@@ -11,6 +11,9 @@
   },
   "include": [
     "packages/protocol/test",
+    "packages/engine/test",
+    "packages/sites/test",
+    "packages/sites/src/*/test",
     "packages/companion/test",
     "packages/cli/test",
     "packages/extension/test",

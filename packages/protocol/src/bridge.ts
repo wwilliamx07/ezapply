@@ -3,15 +3,16 @@ import { BrowserInfo, BrowserStatus } from "./browser.js";
 import { ErrorPayload } from "./errors.js";
 import { FormMethods } from "./forms.js";
 import { PanelMethods, PanelUpdate } from "./panel.js";
-import { CapturePayload, CaptureResult } from "./postings.js";
+import { CapturePayload, CaptureResult, SiteId } from "./postings.js";
 
 /**
  * Wire protocol between the browser extension and the companion (WebSocket, JSON text frames).
  *
  * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema.
- * Both sides refuse to talk across versions and tell the user which side to update.
+ * Both sides refuse to talk across versions and tell the user which side to update. A new site is no such change:
+ * `hello` carries the extension's sites, and the companion refuses an extension that knows other sites than it does.
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 /** WebSocket close codes used by the companion. */
 export const CloseCode = {
@@ -31,6 +32,11 @@ export const HelloMessage = z.object({
   pendingCapture: z.boolean().optional(),
   /** The browser the extension runs in; the companion opens pages and files there. */
   browser: BrowserInfo.optional(),
+  /**
+   * The sites the extension was built with (its registry's ids). The companion refuses an extension whose sites
+   * differ from its own, as built from another version: one would name a site the other can't handle.
+   */
+  sites: z.array(SiteId).max(256).optional(),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 

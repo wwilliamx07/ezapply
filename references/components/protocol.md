@@ -8,65 +8,30 @@ so a change here is a change to the contract between them.
 | `bridge.ts` | `PROTOCOL_VERSION`, close codes, handshake and envelope messages, `CompanionApi` / `ExtensionApi` method maps (the side panel's `panel.*` among the companion's, `panel.update` among the extension's), `parseBridgeMessage` |
 | `rpc.ts` | `RpcPeer`: symmetric, validated request/response over any message channel; `WithDebug` (a result with a debug trace beside it) |
 | `forms.ts` | `FormSchema`, `Field`, `FillAction`, `FillResult`, `NextResult`, `OptionInfo`, `PageKind`, `PageAction`, `UploadFile`, `RemoveResult`, `DebugRequest` (what a debugged form call asks for), and the extension's form methods |
-| `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingApplication` (the application a posting is tied to: [data-formats](../data-formats.md#postingsidmetajson-protocolsrcpostingsts)), `PostingMetaPatch`, `PostingStatus`, `SiteId` |
-| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, and, from the [registry](#the-site-registry-sitests): `detectSite(url)` (a registry site by its URL alone, else `generic`: what decides where no page can be read), `FORM_SITES` / `isFormSite` (the sites with a form adapter), `siteTenant(url)` (the employer's space on its site: a Workday tenant, an Oracle career site, a Greenhouse board…), `siteJob(url)` (the job the URL is for: a Workday requisition, an Oracle job id, a Greenhouse job…); and `sameJob(a, b, site?)` (Workday's `-1` posting suffix counts as the same job, and with `site`, that site's own rule: its registry entry's `sameJob`; [which posting](../mcp-tools.md#forms)) |
-| `sites.ts` | The [site registry](#the-site-registry-sitests): `SITES`, `FormSiteId`, `SiteInfo`, `FORM_SITE_IDS`, `siteInfo(id)`, `siteOfUrl(url)`, `siteSignatures()` (each site's `[id, signature]`, in registry order), `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions); no zod (`@ezapply/protocol/sites`) |
+| `postings.ts` | `CapturePayload`, `CaptureResult`, `PostingMeta`, `PostingApplication` (the application a posting is tied to: [data-formats](../data-formats.md#postingsidmetajson-protocolsrcpostingsts)), `PostingMetaPatch`, `PostingStatus`, `SiteId` (a registry site's id or `generic`: a string, which each side checks against its own registry, `isFormSite`) |
+| `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, `BrowserInfo` |
+| `sites.ts` | `SiteInfo`, the shape of a [registry entry](sites.md#the-registry), and `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions, [why](sites.md#the-registry)); no zod (`@ezapply/protocol/sites`). The sites themselves are in `@ezapply/sites`: the protocol names none |
 | `panel.ts` | The side panel's agent ([agent](agent.md)): `AgentEvent`, `AgentStatus`, `AskSpec`, `AskQuestion`, `AskAnswers` and their checks (`askSpecProblems`, `askAnswerProblems`), the cards (`AskCard`, `PermissionCard`, `Card`), the conversation keys (`GENERAL_CONVERSATION`, `ConversationPart`, `conversationKey`, `postingConversation`); the panel's bridge methods (`PanelMethods`: [agent](agent.md#the-panels-side-panelts)) and their types (`PanelState`, `PanelPosting`, `PanelConversation`, `DocumentState`, `PanelTabParams`, `PanelTab`, `PanelUpdate`); the agent's settings (`AgentSettings`, `AgentPermissionMode`, `AgentModel`, `AgentEffort`, `DEFAULT_AGENT_SETTINGS`) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
-| `oracle.ts` | Oracle Recruiting Cloud facts, with no imports (`@ezapply/protocol/oracle`): `isOracleUrl` (by path: `…/sites/<site>/job|jobs|requisitions|my-profile`, https), `oracleTenant(url)` (`host/site`), `oracleJob(url)`, `oracleJobPath` (a job's path without language or application pages), `ORACLE_LOCALE_SEGMENT` ([sites](sites.md#oracle-recruiting-cloud-sitesoracle)) |
-| `workday.ts` | Workday facts shared by the companion and the in-page adapter, with no imports (so the adapter bundle stays free of zod; imported as `@ezapply/protocol/workday`): `WORKDAY_HOST` (`*.myworkdayjobs.com`, `*.myworkdaysite.com`), `isWorkdayUrl`, `workdayTenant(url)`, `workdayJob(url)` (the requisition), `workdayCanonicalPath` (without the locale segment), `WORKDAY_LOCALE_SEGMENT`, and the posting-page hooks `WORKDAY_POSTING` |
-| `greenhouse.ts`, `lever.ts`, `ashby.ts`, `phenom.ts`, `dayforce.ts`, `successfactors.ts` | Each site's URL rules, with no imports: `isXUrl`, `xTenant`, `xJob`, and for Lever and Ashby a canonical path without the application page (`/apply`, `/application`); Phenom's apply page on any host by its last path segment and `jobSeqNo`, the host of any of the site's pages as tenant, `jobSeqNo` as job, `hvhapply` as `apply`; Dayforce's `…/<client>/<site>/jobs/<id>` on `*.dayforcehcm.com` with or without a locale, the client as tenant, the posting id as job, a canonical path from the client to the id ([sites](sites.md#dayforce-sitesdayforce)); SuccessFactors' career site paths on its `career<n>` hosts (`sapsf.com`, `successfactors.eu`…), `company` as tenant, `career_job_req_id` (or `jobId`) as job, a signed-in page's URL naming neither ([sites](sites.md#sap-successfactors-sitessuccessfactors)) |
 
-The package exports `.` (everything), and `./workday`, `./oracle`, `./sites` and `./timing` for the in-page adapters:
+The package exports `.` (everything), and `./sites` and `./timing` for the in-page adapters and the site registry:
 those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
-waits, making each adapter 850 KB instead of 60 KB). `detectSite` counts only candidate-facing Workday hosts
-as Workday: `www.workday.com` is marketing and `*.myworkday.com` are employee tenants.
-
-## The site registry (`sites.ts`)
-Every job site whose application forms ezapply fills has one entry (`SiteInfo`), and everything that knows the
-list of sites derives from it, so a new site's only protocol change is its entry (plus its URL module):
-
-| Field | Meaning |
-|---|---|
-| `id` | `FormSiteId`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce`, `successfactors` (each also in `SiteId`) |
-| `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
-| `signature` | What the site's own pages render, as a CSS selector list: a page (or frame) is the site's when its document matches any part. How the extension tells a site, before the URL ([telling a site](extension.md#telling-a-pages-site-framests)). Each part is the provider's own markup (its widgets' attributes, class names, script host), never a link to it or its embed script, which an employer's careers page has too |
-| `isUrl(url)` | A posting or application page of the site by its URL alone: what decides where no page can be read (a captured page's links, the companion's canonical URLs, a tab the extension can't read) |
-| `tenant(url)`, `job(url)` | The employer's space and the job, lowercased, read from a URL of the site's (by `isUrl`, or a tab whose page showed the site) |
-| `canonicalPath?(pathname)` | The posting's identifying path, when the site varies it for the same job (a locale segment, an application page) |
-| `hostPageJob?(url)` | The site's job that a page on another host names in its URL: a company's careers page embedding the site's board (Greenhouse: `?gh_jid=`). Ties a posting captured there to its application |
-| `sameJob?(a, b)` | Whether two of the site's job ids name one job where its pages use different ids for it (Phenom: `jobSeqNo` embeds the requisition the posting shows, [Phenom](sites.md#phenom-sitesphenom)). Consulted by `sameJob` only when the caller names the site, so no other site's ids are compared loosely |
-| `waits` | The site's own waits ([waits owned by the site](adapters.md#waits-owned-by-the-site)); all start from `STANDARD_WAITS` |
-
-Derived from it: `detectSite`, `FORM_SITES`, `siteTenant`, `siteJob`, the companion's canonical posting URLs
-(`siteOfUrl(url)?.canonicalPath`), which application a posting is tied to and which posting a tab belongs to
-(`tenant`, `job`, `hostPageJob`, `sameJob`: [which posting](../mcp-tools.md#forms)), the extension's bundles (`build.mjs`), the
-site of every tab, frame and capture in the extension (`siteSignatures`, then `detectSite`), and `loadTiming`'s
-per-site sections. `sites.test.ts` checks that the registry and `SiteId` name the same sites and that every site
-has a signature; the extension's `sites.test.ts` checks each signature on every saved page of every site.
-
-**Why signatures, and access to every site.** Phenom and Oracle run on employers' own domains, where the URL
-is the employer's and its shape varies from one employer to the next: Phenom's apply pages are
-`/ca/en/apply` on one site and `/global/en/apply` on another, and a URL rule written from the first missed the
-second, so a Phenom application was listed `generic` and the form tools refused it. What every page of a
-provider's site has is the provider's own markup, so that's what tells the site. Reading a page needs access to
-its host, which for sites on any host means every host: asked for one origin at a time, a tab on an unknown
-host stayed unreadable until something already knew its site, which only the URL could say.
-`HOST_PERMISSIONS` is `<all_urls>`, which also lets `tab.screenshot` work. The cost is Chrome's broadest
-install warning ("Read and change all your data on all websites"), accepted for this; the extension still acts
-on a page only for Capture or a call from Claude ([security](../security.md)).
+waits, making each adapter 850 KB instead of 60 KB).
 
 ## Bridge handshake
 
 WebSocket, JSON text frames, one message per frame.
 
-1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture?, browser? }`. An empty
+1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture?, browser?, sites? }`. An empty
    `pairingToken` asks to pair; it's accepted only while a pairing window is open. `pendingCapture: true`
    says a capture made while the companion was down follows right after `welcome` (the companion holds
    `posting_active` until it's saved). `browser { name, version? }` is the browser the extension runs in
    (`BrowserInfo`; `name` one of `BROWSER_NAMES`: chrome, edge, brave, opera, vivaldi, chromium, or
-   something newer the companion ignores); the companion opens pages and files there.
+   something newer the companion ignores); the companion opens pages and files there. `sites` are the ids of the
+   registry the extension was built with: the companion refuses a list other than its own (in any order), or none, as
+   an extension built from another version, since one side would name a site the other can't handle. This is what
+   lets a new site go without a version bump ([changing the protocol](#changing-the-protocol)).
 2. Companion → `welcome { protocolVersion, companionVersion, pairingToken? }` (the code is included only
    when the extension paired without one), or `reject { error }` followed by a close.
 3. Then either side sends `request` / `response`; the extension sends `ping` every 20 s and gets `pong`.
@@ -76,7 +41,7 @@ The companion closes the socket if no `hello` arrives within 5 s.
 | Close code | Name | Meaning | Extension reaction |
 |---|---|---|---|
 | 4001 | `Unauthorized` | Wrong or rotated code, or not paired | Error state, no backoff retries (only the 30 s alarm tries again). Without a code: quietly "not paired" |
-| 4002 | `ProtocolMismatch` | Versions differ; the error hint names the side to rebuild | Error state, as above |
+| 4002 | `ProtocolMismatch` | Versions differ (the error hint names the side to rebuild), or the two sides' sites do (rebuild and reload the extension) | Error state, as above |
 | 4003 | `Replaced` | A newer connection from the same extension took over | Stays quiet |
 | 4004 | `HandshakeTimeout` | No `hello` in time | Retries with backoff |
 
@@ -199,9 +164,10 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   param and the response's `debug`: an older extension strips the param and answers without a trace (the companion's
   record notes it), and an older companion strips the response's field.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
-  then refuse each other with a hint naming the side to rebuild. **3:** `SiteId` gained `oracle`; an older
-  companion would have rejected every `browser.status` listing an Oracle tab, so the handshake says so instead.
-  **4:** `SiteId` gained `greenhouse`, `lever` and `ashby`, for the same reason. **5:** `SiteId` gained `phenom`. **6:** `SiteId` gained `dayforce`, and
-  `addButtons[].kind` gained `edit`, which an older companion would reject. **7:** `SiteId` gained `successfactors`.
+  then refuse each other with a hint naming the side to rebuild.
+- A new site: no bump. `SiteId` is a string, so neither side rejects a message for naming a site, and `hello`
+  compares the two sides' sites instead: an extension and a companion built with different sites refuse each other
+  at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know. Until version 11,
+  `SiteId` was an enum, and each new site bumped the version for that reason.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

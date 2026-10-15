@@ -7,17 +7,16 @@ import {
   type FillResult,
   type FillValue,
   type FormSchema,
-  isFormSite,
   type OptionInfo,
   type PageAction,
   type PostingApplication,
   type PostingMeta,
   type PostingStatus,
-  SITES,
-  siteInfo,
   type TabInfo,
   type Timing,
 } from "@ezapply/protocol";
+import { isFormSite, SITES, siteInfo } from "@ezapply/sites";
+import { SITE_NOTES } from "@ezapply/sites/notes";
 import type { ExtensionBridge } from "../bridge/server.js";
 import type { ReviewService } from "../documents/review.js";
 import type { Logger } from "../logger.js";
@@ -36,7 +35,6 @@ import {
   type TabFacts,
   tabSite,
 } from "./match.js";
-import { SITE_NOTES } from "./sites/index.js";
 import { loadTiming } from "./timing.js";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -232,7 +230,7 @@ export class FormsService {
   }
 
   /**
-   * A site's notes (`forms/sites/`), the first time a page of that site is read in this chat session; afterwards
+   * A site's notes (`@ezapply/sites/notes`), the first time a page of that site is read in this chat session; afterwards
    * nothing. The tool descriptions and the apply skill never name a site: this is how the agent learns what one does
    * differently, and only for the sites it fills.
    */

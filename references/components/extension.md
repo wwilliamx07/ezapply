@@ -3,7 +3,7 @@
 A Manifest V3 extension for Chrome 120+ and other Chromium browsers. Its toolbar button opens the **side panel**, where the user
 works with ezapply ([below](#the-side-panel)); Alt+Shift+P sets the posting without it. Otherwise it quietly
 carries out the form reads, fills and uploads the companion asks for, on the application pages of every site in
-the [registry](protocol.md#the-site-registry-sitests): Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby,
+the [registry](sites.md#the-registry): Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby,
 Phenom, Dayforce and SAP SuccessFactors, each told by what its pages show. It has no popup; documents are reviewed
 on the companion's review page.
 
@@ -28,11 +28,8 @@ on the companion's review page.
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
 | `src/options/options.ts`, `static/options.html` | Options page: status, access to websites when it's withheld, manual pairing |
-| `src/adapters/engine/` | The adapter engine every site runs on → [adapters.md](adapters.md) |
-| `src/adapters/widgets/` | Shared widget drivers → [adapters.md](adapters.md#shared-drivers-widgets) |
-| `src/adapters/sites/<site>/` | A definition per site: [Workday](sites.md#workday-sitesworkday), [Oracle Recruiting Cloud](sites.md#oracle-recruiting-cloud-sitesoracle), [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](sites.md); `sites/index.ts` lists them |
 | `static/manifest.json` | The manifest. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
-| `build.mjs` | esbuild bundles (one adapter per registry site, the panel) and `dist/` |
+| `build.mjs` | esbuild bundles (one adapter per registry site, from its definition in [the sites package](sites.md#the-package), on [the engine](adapters.md); the panel) and `dist/` |
 | `icons.mjs`, `static/icons/` | The extension's and toolbar button's icons: ezapply's mark (`ui/static/mark.svg`) as 16, 32, 48 and 128 px PNGs |
 
 ## Manifest
@@ -48,7 +45,7 @@ on the companion's review page.
 - Host permissions: `<all_urls>` (the protocol's `HOST_PERMISSIONS`), granted at install, and no optional ones.
   The build writes them; a test checks both builds. Every site, because the extension tells a form site by what
   its pages show, on whatever host (Phenom and Oracle run on employers' own domains), and reading a page needs
-  access to it ([why](protocol.md#the-site-registry-sitests)). It also covers `tabs.captureVisibleTab`
+  access to it ([why](sites.md#the-registry)). It also covers `tabs.captureVisibleTab`
   (`tab.screenshot` of a tab in front). Chrome warns "Read and change all your data on all websites" at install.
 - `side_panel.default_path: panel.html`. The action's title is "ezapply".
 - `commands.set-posting`: Alt+Shift+P runs Capture. Not `_execute_action`, which now opens the panel.
@@ -58,8 +55,8 @@ on the companion's review page.
 esbuild bundles `background.js` (ESM), `options.js`, `panel.js` and `panel.css` (ESM, minified, JSX: the UI
 package's panel and React, with the base and panel stylesheets; about 700 KB, most of it React and the protocol's
 schemas, which the panel's answer checks use), and one adapter per registry site, `<site>-main.js` from
-`src/adapters/sites/<site>/main.ts` (IIFE, 50–80 KB each and without zod: they import only the protocol's
-import-free subpaths) for
+`packages/sites/src/<site>/definition/main.ts` (IIFE, 50–80 KB each and without zod: they import only the
+protocol's import-free subpaths) for
 `chrome120`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
 (so the source map stays exact). Any change to the adapter therefore replaces older copies in open tabs,
 with no version number to remember to bump.
@@ -148,14 +145,15 @@ and a capture of the top frame alone holds only the company's page around it.
   included, and could outweigh the page itself: a job page that shows its description without `JobPosting`
   data (LinkedIn's) was captured as the reCAPTCHA frame, with an empty description.
 - `unreadableBoard`: when the chosen frame has no `JobPosting` data but contains a visible iframe of at least
-  300×300 from a known job board host that couldn't be read (only when access to websites is withheld), nothing
+  300×300 from a job board's host that couldn't be read (a registry site's `providerHosts`, or one of a
+  few boards with no adapter, `OTHER_BOARD_HOST`) (only when access to websites is withheld), nothing
   is captured: the board's URL opens in a new tab next to the page, and the badge says to click Capture there.
 
 ## Telling a page's site (`frames.ts`)
 A page (or a frame) is a site's when its body shows it: `pageSite` runs in the page (isolated world,
 `injectImmediately`, self-contained) with the registry's signatures (`siteSignatures()`) and returns the first
 site whose selector its document matches, in registry order. A selector the browser can't parse is skipped.
-Where that gives nothing, the URL decides (`detectSite`): a page that shows no site, a discarded tab, a browser
+Where that gives nothing, the URL decides (`detectSite`, from the registry): a page that shows no site, a discarded tab, a browser
 page, an origin the user withheld, a page that didn't answer within 1.5 s (`READ_MS`; with `injectImmediately` a
 page still loading answers at once, from what it has so far).
 - `tabSite(tab)`: the tab's own page. `tabSites(tab)`: the tab's site and its `frames` on a form site, in one
@@ -165,7 +163,7 @@ page still loading answers at once, from what it has so far).
   loading may not show its signature yet. `browser.status` reads every open tab this way, in parallel.
 - A provider's site counts as the site on every page it serves, not only the application: a Phenom job page is
   `phenom`, as a Workday job page is `workday`, and its adapter reports it as a `posting` page with an Apply action.
-- Why the body: [the site registry](protocol.md#the-site-registry-sitests).
+- Why the body: [the site registry](sites.md#the-registry).
 
 ## Access to websites
 The extension holds every site from the install (`<all_urls>`). Chrome lets the user limit that to some sites
@@ -241,7 +239,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    it is (`emulated: false`): nothing is switched to or raised. Without access to the page it falls back to the
    tab's active state, and `focused` is left out. `focused` is recorded in debug mode: a page without focus gets
    no focus events, which widgets that track focus depend on
-   ([Workday's dates](sites.md#dates-typed-into-workdays-split-widget)).
+   ([Workday's dates](sites/workday.md#dates-typed-into-workdays-split-widget)).
 
    **Why nothing is brought to the front.** Earlier builds switched to the tab and raised the browser window
    (`windows.update`, restoring a minimized one) when focus emulation wasn't there. That pulled the browser in

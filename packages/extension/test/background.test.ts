@@ -168,7 +168,7 @@ describe("telling a page's site", () => {
 
   it("matches each site's signature in the page, the first in registry order", async () => {
     const { pageSite } = await import("../src/background/frames.js");
-    const { siteSignatures } = await import("@ezapply/protocol");
+    const { siteSignatures } = await import("@ezapply/sites");
     const { JSDOM } = await import("jsdom");
     const { window } = new JSDOM(
       '<body><div class="ph-apply-box"><div data-ph-at-id="apply-link"></div></div></body>',

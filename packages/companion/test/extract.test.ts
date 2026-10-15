@@ -95,6 +95,33 @@ describe("helpers", () => {
     expect(companyFromUrl("https://career17.sapsf.com/career?company=soylent&career_job_req_id=1000")).toBeUndefined();
   });
 
+  it("companyFromUrl asks the sites: their boards' hosts name the employer only in the path", () => {
+    // What shared code read from these hosts before the sites' registry entries held them.
+    expect(companyFromUrl("https://job-boards.greenhouse.io/vandelay/jobs/1000000001")).toBe("vandelay");
+    expect(companyFromUrl("https://boards.greenhouse.io/vandelay/jobs/1")).toBe("vandelay");
+    expect(companyFromUrl("https://jobs.eu.lever.co/wonka/5c1e7a2b")).toBe("wonka");
+    expect(companyFromUrl("https://jobs.ashbyhq.com/stark/7d2e9b14/application")).toBe("stark");
+    expect(
+      companyFromUrl(
+        "https://fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/1",
+      ),
+    ).toBeUndefined();
+    expect(companyFromUrl("https://career2.successfactors.eu/career?company=soylent")).toBeUndefined();
+    // An employer's own domain (an Oracle or Phenom site on it) names the employer.
+    expect(companyFromUrl("https://jobs.umbrella.example/en/sites/CX_1/job/10001")).toBe("umbrella");
+    // Dayforce's one host for every employer names none (it was "dayforcehcm" before the site said so).
+    expect(companyFromUrl("https://jobs.dayforcehcm.com/en-US/hooli/CANDIDATEPORTAL/jobs/1000")).toBeUndefined();
+  });
+
+  it("canonicalizeUrl keeps every site's job parameters, and the common ones", () => {
+    expect(
+      canonicalizeUrl("https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA&step=2"),
+    ).toBe("https://jobs.globex.example/ca/en/apply?jobSeqNo=GLOBA0001R0000000001EXTERNALENCA");
+    expect(canonicalizeUrl("https://www.indeed.com/viewjob?jk=abc123&from=serp")).toBe(
+      "https://www.indeed.com/viewjob?jk=abc123",
+    );
+  });
+
   it("canonicalizeUrl keeps only job id params", () => {
     expect(canonicalizeUrl("https://Example.com/jobs/1/?utm_source=x&gh_jid=42")).toBe(
       "https://example.com/jobs/1?gh_jid=42",
@@ -162,7 +189,7 @@ describe("live Workday posting", () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const html = readFileSync(
-      join(import.meta.dirname, "..", "..", "extension", "test", "fixtures", "live", "posting.html"),
+      join(import.meta.dirname, "..", "..", "sites", "src", "workday", "fixtures", "posting.html"),
       "utf8",
     );
     const out = extractPosting({

@@ -127,7 +127,7 @@ folder holds:
   the values blanked and the profile's strings, the tenant and the job title replaced, behind a header comment
   saying what was done.
 
-A bridge entry's `trace` (`extension/src/adapters/engine/trace.ts`, `DebugTrace`), times in ms from the start of
+A bridge entry's `trace` (`engine/src/trace.ts`, `DebugTrace`), times in ms from the start of
 the call in the page:
 - `ms`; `page`: `{ before, after }`, each `{ url, step?, visibility, focused }`;
 - `events`, in order, each `{ t, k, … }`. `k`: `query` (`sel`, `in` the element or `document` it was run on, `n`
@@ -296,7 +296,7 @@ entries:
     canonical: "Will you now or in the future require visa sponsorship?"
     answer: "No"                        # string | null (always ask) | { default, byCompany: { Acme: "Yes" } }
     suggested: "No"                     # proposal only; never used on a form until copied into answer
-    source: profile.workAuthorization   # where the answer should come from, if not fixed
+    source: profile.workAuthorization.requiresSponsorshipFuture  # profile path; with answer null, answered from it
     sensitive: false                    # true = always ask, even when answered
     variants: ["Do you require sponsorship now or later?"]
     notes: ""

@@ -4,6 +4,8 @@
   "type": "module",
   "workspaces": [
     "packages/protocol",
+    "packages/engine",
+    "packages/sites",
     "packages/companion",
     "packages/cli",
     "packages/extension",
@@ -14,8 +16,8 @@
   },
   "scripts": {
     "setup": "npm install && npm run build && node packages/cli/dist/main.js init",
-    "build": "tsc -b packages/protocol packages/companion packages/cli && npm run build -w @ezapply/extension && npm run build -w @ezapply/ui",
-    "typecheck": "tsc -b packages/protocol packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
+    "build": "tsc -b packages/protocol packages/sites packages/companion packages/cli && npm run build -w @ezapply/extension && npm run build -w @ezapply/ui",
+    "typecheck": "tsc -b packages/protocol packages/sites packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/engine && npm run typecheck -w @ezapply/sites && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
     "test": "npm run build && vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",

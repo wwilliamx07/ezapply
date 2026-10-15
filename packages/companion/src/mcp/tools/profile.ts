@@ -89,7 +89,8 @@ export function registerProfileTools(server: McpServer, s: Services): void {
     {
       title: "Validate answer bank",
       description:
-        "Validate profile/answers.yaml and list unanswered questions (with suggested defaults and profile sources). " +
+        "Validate profile/answers.yaml and list unanswered questions (with suggested defaults), and the ones answered " +
+        "from the profile (fromProfile: the profile path and what it holds now; missing value = not in the profile). " +
         "Call after every edit to the answer bank.",
       annotations: { readOnlyHint: true },
     },

@@ -15,29 +15,35 @@ ezapply/
   test/                     checks on the reference itself (references.test.ts)
   packages/
     protocol/               shared schemas            → components/protocol.md
+    engine/                 the adapter engine and shared widget drivers (sources only) → components/adapters.md
+    sites/                  everything about each job site, a directory per site → components/sites.md
     companion/              MCP server, bridge, services, the panel's agent (runs inside `ezapply`) → components/companion.md
     cli/                    the ezapply command, workspace templates, skills → components/cli.md
     extension/              the browser extension and its side panel → components/extension.md
     ui/                     the side panel's components, the review and setup pages (React) → components/ui.md
 ```
-Each package has `src/`, `test/`, and builds to `dist/`.
+Each package has `src/` and `test/`; all but the engine build to `dist/` (the engine's sources are compiled into
+each site's bundle). The sites package also keeps each site's tests beside it, in `src/<site>/test/`.
 
 ## Tooling
 - **Node** ≥ 22.12 (CI uses 24). npm workspaces; no other package manager. npm was chosen over pnpm because it
   ships with Node, so setup installs nothing extra; switching later would be cheap.
-- **TypeScript 7**, strict, project references: `tsc -b packages/protocol packages/companion packages/cli`.
+- **TypeScript 7**, strict, project references: `tsc -b packages/protocol packages/sites packages/companion packages/cli`.
+  The sites package builds only its registry, notes and readers for Node; its definitions are typechecked with the
+  DOM libraries by `tsconfig.definitions.json` ([two builds](components/sites.md#the-package)).
   If type errors look stale after a `tsconfig` change, delete `packages/*/tsconfig.tsbuildinfo`.
 - **esbuild** bundles the extension (`packages/extension/build.mjs`) and the UI package's pages
   (`packages/ui/build.mjs`; React 19, pdf.js, [ui](components/ui.md#the-build-npm-run-build--w-ezapplyui)).
 - **Biome** lints and formats (2-space indent, 120 columns, double quotes, organized imports). It skips
-  `dist`, the live HTML snapshots in `test/fixtures/live/` (third-party markup), the golden
-  schemas in `extension/test/golden/` (written by the test), and `ui/src/review/textlayer.css` (pdf.js's rules,
+  `dist`, the live HTML snapshots in each site's `fixtures/` (third-party markup), the golden
+  schemas in `sites/src/<site>/test/golden/` (written by the test), and `ui/src/review/textlayer.css` (pdf.js's rules,
   kept as they came). Its React rules apply wherever React is a
   dependency, the extension included since it bundles the side panel; the adapter engine's `use…` functions
-  aren't hooks, so `useHookAtTopLevel` is off for `extension/src/adapters/`.
+  aren't hooks, so `useHookAtTopLevel` is off for `packages/engine/` and `packages/sites/`.
 - **Line endings:** `.gitattributes` pins LF everywhere (Biome rejects CRLF). On Windows, after a fresh
   clone with the old settings, renormalize with `git rm --cached -r . && git reset --hard` (on a clean tree).
-- **Vitest** runs every `packages/*/test/**/*.test.{ts,tsx}` and the repo's own `test/*.test.ts` (20 s default
+- **Vitest** runs every `packages/*/test/**/*.test.{ts,tsx}`, each site's `packages/sites/src/*/test/**/*.test.ts`
+  and the repo's own `test/*.test.ts` (20 s default
   timeout). A test that needs a DOM says so in its first line (`// @vitest-environment jsdom`); the UI's component
   tests use Testing Library.
 
@@ -46,14 +52,14 @@ Each package has `src/`, `test/`, and builds to `dist/`.
 | Command | Does |
 |---|---|
 | `npm run setup` | `npm install`, build, `ezapply init` |
-| `npm run build` | tsc build of protocol, companion, cli; then the extension bundles and the UI package's pages |
+| `npm run build` | tsc build of protocol, sites, companion, cli; then the extension bundles and the UI package's pages |
 | `npm test` | build, then vitest |
-| `npm run typecheck` | all packages (the extension and UI with their own `tsconfig.json`) and `tsconfig.tests.json` (tests) |
+| `npm run typecheck` | all packages (the engine, the sites' definitions, the extension and UI with their own `tsconfig.json`) and `tsconfig.tests.json` (tests) |
 | `npm run lint` / `npm run format` | Biome check / write |
 | `npm run ezapply -- <cmd>` | run the CLI |
 
 ## Tests
-Each package's tests are in its `test/`, a file per area, named after it (`forms.test.ts`, `checklist.test.ts`).
+Each package's tests are in its `test/` (and each site's in `packages/sites/src/<site>/test/`), a file per area, named after it (`forms.test.ts`, `checklist.test.ts`).
 What a file covers is in its `describe` and `it` names; read those rather than a list here, which would only
 repeat them and fall behind.
 
@@ -61,19 +67,21 @@ repeat them and fall behind.
 |---|---|---|
 | Module and service tests | `packages/*/test/<area>.test.ts` | One service or module, with stubs at its edges (`companion/test/claude-stream-stub.mjs` plays Claude Code's stream-json, `cli/test/quiet-child.mjs` a process set up like `ezapply`) |
 | End to end | `companion/test/e2e.test.ts` | A real companion on a free port, over HTTP, MCP and the bridge, behind a fake extension that runs the real adapters on their fixtures. A new MCP tool or bridge method is tested here, or in its service's test |
-| Behavioural fixtures | `extension/test/workday-fixture.ts`, `oracle-fixture.ts` | jsdom pages that act like the site's widgets (events, lists that load late), built from saved pages and debug traces. Filler tests run on these: jsdom doesn't run a saved page's own scripts, so a saved page can't test a fill |
-| Live snapshots | `extension/test/fixtures/live/` | Real pages, scrubbed ([below](#live-snapshots-are-scrubbed)), for extraction and page detection (`*-live.test.ts`, `sites-live.test.ts`) |
-| Golden schemas | `extension/test/golden/` | `getForm()` of every Workday and Oracle fixture state, written by `golden.test.ts`: a diff there is a change to what the agent sees |
-| Conformance | `extension/test/sites.test.ts` | Every registry site, on a page of it, answers the adapter API the same way |
+| Behavioural fixtures | `sites/src/workday/test/fixture.ts`, `sites/src/oracle/test/fixture.ts` (with `engine/test/shims.ts`) | jsdom pages that act like the site's widgets (events, lists that load late), built from saved pages and debug traces. Filler tests run on these: jsdom doesn't run a saved page's own scripts, so a saved page can't test a fill |
+| Live snapshots | `sites/src/<site>/fixtures/` | Real pages, scrubbed ([below](#live-snapshots-are-scrubbed)), for extraction and page detection (each site's `test/live.test.ts`, and the signatures in `conformance.test.ts`) |
+| Golden schemas | `sites/src/workday/test/golden/`, `sites/src/oracle/test/golden/` | `getForm()` of every Workday and Oracle fixture state, written by each one's `golden.test.ts`: a diff there is a change to what the agent sees |
+| Conformance | `sites/test/conformance.test.ts` | Every registry site has its directory, its files and its place in each list, and, on the page its `test/page.ts` builds, answers the adapter API the same way |
+| Site knowledge | `sites/test/knowledge.test.ts` | No other package's source names a site (comments aside): what a site does differently stays in its directory |
+| URL rules | `sites/src/<site>/test/url.test.ts` | The site's postings and applications by URL, tenant and job, and pages that look close but aren't |
 | UI | `ui/test/*.test.tsx` | Components and pages under jsdom, with Testing Library |
-| The reference | `test/references.test.ts` | Links and anchors in `references/`, `todo/` and the `CLAUDE.md` files resolve; the [index](README.md) lists every page; every registered MCP tool has its row in [mcp-tools.md](mcp-tools.md), and no row names a tool that isn't registered; every registry site has its section in [sites.md](components/sites.md); every shipped skill is named in [workspace.md](components/workspace.md) |
+| The reference | `test/references.test.ts` | Links and anchors in `references/`, `todo/` and the `CLAUDE.md` files resolve; the [index](README.md) lists every page; every registered MCP tool has its row in [mcp-tools.md](mcp-tools.md), and no row names a tool that isn't registered; every registry site has its page under [components/sites/](components/sites.md), titled with its directory; every shipped skill is named in [workspace.md](components/workspace.md) |
 
 Tests that need TeX are skipped when no engine is installed (CI's `tex` job sets `EZAPPLY_REQUIRE_TEX=1`,
 which turns a missing engine into a failure); everything else runs without external tools (git is required
 for `repos.test.ts`).
 
 ### Live snapshots are scrubbed
-The pages in `extension/test/fixtures/live/` were captured from real career sites, some during the user's own
+The pages in each site's `fixtures/` were captured from real career sites, some during the user's own
 applications. Nothing in them, or in the tests, goldens and pages written about them, may say which employers the
 user looked at or applied to, or anything about the user (`CLAUDE.md`, "Never expose sensitive information"). So
 each employer is a fictional one, used consistently across the page, its tests and its golden schema:
@@ -109,7 +117,7 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 
 ## Conventions
 - **Keep `references/` current** in the same change (see `CLAUDE.md`).
-- **Rules beside the code.** `packages/extension/src/adapters/CLAUDE.md`, `packages/companion/CLAUDE.md` and
+- **Rules beside the code.** `packages/sites/CLAUDE.md`, `packages/companion/CLAUDE.md` and
   `packages/cli/CLAUDE.md` hold the few hard rules for that code, with pointers into this folder. Claude Code loads
   one when it works in that folder, so the rules reach an agent that went straight to the code without reading
   here first. Keep them short; a rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
@@ -125,17 +133,16 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 - **Write atomically** (`writeFileAtomic` for text or bytes, `writeJsonAtomic`, in `companion/src/util/fs.ts`).
 - **Shared helpers live in `companion/src/util/`** (`fs.ts`, `keyed-queue.ts`, `wait.ts`, `open.ts`, `proc.ts`,
   `install-hints.ts`) and are exported for the CLI; don't redefine `exists` or a polling loop locally. The
-  adapters' own `waitFor` in `adapters/engine/dom.ts` is different on purpose: it runs in the page and polls a synchronous
+  adapters' own `waitFor` in `engine/src/dom.ts` is different on purpose: it runs in the page and polls a synchronous
   DOM condition.
 - **External programs** through `run()` (no shell, timeouts, tree kill) and `which()`; programs that should
   outlive the call (a viewer, a browser) through the `Opener`.
-- **Site strings** only in each site's folder (`adapters/sites/<site>/`: `selectors.ts` for Workday and Oracle,
-  `site.ts` for the others), plus the site's URL module in `protocol/src/` (`workday.ts`, `oracle.ts`,
-  `greenhouse.ts`…) for what the companion and background need too (hosts or paths, tenant and job parsing, the
-  posting-page hooks). Both sides import those from there instead of repeating them. Nothing outside the
-  registry and a site's folder names a site: the companion reads the schema's facts (`kind`, `saved`, `lastPage`).
+- **Site strings** only in the site's directory, `packages/sites/src/<site>/` ([the package](components/sites.md#the-package)):
+  its registry entry for what the companion and the background need too (hosts or paths, tenant and job parsing, the
+  posting-page hooks), its definition for the rest. Other code asks the registry, and reads the schema's facts
+  (`kind`, `saved`, `lastPage`); `sites/test/knowledge.test.ts` fails on a site's id anywhere else.
 - **Adapter bundles stay free of zod:** in-page code imports the protocol only through its import-free
-  subpaths (`@ezapply/protocol/workday`, `/oracle`, `/sites`, `/timing`) or as types.
+  subpaths (`@ezapply/protocol/sites`, `/timing`) or as types.
 - **No personal assumptions in code**: everything user-specific lives in the profile and config.
 - **One adapter change per live run.** The fixtures can't catch a slower or broken fill on a real site, since
   they're built from what the adapter expects. So land adapter changes one per live run, so a slowdown or failure
@@ -165,8 +172,8 @@ saves the page before each call and at every failed field, with a screenshot whe
    that ran out, the DOM change it didn't expect.
 2. Export the page (`ezapply debug export <session> <NNNN> [before|after|fail-<fieldId>]`,
    [cli](components/cli.md#debug-export)). The user looks at the fixture candidate before it goes into
-   `extension/test/fixtures/live/`; scrub what's left by hand ([live snapshots](#live-snapshots-are-scrubbed)),
-   then add an extraction test (`workday-live.test.ts`, `oracle-live.test.ts`).
+   the site's `fixtures/`; scrub what's left by hand ([live snapshots](#live-snapshots-are-scrubbed)),
+   then add an extraction test to its `test/live.test.ts`.
 3. Correct the behavioural fixture to the real markup and the events the trace shows, and write the filler
    test there: jsdom doesn't run the site's scripts, so a saved page can't test a fill.
 4. Fix, run live again (one adapter change per run), and compare the reports.
@@ -184,8 +191,8 @@ Compare a debugged run's timings with other debugged runs only. Turn it off (`ez
 - **Add a bridge method:** schema in `protocol/src/forms.ts` (or `bridge.ts`) → add to `ExtensionApi` /
   `CompanionApi` → implement the handler on the serving side (type errors until you do; for a form method
   that's `extension/src/background/forms.ts` and the handler map in `companion/test/e2e.test.ts`) → decide
-  whether it's additive or needs a `PROTOCOL_VERSION` bump. A changed adapter needs no version bump of its
-  own: the build stamps `ADAPTER_VERSION` with a hash of the bundle.
+  whether it's additive or needs a `PROTOCOL_VERSION` bump. A new site needs none (`hello` carries the site
+  ids), and a changed adapter needs none of its own: the build stamps `ADAPTER_VERSION` with a hash of the bundle.
 - **Change a stored format:** bump its `schemaVersion`, add a migration run by `ezapply init`, update
   [data-formats.md](data-formats.md).
 - **Change a skill or `EZAPPLY.md`:** edit `packages/cli/templates/`; users get it with `ezapply init`.

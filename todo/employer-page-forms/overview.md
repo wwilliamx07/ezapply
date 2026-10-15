@@ -1,6 +1,6 @@
 # Application forms on an employer's own page
 
-**Value** Medium · **Size** M–L · **Needs first** One directory per adapter; a page saved from a real one
+**Value** Medium · **Size** M–L · **Needs first** A page saved from a real one
 
 **What.** Fill an application that a careers page shows in its own page, with no provider frame.
 

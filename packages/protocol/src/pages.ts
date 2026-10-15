@@ -155,7 +155,9 @@ export interface OnboardState {
   answers: {
     total: number;
     answered: number;
-    unanswered: { id: string; canonical: string; suggested?: string; source?: string; sensitive: boolean }[];
+    unanswered: { id: string; canonical: string; suggested?: string; sensitive: boolean }[];
+    /** Answered from the profile, per posting: `value` is what the profile holds there now, absent when nothing. */
+    fromProfile: { id: string; canonical: string; source: string; value?: string }[];
   };
   preferences: OnboardPreferences;
   library: string[];

@@ -12,8 +12,8 @@ posting to `greenhouse.io`) finds it, and the provider's definition couldn't rea
 definition for plain HTML forms, used only when asked for. An embedded application differs: its frame is the
 provider's own page, so the provider's signature and definition work there unchanged.
 
-**Part 1: a `generic` definition** (`extension/src/adapters/sites/generic/`, or `generic/` in the sites package
-once "One directory per adapter" is built), on the engine, shared drivers only.
+**Part 1: a `generic` definition** (`packages/sites/src/generic/`, outside `SITES`, so the conformance and
+knowledge tests need to know it), on the engine, shared drivers only.
 - **The form.** Each `<form>`, or for a page without one (a React app), the smallest element holding an email
   input and a submit control. It counts as an application when it has an email input and either a file input or
   at least four labelled fields. A form with a password input never counts (sign-in and account forms stay the
@@ -47,7 +47,7 @@ once "One directory per adapter" is built), on the engine, shared drivers only.
 
 **Part 2: used only when asked, never by detection.** Almost any page has a form, so `generic` has no signature
 and no URL rule. It isn't in `SITES`, and `browser.status` never lists a tab as one.
-- **Protocol:** a `GENERIC: SiteInfo` beside the registry (`protocol/src/sites.ts`): tenant the page's host; job
+- **Registry:** a `GENERIC: SiteInfo` beside the registry (`packages/sites/src/registry.ts`): tenant the page's host; job
   any registry site's `hostPageJob(url)` (a careers page with `?gh_jid=` still names its Greenhouse job).
   `adapterOf` (`background/forms.ts`) and `build.mjs` know it, so it gets its own `generic-main.js`. `SiteId` already has `generic`.
 - **Extension** (`background/forms.ts`): a form call with an explicit `tabId` on a page that's no registry
@@ -72,7 +72,7 @@ provider's. `tabSite` (`forms/match.ts`) and the engine's `extract` would then f
 - Generic, on synthetic forms: an application form read with its prompts, ids, groups and hints; a newsletter,
   search or sign-in form not counted; a page with two forms picks the application; a custom widget counted and
   reported; Submit blocked when pressed synthetically, including a `submit` event on the form. It also passes
-  the conformance test every definition does (`sites.test.ts`), with a saved page from a real one when there is
+  the conformance test every definition does (`sites/test/conformance.test.ts`), with a saved page from a real one when there is
   one.
 - Extension: a page with no site and no frame, asked by `tabId`, gets the generic adapter; without `tabId`, or
   with a framed board, it doesn't.

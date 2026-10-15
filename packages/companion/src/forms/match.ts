@@ -1,4 +1,5 @@
-import { type PostingApplication, type PostingMeta, sameJob, siteInfo, siteOfUrl } from "@ezapply/protocol";
+import type { PostingApplication, PostingMeta } from "@ezapply/protocol";
+import { sameJob, siteInfo, siteOfUrl } from "@ezapply/sites";
 
 /**
  * Which posting an application tab belongs to. Everything here works on facts, never on site names: what a URL

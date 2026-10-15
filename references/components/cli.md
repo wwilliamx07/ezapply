@@ -163,7 +163,7 @@ passes:
 It writes `NNNN-<which>.fixture.html` beside the source, with a header comment in the fixtures' style (site, page
 kind, step, what was removed, the counts), and prints the counts. It never writes into the repo: the markup is the
 employer's and the scrub can miss something (a name the page shows differently, an employer detail in a link), so
-the user looks at it before it's copied to `extension/test/fixtures/live/`.
+the user looks at it before it's copied to the site's `fixtures/` in `packages/sites/src/<site>/`.
 
 ## Shipped templates (`packages/cli/templates/`)
 - `workspace/EZAPPLY.md`: the agent file → [workspace.md](workspace.md#the-agent-file-ezapplymd)

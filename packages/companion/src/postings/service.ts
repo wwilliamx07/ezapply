@@ -8,8 +8,8 @@ import {
   type PostingApplication,
   PostingMeta,
   type PostingMetaPatch,
-  siteOfUrl,
 } from "@ezapply/protocol";
+import { SITE_JOB_PARAMS, siteOfUrl } from "@ezapply/sites";
 import type { Logger } from "../logger.js";
 import { exists, readJson, writeFileAtomic, writeJsonAtomic } from "../util/fs.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
@@ -35,23 +35,12 @@ export interface PostingDetails extends PostingMeta {
 /** Build output, snapshots and previews are noise when listing a posting folder. */
 const HIDDEN_DIRS = new Set([".history", ".build", ".previews"]);
 
-/** Job query parameters that identify a posting; everything else is dropped from the canonical URL. */
-// `jobseqno`: Phenom's job on an employer's careers site, the only thing naming the job in its apply page's URL.
-// `career_job_req_id` and `company`: the requisition and the employer on SuccessFactors' career site, a host shared by
-// every employer in a data centre whose requisitions are numbered per employer.
-const JOB_ID_PARAMS = new Set([
-  "gh_jid",
-  "jobid",
-  "job_id",
-  "jid",
-  "jk",
-  "currentjobid",
-  "id",
-  "reqid",
-  "jobseqno",
-  "career_job_req_id",
-  "company",
-]);
+/**
+ * Job query parameters that identify a posting; everything else is dropped from the canonical URL. The common names
+ * any careers page or job board may use (`jk` and `currentjobid`: Indeed's and LinkedIn's), and each site's own
+ * (`SiteInfo.jobParams`).
+ */
+const JOB_ID_PARAMS = new Set(["jobid", "job_id", "jid", "jk", "currentjobid", "id", "reqid", ...SITE_JOB_PARAMS]);
 
 /** Posting ids are folder names ezapply made (`2026-09-24_acme_backend-engineer`): no separators, no `..`. */
 const POSTING_ID = /^[\w.-]+$/;

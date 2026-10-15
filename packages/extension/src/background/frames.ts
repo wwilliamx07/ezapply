@@ -1,4 +1,5 @@
-import { detectSite, type FrameInfo, isFormSite, type SiteId, siteSignatures } from "@ezapply/protocol";
+import type { FrameInfo, SiteId } from "@ezapply/protocol";
+import { detectSite, isFormSite, siteSignatures } from "@ezapply/sites";
 import { ext } from "../ext.js";
 
 /**

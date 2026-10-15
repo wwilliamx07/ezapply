@@ -66,7 +66,7 @@ export interface CallRecord {
     ms: number;
     result?: unknown;
     error?: string;
-    /** The adapter's trace of this call (adapters/engine/trace.ts); its markup and screenshot as file names. */
+    /** The adapter's trace of this call (@ezapply/engine/trace); its markup and screenshot as file names. */
     trace?: Trace;
   }[];
   /** Extra notes from the call, such as `noTrace` when the extension sent no adapter trace. */

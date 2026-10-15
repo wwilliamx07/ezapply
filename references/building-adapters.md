@@ -2,22 +2,24 @@
 
 How to add a job site to ezapply: the whole process, from saving its pages to its first real application, and the
 rules every adapter follows. What the parts are and how they work is in [adapters](components/adapters.md) (the
-engine, the drivers), [protocol](components/protocol.md#the-site-registry-sitests) (the registry) and the site pages
+engine, the drivers), [sites](components/sites.md#the-registry) (the registry) and the site pages
 ([sites](components/sites.md)).
 This page says how to build one and what goes where.
 
 ## Principles
 
 **1. Generic everywhere, specific in one place.** The tool descriptions, the apply skill, `EZAPPLY.md`, the MCP
-server's instructions and the companion's planning never name a site. Everything a site does differently lives with
-that site:
+server's instructions and the companion's planning never name a site. Everything a site does differently lives in
+its directory, `packages/sites/src/<site>/` ([the package](components/sites.md#the-package)), and no other package's
+source names it (`sites/test/knowledge.test.ts` checks):
 
-| What | Where | Read by |
+| What | Where in the directory | Read by |
 |---|---|---|
-| Registry entry: signature, URL rules, tenant, job, canonical path, waits | `protocol/src/sites.ts`, `protocol/src/<site>.ts` | Extension and companion |
-| Definition: fields, sections, buttons, pages, its own messages | `extension/src/adapters/sites/<site>/` | The engine, in the page |
-| Notes: what the agent must know that no schema fact says | `companion/src/forms/sites/<site>.ts` | The agent, once per session |
-| Posting reader, only if the generic capture reads its posting pages badly | `companion/src/postings/readers/` | Posting capture |
+| Registry entry: signature, URL rules, tenant, job, canonical path, job parameters, provider hosts, waits | `registry.ts` | Extension and companion |
+| Definition: fields, sections, buttons, pages, its own messages, its bundle's entry | `definition/` | The engine, in the page |
+| Notes: what the agent must know that no schema fact says | `notes.ts` | The agent, once per session |
+| Posting reader, only if the generic capture reads its posting pages badly | `reader.ts` | Posting capture |
+| Tests, the conformance page, saved pages | `test/`, `fixtures/` | `npm test` |
 
 **Why.** Every Claude session reads the tool descriptions and the apply skill, whichever site it fills. A sentence
 about one site there is paid for in every session on every other site, and with many sites those sentences pile up
@@ -49,7 +51,7 @@ choice or an agreement that is the user's, a field whose value takes a particula
 imperative, a few lines per site. Never repeat a fact the schema already carries ("one page with only Submit" is
 `lastPage`), never explain the generic flow again, and never restate the skill.
 
-**4. Drivers per widget library, not per site.** A driver (`adapters/widgets/`) is one kind of widget: a native
+**4. Drivers per widget library, not per site.** A driver (`packages/engine/src/widgets/`) is one kind of widget: a native
 control, react-select, Ant Design's Select, a react-datepicker, a file input. Most sites are built from a few
 widely used libraries, so the drivers grow with the libraries sites use, not with the number of sites. In order:
 - Use an existing shared driver. Its selector or container is the site's to give (`textDriver("number",
@@ -59,7 +61,7 @@ widely used libraries, so the drivers grow with the libraries sites use, not wit
   (`selectDriver({ settled })`): a quirk of one site's data is better handled where every site benefits (Dayforce's
   dialling codes read "🇨🇦 +1 Canada": the shared option match takes "Canada" for it, rather than the driver
   rewording one site's labels).
-- A driver of the site's own (`sites/<site>/widgets.ts`) only for a widget that is the site's own (Workday's
+- A driver of the site's own (`<site>/definition/widgets.ts`) only for a widget that is the site's own (Workday's
   prompt, Oracle's cx-select).
 
 **5. Never submit.** `isSubmit` recognises the site's Submit, by a hook of its own or its words, never by
@@ -80,7 +82,7 @@ real run.
   application. Never work around bot protection.
 - Save several employers' applications where possible: one rarely shows every kind of question. A definition built
   from one Ashby page missed every radio and checkbox group, which another employer's page had
-  ([sites](components/sites.md#ashby-sitesashby)).
+  ([sites](components/sites/ashby.md)).
 - **When a step can't be reached** (it saves to the employer's system, or needs a finished earlier step), read the
   site's own scripts, saved with the page: the components' hooks (`test-id`, `data-automation-id`), form field
   names, the markup of each field type, and the text of every message (a Next.js app keeps them in
@@ -89,8 +91,9 @@ real run.
   fictional employer per site, used consistently, and nothing of the user's. Read the result's visible text and
   attribute values afterwards.
 
-### 2. The registry entry (`protocol`)
-- **URL rules** in `protocol/src/<site>.ts`, with no imports: `isXUrl` (a posting or application page by its URL
+### 2. The registry entry (`<site>/registry.ts`)
+Create the directory; the conformance test fails until it holds every file below.
+- **URL rules**, importing nothing but types and `STANDARD_WAITS` (the bundles import the entry): `isXUrl` (a posting or application page by its URL
   alone), `xTenant` (the employer's space on the site), `xJob` (the job), and a canonical path when the site varies
   the path for one job (a locale, the application's own path). `tenant` and `job` tie a posting to its application
   and a tab to its posting ([which posting](mcp-tools.md#forms)), so read them from the application's URL as well
@@ -99,13 +102,19 @@ real run.
   `jobSeqNo` embeds the requisition): without it the tab is refused as another job's.
 - **Signature:** the provider's own markup on every page of the site (its hooks, class names, script host), never a
   link to it or its embed script, which an employer's careers page has too.
+- **Job parameters and provider hosts:** `jobParams` if the site's pages, or pages embedding it, name a job in a
+  query parameter; `providerHosts` if the provider serves every employer from its own hosts, and `company` if those
+  URLs name the employer ([what derives from them](components/sites.md#the-registry)).
 - **Waits:** `STANDARD_WAITS` unless the site needs longer ones; say why beside each.
-- Add the id to `FormSiteId` and `SiteId`, and bump `PROTOCOL_VERSION`: an older peer rejects a new site id.
+- Export the entry as `<site>Info` and add it to `ENTRIES` in `src/registry.ts`; `FormSiteId` follows. No version
+  bump: the extension sends its site ids in `hello`, and the companion refuses a different list
+  ([handshake](components/protocol.md#bridge-handshake)).
 - The extension's bundle for the site, telling its pages (by signature, then URL), the companion's tab choice and
   the per-site sections of `autofill-timing.yaml` all follow from the entry.
 
-### 3. The definition (`extension/src/adapters/sites/<site>/`)
-`site.ts` exports the `SiteDefinition`, `main.ts` installs it, and `sites/index.ts` lists it.
+### 3. The definition (`<site>/definition/`)
+`site.ts` exports the `SiteDefinition`, `main.ts` installs it (the extension builds one bundle from it), and
+`SITE_DEFINITIONS` (`src/definitions.ts`) lists it for the tests. It imports the engine as `@ezapply/engine/...`.
 - **Fields** (`fields(doc)`): every field in page order, each with its container, its driver, a key, its prompt, its
   section and whether it's required, and its error, help and hint where there are any.
   - **Keys** are stable: the control's own name or form path where it reads as one (`firstName`), else the prompt's
@@ -129,26 +138,27 @@ real run.
 - **Messages:** what the engine says when it refuses or finds nothing, in the site's words. These can name the
   site's own steps and buttons: they're only ever shown on its pages.
 
-### 4. Its notes (`companion/src/forms/sites/<site>.ts`)
-Export one string, `<Site name>:` then a few bullets, and add it to `SITE_NOTES` (`sites/index.ts`), which is keyed
+### 4. Its notes (`<site>/notes.ts`)
+Export one string, `<Site name>:` then a few bullets, and add it to `SITE_NOTES` (`src/notes.ts`), which is keyed
 by every registry site: a site without notes doesn't compile. Check each line against principle 3: if a schema
 fact already says it, drop it; if every site does it, it belongs in the skill instead.
 
-### 5. A posting reader, only if needed (`companion/src/postings/readers/`)
+### 5. A posting reader, only if needed (`<site>/reader.ts`)
 Posting capture reads JSON-LD, then the page title, then the main content, for every site. Only when a capture of
-the site's posting page comes out wrong (no JSON-LD, a title that is only the role) does it get a reader in
-`POSTING_READERS`; never a branch in `extract.ts`.
+the site's posting page comes out wrong (no JSON-LD, a title that is only the role) does it get a reader, listed in
+`POSTING_READERS` (`src/readers.ts`); never a branch in `extract.ts`.
 
 ### 6. Tests
-- **Conformance** (`extension/test/sites.test.ts`): its page in `PAGES`, its saved pages in `SAVED`. Every field
+- **Conformance** (`sites/test/conformance.test.ts`), on the page its `test/page.ts` builds and every saved page in
+  its `fixtures/`, found from the directory. Every field
   has a prompt and a kind, ids are the same on two reads, the guard blocks Submit and `next` never presses it, and
   its signature matches its own pages and no other site's.
-- **Extraction** (`extension/test/sites-live.test.ts`) on its saved pages: page kind, step, job, tenant, each kind
+- **Extraction** (`<site>/test/live.test.ts`) on its saved pages: page kind, step, job, tenant, each kind
   of field with its key, prompt, hints and requirement, buttons and their kinds, rows and saved items, `isSubmit`.
   What came from the site's scripts rather than a saved page is tested on markup built from them.
-- **A new shared driver** (`extension/test/widgets.test.ts`) on a minimal model of the widget, including what was
+- **A new shared driver** (`engine/test/widgets.test.ts`) on a minimal model of the widget, including what was
   seen live to go wrong.
-- **URL rules** (`protocol/test/sites.test.ts`): its postings and applications, and pages that look close but aren't.
+- **URL rules** (`<site>/test/url.test.ts`): its postings and applications, and pages that look close but aren't.
 - **Notes** need no test of their own: the type checks every site has them, and `e2e.test.ts` checks they come
   once per session.
 
@@ -160,18 +170,19 @@ the site's posting page comes out wrong (no JSON-LD, a title that is only the ro
   them. One adapter change per live run, so a failure points at one change.
 
 ### 8. The reference
-A section in [sites](components/sites.md) (or a page of its own for a large site): its pages, registry entry,
+A page of its own, `references/components/sites/<site>.md`, titled with its directory (the references test checks),
+and its row in the index: its pages, registry entry,
 fields, buttons and rows, what it refuses, and what was verified and how. Its line in [status](status.md), with what
 the first real run must check. Its name in the lists of sites in the references (not in the skills or tool
 descriptions).
 
 ## Checklist
 - [ ] Pages saved and scrubbed; what couldn't be saved read from the site's scripts, and said so
-- [ ] URL rules, registry entry, `FormSiteId`, `SiteId`, `PROTOCOL_VERSION`
-- [ ] Definition, `main.ts`, listed in `sites/index.ts`; existing drivers first, a new one only for a new library
+- [ ] Its directory; URL rules and registry entry, in `ENTRIES`
+- [ ] Definition and `main.ts`, in `SITE_DEFINITIONS`; existing drivers first, a new one only for a new library
 - [ ] Facts set: page kinds, `lastPage`, button kinds, `removable` and `saved`, hints, errors apart from notices
 - [ ] `isSubmit` by hook or words; `next` refused where it must be
 - [ ] Notes in `SITE_NOTES`, saying only what no fact says
 - [ ] No site named in a tool description, the skill, `EZAPPLY.md` or the MCP instructions
-- [ ] Tests: conformance, signatures, extraction, drivers, URL rules
-- [ ] Reference section, status entry, the site in the references' lists
+- [ ] Tests: its conformance page and saved pages, extraction, drivers, URL rules
+- [ ] Its reference page, status entry, the site in the references' lists

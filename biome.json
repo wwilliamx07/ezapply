@@ -10,7 +10,7 @@
     "includes": [
       "**",
       "!**/dist",
-      "!**/test/fixtures/live",
+      "!packages/sites/src/*/fixtures",
       "!**/test/golden",
       "!project.txt",
       "!**/src/review/textlayer.css"
@@ -43,7 +43,7 @@
   },
   "overrides": [
     {
-      "includes": ["packages/extension/src/adapters/**"],
+      "includes": ["packages/engine/**", "packages/sites/**"],
       "linter": {
         "rules": {
           "correctness": {

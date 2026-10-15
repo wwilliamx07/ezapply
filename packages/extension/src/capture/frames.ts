@@ -1,11 +1,15 @@
+import { providerOf } from "@ezapply/sites";
 import type { PageCapture } from "./capture.js";
 
 /**
- * Job boards that company career pages embed in an iframe. A capture of the host page alone would hold the
- * company's page chrome and no job description.
+ * Job boards that company career pages embed in an iframe: every site's provider hosts (`SiteInfo.providerHosts`), and
+ * these boards ezapply has no site for. A capture of the host page alone would hold the company's page chrome and no
+ * job description.
  */
-export const EMBEDDED_BOARD_HOST =
-  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|icims\.com|myworkdayjobs\.com|myworkdaysite\.com|oraclecloud\.com|smartrecruiters\.com|jobvite\.com|bamboohr\.com|workable\.com|recruitee\.com|teamtailor\.com|personio\.(de|com))$/i;
+const OTHER_BOARD_HOST =
+  /(^|\.)(icims\.com|smartrecruiters\.com|jobvite\.com|bamboohr\.com|workable\.com|recruitee\.com|teamtailor\.com|personio\.(de|com))$/i;
+
+export const isEmbeddedBoardHost = (host: string) => Boolean(providerOf(host)) || OTHER_BOARD_HOST.test(host);
 
 export interface FrameCapture {
   frameId: number;
@@ -44,6 +48,6 @@ export function unreadableBoard(chosen: FrameCapture, frames: FrameCapture[]): s
     } catch {
       return false;
     }
-    return EMBEDDED_BOARD_HOST.test(host) && f.height >= 300 && f.width >= 300 && !read.has(f.src);
+    return isEmbeddedBoardHost(host) && f.height >= 300 && f.width >= 300 && !read.has(f.src);
   })?.src;
 }

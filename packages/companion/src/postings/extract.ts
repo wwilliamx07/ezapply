@@ -1,8 +1,9 @@
-import { detectSite, type FormSiteId, type SiteId, siteInfo, workdayTenant } from "@ezapply/protocol";
+import type { SiteId } from "@ezapply/protocol";
+import { detectSite, isFormSite, providerOf, siteInfo } from "@ezapply/sites";
+import { POSTING_READERS } from "@ezapply/sites/readers";
 import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
-import { POSTING_READERS } from "./readers/index.js";
 
 export interface ExtractedPosting {
   markdown: string;
@@ -22,8 +23,8 @@ interface JobPostingLd {
 }
 
 const STRIP_SELECTORS = "script, style, noscript, template, svg, iframe, canvas, link, meta";
-const ATS_HOSTS =
-  /(greenhouse|lever|workday|myworkdayjobs|myworkdaysite|ashbyhq|smartrecruiters|icims|jobvite|bamboohr|workable|linkedin|indeed)\./i;
+/** Job boards and applicant tracking systems ezapply has no site for, whose host names no employer. */
+const JOB_BOARD_HOSTS = /(smartrecruiters|icims|jobvite|bamboohr|workable|linkedin|indeed)\./i;
 
 /**
  * Turn the captured (visible-only) body HTML into clean markdown plus best-effort metadata.
@@ -53,8 +54,8 @@ export function extractPosting(input: {
   for (const el of doc.querySelectorAll(STRIP_SELECTORS)) el.remove();
 
   const ld = parseJobPostingLd(input.jsonLd);
-  // The site's own reader, where the generic reading isn't enough (readers/index.ts).
-  const own = POSTING_READERS[site as FormSiteId]?.(doc, contentUrl) ?? {};
+  // The site's own reader, where the generic reading isn't enough (`@ezapply/sites/readers`).
+  const own = (isFormSite(site) ? POSTING_READERS[site]?.(doc, contentUrl) : undefined) ?? {};
   // A title that is only the role (Workday's) isn't split: the company comes from JSON-LD or the URL.
   const fromTitle = own.titleIsRole ? {} : splitTitle(input.pageTitle);
 
@@ -202,19 +203,18 @@ function cleanCompany(s: string): string | undefined {
 
 export function companyFromUrl(url: string): string | undefined {
   const u = new URL(url);
-  // Oracle Cloud hosts (fa-abcd-saasfaprod1.fa.ocs.oraclecloud.com) and SuccessFactors' career hosts
-  // (career17.sapsf.com) name the provider's data centre, not the employer; the title does.
-  if (/(^|\.)(oraclecloud\.com|sapsf\.(com|eu|cn)|successfactors\.(com|eu))$/i.test(u.hostname)) return undefined;
-  if (ATS_HOSTS.test(u.hostname)) {
-    // Workday: acme.wd5.myworkdayjobs.com, wd5.myworkdaysite.com/recruiting/acme/...
-    if (/myworkday/i.test(u.hostname)) return workdayTenant(url);
+  // A site's provider host names the provider (a board's host, a data centre's): the employer is what its URL names
+  // (`SiteInfo.company`), else the title says it.
+  const provider = providerOf(u.hostname);
+  if (provider) return provider.company?.(url);
+  if (JOB_BOARD_HOSTS.test(u.hostname)) {
     const segments = u.pathname.split("/").filter(Boolean);
     // Job boards: the company is only in the path of Indeed company pages (indeed.com/cmp/acme/jobs);
     // linkedin.com/jobs/view/<id> and indeed.com/viewjob?jk= don't name it (the page title and JSON-LD do).
     if (/(^|\.)(linkedin|indeed)\./i.test(u.hostname)) {
       return segments[0] === "cmp" && segments[1] ? segments[1] : undefined;
     }
-    // e.g. boards.greenhouse.io/acme/jobs/1, jobs.lever.co/acme/...
+    // e.g. jobs.smartrecruiters.com/acme/...
     return segments[0];
   }
   const labels = u.hostname.replace(/^www\./, "").split(".");

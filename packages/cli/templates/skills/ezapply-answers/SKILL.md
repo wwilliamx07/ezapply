@@ -9,7 +9,9 @@ description: Review and tidy the screening-question answer bank (profile/answers
 2. Show a compact table: id, question (shortened), answer, sensitive. List unanswered ones separately with
    their suggestions.
 3. Apply the user's changes. Rules:
-   - `answer: null` means "ask me every time". `sensitive: true` means always ask, even if answered (the
+   - `answer: null` means "ask me every time", unless the entry has a `source`: then it's answered from that
+     profile path (`answers_check` lists these as `fromProfile`, with what the profile holds), and a change to
+     it belongs in `profile/profile.yaml`. `sensitive: true` means always ask, even if answered (the
      stored answer may be offered as the suggestion). An
      answer the user tells you to save is meant to be used: set `sensitive: false` unless they say to keep
      asking.

@@ -140,9 +140,7 @@ export async function workspaceStatus(
   const answers = await s.profile.checkAnswers();
   add(
     "answer_bank",
-    answers.exists === true &&
-      answers.valid === true &&
-      (answers.unanswered?.length ?? 1) <= (answers.sensitive?.length ?? 0),
+    answers.exists === true && answers.valid === true && (answers.unanswered ?? []).every((u) => u.sensitive),
     !answers.exists
       ? "profile/answers.yaml missing"
       : answers.valid

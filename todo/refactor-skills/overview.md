@@ -1,12 +1,24 @@
 # Refactor the skills for agent performance
 
-**What.** Rework the workspace skills (`packages/cli/templates/skills/`) so the agent applying for the user does
-better with them.
+**What.** Code does every step that needs no judgement: tools, the companion and the panel. The skills hold only
+what does, written for the agent to follow. Every value on a form is still the model's. The application is filled
+one step per fresh session, driven by the companion, each session starting from a prefix the prompt cache matches.
 
-**Why.** The skills are the agent's instructions for every flow; their length and structure bear on how well it
-follows them.
+**Why.** A mechanical step done in code is done the same way every time, costs no turns or tokens, and doesn't
+depend on the model. The agent still sometimes skips the review, and a long application re-reads every earlier
+step's form on every call. Fields that the site prefills from the resume are often left as they came.
 
 **Plan.**
-1. After "Remove the onboarding and repos skills", take stock of the skills left.
-2. Restructure each for the agent's performance, keeping the honesty rules as they are.
-3. Update the references describing each skill.
+1. The companion opens the review when a tailoring turn leaves a changed PDF, and sends the answer back as a
+   message. The panel's buttons invoke their skill by name.
+2. Tailoring: one call sets a document up and returns its brief. `ezapply-bundle` becomes one tool.
+3. Applying: `get_form` marks prefilled fields and stale files. Code writes the answers the user confirmed, and
+   the panel shows the hand-off. Nothing is filled without the model.
+4. Each step runs in a fresh session. The companion writes its first message in a fixed order (skill, profile,
+   answers, posting, then the step), so everything before the step matches the cache. Check that it does before
+   building it.
+5. Rewrite each remaining skill to its judgement, and keep only rules that apply everywhere in `EZAPPLY.md`.
+6. Measure a tailoring and an application against the runs in "Cut the tokens a panel conversation spends", then
+   update the references.
+
+[details](details.md)

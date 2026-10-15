@@ -12,6 +12,7 @@ import {
   parseBridgeMessage,
   RpcPeer,
 } from "@ezapply/protocol";
+import { FORM_SITE_IDS } from "@ezapply/sites";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -93,7 +94,13 @@ async function extension() {
   });
   await new Promise<void>((resolve, reject) => {
     ws.on("open", () =>
-      send({ kind: "hello", protocolVersion: PROTOCOL_VERSION, extensionVersion: "9.9.9", pairingToken: PAIRING }),
+      send({
+        kind: "hello",
+        protocolVersion: PROTOCOL_VERSION,
+        extensionVersion: "9.9.9",
+        pairingToken: PAIRING,
+        sites: [...FORM_SITE_IDS],
+      }),
     );
     ws.on("message", (data) => {
       const msg = parseBridgeMessage(data.toString());

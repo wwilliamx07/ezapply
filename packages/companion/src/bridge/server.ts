@@ -16,6 +16,7 @@ import {
   type ResultOf,
   RpcPeer,
 } from "@ezapply/protocol";
+import { FORM_SITE_IDS } from "@ezapply/sites";
 import { type WebSocket, WebSocketServer } from "ws";
 import type { Logger } from "../logger.js";
 
@@ -287,6 +288,19 @@ export class ExtensionBridge {
               ErrorCode.ProtocolMismatch,
               `Protocol mismatch: extension v${msg.protocolVersion}, companion v${PROTOCOL_VERSION}.`,
               `Rebuild and reload the ${newer} so both sides match.`,
+            ),
+          );
+          return;
+        }
+        const theirs = [...(msg.sites ?? [])].sort();
+        const ours = [...FORM_SITE_IDS].sort();
+        if (theirs.join() !== ours.join()) {
+          reject(
+            CloseCode.ProtocolMismatch,
+            new EzError(
+              ErrorCode.ProtocolMismatch,
+              `Site mismatch: the extension knows ${theirs.join(", ") || "no sites"}, the companion ${ours.join(", ")}.`,
+              "Rebuild and reload the extension so both sides come from the same version.",
             ),
           );
           return;

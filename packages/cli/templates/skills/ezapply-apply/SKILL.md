@@ -89,6 +89,8 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      - **Check polarity:** "I certify I do NOT…" and "Select if you are not…" reverse yes and no.
      - Map the stored answer onto the field's actual options.
      - Company-specific answers use `byCompany`.
+     - An entry with a `source` and `answer: null` is answered from that profile path, for this posting (its
+       country, its required degree): the profile owns the fact, so onboarding never asks it.
      - Numbers, ages and dates: compute from the profile.
      - Compound questions: answer each part.
    - **Ask the user** with one `ask_user` card per step: each question with the field's exact options as
@@ -98,7 +100,9 @@ this skill, they win. They come once per site, so keep them in mind for the rest
      ask in chat instead, one message per step listing each question with your proposed answer and the exact
      options. Ask for:
      - no matching answer
-     - `answer: null` or `sensitive: true`
+     - `answer: null` with no `source`, or a `source` the profile doesn't hold (no `remember` then: offer to save
+       the reply into `profile/profile.yaml` at that path, then `profile_check`)
+     - `sensitive: true`
      - EEO questions not set in the profile
      - salary
      - anything where you are unsure
