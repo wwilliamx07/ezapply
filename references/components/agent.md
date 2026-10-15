@@ -12,7 +12,7 @@ It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Cod
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` (the header's value, if it's 8–64 letters, digits and dashes) |
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` ([sessions](companion.md#sessions)) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
 | `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, forgetting a posting's, the permission mode and model |
@@ -25,8 +25,7 @@ a dependency; its `canUseTool` callback is the host protocol `--permission-promp
 loop of ezapply's own over the API (the "only agent" principle lost, with the skills, subagents and permissions);
 channels (`notifications/claude/channel`), which push messages into an interactive session: a research preview,
 stdio servers only, a custom channel needs `--dangerously-load-development-channels` with a warning dialog at every
-start, and `-p` ignores it; keeping the interactive session and waiting on a blocking tool, as onboarding did:
-permission prompts and Claude's questions would still be in the terminal.
+start, and `-p` ignores it; keeping the interactive session and waiting on a blocking tool: permission prompts and Claude's questions would still be in the terminal.
 
 **Long waits.** An interactive session moves an MCP call still running after 2 minutes into a background task;
 `-p` doesn't, so `ask_user`, `permission_ask` and `review_documents` hold the turn until answered. What still
@@ -60,11 +59,12 @@ with a `control_response` and ends the turn (`terminal_reason: "aborted_tools"`)
 see its result (the next `get_form` shows the page as it is). Stop doesn't wait for a running form call to end:
 the user pressed Stop to stop, and whatever the call did to the form stays on the
 page for them to see. Not SIGTERM, which leaves the turn unfinished with no
-result. **Closing** ends stdin (the process exits once idle) and kills the tree after a grace period (`taskkill /T
-/F` on Windows). A message written while a tool call runs is taken when the call ends, in
+result. **Closing** ends stdin (the process exits once idle) and kills it after a grace period (10 s; 3 s when
+the companion stops): the tree with `taskkill /T /F` on Windows, elsewhere SIGTERM then SIGKILL to `claude`
+itself. Reset and Forget kill at once. A message written while a tool call runs is taken when the call ends, in
 the same turn.
 
-All of this was checked against Claude Code 2.1 in a scratch folder with a throwaway MCP server: a message sent
+Verified against Claude Code 2.1 with a throwaway MCP server: a message sent
 mid-call was answered in the same turn, an interrupt ended the turn and the process went on to the next message,
 the permission tool got `{ tool_name, input, tool_use_id }` for a command that needed approval and its deny message
 reached Claude word for word, `AskUserQuestion` disallowed left Claude asking in text, and `total_cost_usd` in each
@@ -177,7 +177,7 @@ own and no web page can reach it.
 |---|---|
 | `panel.watch { open }` | How many panels are open, sent by the extension on every change and on connecting. While more than none, cards are shown (`NeedsYou.watch`) and updates pushed; the extension disconnecting ends it |
 | `panel.state` | `PanelState`: the agent's status, the active posting, the 20 newest postings, the open cards, and setup (`workspace_check`'s required steps left; kept 30 s, as it runs TeX and GitHub checks) |
-| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for either of a posting's conversations its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes, `attached` from an upload in the form log), and a review waiting on the user |
+| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for either of a posting's conversations its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes; `attached` when an approved one has an upload in the form log; only PDFs at the top of the posting's folder), and a review waiting on the user |
 | `panel.tab { tabId, url, title, site }` | What the tab is to the active posting: its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page |
 | `panel.send { key, text }` | The user's message to a conversation (`general`, or a posting's `tailor` or `fill`); a posting's makes its posting active first, since the skills work on the active one |
 | `panel.stop`, `panel.reset { key }` | Stop the turn; a new session for the conversation |

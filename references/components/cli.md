@@ -22,14 +22,12 @@ the build it started with; `init` says to stop it and start it again.
 
 There are no `start`, `stop`, `restart`, `daemon` or `pair` commands: there is no background process to
 control (`ezapply` runs in the foreground of its terminal) (see [architecture](../architecture.md#processes-and-lifecycle) for why). Pairing, and forgetting a
-paired extension (what `pair --reset` did), are `extension_pair` and `extension_pair replace: true`, which
-onboarding calls.
+paired extension, are `extension_pair` and `extension_pair replace: true`, which onboarding calls.
 
-Commands that were removed because something else does their job: `chat` (Claude Code in the terminal as
-ezapply's child, restarted with a fresh session on each new posting) went once the side panel's agent
-([agent](agent.md)) did everything it did, with its own conversations per posting; Claude Code can still be
-run in the workspace while `ezapply` runs, and its relay reaches the same companion. `status` went because
-`doctor` reports the same (running, version, extension connected) along with the rest.
+There is no `chat` or `status` command either: the user talks to Claude in the side panel's agent
+([agent](agent.md)), with a conversation per posting, and `doctor` reports whether ezapply is running, its
+version and whether the extension is connected. Claude Code can still be run by hand in the workspace while
+`ezapply` runs; its relay reaches the same companion. An unknown command prints the usage, exit code 2.
 
 **Errors.** Expected problems are `EzError`s and print as `ezapply: <message>` plus the hint, with exit code
 1: a `--port` that isn't a whole number from 1 to 65535, a `config.json` that isn't valid JSON or doesn't
@@ -44,23 +42,20 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    build's `daemon.json` is moved to `config.json` when the config is loaded (so the pairing carries over).
 2. **Folders**: `WORKSPACE_DIRS` (`profile`, `templates/resume`, `templates/cover`, `library`, `knowledge`,
    `postings`, `repo-cache`, `.claude/skills`).
-3. **`ezapply.config.json`** if missing, then config migrations for untouched old defaults (e.g. the 0.1
-   `latexmk` engine default → `auto`), and renamed settings: debug mode's old switch `debug.autofill` becomes
-   `debug.enabled` (the schema drops keys it doesn't know, so the old one left in place turned debug mode off
-   silently; a `debug.enabled` already set wins); and removed ones: `forms.focusBrowser`, which focus emulation
-   replaced (the `forms` object goes when nothing else is in it), and `context.restartOnCapture`, which only
-   the removed `chat` command read (the `context` object goes when nothing else is in it). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
+3. **`ezapply.config.json`** if missing, then its upgrades from older builds (`migrateWorkspaceConfig`: untouched
+   old defaults, renamed and removed settings; each, and why, in
+   [data-formats](../data-formats.md#ezapplyconfigjson-companionsrcconfigworkspacets)). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
    commented out at its default, so a default changed in a later build still applies to an untouched line.
 4. **`EZAPPLY.md`** (managed, always rewritten) from `templates/workspace/EZAPPLY.md`, with `{{EZAPPLY}}`
    replaced by `node "<absolute path of dist/main.js>"` so Claude can run the commands.
 5. **`CLAUDE.md`** (the user's): created as a stub that imports `@EZAPPLY.md`; an existing one gets the import
    line added; a pre-split 0.1 file is backed up to `CLAUDE.md.bak` and replaced.
-6. **Default cover letter template** into `templates/cover/` only if that folder is empty.
+6. **Default cover letter template** into `templates/cover/` only if that folder holds nothing but dotfiles.
 7. **`.mcp.json`**: the `ezapply` server entry is set to
    `{ type: "stdio", command: <node>, args: [<dist/main.js>, "mcp"] }`; other servers are kept.
 8. **`.claude/settings.json`**: merged so `enabledMcpjsonServers` includes `ezapply` (no approval prompt),
    `permissions.allow` includes `mcp__ezapply`, `permissions.deny` includes Edit, Write and NotebookEdit
-   on `repo-cache/**`, and `autoMemoryEnabled` is `false` unless the user set it
+   on `repo-cache/**` and Read on `debug/**`, and `autoMemoryEnabled` is `false` unless the user set it
    ([why](workspace.md#claude-code-settings)).
 9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Then
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
@@ -94,8 +89,8 @@ tools wait up to 15 minutes.)
 4. **No timeout.** Requests go through `node:http` without an agent, which has no response timeout. Node's
    `fetch` gives up on response headers after 300 s, and some tools legitimately take longer:
    `extension_pair_wait` and `github_login_wait` accept up to 15 minutes, `repo_sync` allows git 10.
-5. Unrecoverable failures on requests become `{ error: { code: -32000, message } }`. Exit when stdin ends and
-   in-flight requests finish.
+5. A non-2xx answer to a request, and any other failure, becomes `{ error: { code: -32000, message } }`; a
+   line that isn't JSON is dropped. Exit when stdin ends and in-flight requests finish.
 6. The panel's agent runs Claude Code with `EZAPPLY_SESSION=<session id>` in the environment (Claude Code
    passes its environment to MCP servers it starts), and the relay sends it on every request as
    `x-ezapply-session`, so the companion knows which conversation a call comes from

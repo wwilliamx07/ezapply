@@ -1,9 +1,9 @@
 # Profile, answer bank and templates (`companion/src/profile/`)
 
 `ProfileService` reads, validates and writes the user's own data in `profile/` (and lists `library/`);
-`TemplateService` (`companion/src/templates/service.ts`) owns `templates/`. They were one service; templates
-(import, examples, the main file and its content files, the engine a template needs) are a separate concern
-from the profile and answers. YAML files are parsed with line-aware errors, so `profile_check` /
+`TemplateService` (`companion/src/templates/service.ts`) owns `templates/`, since templates (import, examples,
+the main file and its content files, the engine a template needs) are a separate concern from the profile and
+answers. YAML files are parsed with line-aware errors, so `profile_check` /
 `answers_check` report problems with field paths. Exact schemas: [data-formats.md](../data-formats.md).
 
 ## Profile (`profile/profile.yaml`)
@@ -19,12 +19,12 @@ skills, languages, certifications, and optional EEO self-identification.
   work-authorization countries, sponsorship now and in future, some work or education, LinkedIn.
 - EEO values are only ever filled verbatim from here; `"decline"` means choose the form's decline option;
   missing means ask each time.
-- Workday field hints (`hint.profileKey`) point into this file by path, e.g. `identity.firstName`.
+- Field hints (`hint.profileKey`, from a site's definition) point into this file by path, e.g. `identity.firstName`.
 
 ## Answer bank (`profile/answers.yaml`)
 Stored answers to screening questions.
 
-- **Seeded** on the companion's first start with 33 common Workday questions (work authorization, sponsorship,
+- **Seeded** when the companion starts and the file is missing (`ensureAnswerSeed`), with 33 common screening questions (work authorization, sponsorship,
   export control, previous employment, relatives, referrals, government relationships, conflicts of
   interest, consents, relocation, travel, start date, salary, degree, criminal history…), all unanswered,
   some with a `suggested` default or a `source` in the profile.
@@ -70,7 +70,7 @@ whether to write cover letters by default. Done at 10+ words.
 
 ## Templates (`templates/resume/`, `templates/cover/`)
 Each folder holds a LaTeX project and `template.json` naming its main file
-(`{ schemaVersion, main, origin?, contentFiles?, example?, importedFrom?, importedAt? }`). Tailored documents
+(`{ schemaVersion, main, origin?, contentFiles?, example?, importedFrom?, importedAt?, sourceHash? }`). Tailored documents
 are copies in the posting folder; the templates themselves are never edited while tailoring. Their folders
 are on the TeX search path, so the copies find class and style files.
 
@@ -100,7 +100,7 @@ file structure, so a diff against the template stays readable.)
   folders stay refused: they're ezapply's own output.
 - **Main file detection:** the `.tex` files that contain both `\documentclass` and `\begin{document}`; if
   several, a top-level file named like resume/cv/cover/letter/main wins; if still ambiguous, the error lists
-  candidates and Claude asks.
+  candidates and Claude asks, then passes `main`.
 - An existing template is moved to `templates/.old/<kind>-<timestamp>/`, never overwritten. Replacing one
   the user has needs `replace: true` (Claude confirms first); replacing ezapply's untouched default doesn't.
 - Records `origin: "imported"`, where it came from, and `sourceHash`, a hash of the files it copied, so the

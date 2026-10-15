@@ -55,8 +55,8 @@ user gives an example. If the setup page's cover step hands it over as a task, i
 instead.
 
 ## 3. Applying: code prepares, the model fills
-**Nothing is filled without the model.** Deterministic autofill was removed for that reason (see `status.md`). It
-saved values but not turns, and its label-pattern mistakes read back as clean fills. Every value, row, upload and
+**Nothing is filled without the model** (the decision in `status.md`): filling from the profile without it saves
+values but not turns, and its label-pattern mistakes read back as clean fills. Every value, row, upload and
 question stays the agent's. Code supplies the context, points out what to look at, writes down what the user
 confirmed, and moves from step to step (§4). The saving comes from fewer turns and a shorter context, not from fewer
 values.
@@ -71,9 +71,9 @@ values.
   from a previous application. The checklist names them. The skill says that a prefilled field is checked like an
   empty one, and a prefilled work description is tailored like a new one. Today the agent sometimes leaves them
   as they came.
-- **Stale files are marked.** `get_form` marks attached files this application didn't upload as `stale` (from
-  the form log) rather than leaving the skill to have the agent read `form-log.jsonl`. The agent still removes
-  them.
+- **Stale files on the field.** `get_form`'s step warnings already name files this application didn't upload
+  (`stepWarnings`); mark each such field `stale` as well, and drop the skill's reading of `form-log.jsonl` for it.
+  The agent still removes them.
 - **Confirmed answers are written by code.** `toSave` (answers the user marked to save that the bank has no entry
   for) is written to `answers.yaml` by the companion, with the form's wording as `canonical` or as a `variant` of
   the entry the card named. The writes wait until the hand-off, so the bank in the brief's prefix doesn't change

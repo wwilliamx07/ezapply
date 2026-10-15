@@ -6,7 +6,11 @@ One of [the sites](../sites.md): only what this site does differently from [the 
 signature is Workday's UI widgets (`[data-uxi-widget-type]`) and the chrome every candidate page has
 (`data-automation-id` `utilityButtonBar`, `accessibilitySkipToMainContent`), checked on every saved Workday page.
 The **tenant** is the host's first label on myworkdayjobs.com, the segment after `recruiting` on myworkdaysite.com
-(whose first label is just `wd5`). A multi-step application: a progress bar, Save and Continue, a review page.
+(whose first label is just `wd5`). The **job** is the requisition at the end of the path's job segment, after `job`
+or `details` and before `apply` (`…/job/Toronto/Engineer_JR1000001-1/apply` → `jr1000001-1`). The canonical path
+drops the locale segment (`/en-US/`), which the same job's links have or lack. The hosts are Workday's
+(`providerHosts`), so a posting's company is the tenant. A multi-step application: a progress bar, Save and
+Continue, a review page.
 
 | File | Holds |
 |---|---|
@@ -16,6 +20,7 @@ The **tenant** is the host's first label on myworkdayjobs.com, the segment after
 | `dropdown.ts`, `typeahead.ts`, `date.ts` | Workday's own widgets (below) |
 | `remove.ts` | Taking chips and attached files off (`removeItems`), confirming a delete dialog (`confirmRemoval`, the rows' too) |
 | `selectors.ts` | Every Workday string of the adapter: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS` (`legalNameFirstName` → `identity.firstName`) |
+| `reader.ts` (beside `definition/`) | The posting reader (`readWorkdayPosting`, in `POSTING_READERS`): Workday's posting pages carry no JSON-LD worth reading and their title is the role alone, so the capture takes the description, role, location and requisition from the posting hooks `registry.ts` shares with the adapter (`WORKDAY_POSTING`) |
 
 **Page kinds** (`detectPage`), in order: **confirmation** (a confirmation element, or, with no progress bar and no
 fields, "application submitted" / "thank you for applying"); **auth** (a visible password input, an active step
@@ -33,20 +38,20 @@ rest on the behavioural fixture. Page actions: Apply, Apply Manually, Autofill w
   when that heading is the step's title. Live Workday labels every add button "Add", or "Add Another" once a row
   exists, so ids from labels said nothing and renumbered after each add.
 - **Notices aren't errors:** alerts (`errorMessage`, `errorBanner`, `inputAlert`, `role="alert"`) whose text says
-  "success(fully)" and nothing like fail, error, could not, invalid or required go to `messages`. Workday announces
+  "success(fully)" and nothing like fail, error, could not, unable, invalid or required go to `messages`. Workday announces
   "resume.pdf successfully uploaded" in the same region; read as an error, it showed in `go_next` and on the file
   field, and ended `next`'s wait before the page had moved.
 - **Removable rows:** a section whose first field sits in a row with its own delete button, outside any field, in
   an ancestor holding no other section's fields (so a file's delete button doesn't count, nor a page-wide one). Live,
   that button is a plain "Delete" with a trash icon in a `role="group"` labelled by the row's heading, with no
   automation id or label, so it's found by the icon (`button:has(.wd-icon-trash)`); `panel-set-delete-button`,
-  `deleteButton` and "Delete…" were guesses that matched nothing live, kept as fallbacks. Removing a row renumbers
+  `deleteButton` and "Delete…" are fallbacks that matched nothing live. Removing a row renumbers
   the rows after it.
 
 **Moving.** Live step titles are often all "Application", so the step key is the progress bar's index and title:
 comparing titles alone reported every move as none, and Back waited out 12 s each time. After a move the definition
 waits (up to `stepFieldsMs`, 3 s) for the new step to show a field, since Workday moves the progress bar before it
-renders the step: a read straight after the move (now `go_next`'s own `form`) found an empty step, which with `onlyEmpty` looks like a step
+renders the step: a read straight after the move (`go_next`'s own `form`) would find an empty step, which with `onlyEmpty` looks like a step
 with nothing left to fill. The review page has no fields and isn't waited for.
 
 **A step filled before shows its dropdowns' choices late.** Coming back to such a step (Back, or Next after
@@ -76,31 +81,31 @@ keyboard, and a file and rows whose delete asks for confirmation.
 ## Workday's dropdown: finding its listbox
 A button opening a listbox rendered as a portal under `body` (`dropdown.ts`). Live Workday gives the button no
 usable `aria-controls`, and a closed listbox stays on screen while it animates away, so "the visible listbox" right
-after one dropdown was the previous one's: in the first real application almost every first attempt read the
-wrong options. So:
+after one dropdown was the previous one's, and live, first attempts read the wrong options. So:
 - Only listboxes outside any `formField-` container count (a list of selected items inside a field isn't one).
 - Before opening, wait (up to `dropdownOthersClosedMs`) for none to be visible, pressing Escape on any left.
 - After the press, take `aria-controls`' target, else a listbox that wasn't visible before, or one whose options
   changed (a reused portal); none → React's `onClick`; still none → wait for the page to go quiet and open once more.
 - The choice is checked against the button's label, with React's `onClick` on the option as the fallback.
 - **Closing.** After a choice the list closes by itself and the driver waits until it's gone. Without one
-  (`list_options`, a miss) it must be closed: Escape on the button, then, if the button has no `aria-expanded` and the
-  list is still there after `dropdownEscapeCloseMs`, a press on the button, as a person would. A button without
+  (`list_options`, a miss) it must be closed: Escape on the button, then, if the list is still open (its
+  `aria-expanded` still true, or, without one, the list still there after `dropdownEscapeCloseMs`), a press on the
+  button, as a person would. A button without
   `aria-expanded` is never pressed after a choice: a list still animating away would open again.
 
 **Why the press and the second open.** Live buttons have no `aria-expanded` and Escape doesn't close a live
-listbox, so a list read without a choice stayed open and the next dropdown's press only closed it: "Could not open
-the dropdown" on 9 fields of one run. With the press, two later runs still failed 12 dropdowns, every one a dropdown
-whose own list had been read without a choice, and the agent's next call filled each at once. Why the first open
-fails isn't known, so the driver does what worked: it tries again. The fixture models this (`liveDropdowns`:
-lingering portals, no `aria-expanded`, Escape closing nothing; `dismissedIgnoresNextPress`), and its tests fail on
-the old logic. A dropdown that can't be opened at all costs its open waits twice.
+listbox, so without the press a list read without a choice stays open and the next dropdown's press only closes it
+("Could not open the dropdown"). Even with it, live, a dropdown whose own list had been read without a choice failed
+its next open, and the same fill a call later worked. Why the first open fails isn't known, so the driver does what
+worked: it tries again (`dropdown re-open` in the trace). The fixture models this (`liveDropdowns`: lingering
+portals, no `aria-expanded`, Escape closing nothing; `dismissedIgnoresNextPress`). A dropdown that can't be opened at
+all costs its open waits twice.
 
 ## Workday's prompt: searches and lists
 A search-as-you-type multi-select (`multiSelectContainer`, options in a `wd-popup`; `typeahead.ts`), single- or
 multi-select, sometimes with nested menus, chosen values shown as chips. Each value is selected on its own: one
-matching nothing goes to `unmatched` with the options its search showed while the rest are still selected (a skills
-list once stopped at its first miss); one Workday chose itself on Enter (single-select prompts do) goes to
+matching nothing goes to `unmatched` with the options its search showed while the rest are still selected (so one
+miss doesn't stop a skills list); one Workday chose itself on Enter (single-select prompts do) goes to
 `inexact`; one chosen but not kept is named in the error, not `unmatched`, so the agent doesn't look for other
 wordings of an option it found. `"Job Board > LinkedIn"` walks nested menus. Values already selected are skipped.
 - **Waiting for results.** Typing waits until the options differ from those before and one of them holds the query
@@ -108,7 +113,7 @@ wordings of an option it found. `"Job Board > LinkedIn"` walks nested menus. Val
   "No Items." has stayed for `typeaheadNoResultsMs` (it also shows while results load). Reading once the DOM went
   quiet returned the previous query's results, one call behind. **Why the query must show:** on a hierarchical
   prompt (a field of study under "All" and "Partial List…") the category menu rendered just after the query was
-  typed and was read as the results. Results that hold no part of the query now cost the full wait and its retry,
+  typed and was read as the results. Results that hold no part of the query cost the full wait and its retry,
   about 6 s.
 - **Checkbox lists.** Some multi-selects tick each option (`promptLeafNode` with `data-automation-checked`), stay
   open on a press, toggle on every press, and tick a search's only result themselves on Enter; pressing it then
@@ -129,11 +134,10 @@ was seen taken on the second entry). Parts that don't read back the value fail w
 parts that do while the field shows an error stay `ok` with "Filled, but the page reports: …". The fixture's
 `dateWidget: "keys"` (digits only in keydown) and `"stuck"` (synthetic keys ignored) model both cases.
 
-Typing worked on live tenants, and failed once in a run whose browser window may have been behind the terminal: every
-multi-part date read back right while Workday called it required. The next run, with the window in front, took
-every date. So the application tab now runs under focus emulation, which gives the page focus wherever its window
-is ([the tab at full speed](../../mcp-tools.md#forms)), and debug mode records `focused` and the date's `date part set directly` and `date
-entered again` branches, to settle it.
+Typing works on live tenants while the page has focus; with the browser window behind another, every multi-part
+date read back right while Workday called it required. So the application tab runs under focus emulation, which
+gives the page focus wherever its window is ([the tab at full speed](../../mcp-tools.md#forms)), and debug mode
+records `focused` and the date's `date part set directly` and `date entered again` branches, to confirm it.
 
 **Tests.** The behavioural fixture (`test/fixture.ts`) is the one model of a Workday step: the adapter tests
 use it in jsdom, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new

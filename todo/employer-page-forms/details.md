@@ -7,8 +7,8 @@ and every signature is a provider's own markup.
 **What such a page is.** Submitting through Greenhouse's Job Board API, Lever's postings API or Ashby's
 `applicationForm.submit` takes the employer's secret API key, so a careers page can't send an application to the
 provider from the browser. A frameless application is the employer's own form, posted to its own server, which
-forwards it. It has none of the provider's markup, so no per-provider signature (the earlier idea: a `form`
-posting to `greenhouse.io`) finds it, and the provider's definition couldn't read it anyway. What fits is one
+forwards it. It has none of the provider's markup, so no per-provider signature (such as a `form`
+posting to `greenhouse.io`, rejected for this) finds it, and the provider's definition couldn't read it anyway. What fits is one
 definition for plain HTML forms, used only when asked for. An embedded application differs: its frame is the
 provider's own page, so the provider's signature and definition work there unchanged.
 
@@ -80,7 +80,7 @@ provider's. `tabSite` (`forms/match.ts`) and the engine's `extract` would then f
   sites.
 
 **References when built:** `components/sites.md` (a Generic section), `components/adapters.md` (replace "No
-generic definition"), `components/extension.md` (replace "Not covered"), `protocol.md` (`GENERIC`),
+generic definition"), `components/extension.md` (replace "Not covered"), `components/protocol.md` (`GENERIC`),
 `mcp-tools.md` (which tab), `security.md` (the submit guard on arbitrary pages; password forms excluded),
 `status.md`.
 

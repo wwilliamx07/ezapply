@@ -1,7 +1,7 @@
 # Status
 
-As of 2026-10-11. A lean log: the decisions that shape the build and aren't obvious from the code, what still
-needs a live run, and open questions. What is built, and how, is on the component pages; older history is in git.
+A lean log: the decisions that shape the build and aren't obvious from the code, what still needs a live run, and
+open questions. What is built, and how, is on the component pages; history is in git.
 
 ## Decisions
 Each gives the choice and the reason in a line or two; the linked page has the detail.
@@ -11,10 +11,10 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   ([architecture](architecture.md#processes-and-lifecycle)).
 - **Pairing without a code.** The extension pairs during a 15-minute window opened from the setup page or by
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
-  `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension)).
-- **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation.
-  `ezapply chat` (Claude Code in the terminal) was removed once the panel did all it did, so there's one way to
-  run ezapply ([cli](components/cli.md#commands)).
+  `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension),
+  [why](security.md#accepted-limits)).
+- **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation; there's
+  no Claude Code in the terminal, so there's one way to run ezapply ([cli](components/cli.md#commands)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
   guard are shared and a site is a registry entry plus a definition ([adapters](components/adapters.md)).
 - **Everything about a site in one directory** (`packages/sites/src/<site>/`), with a list per side (registry,
@@ -33,7 +33,10 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   around bot checks ([sites](components/sites.md#why-these-three)).
 - **A step's late values are waited for by its requests,** not by a longer quiet: Workday's requests for a
   returning step's dropdown values run while the page shows nothing changing ([workday](components/sites/workday.md)).
-- **Nothing is filled without the model.** See [deterministic autofill removed](#deterministic-autofill-removed).
+- **Nothing is filled without the model.** Every value goes in through the agent's `fill_fields`; fields carry only
+  profile hints. Filling from the profile and answer bank without the model saved values, not turns (every step
+  still took a `fill_fields` call for the rest), and its mistakes passed as clean fills (a word in a 1–10 scale
+  field read back as matching); reading labels is what the model does well ([adapters](components/adapters.md#widget-drivers)).
 - **Documents are approved one by one** before they're attached (by default, enforced by `upload_file`), each by a
   press of its own: what's attached goes to an employer ([documents](components/documents.md#review-before-attaching)).
 - **Layout is linted, not looked at.** `tex_compile` names layout problems from where the text sits; no tool renders
@@ -55,48 +58,27 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   few hard rules sit in a `CLAUDE.md` beside the code they govern, it doesn't restate the code (no per-test
   lists), and a test checks its links and coverage: the agent reads less and still finds the page that matters
   ([conventions](development.md#conventions)).
-- **Defaults assumed:** resume page size Letter (bundle normalization); contributions to other people's public
-  repos are added by URL, with claims limited to the user's own commits.
-
-### Deterministic autofill removed
-`autofill_step` (removed 2026-10-07, with its tool, setting, hand-off lists, debug fields and the adapters'
-`strict` matching) filled from the profile and answer bank without the model. It filled about 45% of fields in
-debugged live runs, but every step still took a `fill_fields` call for the rest, so it saved values, not turns. Its
-mistakes passed as clean fills: rows and levels placed by label patterns put a word into a 1–10 scale field and
-read back as matching. Reading labels is what the model does well. What stayed: the profile hints on fields.
-
-### Where the build departs from the original plan
-The plan (`plan.md`) is in git history before 2026-09-27.
-
-| Plan | Built |
-|---|---|
-| GitHub device flow; app registered by hand | App Manifest flow and OAuth web flow ([github-and-repos](components/github-and-repos.md#github-app-githubservice)) |
-| SQLite log, `app_status` / `app_search` | `meta.json`, `form-log.jsonl`, `postings_list` |
-| A daemon started by hand or at login | None (above) |
-| `init`, a daemon start, a pairing code, `claude` | `npm run setup` and the onboarding page; pairing without a code |
-| A content script declared for Workday | Adapters injected into the MAIN world on demand |
-| A Workday adapter, Chrome only | Eight sites on one engine; Chrome and other Chromium browsers (Firefox was built, then dropped for focus emulation) |
-| One TeX engine (latexmk + XeLaTeX) | Per file: `% !TEX program`, else `tex.engine` ([documents](components/documents.md#tex-engines-texenginests)) |
-| Playwright tests with React harnesses | jsdom tests against behavioural fixtures and live snapshots |
-| Changesets, per-package READMEs, `ezapply migrate`, `docs/adr/` | Migrations in `ezapply init`; this folder |
-| A cover template generated in onboarding | A shipped default, the user's LaTeX, or one rebuilt from an example letter |
+- **Defaults assumed:** resume page size Letter (bundle normalization;
+  [`resume.pageSize`](data-formats.md#ezapplyconfigjson-companionsrcconfigworkspacets)); contributions to other
+  people's public repos are added by URL, with claims limited to the user's own commits
+  ([contributions](components/github-and-repos.md#contributions-repo_contributions)).
 
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
 
-- **The form-filling fixes** (2026-10-15), from live Workday records: Back on the review page (refused as Submit
+- **The form-filling fixes,** from live Workday records: Back on the review page (refused as Submit
   before), a returning step's dropdowns read once their values' requests are back (read as empty and refilled
   before), and the agent ticking every attestation. Check that a move to a new step costs no more than before (the
   request wait should end at once there), and `remove_items` clearing a text field. Two Workday changes in one run,
   against the rule: if moves get slower, suspect the request wait ([workday](components/sites/workday.md)).
 
-- **The sites package** (2026-10-15): the bundles were compared and hold the same code, and every test passes. Not
+- **The sites package:** the bundles were compared and hold the same code, and every test passes. Not
   yet seen live: the extension's `hello` with its site ids accepted by the companion (and a stale extension refused
   with "Site mismatch"); a posting's company on a provider's host (now from the registry's `providerHosts` and
   `company`: a Dayforce posting's company now comes from its title or JSON-LD, not the host); and an embedded
   board's frame recognised by the same hosts when access to websites is withheld.
 
-- **The token cuts** (2026-10-12): one live Workday application used `go_next`'s and `add_repeatable`'s `form`
+- **The token cuts:** one live Workday application used `go_next`'s and `add_repeatable`'s `form`
   (one `get_form` in four steps), but still called `list_options` before filling three steps' dropdowns. Not yet
   checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long list, and the lint's findings against the
   PDF. What the runs cost, and what to cut next, is in the todo item "Cut the tokens a panel conversation spends".
@@ -122,7 +104,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
   it's slower, suspect first the adapter trace's calls, then two retries brought back after a revert
   (`openListboxRetrying`, and `back()` seeing a move by step index), then the row Delete; every site's `page.job`
   adds no wait and runs only on reads.
-- **Workday's and Oracle's drivers on the shared ones** (2026-10-11): equal golden schemas and behaviour tests.
+- **Workday's and Oracle's drivers on the shared ones:** equal golden schemas and behaviour tests.
   What changed is small: the shared text driver's reformatted-phone and read-only checks on Workday, a checkbox
   group's `multiple` and `remove_items` there, an uploaded file's name matched regardless of case, and Oracle's
   native checkbox groups, which couldn't be filled before ([adapters](components/adapters.md#a-sites-own-drivers)).

@@ -61,8 +61,8 @@ widely used libraries, so the drivers grow with the libraries sites use, not wit
   (`selectDriver({ settled })`): a quirk of one site's data is better handled where every site benefits (Dayforce's
   dialling codes read "🇨🇦 +1 Canada": the shared option match takes "Canada" for it, rather than the driver
   rewording one site's labels).
-- A driver of the site's own (`<site>/definition/widgets.ts`) only for a widget that is the site's own (Workday's
-  prompt, Oracle's cx-select).
+- A driver of the site's own (in `<site>/definition/`: `widgets.ts`, or a file per widget beside it) only for a
+  widget that is the site's own (Workday's prompt, Oracle's cx-select).
 
 **5. Never submit.** `isSubmit` recognises the site's Submit, by a hook of its own or its words, never by
 `type=submit` alone when the site's other buttons are `type=submit` too (Phenom's Next, Dayforce's Update). `next`
@@ -98,7 +98,7 @@ Create the directory; the conformance test fails until it holds every file below
   the path for one job (a locale, the application's own path). `tenant` and `job` tie a posting to its application
   and a tab to its posting ([which posting](mcp-tools.md#forms)), so read them from the application's URL as well
   as the posting's. `hostPageJob` if companies' careers pages name the site's jobs in their own URLs (Greenhouse's
-  `?gh_jid=`)). `sameJob` if the application's job id differs from the one the posting shows (Phenom's
+  `?gh_jid=`). `sameJob` if the application's job id differs from the one the posting shows (Phenom's
   `jobSeqNo` embeds the requisition): without it the tab is refused as another job's.
 - **Signature:** the provider's own markup on every page of the site (its hooks, class names, script host), never a
   link to it or its embed script, which an employer's careers page has too.
@@ -127,7 +127,7 @@ Create the directory; the conformance test fails until it holds every file below
     no hint and says so in its help.
 - **Buttons** (`addButtons(doc)`) with their kind: `row`, `form` (an inline form opens), `save` (an inline form's,
   or a form that's part of the step), `edit`. Keys `add.<list>`, `save.<section>`, `edit.<section>`.
-- **Rows and saved items** (`rows(doc)`): what can be removed, with its delete button. A saved item (a summary
+- **Rows and saved items** (`rows(doc, sections)`): what can be removed, with its delete button. A saved item (a summary
   without fields) gets a section id `<block>.<kind>-<n>`, `kind` being `experience`, `education` or `item`, and a
   title starting with its list ("Employment History: Analyst, Example Corp"), so the checklist can count it against
   the profile's list.

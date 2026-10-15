@@ -43,16 +43,17 @@ on the companion's review page.
   loopback. Nothing in them fetches anything else (the adapters run in the page's world, under the page's
   policy). `test/manifest.test.ts` guards it.
 - Host permissions: `<all_urls>` (the protocol's `HOST_PERMISSIONS`), granted at install, and no optional ones.
-  The build writes them; a test checks both builds. Every site, because the extension tells a form site by what
+  The build writes them; `test/manifest.test.ts` checks the built manifest. Every site, because the extension tells a form site by what
   its pages show, on whatever host (Phenom and Oracle run on employers' own domains), and reading a page needs
   access to it ([why](sites.md#the-registry)). It also covers `tabs.captureVisibleTab`
   (`tab.screenshot` of a tab in front). Chrome warns "Read and change all your data on all websites" at install.
 - `side_panel.default_path: panel.html`. The action's title is "ezapply".
-- `commands.set-posting`: Alt+Shift+P runs Capture. Not `_execute_action`, which now opens the panel.
+- `commands.set-posting`: Alt+Shift+P runs Capture without opening the panel. It's a command of its own, not
+  `_execute_action`, since the toolbar button opens the panel.
 - Options page embedded (`open_in_tab: false`).
 
 ## Builds (`npm run build -w @ezapply/extension`)
-esbuild bundles `background.js` (ESM), `options.js`, `panel.js` and `panel.css` (ESM, minified, JSX: the UI
+esbuild bundles `background.js` (ESM), `options.js` and `grant.js` (IIFE), `panel.js` and `panel.css` (ESM, minified, JSX: the UI
 package's panel and React, with the base and panel stylesheets; about 700 KB, most of it React and the protocol's
 schemas, which the panel's answer checks use), and one adapter per registry site, `<site>-main.js` from
 `packages/sites/src/<site>/definition/main.ts` (IIFE, 50–80 KB each and without zod: they import only the
@@ -69,9 +70,8 @@ The output is `dist/`, loaded in Chrome with Load unpacked (`background.service_
 `minimum_chrome_version: 120`). It stays at the same path because Chrome derives an unpacked extension's id from
 its folder, and the companion pins that id.
 
-**Chromium only.** Firefox was supported until focus emulation, which needs `chrome.debugger`, an API Firefox
-lacks. A Firefox build would have run every application tab throttled or pulled to the front, so it was dropped
-rather than kept as the slower path.
+**Chromium only.** Focus emulation needs `chrome.debugger`, an API Firefox lacks: a Firefox build would run every
+application tab throttled or pulled to the front, so there is none rather than a slower path.
 
 ## Connection (`CompanionConnection`)
 - **With a stored code:** connect to `ws://127.0.0.1:<port>/bridge`, send `hello` with the code. On
@@ -94,8 +94,8 @@ rather than kept as the slower path.
   5 s while the panel is open. The alarm can't do this itself: Chrome fires alarms at most every 30 s, so with
   no panel open a reconnect still takes up to 30 s. The alarm is created every
   time the background starts, if it doesn't exist (`ensureReconnectAlarm`): Chrome may clear alarms on restart,
-  so an alarm made only at install left the extension
-  disconnected after a browser restart, until the user clicked Capture. Creating it only when missing
+  so an alarm made only at install would leave the extension disconnected after a browser restart. Creating it
+  only when missing
   keeps a wake-up from pushing the next firing back. `test/background.test.ts` loads the background with a
   stubbed API and checks this.
 - **Settings changes** (`port`, `pairingToken`) reconnect only when they differ from the live connection's.
@@ -115,6 +115,7 @@ over a runtime port (`ezapply-panel`) to the background:
   (`panel.tab`); none without a connection or a web page.
 - **`openTab`**: an `http(s)` address in a new tab of the panel's window (the posting's application).
 - **`connection`**: the connection's state, as the badge shows it.
+- **`openSettings`**: the options page, opened by the panel itself (`runtime.openOptionsPage`), with nothing relayed.
 
 The background pushes to every open panel: the connection's state when it changes, "the tab changed" when a tab is
 activated or navigates, and the companion's `panel.update`s. It tells the companion how many panels are open
@@ -142,12 +143,12 @@ and a capture of the top frame alone holds only the company's page around it.
   URL and title, takes the content from that frame, and sets `frameUrl`.
 - A frame that isn't rendered (its body fails `checkVisibility`, as in the `display:none` iframe of an invisible
   reCAPTCHA) reports no visible text. Its `innerText` would otherwise fall back to `textContent`, scripts
-  included, and could outweigh the page itself: a job page that shows its description without `JobPosting`
-  data (LinkedIn's) was captured as the reCAPTCHA frame, with an empty description.
+  included, and could outweigh the page itself, so a job page that shows its description without `JobPosting`
+  data (LinkedIn's) would be captured as the reCAPTCHA frame, with an empty description.
 - `unreadableBoard`: when the chosen frame has no `JobPosting` data but contains a visible iframe of at least
-  300×300 from a job board's host that couldn't be read (a registry site's `providerHosts`, or one of a
-  few boards with no adapter, `OTHER_BOARD_HOST`) (only when access to websites is withheld), nothing
-  is captured: the board's URL opens in a new tab next to the page, and the badge says to click Capture there.
+  300×300 from a job board's host (a registry site's `providerHosts`, or one of a few boards with no adapter,
+  `OTHER_BOARD_HOST`) that the capture didn't read (as when access to websites is withheld), nothing is captured:
+  the board's URL opens in a new tab next to the page, and the badge and the panel say to click Capture there.
 
 ## Telling a page's site (`frames.ts`)
 A page (or a frame) is a site's when its body shows it: `pageSite` runs in the page (isolated world,
@@ -241,17 +242,17 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    no focus events, which widgets that track focus depend on
    ([Workday's dates](sites/workday.md#dates-typed-into-workdays-split-widget)).
 
-   **Why nothing is brought to the front.** Earlier builds switched to the tab and raised the browser window
-   (`windows.update`, restoring a minimized one) when focus emulation wasn't there. That pulled the browser in
-   front of the terminal the user was typing in, took keyboard focus, could be refused by Windows' focus-stealing
-   rules, and a window kept minimized or covered stayed hidden anyway. Focus emulation needs none of it.
+   **Why nothing is brought to the front, even without focus emulation.** Switching to the tab and raising the
+   browser window (`windows.update`) pulls the browser in front of the terminal the user is typing in, takes
+   keyboard focus, can be refused by Windows' focus-stealing rules, and a window kept minimized or covered stays
+   hidden anyway. Focus emulation needs none of it.
 
 ## Focus emulation (`emulation.ts`)
 Chrome slows a hidden page's timers to about once a second (once a minute for chained timers after five hidden
 minutes), stops its animation frames, and under Energy Saver may freeze it outright. A page whose window is behind
 another app gets no focus events. Every adapter wait is a timer, and Workday's widgets render on timers and
-animation frames and track focus, so a hidden tab filled many times slower, past the companion's timeouts, and
-Workday's split dates weren't taken behind the terminal ([the tab at full speed](../mcp-tools.md#forms)).
+animation frames and track focus, so a hidden tab fills many times slower, past the companion's timeouts, and
+Workday's split dates aren't taken behind the terminal ([the tab at full speed](../mcp-tools.md#forms)).
 
 `emulateFocus(tabId)` attaches `chrome.debugger` to the tab (DevTools protocol `1.3`) and sends
 `Emulation.setFocusEmulationEnabled({ enabled: true })`. The page then reports itself focused, and Chrome counts
@@ -262,7 +263,7 @@ focus events all behave as in a tab in front, the page's own code included.
 **Why the debugger, not a script in the page.** Scripts that replace `setTimeout` (a worker clock, as HackTimer
 does) or `document.visibilityState` speed up only the code that goes through them: Workday's own timers, animation
 frames and CSS transitions stay throttled, and focus events still don't arrive. Bringing the tab and window to the
-front (what `tab.show` did before) works only while the user leaves it there, and pulls the browser in front of
+front works only while the user leaves it there, and pulls the browser in front of
 their terminal. Launch flags (`--disable-background-timer-throttling`) need a browser
 started specially. Other browser-automation tools settled on the same command for the same problem.
 
@@ -293,7 +294,7 @@ and `frames` (embedded applications, when there are any). The companion picks fo
 ## Badge and options
 - Badge: green = connected, grey = connecting or disconnected, amber = not paired or a capture is pending
   (`…`), red = error; briefly ✓ or `!` after a capture; the number of cards waiting in the panel (amber), pushed by
-  the companion even while no panel is open. The tooltip shows the status, the cards waiting, any pending capture,
+  the companion even while no panel is open (shown while connected; it takes the pending capture's place). The tooltip shows the status, the cards waiting, any pending capture,
   and the active posting.
 - Options page: connection status (live), a **Grant access** row while access to websites is missing ("No access
   to websites, so ezapply can't read or fill application forms"), the extension id the companion pins (from the

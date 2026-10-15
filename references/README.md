@@ -2,8 +2,7 @@
 
 The complete, current description of ezapply: what it's for, how it's built, and how every part works.
 **This folder is the source of truth**, including the reasons behind the design (the lean decisions log is
-[status.md](status.md#decisions)). The original design plan was removed once
-built; what changed from it is in [status.md](status.md#where-the-build-departs-from-the-original-plan). Planned work is in `todo/` (its map is `todo/todo.md`). The
+[status.md](status.md#decisions)). Planned work is in `todo/` (its map is `todo/todo.md`). The
 repo's `CLAUDE.md` requires every change to keep this folder accurate and complete.
 
 ## By task
@@ -35,7 +34,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 |---|---|
 | [philosophy.md](philosophy.md) | Purpose, principles, goals and non-goals |
 | [architecture.md](architecture.md) | The parts, processes, transports, lifecycle, where state lives, cross-cutting concerns |
-| [flows.md](flows.md) | End to end: setup and onboarding (on its page), pairing, capture, resume, cover letter, bundle, filling the application |
+| [flows.md](flows.md) | End to end: setup and onboarding (on its page), pairing, capture, resume, cover letter, bundle, filling the application, review and attach |
 | [components/protocol.md](components/protocol.md) | `packages/protocol`: bridge messages, RPC, a site registry entry's shape, form and posting schemas, errors |
 | [components/companion.md](components/companion.md) | `packages/companion`: startup inside `ezapply`, HTTP surface, sessions, MCP server, bridge, readiness check |
 | [components/postings.md](components/postings.md) | Posting capture, extraction, folders, statuses |
@@ -49,14 +48,14 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 | [components/sites/workday.md](components/sites/workday.md), [oracle.md](components/sites/oracle.md), [greenhouse.md](components/sites/greenhouse.md), [lever.md](components/sites/lever.md), [ashby.md](components/sites/ashby.md), [phenom.md](components/sites/phenom.md), [dayforce.md](components/sites/dayforce.md), [successfactors.md](components/sites/successfactors.md) | Each site, only what it does differently: its pages, registry entry and signature, its definition's files and rules, what was verified live and what wasn't |
 | [components/ui.md](components/ui.md) | `packages/ui`: the side panel's components, the review and onboarding pages, the PDF viewer, what changed since the last review, how the pages talk to the companion, the build |
 | [components/agent.md](components/agent.md) | `companion/src/agent/`: Claude Code run headless for the side panel, its conversations, the agent's questions and approvals (cards), the panel's methods and updates |
-| [components/cli.md](components/cli.md) | `packages/cli`: the `ezapply` command (hosting the companion for the side panel), init, the MCP relay, doctor, debug mode, the commands that were removed |
+| [components/cli.md](components/cli.md) | `packages/cli`: the `ezapply` command (hosting the companion for the side panel), init, the MCP relay, doctor, debug mode, the commands it doesn't have and why |
 | [components/workspace.md](components/workspace.md) | The user's workspace: layout, agent file, skills, Claude Code settings |
 | [mcp-tools.md](mcp-tools.md) | Every MCP tool: inputs, behaviour, errors |
 | [data-formats.md](data-formats.md) | Every file ezapply reads or writes, with its schema |
 | [security.md](security.md) | Threat model and the controls against each threat |
 | [development.md](development.md) | Repo layout, build, tests, CI, conventions, how to extend |
 | [building-adapters.md](building-adapters.md) | Adding a job site: the process, what goes where (registry, definition, site notes), drivers, tests, checking it live |
-| [status.md](status.md) | The decisions log, what still needs a live run, known issues, open questions, where the build departs from the original plan |
+| [status.md](status.md) | The decisions log, what still needs a live run, known issues, open questions |
 
 ## Reading order
 For a change, the task's row above is enough to start; read the code next. New to the project, or changing how the

@@ -104,6 +104,9 @@ Submit (`application-submit`), the `review` page kind: `next` refuses there, and
 user. `isSubmit` is that hook, or a control whose text, `aria-label` or value reads "Submit" or "Submit
 application": the Updates are `type=submit` buttons too, so the type says nothing.
 
+**The job** is the header's title (`job-detail-title`) and its "Req #0000" (`job-detail-job-req-id`) without the
+prefix, as `reqId`.
+
 **Other pages.** The confirmation is told by the page's own text (`main`), never the body's: the page's scripts
 carry every message of the portal, "your application has been submitted" included. The posting's Apply is found by
 its words ("Apply", or `aria-label` "Apply for …"), since the posting page wasn't saved.

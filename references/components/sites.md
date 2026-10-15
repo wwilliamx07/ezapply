@@ -47,8 +47,8 @@ packages/engine/                @ezapply/engine: the adapter engine and its driv
 - **The lists stay per side.** The extension's bundles import only their own definition (and the registry), never
   notes or readers; the companion imports the registry, the notes and the readers, never a definition. Each list is
   keyed by every registry site, so a site missing from one doesn't compile, and `conformance.test.ts` checks that the
-  directories, `SITES` and every list name the same sites, that each directory has its files, and that only a site
-  with a `reader.ts` is in `POSTING_READERS`.
+  directories, `SITES` and every list name the same sites, that each directory has its files and saved pages, that
+  every wait of every site is a number, and that only a site with a `reader.ts` is in `POSTING_READERS`.
 - **Dependencies:** `protocol` ← `engine` ← `sites` ← `extension`, `companion`. The engine is a package of its own
   because the definitions import it and the extension imports the definitions. The protocol keeps the entry's shape
   (`SiteInfo`), the waits' (`Timing`, `STANDARD_WAITS`) and `HOST_PERMISSIONS`, and knows no site: the wire takes a site
@@ -67,7 +67,7 @@ Every job site whose application forms ezapply fills has one entry (`SiteInfo`, 
 | Field | Meaning |
 |---|---|
 | `id` | `FormSiteId`, derived from `SITES`: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce`, `successfactors` |
-| `name` | As the user knows it ("Oracle Recruiting Cloud"); the options page uses it |
+| `name` | As the user knows it ("Oracle Recruiting Cloud"); the form tools' messages (the supported sites, a tab on another site) and the panel use it |
 | `signature` | What the site's own pages render, as a CSS selector list: a page (or frame) is the site's when its document matches any part. How the extension tells a site, before the URL ([telling a site](extension.md#telling-a-pages-site-framests)). Each part is the provider's own markup (its widgets' attributes, class names, script host), never a link to it or its embed script, which an employer's careers page has too |
 | `isUrl(url)` | A posting or application page of the site by its URL alone: what decides where no page can be read (a captured page's links, the companion's canonical URLs, a tab the extension can't read) |
 | `tenant(url)`, `job(url)` | The employer's space and the job, lowercased, read from a URL of the site's (by `isUrl`, or a tab whose page showed the site) |
@@ -114,8 +114,8 @@ be built from real markup and checked live without an account. The others couldn
 | SmartRecruiters | Bot protection (DataDome) on its application pages. Not worked around, on purpose |
 | Taleo, BrassRing | The application is behind a candidate account on each employer's site |
 
-Each needs pages the user saves from a real application in their own browser. None is planned yet. SuccessFactors was
-in this list too; it was built from such a page ([below](sites/successfactors.md)).
+Each needs pages the user saves from a real application in their own browser. None is planned yet. SuccessFactors,
+whose application is also behind a candidate account, was built from such a page ([its page](sites/successfactors.md)).
 
 ## What the three boards share
 - **Registry entries** (each board's `registry.ts`): https only; the board's company as tenant and its posting as
@@ -133,8 +133,8 @@ in this list too; it was built from such a page ([below](sites/successfactors.md
   the page's `next`, so `nextLabel` shows it, and the guard blocks any synthetic press of it.
 - **The job title** is the page's own title, which is also the step's (`titledJob`): Greenhouse's
   `.job__title h1`, Lever's `.posting-header h2` (the application page; `.posting-headline h2` on the posting's),
-  Ashby's `h1`. Read on each live snapshot. At first Lever looked only for `.posting-headline`, which
-  the application page doesn't have, so its step was titled "Application".
+  Ashby's `h1`. Read on each live snapshot. Lever needs both: its application page has no `.posting-headline`,
+  and without a title the step is "Application".
 - **Embedded boards:** a company's careers page that names a Greenhouse job in its URL (`?gh_jid=`,
   `hostPageJob`) ties the posting captured there to that job, so its application is told apart from others
   ([which posting](../mcp-tools.md#forms)).
@@ -147,7 +147,7 @@ in this list too; it was built from such a page ([below](sites/successfactors.md
 
 ## What was verified, and how
 Each board's definition was built from a live application page rendered by headless Edge (saved, without scripts and
-styles, as the board's `fixtures/`: `greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html`, and later
+styles, as the board's `fixtures/`: `greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html` and
 `ashby-groups.html`, employer details replaced; each board's `test/live.test.ts` reads them), then checked on live
 public forms with fake values, never submitting ([how](adapters.md#checking-a-site-live)). What each run showed, and
 what's still untried, is on the board's page; the other sites' are on theirs.

@@ -13,9 +13,9 @@ address, screening answers): on a page the user types into the files directly, n
 chat turn is spent on it. What needs judgment stays the agent's ([onboarding](#the-onboarding-page-onboard)).
 Everything else happens in the side panel ([philosophy](../philosophy.md)).
 
-**Why React.** The earlier review page was a template string with one inline script, enough for a form and a
-Send button. The viewer (pages, highlights, comments, a diff) and onboarding (eleven steps, forms, the agent's
-progress arriving live) are state a component tree handles and string templates don't. **Why esbuild:** the
+**Why React.** A template string with one inline script is enough for a form and a Send button, as the
+companion's own pages are. The viewer (pages, highlights, comments, a diff) and onboarding (eleven steps, forms,
+the agent's progress arriving live) are state a component tree handles and string templates don't. **Why esbuild:** the
 extension already builds with it; no dev server or framework build is needed.
 
 | Path | Role |
@@ -31,7 +31,7 @@ extension already builds with it; no dev server or framework build is needed.
 | `src/review/` | The review page: `App.tsx`, `Viewer.tsx` (the PDF viewer, shared with onboarding), `Panel.tsx`, `changes.ts`, `draft.ts`, `selection.ts`, `review.css`, `viewer.css`, `textlayer.css` |
 | `src/onboard/` | The onboarding page: `App.tsx`, `state.ts`, `parts.tsx`, `steps-setup.tsx`, `steps-documents.tsx`, `ProfileStep.tsx`, `onboard.css` |
 | `src/panel/` | The side panel: `App.tsx` (`PanelApp`, `Conversation`, `REQUESTS`, `withEvent`), `cards.tsx` (question and approval cards: `AskCardView`, `PermissionCardView`, `initialDraft`, `answerOf`, `permissionBody`), `markdown.tsx`, `transport.ts` (`PanelTransport`), `panel.css`, `index.ts`. Exported as `@ezapply/ui/panel` (with `@ezapply/ui/base.css` and `@ezapply/ui/panel.css`) for the extension to bundle |
-| `test/review.test.tsx`, `test/panel.test.tsx` | Unit and component tests ([development](../development.md#tests)) |
+| `test/review.test.tsx`, `test/panel.test.tsx`, `test/onboard.test.tsx`, `test/brand.test.ts` | Unit and component tests ([development](../development.md#tests)) |
 
 ## The build (`npm run build -w @ezapply/ui`)
 - **Bundles:** `review` and `onboard` (`src/<page>/main.tsx`) and `base` (`src/styles/base.css`), as ES modules with
@@ -53,7 +53,7 @@ extension already builds with it; no dev server or framework build is needed.
 ## Serving (`companion/src/ui/assets.ts`)
 `UiAssets` finds `packages/ui/dist` through the workspace's link to `@ezapply/ui` (a companion dependency).
 - **`/ui/<file>`:** files from `dist/` only (a path that leaves it, or holds a NUL, is a 404). Hashed names are
-  cached for a year as immutable, pdf.js's data files for a day; `nosniff` and `Cross-Origin-Resource-Policy:
+  cached for a year as immutable, everything else (pdf.js's data files, the favicon, `manifest.json`) for a day; `nosniff` and `Cross-Origin-Resource-Policy:
   same-origin` on all.
 - **A page's HTML** (`page(res, page, title, base)`): an empty `#root` with `data-base` (the page's API path),
   the favicon, the base and page stylesheets, and the page's module script. Without a built UI, a 503 saying to
@@ -88,17 +88,16 @@ extension already builds with it; no dev server or framework build is needed.
 Everything the user does with ezapply after setup ("Everything in the browser"): the extension shows it as Chrome's
 side panel ([extension](extension.md#the-side-panel)). It reaches ezapply through a
 `PanelTransport`, which the extension implements over its background and tests fake: `call` (the companion's
-`panel.*` methods: [agent](agent.md#the-panels-side-panelts)), `capture`, `tab`, `openTab`, `connection`,
-`subscribe` (pushes: the connection's state, "the tab changed", the companion's updates).
+`panel.*` methods: [agent](agent.md#the-panels-side-panelts)), `capture`, `tab`, `openTab`, `openSettings`,
+`connection`, `subscribe` (pushes: the connection's state, "the tab changed", the companion's updates).
 
 **Layout.** Only the conversation scrolls. The header sits above it, and the buttons and the chat box sit in the
 footer below it, so however long the conversation gets, the buttons are next to where the user types. The
-posting's details and its documents moved into a popover from the header. An earlier layout put the posting
-card, the buttons and the documents above the conversation in the same scroll, so a long conversation pushed the
-buttons out of reach. Splitting that into two scrolling boxes (the controls capped at half the height) fixed the
-reach but split the panel into two cramped areas. The other candidates were a sticky posting strip under the
-header, tabs for the chat and the posting, and icon buttons in the header. The footer layout was chosen because the
-buttons belong where the user's attention already is. Capture sits beside the picker rather than with
+posting's details and its documents are in a popover from the header. Rejected: the posting card, buttons and
+documents above the conversation in one scroll (a long conversation pushes the buttons out of reach); two
+scrolling boxes, the controls capped at half the height (two cramped areas); a sticky posting strip under the
+header; tabs for the chat and the posting; icon buttons in the header. The buttons belong where the user's
+attention already is. Capture sits beside the picker rather than with
 the footer's buttons: it adds a posting to choose from, while those act on the chosen one, and among them it read
 as one of the posting's own actions. The menus and the popover close on a click elsewhere. Top
 to bottom:
@@ -126,16 +125,16 @@ to bottom:
    yet." before there are any), an approved document with a **trash** button that deletes the PDF (asks first; its
    LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
    shown, documents or application; the files stay); and **Delete posting** (red when hovered; asks first; disabled
-   while Claude works), which deletes the posting's folder and both its conversations for good, after which the panel follows the active
+   while Claude works; refused while the posting has a review open), which deletes the posting's folder and both its conversations for good, after which the panel follows the active
    posting again (none). For the general conversation, a line saying there's no posting. The panel
    shows only approved or not because approving is the one thing the user does with a document. The finer states
    (`DocumentState`) and the posting's status (`PostingStatus`: drafting, attached, …) are still kept and used by
-   the tools and skills; they just aren't shown. A posting-level "documents approved" tag was dropped as well:
-   each document's own tag already says it.
+   the tools and skills; they just aren't shown. No posting-level "documents approved" tag either: each
+   document's own tag already says it.
 4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude" until taken); Claude's text
    as Markdown built as elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics;
    links stay text); each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary),
-   unfolding to its error or arguments, red when it failed, "…" while it runs; settled cards; each turn's end with
+   unfolding to its error or its summary, red when it failed, "…" while it runs; settled cards; each turn's end with
    its cost (the session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest
    event.
 5. **Needs you** (while anything waits), at the conversation's end, just above the buttons: every open card, oldest
@@ -161,11 +160,11 @@ to bottom:
    companion has answered the send and the state read after it says Claude works, the buttons and Send are
    disabled and the box is read-only (it keeps its focus); a ref holds it within the same frame, so a double click
    or a second Enter sends one message, not two. *Why not just "while Claude works":* the state says so only once
-   the companion's answer arrives, and a second press in that gap queued a second message.
+   the companion's answer arrives, and a second press in that gap would queue a second message.
 8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
-   waiting), or that the agent runs only under `ezapply`.
+   waiting), or that Claude isn't available (Claude Code wasn't found when ezapply started).
 9. **Settings line:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in
    its title), the model (Fable, Opus, Sonnet, Haiku) and the effort (Low to Max), which ezapply keeps and applies
    to the running conversation, the effort from its next message
@@ -335,8 +334,7 @@ gets one (`agentIn` in the page's state):
   returns. The task is running from then; Claude busy in another conversation fails it with why, and the page
   offers it again. The page shows Claude as listening while the agent is available, and says to follow it in the
   ezapply panel, where its commands are approved.
-- **Without a panel agent (`terminal`; a companion started without Claude Code, which only tests do now that
-  `ezapply chat` is gone):** the agent sits in a blocking [`onboarding { wait: true }`](../mcp-tools.md#setup-and-status)
+- **Without a panel agent (`terminal`; a companion started without Claude Code, which only tests do):** the agent sits in a blocking [`onboarding { wait: true }`](../mcp-tools.md#setup-and-status)
   call; a task the page queues wakes it, and it gets `{ id, kind, params, how }`. Its report
   (`onboarding { taskId, result, wait: true }`) marks the task done or failed and waits for the next in the same call. Tasks
   are taken in the order asked, one at a time; a task taken and never reported is given again, in case the agent

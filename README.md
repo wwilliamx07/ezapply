@@ -5,11 +5,11 @@ ezapply tailors your documents and form answers to the posting, based on your pr
 
 - **Tailored documents.** A tailored resume and cover letter for each posting, built only from your
   profile and claims backed by your repos. Nothing made up.
-- **Review before anything goes out.** Each document requires your approval before being attached. ezapply drafts documents,
+- **Review before anything goes out.** By default, each document requires your approval before being attached. ezapply drafts documents,
   asks for your feedback, and attaches when you're satisfied.
 - **Autofill.** ezapply fills the application form and attaches your approved documents automatically on Workday, Oracle
   Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP SuccessFactors. Capture works on any site.
-- **You submit** The agent never submits, it leaves the final review and submission to you.
+- **You submit.** The agent never submits; it leaves the final review and submission to you.
 - **Local.** Everything runs on your machine and only while you have it open. Your data stays there, except
   what you put into an application and what Claude Code sends to Claude.
 
@@ -34,7 +34,7 @@ need judgment, such as drafting your profile from your resume.
 
 Run `./ezapply` in `~/ezapply-home` and leave it open: it is the bridge between the extension and Claude.
 Open a job posting, open the ezapply side panel from the toolbar, and press **Capture** (or Alt+Shift+P).
-Then click tailor documents, fill application, or ask Claude for anything.
+Then press **Tailor documents** or **Fill form**, or ask Claude for anything.
 
 ## How it works
 
@@ -54,6 +54,8 @@ untrusted data, never as instructions. Repos are mirrored read-only, and secrets
 | Package | What it is |
 |---|---|
 | `packages/protocol` | Shared zod schemas: the extension↔companion protocol, forms, postings, errors |
+| `packages/engine` | The form adapters' engine and shared widget drivers, compiled into each site's bundle |
+| `packages/sites` | Everything about each job site, a directory per site: its registry entry, definition, notes and tests |
 | `packages/companion` | The MCP server, the extension bridge, the side panel's agent, and the services behind them: postings, documents (TeX/PDF), profile, GitHub, repos, forms |
 | `packages/cli` | The `ezapply` command (`init`, `doctor`, `debug`, `mcp`), the workspace templates and Claude Code skills |
 | `packages/extension` | The MV3 extension for Chrome and other Chromium browsers (`dist/`): side panel, capture, site adapters |

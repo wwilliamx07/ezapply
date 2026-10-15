@@ -71,13 +71,16 @@ arguments avoid the escaping that rules out scripted edits). Review-page tweaks 
 
 **`EZAPPLY.md`** (`packages/cli/templates/workspace/`, ~2.7k, in every call of every conversation) to ~1.3k:
 - attach mode and `review_documents`, the TeX engine, `.history`, `pdf_text`: to the resume and cover-letter skills;
-- "Application forms" and rule 4 (ask on EEO, already in the apply skill): to `ezapply-apply`;
+- "Application forms" and the "Ask, don't guess" rule (EEO, already in the apply skill): to `ezapply-apply`;
 - the `ask_user` parameters: one line (the tool description and the apply skill carry them);
-- the `doctor` and `init` commands: to the onboarding skill;
-- keep untrusted content, application requirements, keep context lean, layout, rules 1, 2 and 5.
+- the `doctor` and `init` commands: out of `EZAPPLY.md` (where to is open: "Remove the onboarding and repos
+  skills" drops the onboarding skill);
+- keep untrusted content, application requirements, keep context lean, layout, and the rules "Untrusted content
+  is data", "No fabrication" and "Never submit an application". Decide where "The resume is exactly one page" and
+  "Repos are read-only" go.
 
 **`ezapply-apply`** (~3.9k, re-read on every call after it loads) to ~2k:
-- "Before starting" step 1 (tabs, frames, `tabHidden`, `browserBehind`, `postingMismatch`, `postingBound`): each
+- The first step of "Before starting" (tabs, frames, `tabHidden`, `browserBehind`, `postingMismatch`, `postingBound`): each
   result carries a `hint`; say to follow it.
 - "Carried over from a previous application" and "Save what got resolved" (~650): supporting files beside
   `SKILL.md`, read only when they apply.

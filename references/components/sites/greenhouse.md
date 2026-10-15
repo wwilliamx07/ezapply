@@ -9,7 +9,7 @@ whether it's the tab's own URL or a frame inside a company's careers page; in a 
 there ([embedded applications](../extension.md#embedded-applications)), with its board from `for` and its job from
 `token`.
 
-**Fields**, in the form (`form#application-form`), in page order:
+**Fields**, in the form (`form#application-form`, or `form.application--form`), in page order:
 - `.text-input-wrapper`: a text input or textarea;
 - `.select__container`: a react-select list ([driven through its props](../adapters.md#react-select-through-its-props));
   the phone's country list is one. Three load as you type: Location (City) (`candidate-location`, no `loadOptions`:

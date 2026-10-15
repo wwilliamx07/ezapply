@@ -22,9 +22,9 @@ state value that expires after 30 minutes.
    start the flow) and opens it through the `Opener` in the browser the extension runs in (the system default until the
    extension has connected), which accepts only `http://127.0.0.1:<port>/` URLs. The result says whether that
    worked (`openedBrowser`, and `openedIn`), and its `tell`
-   text gives the user the URL to open when it didn't (no `xdg-open` on a headless Linux, say). (It used to
-   call the file opener, which checks that its argument exists on disk: a URL never does, so no browser
-   ever opened while the text said one had.)
+   text gives the user the URL to open when it didn't (no `xdg-open` on a headless Linux, say). It goes
+   through the `Opener`'s `url`, not its `file`, which checks that its argument exists on disk: a URL never
+   does.
 2. **First time only** (`/github/start` with no app registered): a page posts an App Manifest to GitHub
    (`ezapply-<random>`, private, read-only permissions, callback and setup URLs on the companion). The user
    clicks "Create".
@@ -73,7 +73,7 @@ them). A port mismatch doesn't stop `github_login` when an app is chosen, since 
   parallel subagents whose `repo_sync` calls all ask for a token. Concurrent callers share one refresh in
   flight; the refresh re-reads the stored token first (another call may just have refreshed it), and if
   GitHub rejects the refresh token after someone else replaced it, the new stored token is used. Without
-  this the second caller got `bad_refresh_token` and onboarding needed a fresh login midway.
+  this the second caller would get `bad_refresh_token` and onboarding would need a fresh login midway.
 - A stored token that can't be parsed reads as logged out (and is logged), never as a crash.
 - `github_logout` revokes the token with GitHub (best effort) and deletes it locally. The app and cached
   repos stay.
@@ -84,9 +84,10 @@ them). A port mismatch doesn't stop `github_login` when an app is chosen, since 
 The app's callback and setup URLs contain the companion's port at creation time, so after
 `ezapply init --port N` GitHub would redirect logins to the old port. `github-app.json` records
 `localBaseUrl` at creation; when it differs from where the companion listens, `github_status` reports
-`portMismatch { appUrl, localUrl, hint }` (move ezapply back and restart the chat, or change the Callback URL and Setup URL
-in the app's settings on GitHub), `github_login` refuses with that hint, and `workspace_check` counts
-`github_login` as not done. Apps created before this field existed can't be checked.
+`portMismatch { appUrl, localUrl, hint }` (move ezapply back with `ezapply init --port <old>` and restart
+ezapply, or change the Callback URL and Setup URL in the app's settings on GitHub), `github_login` without
+`app` refuses with that hint, and `workspace_check` counts `github_login` as not done. A `github-app.json`
+without `localBaseUrl` (written by an older build) can't be checked.
 
 ### Listing repos
 `github_list_repos` walks every installation of the app the user can see (`/user/installations`, then each
@@ -112,12 +113,15 @@ anonymously.
   fetches the old side's blobs, which `repo_diff` needs and couldn't fetch itself into a read-only `.git`.
 - **Diff** (`repo_diff`): `git diff --no-ext-diff --no-textconv --no-renames <indexedSha> HEAD -- <paths>`, with
   hooks and every transport off, so it never touches the network and the repo's `.gitattributes` can't make
-  git run a diff driver. Paths that leave the repo, are absolute or start with `-` are refused. Output past
+  git run a diff driver. A repo never indexed is refused (index it whole), and so are paths that leave the
+  repo, are absolute or start with `-`. Output past
   60k characters is cut, with a note to ask for fewer paths.
-- **Hardening on every git command:** HTTPS only for real remotes (`protocol.allow=never`,
+- **Hardening on every git command that reaches the remote or rewrites the tree** (clone, fetch, the
+  numstat, `ls-remote`, `reset`, `clean`): HTTPS only for real remotes (`protocol.allow=never`,
   `protocol.https.allow=always`, so no `file://`, ssh, `ext::` or submodule transports), symlinks off, hooks
-  off, credential helpers off, and the token passed per command, never written to `.git/config`.
-  `GIT_TERMINAL_PROMPT=0` and no askpass, so git never prompts.
+  off, credential helpers off, and the token passed per command, never written to `.git/config`. Local reads
+  (`rev-parse`, `ls-files`, `log`) run plain. Every git command gets `GIT_TERMINAL_PROMPT=0`,
+  `GCM_INTERACTIVE=never` and no askpass, so git never prompts, and a 10-minute timeout unless stated.
 - **The token travels in the environment** (`GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=http.extraHeader`,
   `GIT_CONFIG_VALUE_0=Authorization: Basic …`), not as `-c http.extraHeader=…` on the command line: on Linux
   other local users can read a process's arguments (`/proc/<pid>/cmdline`) but not its environment. This
@@ -142,7 +146,7 @@ anonymously.
   the timers of repos it no longer lists ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
 
 ## Contributions (`repo_contributions`)
-From commit history only (no file contents): total commits, the user's commits (matched by GitHub noreply
+From commit history only (no file contents; merge commits left out): total commits, the user's commits (matched by GitHub noreply
 email, login or display name), share, first and last commit dates, the top 25 areas (first two path
 segments) they changed, and the top 8 authors. If nothing matches, the hint says to ask the user which
 author name or email they commit with. Claims in shared repos are limited to the user's own work.

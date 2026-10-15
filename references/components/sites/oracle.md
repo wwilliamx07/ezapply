@@ -8,9 +8,12 @@ One of [the sites](../sites.md): only what this site does differently from [the 
 components (`apply-flow`, `apply-flow-block`, `apply-flow-header`), its dialogs (`.app-dialog__wrapper.oj-dialog-body`)
 and its scripts' path (`/hcmUI/CandidateExperience/`). Where no page can be read, `isOracleUrl` goes by the path:
 https, an optional `hcmUI/CandidateExperience`, a language, `sites/<site number>`, then `job`, `jobs`,
-`requisitions` or `my-profile`. The **tenant** is host plus site number, lowercased (`jobs.example.com/cx_1`);
-a page told Oracle's by its body on a URL of another shape has neither tenant nor job, and its tab is matched by its
-binding or what the page shows. The pages are Knockout components with React widgets inside.
+`requisitions` or `my-profile`. The **tenant** is host plus site number, lowercased (`jobs.example.com/cx_1`),
+and the **job** the id after `job/`; a page told Oracle's by its body on a URL of another shape has neither tenant
+nor job, and its tab is matched by its binding or what the page shows. The canonical path drops the language segment
+and whatever follows the job id (`/apply/section/1`), so a capture on the application is the job page's posting.
+`oraclecloud.com` hosts are provider hosts (the pod names Oracle's data centre), with no `company`: there, a
+posting's company comes from its JSON-LD or title, never the host. The pages are Knockout components with React widgets inside.
 
 | File | Holds |
 |---|---|
@@ -32,7 +35,7 @@ button is Submit on the last section, so no posting reaches `filled` on Oracle. 
 "Address"…), each of rows. A site shows either **every section on one page**, with Submit the only button (`step.title`
 joins the section titles; `go_next` refuses, the agent fills everything and hands over), or **one section per page**
 with Next (`applyFlowPaginationNextButton`) and Previous, and "step 2 of 4" from the flow's hidden heading (from the
-page's templates, not seen live). The job is that heading's part before "application, step"; worded otherwise (another
+page's templates, not seen live). The job's title is that heading's part before "application, step"; worded otherwise (another
 language), none. The "Import your profile" pre-section is left out.
 
 **Fields.** Each visible innermost `.input-row`; the phone row gives `phoneCountryCode` (a list) and `phoneNumber`;
@@ -95,8 +98,8 @@ choice. Nothing matches: the options go back and the widget restores its value. 
   bundle's templates: every widget, dependent lists, the Escape trap, uploads and removals, inline forms and Save,
   tile and timeline deletes, the multi-page flow, the guard; the companion's e2e tests run on it too.
 - **Real applications:** text, pills, native radios, dates, lists, uploads, and education and work entries through
-  the inline form were filled. Their failures (a city shown shorter than its option, the re-rendered city input, the
-  postal code by its full label, a reformatted phone number, stale errors, "Saved" as an error, then the address and
-  school lists' late search) are fixed and reproduced by the fixture, whose tests fail on the old logic. A Cover
-  Letter field missing from `get_form` on one page is unexplained.
+  the inline form were filled. What they showed (a city shown shorter than its option, the re-rendered city input,
+  the postal code by its full label, a reformatted phone number, stale errors, "Saved" as an error, the address and
+  school lists' late search) is handled above and reproduced by the fixture's tests. A Cover Letter field missing
+  from `get_form` on one page is unexplained.
 - **Not yet live:** language and license tiles, deletes, the multi-page flow, the confirmation page.

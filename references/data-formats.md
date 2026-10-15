@@ -13,24 +13,24 @@ and adds a migration (run by `ezapply init`). Schemas are zod definitions in the
 | `port` | default 17373 |
 | `mcpToken` | bearer token for `/mcp` (43 base64url chars), presented by the relay |
 | `pairingToken` | the extension's code, `XXXX-XXXX-XXXX-XXXX` from an unambiguous alphabet; rotated when a paired extension is forgotten |
-| `pairedExtensionId?` | pinned extension id (the 32 a–p of `chrome-extension://…`). One pinned by a Firefox build (an install UUID) no longer matches anything: `extension_pair` with `replace: true` pairs the Chrome copy |
+| `pairedExtensionId?` | pinned extension id (the 32 a–p of `chrome-extension://…`); `extension_pair` with `replace: true` forgets it, so another copy can pair |
 | `workspace` | absolute workspace path |
 
 A running companion writes only the pairing fields, into the file as it is at that moment, so edits made while
 ezapply runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix
 it, or delete it and run `ezapply init`), not as a stack trace.
 
-**From earlier builds.** The file used to be `daemon.json`; loading the config moves it to `config.json` when
-there's no `config.json` yet, so the tokens and pairing carry over. Its `idleTimeoutMinutes` (the background
-daemon's idle stop) is dropped on the next write. The daemon's `daemon-state.json` may still sit beside it;
-nothing reads it, and it can be deleted.
+**From older builds.** When there's no `config.json`, loading the config renames an older build's `daemon.json`
+to it, so the tokens and pairing carry over; keys the schema doesn't know (`idleTimeoutMinutes`) are dropped on
+the next write. Nothing reads a `daemon-state.json` beside it, and it can be deleted.
 
 ### `github-app.json` (`companion/src/github/service.ts`)
 `{ schemaVersion: 1, appId?, slug, clientId, htmlUrl, owner?, createdAt, origin?, localBaseUrl? }`: the public
 parts of the user's GitHub App. `origin`: `created` (from the manifest on this machine) or `reused` (an app the
 user already had); `createdAt` is when this machine started using it. `appId` can be missing for a reused app
 not installed anywhere yet. `localBaseUrl` is `http://127.0.0.1:<port>` when it was set up here, where its
-callback URL points (absent for apps set up before it was recorded).
+callback URL points; GitHub's status reports `portMismatch` when ezapply now listens elsewhere (a file without
+it is never checked).
 
 ### OS keychain (service `ezapply`)
 - `github-app-client-secret`: the app's client secret.
@@ -61,12 +61,12 @@ dropped.
 ```
 Every field has a default; a missing file means all defaults. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
 markup debug mode saves: `"failures"` before each call and at every field that fails, `"always"` after each call
-too, `"none"` never (the adapter's trace is still recorded). Builds before 2026-10-07 named the switch
-`debug.autofill`; `ezapply init` moves it to `debug.enabled`, since unknown keys are dropped and the old one alone
-leaves debug mode off. Builds before focus emulation had `forms.focusBrowser` (bring the browser window to the
-front before a call that changes the page); `ezapply init` removes it, and the schema drops it meanwhile
-([the tab at full speed](mcp-tools.md#forms)). Builds with `ezapply chat` had `context.restartOnCapture` (a new
-posting restarted the terminal's Claude); `ezapply init` removes it too. `tex.engine` applies only to `.tex` files
+too, `"none"` never (the adapter's trace is still recorded). Unknown keys are dropped when the file is read, so
+`ezapply init` upgrades an older build's file (`migrateWorkspaceConfig` in `cli/src/workspace-init.ts`), leaving
+anything the user changed: `debug.autofill` becomes `debug.enabled` (left alone, it would turn debug mode off
+without a word; a `debug.enabled` already set wins); `forms.focusBrowser` and `context.restartOnCapture`, which
+nothing reads, are removed (with their object, when it holds nothing else); an untouched
+`tex.engine: "latexmk"` becomes `"auto"`, since latexmk fails on MiKTeX without Perl. `tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
@@ -119,8 +119,8 @@ folder holds:
   call's first adapter call and after its last ([markup](components/adapters.md#debug-mode-the-adapter-trace)).
   Before with `debug.markup` `failures` or `always`; after with `always`.
 - `NNNN-fail-<fieldId>.html`: at each field that failed (unless `none`): its section, every popup or listbox
-  open on screen, and the last one the page closed during the field. `<fieldId>` has characters other than
-  letters, digits, `.`, `_` and `-` replaced by `_`; a repeat gets `-2`, `-3`.
+  open on screen, and the last one the page closed during the field. `<fieldId>` has each run of characters other
+  than letters, digits, `.`, `_` and `-` replaced by one `_`, and is cut at 80; a repeat gets `-2`, `-3`.
 - `NNNN-fail.png`: a screenshot of the tab after an adapter call where a field failed, when the tab was the active
   one in its window (`-2`… for more in one call).
 - `NNNN-<file>.fixture.html`: written by `ezapply debug export` ([cli](components/cli.md)): a saved page with
@@ -133,13 +133,14 @@ the call in the page:
 - `events`, in order, each `{ t, k, … }`. `k`: `query` (`sel`, `in` the element or `document` it was run on, `n`
   elements found, `x` repeats in a row, so a polling wait's queries are one entry each); `press`, `key` (`key`),
   `input` (`value`, up to 80 characters), `type` (`text`, consecutive characters joined), `blur`, `react`
-  (`handler`, `missing` when the element had none), each with `el`, a summary of the element (tag, automation id
+  (`handler`, `missing` when the element had none), `select` (`value`) and `upload` (`name`, the file's;
+  SuccessFactors), each with `el`, a summary of the element (tag, automation id
   or id, role, and its label or text up to 40 characters); `wait` (`kind` `waitFor`, `settle` or `sleep`, `name`
   the wait in `T` the caller passed or its length, `max`, `quiet` and `quietMs` for a settle, `ms` taken, `end`
   `condition`, `quiet`, `max` or `slept`); `branch` (`name`: `dropdown re-open`, `date entered again`, `date
   part set directly`, `typeahead search again`, `selected on Enter`, `upload by drop`, `search the list`, with details); `match`
   (`wanted`, `of` options, `chosen`, or the `options` on a miss, up to 40); `listbox` (Workday:
-  `shown`, `stale`, `read`, `options`, up to 80) and `list` (Oracle: `options`); `field` (`op` `fill`,
+  `shown`, `stale`, `read`, `options`, up to 80) and `list` (Oracle: `options`, up to 80); `field` (`op` `fill`,
   `upload`, `remove`, `list` or `search`, `fieldId`, and once it ends `ms`, `ok`, `error`) and `field-end`;
 - `mutations`: the page's DOM changes, `+` and `-` (`el`, `n` elements in it; only the topmost node of each
   change) and `attr` (`el`, `a`, `from`, `to`; only `aria-expanded`, `aria-selected`, `aria-invalid`, `value`,
@@ -151,7 +152,8 @@ the call in the page:
   above (the content goes into the files).
 
 A call that fails or times out is still recorded. Records are written after the call returns, off its path.
-`debug.maxMB` caps the folder: past it, the oldest sessions are deleted (never the one being written).
+`debug.maxMB` caps the folder: past it, the oldest sessions are deleted (never the one being written), checked at
+each session's first record and every 50 records.
 `ezapply debug clean` deletes it all. It holds the user's personal data and is never sent anywhere
 ([security](security.md)).
 
@@ -213,7 +215,7 @@ Claude Code's own formats; ezapply's entries are described in [workspace.md](com
 | `reviewed.json` | companion | The version of each document the user last answered a review of, with its text ([below](#postingsidreviewedjson-companionsrcdocumentsreviewts)) |
 | `.build/<name>/` | companion | TeX aux files and logs |
 | `.history/<timestamp>/` | companion | snapshot of `.tex` + `.pdf` per successful build (newest 30 kept) |
-| `.previews/` | older companions | rendered pages, from the removed `pdf_render`; still hidden from posting listings |
+| `.previews/` | older builds | rendered page images nothing writes now; hidden from posting listings |
 
 ### `postings/<id>/reviewed.json` (`companion/src/documents/review.ts`)
 `{ schemaVersion: 1, documents: { "<file>": { sha256, at, reviewId, approved, pages?: string[] } } }`, keyed by the
@@ -236,8 +238,8 @@ Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host,
 at }`. `from`: `apply-link` (the captured page links to it), `host-page-job` (the page's URL names an embedded
 board's job: Greenhouse's `gh_jid`; no tenant), `bound` (the first form call that changed a page bound the tab),
 `user` (`posting_activate { id, tabId }`). A posting on a form site's own page needs none: its URL is its
-application (`posting-url`, worked out, not stored). Postings captured before it existed get it from
-`capture/raw.html` the first time they're active in a form call. A re-capture keeps a `user` one, else takes what
+application (`posting-url`, worked out, not stored). A posting without one is searched for it in
+`capture/raw.html` the first time it's active in a form call, once per run (again after its `reqId` changes). A re-capture keeps a `user` one, else takes what
 the page now shows, else keeps the old one. No `schemaVersion` bump: it's optional, older builds drop it when they
 rewrite the file, and it's found again from the capture ([which posting](mcp-tools.md#forms)).
 
@@ -257,16 +259,14 @@ saying otherwise):
 - `{ event: "back", moved, pageKind, step? }`
 - `{ event: "confirmation-seen", url }`
 
-Logs written while deterministic autofill existed ([removed](status.md#deterministic-autofill-removed)) may also
-hold fills with `auto`, `rule` and `was`, and `add-row` and `add-item` events. Nothing reads those fields now.
-
 Any event can also carry `focusNotEmulated: true` (focus emulation wasn't on for the call, so the tab ran as the
 browser left it), `tabHidden: true` (the page was still hidden, so the browser throttled it) and `windowInBackground: true` (the
 page was on screen but without focus: the window was behind another app), so a slow step, or a field that wasn't
-taken, can be matched to a hidden tab or a window behind afterwards. They're left out when false. Logs from
-builds before focus emulation may also hold `tabActivated` and `windowFocused` (the tab switched to, the window
-raised). Every event carries `matchedBy`: what tied the tab to this
+taken, can be matched to a hidden tab or a window behind afterwards. They're left out when false. An event on a
+form site's tab carries `matchedBy`: what tied the tab to this
 posting (`job`, `binding`, `page-reqid`, `tenant`, `title`, or `unconfirmed` for the call that bound it).
+Readers (the checklist, the hand-off) skip events and fields they don't know, so lines from older builds are
+harmless.
 
 ## Profile (`companion/src/profile/schema.ts`)
 

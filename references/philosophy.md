@@ -34,12 +34,12 @@ user decides and submits.
 8. **As few manual steps as possible.** The terminal part of setup is one command, and everyday use is one
    more (`ezapply`) left running; everything else happens in the browser. The only thing the user must do by
    hand is what a browser or website insists on: loading the extension, signing in to Workday or an Oracle career
-   site (and letting the extension onto that site), pressing Submit.
+   site (and, where the user limited the extension's site access, letting it onto that site), pressing Submit.
 9. **Honest about uncertainty.** Claude asks, with a suggestion where it has one, rather than filling
    sensitive answers itself (EEO, salary, anything marked `sensitive` or unanswered), and flags answers that came
    from its own judgment.
-10. **Built to grow, not built big.** Single-user today, but with seams for more: site adapters beyond
-    Workday and Oracle, a pluggable decision model, versioned file formats and protocol, and no personal
+10. **Built to grow, not built big.** Single-user, with seams for more: a new site is a registry entry and a
+    definition on the shared engine, file formats and the protocol are versioned, and there are no personal
     assumptions in code.
 
 ## Goals
