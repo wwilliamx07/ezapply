@@ -11,7 +11,12 @@ sits behind a candidate account, so it was built from a page saved from a real a
 be `…/portalcareer?_s.crb=<session token>`, whose URL names neither. It's **one page** of collapsible sections, from
 the employer's template: My Documents, Profile Information, background lists (Outside Work Experience, Formal
 Education, Certifications/Licenses, Geographic Mobility…), Job-Specific Information, with View Profile, Save and Apply
-at the foot. Apply submits it. The employer's own careers site in front of it (SuccessFactors' Recruiting Marketing,
+at the foot. Apply submits it. Some employers' career sites still serve an **older application layout** on the same
+URLs (seen on `…/sfcareer/jobreqcareerpvt?…`, then `…/portalcareer?_s.crb=…`): fields straight inside
+`form#careerform` (inputs named by the profile's fields, the same paginated picklists, questions as
+`fbjq_question_*` radios, Apply and Save as `button#fbja_apply` / `#fbja_draft`), with no `#rcmJobApplicationCtr`. The
+signature matches it, but the definition reads only the layout above, so `get_form` there gives `pageKind: unknown`
+and no fields: the agent can't fill it. The employer's own careers site in front of it (SuccessFactors' Recruiting Marketing,
 on the employer's domain, where postings are found) is another product with other markup, and isn't this site.
 
 **Registry** (`registry.ts`): the URL rule takes an https `career<n>` host on `sapsf.com`,

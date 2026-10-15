@@ -2,10 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // npm test builds first, so the CLI exists.
 const CLI = join(import.meta.dirname, "..", "dist", "main.js");
+const MODULE_LOG = join(import.meta.dirname, "module-log.mjs");
 let appDir: string;
 
 beforeEach(async () => {
@@ -47,5 +49,29 @@ describe("commands", () => {
       expect(r.status, command).toBe(2);
       expect(r.stderr).toMatch(/Unknown command/);
     }
+  });
+
+  it("loads none of the companion's services for `ezapply mcp`, which every panel conversation starts", async () => {
+    const config = {
+      schemaVersion: 1,
+      host: "127.0.0.1",
+      port: 1,
+      mcpToken: "t".repeat(32),
+      pairingToken: "p".repeat(16),
+      workspace: join(appDir, "ws"),
+    };
+    await writeFile(join(appDir, "config.json"), JSON.stringify(config));
+    const r = spawnSync(process.execPath, ["--import", pathToFileURL(MODULE_LOG).href, CLI, "mcp"], {
+      encoding: "utf8",
+      env: { ...process.env, EZAPPLY_APP_DIR: appDir },
+      input: "",
+      timeout: 20_000,
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const modules: string[] = JSON.parse(/^modules (.*)$/m.exec(r.stderr)?.[1] ?? "[]");
+    expect(modules.some((m) => m.endsWith("/mcp-relay.js"))).toBe(true);
+    expect(
+      modules.filter((m) => /jsdom|pdfjs|pdf-lib|napi-rs|modelcontextprotocol|companion\/dist\/index/.test(m)),
+    ).toEqual([]);
   });
 });

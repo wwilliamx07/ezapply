@@ -23,6 +23,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
 | — | [The extension's reconnect storm](extension-reconnect-storm/overview.md) | High | S | — |
+| — | [Fill form is missing where the posting and the form share a page](fill-form-on-posting-page/overview.md) | High | S | — |
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
 | — | ["Locked by another program" when nothing holds the file](spurious-file-locks/overview.md) | Medium | S | — |
 | — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
@@ -48,8 +49,8 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
 
 Why this order:
-- **Bugs first**, in the table's order: the reconnect storm and the agent stopping at its first tool call break a
-  session outright; the rest cost turns or quality on every run.
+- **Bugs first**, in the table's order: the reconnect storm, a missing Fill form and the agent stopping at its
+  first tool call break a session outright; the rest cost turns or quality on every run.
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
   later item. Removing the onboarding and repos skills comes before refactoring the rest, which moves every other
   mechanical step into code.
@@ -61,7 +62,8 @@ Why this order:
 
 ## Groups
 
-- **Bugs:** The extension's reconnect storm, The panel's agent stops when ezapply's tools aren't connected yet,
+- **Bugs:** The extension's reconnect storm, Fill form is missing where the posting and the form share a page,
+  The panel's agent stops when ezapply's tools aren't connected yet,
   "Locked by another program" when nothing holds the file, Form calls on a tab run out of order, CI timeouts on
   Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may

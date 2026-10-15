@@ -4,7 +4,9 @@ The code that does all real work: it serves the MCP tools, holds the connection 
 and reads and writes the workspace. It's a library: `ezapply` calls `startCompanion` in its own process
 and runs it for as long as it's open ([cli](cli.md#ezapply-panelts)); there is no background daemon
 ([architecture](../architecture.md#processes-and-lifecycle)). The CLI also imports the helpers exported from
-`src/index.ts`. Everything it knows about a particular site (the registry, the sites' notes for the agent, their
+`src/index.ts`, which loads all of the companion; `@ezapply/companion/light` (`src/light.ts`: the app config, the
+version, the endpoints) loads none of the services, for the commands that must start fast
+([cli](cli.md#commands)). Everything it knows about a particular site (the registry, the sites' notes for the agent, their
 posting readers) it imports from [the sites package](sites.md#the-package): `@ezapply/sites`, `/notes`, `/readers`.
 
 ## Source layout
@@ -14,6 +16,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `main.ts` | `startCompanion(options)`: builds every service, the bridge and the HTTP server; returns `{ port, services, onServerError, close }` |
 | `services.ts` | The `Services` object handed to every tool: `version`, `log`, `workspace`, `postings`, `documents`, `reviews`, `profile`, `templates`, `github`, `repos`, `freshness`, `forms`, `onboarding`, `agent`, `needs`, `bridge`, `opener`, `ui`, `extensionDir?` |
 | `http.ts` | The HTTP server: routes, guards, stateless MCP transport with the request's session |
+| `endpoints.ts` | What the HTTP server and the CLI's relay agree on: `MCP_PATH`, `HEALTH_PATH`, `SESSION_ENV`, `SESSION_HEADER`. No imports, so the light entry stays light |
 | `mcp/server.ts` | Creates the `McpServer` and registers the tool groups, with the session of the request (the form tools give a site's notes once per session; `ask_user` knows the conversation) |
 | `mcp/tools/postings.ts`, `browser.ts`, `documents.ts`, `profile.ts`, `onboarding.ts`, `templates.ts`, `github.ts`, `forms.ts`, `agent.ts` | One module per tool group ([mcp-tools.md](../mcp-tools.md)) |
 | `mcp/result.ts` | `tool()` / `rawTool()`: turn results into compact JSON text and errors into `{ error }` results |

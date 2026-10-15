@@ -1,15 +1,4 @@
-export { type ClaudeCommand, findClaude, SESSION_ENV, SESSION_HEADER } from "./agent/process.js";
-export {
-  AppConfig,
-  appConfigPath,
-  appDir,
-  DEFAULT_PORT,
-  LEGACY_CONFIG_FILE,
-  loadAppConfig,
-  newPairingToken,
-  newToken,
-  saveAppConfig,
-} from "./config/app.js";
+export { type ClaudeCommand, findClaude } from "./agent/process.js";
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { ENGINES, type EngineId, resolveEngine } from "./documents/tex/engines.js";
 export { DEBUG_DIR, pruneDebug } from "./forms/debug.js";
@@ -19,7 +8,7 @@ export { FormsService } from "./forms/service.js";
 export { loadTiming, TIMING_FILE, timingFileTemplate } from "./forms/timing.js";
 export { KeyringStore } from "./github/secrets.js";
 export { GitHubService } from "./github/service.js";
-export { HEALTH_PATH, MCP_PATH } from "./http.js";
+export * from "./light.js";
 export { createLogger, type Logger } from "./logger.js";
 export { type CompanionHandle, type CompanionOptions, startCompanion } from "./main.js";
 export { ProfileService } from "./profile/service.js";
@@ -31,5 +20,4 @@ export { installCommand, installHint } from "./util/install-hints.js";
 export type { Opener } from "./util/open.js";
 export { clearWhichCache, which } from "./util/proc.js";
 export { waitFor } from "./util/wait.js";
-export { COMPANION_VERSION } from "./version.js";
 export { WORKSPACE_DIRS, Workspace } from "./workspace/workspace.js";

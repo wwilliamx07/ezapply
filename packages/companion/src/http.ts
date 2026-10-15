@@ -2,14 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { PROTOCOL_VERSION } from "@ezapply/protocol";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { SESSION_HEADER, sessionId } from "./agent/process.js";
+import { sessionId } from "./agent/process.js";
 import type { ExtensionBridge } from "./bridge/server.js";
+import { HEALTH_PATH, MCP_PATH, SESSION_HEADER } from "./endpoints.js";
 import type { Logger } from "./logger.js";
 import { createMcpServer } from "./mcp/server.js";
 import type { Services } from "./services.js";
-
-export const MCP_PATH = "/mcp";
-export const HEALTH_PATH = "/health";
 
 export interface HttpOptions {
   services: Services;

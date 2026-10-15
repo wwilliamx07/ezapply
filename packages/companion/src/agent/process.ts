@@ -9,6 +9,7 @@ import {
   type ConversationPart,
   DEFAULT_AGENT_SETTINGS,
 } from "@ezapply/protocol";
+import { SESSION_ENV } from "../endpoints.js";
 import { which } from "../util/proc.js";
 import { readStreamLine, type StreamItem } from "./stream.js";
 
@@ -34,11 +35,6 @@ export function findClaude(env: NodeJS.ProcessEnv = process.env, platform = proc
   }
   return null;
 }
-
-/** The environment variable the MCP relay passes on as `SESSION_HEADER`, naming the conversation's session. */
-export const SESSION_ENV = "EZAPPLY_SESSION";
-/** The header the MCP relay names the conversation's session in. */
-export const SESSION_HEADER = "x-ezapply-session";
 
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
 

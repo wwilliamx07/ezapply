@@ -34,6 +34,14 @@ version and whether the extension is connected. Claude Code can still be run by 
 match its schema ("fix it, or delete it and run `ezapply init`"). Anything else is a bug and keeps its
 stack trace.
 
+**Startup.** `main.ts` imports only `@ezapply/companion/light` (config, version, endpoints:
+[companion](companion.md)) at the top, and each command imports its own module, and the companion's index if it
+needs it, when it runs. The index loads all of the companion (jsdom, pdf-lib, pdfjs, canvas, the MCP server), about
+1.5 s on Windows; `mcp`, which Claude Code starts with every panel conversation, needs none of it, so it starts in
+about 0.25 s, as do `help` and an unknown command. The seconds the relay took were seconds in which a conversation's
+first tool call could find ezapply's tools not yet connected. `cli.test.ts` checks `mcp`'s module graph, through
+the resolve hook in `test/module-log.mjs`, so a top-level import of the index can't come back unnoticed.
+
 ## `init` (`workspace-init.ts`)
 Idempotent. User-owned files are never overwritten; ezapply-managed ones are refreshed.
 

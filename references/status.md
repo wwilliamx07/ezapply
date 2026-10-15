@@ -13,6 +13,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
   `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension),
   [why](security.md#accepted-limits)).
+- **A light entry for the CLI.** `ezapply` imports each command's code when it runs, and the relay only the
+  companion's config and endpoints, since the relay starts with every panel conversation and loading the whole
+  companion took about 1.5 s of it ([cli](components/cli.md#commands)).
 - **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation; there's
   no Claude Code in the terminal, so there's one way to run ezapply ([cli](components/cli.md#commands)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and

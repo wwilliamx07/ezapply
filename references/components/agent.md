@@ -12,7 +12,7 @@ It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Cod
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `SESSION_ENV`, `SESSION_HEADER` and `sessionId` ([sessions](companion.md#sessions)) |
+| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `sessionId` ([sessions](companion.md#sessions); `SESSION_ENV` and `SESSION_HEADER` are in `endpoints.ts`) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
 | `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, forgetting a posting's, the permission mode and model |

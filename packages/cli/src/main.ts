@@ -3,13 +3,14 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+// Only the light entry at the top: the companion's index loads all of it (jsdom, pdfjs, the MCP server), close to
+// 2 s on Windows, and `ezapply mcp` starts in Claude Code with every panel conversation. Each command imports the
+// rest when it runs; test/cli.test.ts checks `mcp`'s module graph.
 import {
   type AppConfig,
   appConfigPath,
   COMPANION_VERSION,
-  createLogger,
   DEFAULT_PORT,
-  findClaude,
   loadAppConfig,
   MCP_PATH,
   newPairingToken,
@@ -17,14 +18,9 @@ import {
   SESSION_ENV,
   SESSION_HEADER,
   saveAppConfig,
-} from "@ezapply/companion";
+} from "@ezapply/companion/light";
 import { ErrorCode, EzError } from "@ezapply/protocol";
-import { runDebug } from "./debug.js";
-import { runDoctor } from "./doctor.js";
-import { runMcpRelay } from "./mcp-relay.js";
-import { hostPanel } from "./panel.js";
-import { guardProcess, quietProcess } from "./quiet.js";
-import { type InitReport, initWorkspace } from "./workspace-init.js";
+import type { InitReport } from "./workspace-init.js";
 
 const CLI_MAIN = fileURLToPath(import.meta.url);
 const EXTENSION_DIR = resolve(dirname(CLI_MAIN), "..", "..", "extension");
@@ -46,7 +42,7 @@ async function main(argv: string[]): Promise<number> {
     case "init":
       return cmdInit(rest);
     case "doctor":
-      return runDoctor();
+      return (await import("./doctor.js")).runDoctor();
     case "debug":
       return cmdDebug(rest);
     case "mcp":
@@ -80,6 +76,7 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
     workspace: resolve(opts.workspace ?? existing?.workspace ?? join(homedir(), "ezapply-home")),
   };
   await saveAppConfig(config);
+  const { initWorkspace } = await import("./workspace-init.js");
   return { config, report: await initWorkspace(config) };
 }
 
@@ -97,6 +94,7 @@ async function cmdDebug(args: string[]): Promise<number> {
     process.stderr.write("No ezapply config yet: run `ezapply init` first.\n");
     return 1;
   }
+  const { runDebug } = await import("./debug.js");
   return runDebug(config.workspace, args, (s) => process.stdout.write(s));
 }
 
@@ -127,6 +125,11 @@ async function cmdInit(args: string[]): Promise<number> {
 /** ezapply for the side panel: the companion in this process, Claude Code started headless by it when needed. */
 async function cmdPanel(): Promise<number> {
   const config = await requireConfig();
+  const [{ createLogger, findClaude }, { hostPanel }, { guardProcess, quietProcess }] = await Promise.all([
+    import("@ezapply/companion"),
+    import("./panel.js"),
+    import("./quiet.js"),
+  ]);
   const claude = findClaude();
   if (!claude) {
     process.stderr.write(
@@ -147,6 +150,7 @@ async function cmdMcp(): Promise<number> {
     process.stderr.write("ezapply is not set up yet. In the ezapply repo run: npm run setup\n");
     return 1;
   }
+  const { runMcpRelay } = await import("./mcp-relay.js");
   await runMcpRelay({
     input: process.stdin,
     output: process.stdout,
