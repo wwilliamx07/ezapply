@@ -279,10 +279,26 @@ describe("the panel", () => {
     expect(onRemoveComment).toHaveBeenCalledWith("m1");
   });
 
-  it("takes a request for the whole document", () => {
+  it("takes a request for the whole document, with the decision under it", () => {
     const onRequest = vi.fn();
-    render(<Panel {...props} file={base} onRequest={onRequest} />);
-    fireEvent.change(screen.getByLabelText("Anything else to change?"), { target: { value: "Shorter." } });
+    render(<Panel {...props} file={base} last onRequest={onRequest} />);
+    const box = screen.getByLabelText("Anything else to change?");
+    fireEvent.change(box, { target: { value: "Shorter." } });
     expect(onRequest).toHaveBeenCalledWith("Shorter.");
+    const send = screen.getByRole("button", { name: "Send to Claude" });
+    expect(box.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("brings the active comment into view in the panel alone, never scrolling the page", () => {
+    const scrollIntoView = vi.fn();
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const comments = [{ id: "c1", page: 1, quote: "built", note: "Say how", rects: [] }];
+      render(<Panel {...props} file={base} comments={comments} active="c1" />);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
   });
 });

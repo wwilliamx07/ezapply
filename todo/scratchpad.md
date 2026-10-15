@@ -1,0 +1,3 @@
+- make sure agents edit tools can only touch files its supposed to touch
+- investigate increased tool failures, agent started using toolsearch, not sure if this was always a thing. might be because too many tools causing lazy loading?
+- agent doesnt read preferences

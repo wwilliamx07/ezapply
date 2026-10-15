@@ -38,6 +38,12 @@ export interface StepOptions {
    * shows the category menu at once, where the plain prompt shows "No Items.", and the results after it.
    */
   skillsPrompt?: "checkboxes" | "menuFirst";
+  /**
+   * Back shows the step with its chosen dropdowns reading "Select One" until their values come back from a
+   * request (`fetch`) this many ms long, started just after the step shows, as live: Workday fetches a
+   * dropdown's values after rendering a step filled before, and shows the saved choice only then.
+   */
+  savedListsLoadMs?: number;
 }
 
 /** The live-dropdown listeners each document was given by its last build. */
@@ -138,8 +144,8 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     </div>
     <div><div><h3>Websites</h3></div><button data-automation-id="add-button">Add</button></div>
     <div data-automation-id="pageFooter">
-      <button data-automation-id="bottom-navigation-previous-button" hidden>Back</button>
-      <button data-automation-id="bottom-navigation-next-button">Save and Continue</button>
+      <button data-automation-id="pageFooterBackButton" hidden>Back</button>
+      <button data-automation-id="pageFooterNextButton">Save and Continue</button>
     </div>
   </div>`;
 
@@ -460,8 +466,8 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
   // Next: requires first name; moves to Review where the forward button becomes Submit and Back appears.
   // Back returns to the step with its entries kept (Workday saved them when Next was pressed).
   let submitClicks = 0;
-  const next = doc.querySelector('[data-automation-id="bottom-navigation-next-button"]') as HTMLButtonElement;
-  const back = doc.querySelector('[data-automation-id="bottom-navigation-previous-button"]') as HTMLButtonElement;
+  const next = doc.querySelector('[data-automation-id="pageFooterNextButton"]') as HTMLButtonElement;
+  const back = doc.querySelector('[data-automation-id="pageFooterBackButton"]') as HTMLButtonElement;
   const bar = doc.querySelector('[data-automation-id="progressBar"]') as HTMLElement;
   const title = (t: string) => (opts.sameStepTitles ? "Application" : t);
   if (opts.sameStepTitles) {
@@ -476,7 +482,24 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     for (const f of doc.querySelectorAll<HTMLElement>('[data-automation-id^="formField-"]')) f.hidden = false;
     next.textContent = "Save and Continue";
     back.hidden = true;
+    if (opts.savedListsLoadMs === undefined) return;
+    const w = doc.defaultView as Window & typeof globalThis;
+    for (const b of doc.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]')) {
+      const saved = b.textContent;
+      if (saved === "Select One") continue;
+      b.textContent = "Select One";
+      setTimeout(() => {
+        void w.fetch("/values").then(() => {
+          b.textContent = saved;
+        });
+      }, 50);
+    }
   });
+  if (opts.savedListsLoadMs !== undefined) {
+    const ms = opts.savedListsLoadMs;
+    (doc.defaultView as Window & typeof globalThis).fetch = (() =>
+      new Promise((resolve) => setTimeout(() => resolve({} as Response), ms))) as typeof fetch;
+  }
   next.addEventListener("click", () => {
     if (next.textContent === "Submit") {
       submitClicks++;

@@ -1,6 +1,7 @@
 import type {
   BackResult,
   DebugRequest,
+  FieldKind,
   FillAction,
   FillResult,
   NextResult,
@@ -29,7 +30,7 @@ import {
   type TraceEvent,
   tracing,
 } from "./trace.js";
-import type { SiteDefinition } from "./types.js";
+import type { RemoveOutcome, SiteDefinition } from "./types.js";
 
 declare const __ADAPTER_VERSION__: string | undefined;
 
@@ -262,7 +263,10 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
       }
     },
 
-    /** Remove selected values (multi-select) or attached files; `values` null or absent = all of them. */
+    /**
+     * Remove selected values (multi-select) or attached files; `values` null or absent = all of them. A text field
+     * is cleared.
+     */
     async remove(fieldId: string, values?: string[] | null): Promise<RemoveResult> {
       const ev = fieldStarted("remove", fieldId);
       let container: HTMLElement | undefined;
@@ -270,6 +274,9 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
         const r = ref(fieldId);
         container = r.container;
         r.container.scrollIntoView?.({ block: "center" });
+        if (!r.driver.remove && CLEARABLE.has(r.field.kind)) {
+          return fieldDone(ev, fieldId, { fieldId, ...(await clearText(r, values)) }, container);
+        }
         if (!r.driver.remove) {
           const error = site.messages.cantRemove(r.field.kind);
           return fieldDone(ev, fieldId, { fieldId, ok: false, removed: [], remaining: [], error });
@@ -413,6 +420,23 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
 }
 
 export type Adapter = ReturnType<typeof createAdapter>;
+
+/** Kinds `remove` clears by filling them empty: an agent asked to clear a field reaches for remove_items. */
+const CLEARABLE: ReadonlySet<FieldKind> = new Set(["text", "textarea", "number"]);
+
+/** Clear a text field: its driver fills it with "", and it must read back empty. */
+async function clearText(r: FieldRef, values: string[] | null | undefined): Promise<RemoveOutcome> {
+  const held = String(r.driver.value(r.container) ?? "");
+  if (!held) return { ok: true, removed: [], remaining: [] };
+  if (values?.length && !values.includes(held)) {
+    return { ok: false, removed: [], remaining: [held], notFound: values, error: `The field holds "${held}".` };
+  }
+  const out = await r.driver.fill(r.container, "");
+  const left = String(r.driver.value(r.container) ?? "");
+  return left
+    ? { ok: false, removed: [], remaining: [left], error: out.error ?? "The page kept the value." }
+    : { ok: true, removed: [held], remaining: [] };
+}
 
 /**
  * Install a site's adapter on the page's window as `__ezapply_<site>`: the bundle's entry calls this. Idempotent

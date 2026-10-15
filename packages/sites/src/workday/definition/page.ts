@@ -40,8 +40,9 @@ export function isSubmitControl(el: Element | null): boolean {
   );
   const auto = control.getAttribute("data-automation-id") ?? "";
   if (SUBMIT_TEXT.test(text(control)) || /^submit\b/i.test(label)) return true;
-  // The forward button on the review step submits the application whatever its label.
-  return /next|footer/i.test(auto) && isReviewStep(control.ownerDocument);
+  // The forward button on the review step submits the application whatever its label. The footer's Back
+  // (`pageFooterBackButton`, seen live) is in the footer too, and isn't it.
+  return /next|footer/i.test(auto) && !/back|previous/i.test(auto) && isReviewStep(control.ownerDocument);
 }
 
 function isReviewStep(doc: Document): boolean {

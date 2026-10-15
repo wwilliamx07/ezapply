@@ -21,7 +21,7 @@ export const SEL = {
   progressStep: `${A("progressBar")} li`,
   progressActive: any("progressBarActiveStep"),
   nextButton: any("bottom-navigation-next-button", "pageFooterNextButton", "wd-CommandButton_next"),
-  /** The footer's Back button. Unverified on a live tenant (it appears from step 2, behind sign-in). */
+  /** The footer's Back button: `pageFooterBackButton` on a live tenant, from step 2 on. */
   backButton: any("bottom-navigation-previous-button", "pageFooterBackButton", "wd-CommandButton_back"),
   errors: `${any("errorMessage", "errorBanner", "inputAlert")},[role="alert"]`,
   postingHeader: any(WORKDAY_POSTING.header),

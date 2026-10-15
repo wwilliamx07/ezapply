@@ -23,8 +23,6 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~M | The token cuts' live run in `references/status.md` |
-| — | [Panel and review-page fixes](panel-fixes/overview.md) | — | ~S | — |
-| — | [Form-filling fixes](form-agent-fixes/overview.md) | — | ~M | — |
 | — | [Tailoring edits that fit the page and the text](tailoring-edits/overview.md) | — | ~M | — |
 | — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
@@ -56,12 +54,12 @@ Why this order:
 ## Groups
 
 - **The agent:** Cut the tokens a panel conversation spends, Remove the onboarding and repos skills, Refactor
-  the skills, A writing spec for claims, Compatibility with various agents, Form-filling fixes, Tailoring edits
+  the skills, A writing spec for claims, Compatibility with various agents, Tailoring edits
   that fit the page and the text.
 - **Adapter building:** Agents that try to break a new adapter, Application forms on an
   employer's own page.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts, Run
-  multiple applications in parallel, Panel and review-page fixes, Notify the user when the agent needs them.
+  multiple applications in parallel, Notify the user when the agent needs them.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`), so the manager reads and extends those; it adds no database. Tracker, Job

@@ -144,13 +144,28 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   const posting = conv?.posting;
   const labelOf = useMemo(() => labeller(state?.postings ?? []), [state?.postings]);
 
+  /**
+   * A message on its way: from the press until the agent's state says it's working (or the send failed), whatever
+   * starts a turn is disabled. The ref holds it at once, so a second press before the panel draws again is refused
+   * too, rather than queueing a second message.
+   */
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const send = async (text: string, key = selected) => {
+    if (sendingRef.current) throw new Error("A message is already on its way.");
+    sendingRef.current = true;
+    setSending(true);
     setError(null);
     try {
       await transport.call("panel.send", { key, text });
+      // The companion marks the agent working before it answers, so the state read now keeps the buttons disabled.
+      await refreshState().catch(() => {});
     } catch (err) {
       fail(err);
       throw err;
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
   const capture = () => {
@@ -221,11 +236,13 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     if (cardIds) needsRef.current?.scrollIntoView?.({ block: "start" });
   }, [cardIds]);
 
-  const busyWhy = workingHere
-    ? "Claude is working: wait, or Stop it"
-    : workingElsewhere
-      ? "Claude is working in another conversation"
-      : undefined;
+  const busyWhy = sending
+    ? "Sending…"
+    : workingHere
+      ? "Claude is working: wait, or Stop it"
+      : workingElsewhere
+        ? "Claude is working in another conversation"
+        : undefined;
   const cards = state?.cards ?? [];
   const docCount = conv?.documents.length ?? 0;
   const waiting = conv?.documents.filter((d) => !isApproved(d.state)).length ?? 0;
@@ -464,12 +481,12 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         ) : null}
         <div className={connected ? "ez-panel-actions" : "ez-panel-actions ez-panel-off"}>
           <TailorButton
-            disabled={!connected || !posting || working}
+            disabled={!connected || !posting || working || sending}
             why={!posting ? "Capture a posting first" : busyWhy}
             onPick={(text) => request("tailor", text)}
           />
           <FillButton
-            disabled={!connected || !posting || working}
+            disabled={!connected || !posting || working || sending}
             why={!posting ? "Capture a posting first" : busyWhy}
             tab={tab}
             application={posting?.application}
@@ -481,6 +498,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         <ChatBar
           disabled={!connected || agent?.status === "unavailable"}
           working={workingHere}
+          sending={sending}
           onSend={send}
           onStop={() => void transport.call("panel.stop", {}).catch(fail)}
         />
@@ -861,11 +879,14 @@ function AgentSettingsBar({
 function ChatBar({
   disabled,
   working,
+  sending,
   onSend,
   onStop,
 }: {
   disabled: boolean;
   working: boolean;
+  /** A message is on its way: the box is read-only (it keeps its focus) and Send is disabled. */
+  sending: boolean;
   onSend: (text: string) => Promise<void>;
   onStop: () => void;
 }) {
@@ -893,6 +914,7 @@ function ChatBar({
         rows={2}
         value={text}
         disabled={disabled}
+        readOnly={sending}
         placeholder="Ask or tell ezapply anything"
         aria-label="Message"
         onChange={(e) => setText(e.target.value)}
@@ -903,7 +925,12 @@ function ChatBar({
           <Icon name="stop" size={16} /> Stop
         </Button>
       ) : (
-        <Button variant="primary" disabled={disabled || !text.trim()} onClick={() => void submit()} aria-label="Send">
+        <Button
+          variant="primary"
+          disabled={disabled || sending || !text.trim()}
+          onClick={() => void submit()}
+          aria-label="Send"
+        >
           <Icon name="send" size={16} />
         </Button>
       )}

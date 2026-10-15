@@ -93,6 +93,11 @@ this skill, they win. They come once per site, so keep them in mind for the rest
        country, its required degree): the profile owns the fact, so onboarding never asks it.
      - Numbers, ages and dates: compute from the profile.
      - Compound questions: answer each part.
+     - **Attestations** ("I certify the information above is true", "I have read the privacy notice", "I agree
+       to the terms"): what they state is true of an application filled from the user's own data, so tick every
+       one (or answer Yes), on every step and every application, without asking. Ask only when one attests
+       something the profile and answers don't establish (a legal status, a restriction, consent to a background
+       check), and check polarity first.
    - **Ask the user** with one `ask_user` card per step: each question with the field's exact options as
      `options` (`single` or `multi`; `text` for free text), your proposed answer in `proposed` and where it came
      from in `why`, `sensitive: true` on sensitive and EEO questions (they get a suggestion too, when you have

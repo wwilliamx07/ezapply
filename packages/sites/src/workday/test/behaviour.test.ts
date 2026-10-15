@@ -280,9 +280,9 @@ describe("filling", () => {
   });
 
   it("refuses fields it can't remove from", async () => {
-    const r = await api.remove(id("formField-legalName--firstName"));
+    const r = await api.remove(id("formField-countryDropdown"));
     expect(r).toMatchObject({ ok: false, removed: [] });
-    expect(r.error).toMatch(/text field. Use fill_fields/);
+    expect(r.error).toMatch(/dropdown field. Use fill_fields/);
   });
 
   it("adds a repeatable row with its own field ids", async () => {
@@ -372,6 +372,12 @@ describe("uploading over a leftover file", () => {
 });
 
 describe("navigation and the submit guard", () => {
+  const id = (automationId: string) =>
+    api
+      .getForm()
+      .sections.flatMap((s) => s.fields)
+      .find((f) => f.automationId === automationId)?.id as string;
+
   it("reports validation errors instead of advancing", async () => {
     const r = await api.next();
     expect(r.advanced).toBe(false);
@@ -431,6 +437,31 @@ describe("navigation and the submit guard", () => {
     expect(fixture.submitClicks()).toBe(0);
   });
 
+  it("comes back to a step with its dropdowns' choices, which show once the page's requests for them return", async () => {
+    fixture = buildWorkdayStep(document, { savedListsLoadMs: 800 });
+    api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
+    const country = id("formField-countryDropdown");
+    await api.fill([
+      { fieldId: id("formField-legalName--firstName"), value: "Jane" },
+      { fieldId: country, value: "Canada" },
+    ]);
+    await api.next();
+    expect(await api.back()).toMatchObject({ moved: true, pageKind: "step" });
+    const fields = api.getForm().sections.flatMap((s) => s.fields);
+    expect(fields.find((f) => f.id === country)).toMatchObject({ currentValue: "Canada" });
+    expect(window.fetch.name).not.toBe("wrapped");
+  });
+
+  it("clears a text field: filled empty, or by remove_items", async () => {
+    const fn = id("formField-legalName--firstName");
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    expect(await api.fill([{ fieldId: fn, value: "" }])).toEqual([{ fieldId: fn, ok: true, readBack: "" }]);
+    await api.fill([{ fieldId: fn, value: "Jane" }]);
+    expect(await api.remove(fn, ["Joe"])).toMatchObject({ ok: false, remaining: ["Jane"], notFound: ["Joe"] });
+    expect(await api.remove(fn)).toEqual({ fieldId: fn, ok: true, removed: ["Jane"], remaining: [] });
+    expect(api.getForm().sections[0]?.fields[0]).toMatchObject({ id: fn, currentValue: "" });
+  });
+
   it("waits for the next step's fields, which render after its progress bar moves", async () => {
     fixture = buildWorkdayStep(document, { questionsStepRenderMs: 800 });
     api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
@@ -458,7 +489,7 @@ describe("navigation and the submit guard", () => {
     await api.fill([{ fieldId: fn, value: "Jane" }]);
     await api.next();
     installSubmitGuard(document);
-    const submit = document.querySelector('[data-automation-id="bottom-navigation-next-button"]') as HTMLElement;
+    const submit = document.querySelector('[data-automation-id="pageFooterNextButton"]') as HTMLElement;
     press(submit);
     submit.click();
     expect(fixture.submitClicks()).toBe(0);

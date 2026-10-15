@@ -31,6 +31,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Build sites from what was seen.** Every selector comes from a saved page or the site's own scripts; iCIMS,
   SmartRecruiters, Taleo and BrassRing wait for pages saved from a real application, since ezapply doesn't work
   around bot checks ([sites](components/sites.md#why-these-three)).
+- **A step's late values are waited for by its requests,** not by a longer quiet: Workday's requests for a
+  returning step's dropdown values run while the page shows nothing changing ([workday](components/sites/workday.md)).
 - **Nothing is filled without the model.** See [deterministic autofill removed](#deterministic-autofill-removed).
 - **Documents are approved one by one** before they're attached (by default, enforced by `upload_file`), each by a
   press of its own: what's attached goes to an employer ([documents](components/documents.md#review-before-attaching)).
@@ -42,7 +44,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   ([forms](mcp-tools.md#forms)).
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
 - **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
-- **One button on the review page** approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
+- **One button on the review page**, under the edits box and stuck to the panel's foot, approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
+- **The side panel blocks a send from the press,** not from the state saying Claude works, which arrives only after the companion answers ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **A screening question the profile answers isn't asked in the answer bank** (an entry with a `source` and no
   answer): the fact has one home, the profile, and a question like the degree needs the posting anyway
   ([answer bank](components/profile-and-templates.md#answer-bank-profileanswersyaml)).
@@ -81,6 +84,12 @@ The plan (`plan.md`) is in git history before 2026-09-27.
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
 
+- **The form-filling fixes** (2026-10-15), from live Workday records: Back on the review page (refused as Submit
+  before), a returning step's dropdowns read once their values' requests are back (read as empty and refilled
+  before), and the agent ticking every attestation. Check that a move to a new step costs no more than before (the
+  request wait should end at once there), and `remove_items` clearing a text field. Two Workday changes in one run,
+  against the rule: if moves get slower, suspect the request wait ([workday](components/sites/workday.md)).
+
 - **The sites package** (2026-10-15): the bundles were compared and hold the same code, and every test passes. Not
   yet seen live: the extension's `hello` with its site ids accepted by the companion (and a stale extension refused
   with "Site mismatch"); a posting's company on a provider's host (now from the registry's `providerHosts` and
@@ -99,6 +108,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   to save that reply into the profile rather than the bank.
 - **The review page's per-document approval** in a real browser, with its one button: on to the next document, and
   the send on the last one; and a real resume's links (from `hyperref`) drawn where the text is and opening.
+- **The panel and review-page fixes** in a real browser: a double click on Tailor or Fill, or a second Enter, sends
+  one message; the review page's button stuck to the panel's foot under the edits box; and adding a comment (near
+  the view's bottom, and on a window under 900 px) leaves the page where it was.
 - **A posting's two conversations** with the real Claude Code: the tailoring one leaves forms alone and the filling
   one leaves the documents' writing to the other, each sending the user to the other's button; and an older
   workspace's conversation showing under Documents.
@@ -151,7 +163,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **"Could not open the dropdown"** on Workday after its own list was read without a choice; the adapter retries
   once, and nothing records whether the retry ran ([details](components/sites/workday.md#workdays-dropdown-finding-its-listbox)).
 - **Unexplained on Workday:** a "Field of Study" search returning only its top level in a step's fill but taken
-  when filled alone; language rows (and their levels) empty on coming back to a step.
+  when filled alone.
 - **A `go_next` after the user advanced the step themselves** presses the next step's button.
 - **The default cover letter test** failed once with MiKTeX and didn't reproduce; capture its `hint` if it recurs.
 

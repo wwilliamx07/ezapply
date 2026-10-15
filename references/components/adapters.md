@@ -16,7 +16,7 @@ definitions are in [the sites package](sites.md#the-package), each in `<site>/de
 | `extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
 | `api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
 | `standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
-| `dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `win(node)` |
+| `dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `watchRequests` (the page's own fetch and XHR requests in flight, counted while a wait needs them), `win(node)` |
 | `timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
 | `trace.ts` | Debug mode's trace ([below](#debug-mode-the-adapter-trace)): the recorder, its hooks, and what the helpers and fillers call |
@@ -88,7 +88,7 @@ the page re-extracts, and an unknown id fails with "call get_form again". No cal
 - **`listOptions`:** the driver's `list`, else the options the field shows. **`searchOptions`:** the driver's
   `search`, else `messages.noSearch`.
 - **`upload`:** builds a `File` from the companion's base64 in the page's own window and hands it to the driver.
-- **`remove`:** the driver's `remove`, else `messages.cantRemove(kind)`.
+- **`remove`:** the driver's `remove`; a text, textarea or number field without one is cleared, its driver filling it with `""`, and done only when it reads back empty; else `messages.cantRemove(kind)`.
 - **`addRepeatable`:** presses the button and waits (`addRowMs`) for `repeat.added` to grow. A `save.*` button
   with `repeat.saveErrors` waits for the form to close or show errors; still open → `ok: false` with the page's
   errors.
@@ -208,7 +208,8 @@ Each site owns its waits. Its registry entry (`SiteInfo.waits`, in its `registry
 a value; today every site starts from `STANDARD_WAITS`, measured on Workday. Its definition's `waits` say what to
 wait for after each field, row, step move and page action: `standardWaits` settles the page for as long as the
 waits say; Workday's `afterStep` also waits (up to `stepFieldsMs`) for the new step's fields, since Workday moves
-the progress bar before the step renders. The engine's loops never sleep on their own; they wait only through
+the progress bar before the step renders, and then (up to `stepRequestsMs`) for the requests the step started
+([workday](sites/workday.md)). The engine's loops never sleep on their own; they wait only through
 these, and for their conditions as long as `T` says.
 
 `createAdapter` loads the site's waits into `T` (`useSiteWaits`). The companion reads `autofill-timing.yaml` for

@@ -48,40 +48,6 @@ export function Panel(props: Props) {
         )}
       </div>
 
-      <div className="ez-approve">
-        {decision === "approved" ? (
-          <Button className="ez-btn-undo" onClick={props.onUndo} disabled={props.sending}>
-            <Icon name="undo" size={17} /> Undo approval
-          </Button>
-        ) : null}
-        {decision !== "approved" || props.last ? (
-          <Button variant="primary" onClick={props.onAdvance} disabled={props.sending}>
-            {props.last ? (
-              <>
-                <Icon name="send" size={17} /> Send to Claude
-              </>
-            ) : decision === "changes" ? (
-              <>
-                <Icon name="send" size={17} /> Request Changes
-              </>
-            ) : (
-              <>
-                <Icon name="check" size={17} /> Approve Document
-              </>
-            )}
-          </Button>
-        ) : null}
-        {props.last ? (
-          <p className="ez-help">
-            {decision === "open"
-              ? "The last document to decide: sending approves it as shown."
-              : decision === "changes"
-                ? "The last document to decide: sending asks for its changes."
-                : "Every document is decided."}
-          </p>
-        ) : null}
-      </div>
-
       <Checks file={file} />
 
       {props.links ? (
@@ -152,6 +118,41 @@ export function Panel(props: Props) {
         />
         <p className="ez-help">A comment or anything written here sends the document back to Claude to revise.</p>
       </section>
+
+      {/* Under the edits box, so the decision follows what was just written; it stays at the panel's foot. */}
+      <div className="ez-approve">
+        {decision === "approved" ? (
+          <Button className="ez-btn-undo" onClick={props.onUndo} disabled={props.sending}>
+            <Icon name="undo" size={17} /> Undo approval
+          </Button>
+        ) : null}
+        {decision !== "approved" || props.last ? (
+          <Button variant="primary" onClick={props.onAdvance} disabled={props.sending}>
+            {props.last ? (
+              <>
+                <Icon name="send" size={17} /> Send to Claude
+              </>
+            ) : decision === "changes" ? (
+              <>
+                <Icon name="send" size={17} /> Request Changes
+              </>
+            ) : (
+              <>
+                <Icon name="check" size={17} /> Approve Document
+              </>
+            )}
+          </Button>
+        ) : null}
+        {props.last ? (
+          <p className="ez-help">
+            {decision === "open"
+              ? "The last document to decide: sending approves it as shown."
+              : decision === "changes"
+                ? "The last document to decide: sending asks for its changes."
+                : "Every document is decided."}
+          </p>
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -272,8 +273,10 @@ function CommentItem({
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(comment.note);
   const ref = useRef<HTMLLIElement>(null);
+  // Into view within the panel only: `scrollIntoView` would scroll the page too, pulling it away from the viewer
+  // whenever a comment is added or its highlight pressed (on a narrow window the panel is under the viewer).
   useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (active && ref.current) scrollWithin(ref.current);
   }, [active]);
   return (
     <li ref={ref} className={`ez-comment${active ? " ez-comment-active" : ""}`}>
@@ -336,6 +339,18 @@ function CommentItem({
       )}
     </li>
   );
+}
+
+/** Scroll the panel, when it scrolls on its own, just enough to show `el`; nothing else moves. */
+function scrollWithin(el: HTMLElement) {
+  const panel = el.closest<HTMLElement>(".ez-panel");
+  if (!panel || panel.scrollHeight <= panel.clientHeight) return;
+  const box = panel.getBoundingClientRect();
+  // The decision bar stays at the panel's foot, over what scrolls under it.
+  const bottom = box.bottom - (panel.querySelector<HTMLElement>(".ez-approve")?.offsetHeight ?? 0);
+  const r = el.getBoundingClientRect();
+  const by = r.top < box.top ? r.top - box.top : r.bottom > bottom ? r.bottom - bottom : 0;
+  if (by) panel.scrollBy({ top: by, behavior: "smooth" });
 }
 
 function capitalize(s: string): string {

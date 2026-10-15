@@ -52,6 +52,7 @@ export const STANDARD_WAITS = {
   rowMaxMs: 2000,
   stepMs: 12000,
   stepFieldsMs: 3000,
+  stepRequestsMs: 4000,
   stepQuietMs: 300,
   stepMaxMs: 4000,
   pageActionQuietMs: 400,
@@ -107,6 +108,8 @@ export const TIMING_DOCS: Record<TimingKey, string> = {
   rowMaxMs: "rows: but never longer than this",
   stepMs: "go_next / go_back: wait for the step to change (or errors to show)",
   stepFieldsMs: "go_next / go_back: then wait for the new step's fields to show, where the site does (not on review)",
+  stepRequestsMs:
+    "go_next / go_back: then wait for the requests the new step started (its lists' values), where the site does",
   stepQuietMs: "go_next / go_back: then wait for quiet",
   stepMaxMs: "go_next / go_back: but never longer than this",
   pageActionQuietMs: "page_action (Apply…): wait for quiet",

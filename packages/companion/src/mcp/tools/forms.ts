@@ -105,7 +105,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
     {
       title: "Fill fields",
       description:
-        "Fill fields on the current step. Values: text; the option text for dropdowns and radios (closest match; " +
+        'Fill fields on the current step. Values: text ("" clears it); the option text for dropdowns and radios ' +
+        "(closest match; " +
         '"Python" finds "Python (Programming Language)"); a string or array for typeaheads ("Category > Item" ' +
         "for nested menus; each entry is matched on its own); true/false for a checkbox; labels for checkbox " +
         'groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns ' +
@@ -163,7 +164,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       title: "Remove selections or attachments",
       description:
         "Remove entries from a multi-select (a typeahead such as Skills, or a checkbox-group) or attached files " +
-        "from a file field. A site may pre-fill both from the user's last application or profile: remove what " +
+        "from a file field, or clear a text field. A site may pre-fill both from the user's last application or profile: remove what " +
         "doesn't belong before uploading or filling. values: labels or file names as get_form shows them; omit to clear the field. Returns removed, " +
         "remaining, notFound.",
       inputSchema: {

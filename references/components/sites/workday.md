@@ -47,11 +47,22 @@ rest on the behavioural fixture. Page actions: Apply, Apply Manually, Autofill w
 comparing titles alone reported every move as none, and Back waited out 12 s each time. After a move the definition
 waits (up to `stepFieldsMs`, 3 s) for the new step to show a field, since Workday moves the progress bar before it
 renders the step: a read straight after the move (now `go_next`'s own `form`) found an empty step, which with `onlyEmpty` looks like a step
-with nothing left to fill. The review page has no fields and isn't waited for. Back (`bottom-navigation-previous-button`,
-`pageFooterBackButton`, `wd-CommandButton_back`, else a button reading Back or Previous) works from any step,
-review included, to correct an answer; what Workday keeps of unsaved entries on the step left isn't known, so the
-skill re-checks steps when coming forward. `isSubmitControl`: "Submit" / "Submit Application", or the forward
-button while the active step is Review, whatever it reads; `next` refuses on review and confirmation.
+with nothing left to fill. The review page has no fields and isn't waited for.
+
+**A step filled before shows its dropdowns' choices late.** Coming back to such a step (Back, or Next after
+Back), Workday renders it, then fetches each dropdown's values and shows the saved choice only once they're in. Seen
+live: the page went quiet with those requests still out, so the read gave every dropdown (and the language rows'
+levels) as empty, and the agent filled them again. So after the fields and the quiet, `afterStep` waits (up to
+`stepRequestsMs`, 4 s) for the page's own requests started since the move (`watchRequests`), then for quiet again.
+A longer quiet wouldn't do: the requests run while the page shows nothing changing.
+
+**Back** (`pageFooterBackButton` live; `bottom-navigation-previous-button` and `wd-CommandButton_back` as
+fallbacks, else a button reading Back or Previous) works from any step, review included, to correct an answer;
+what Workday keeps of unsaved entries on the step left isn't known, so the skill re-checks steps when coming
+forward. `isSubmitControl`: "Submit" / "Submit Application", or the forward button (an automation id with
+`next` or `footer`, but not `back` or `previous`) while the active step is Review, whatever it reads; `next`
+refuses on review and confirmation. Live, Back and Next are both `pageFooter…` buttons, so a test on `footer`
+alone took Back on the review page for Submit and refused it.
 
 **Files and removal.** The shared file driver, with Workday's drop zone (through React's `onDrop` first) and its
 attached files: the `file-upload-item-name` elements with their row, or the rows when a tenant has no name

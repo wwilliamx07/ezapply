@@ -68,9 +68,13 @@ export function Viewer(props: Props) {
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState<"fit" | number>("fit");
   const [current, setCurrent] = useState(0);
-  const [selected, setSelected] = useState<(Selected & { x: number; y: number }) | null>(null);
+  /** The selection, with where its Comment button and note go: `y` under its last line, `top` its first line's top. */
+  const [selected, setSelected] = useState<(Selected & { x: number; y: number; top: number }) | null>(null);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
+  /** The note's top, once placed: under the selection, or above it when there's no room below. */
+  const [noteTop, setNoteTop] = useState<number | null>(null);
+  const popover = useRef<HTMLDivElement>(null);
 
   const widest = useMemo(() => Math.max(...pdf.pages.map((p) => p.width)), [pdf]);
   const fit = width > 0 ? Math.max(0.3, Math.min(3, (width - GUTTER) / widest)) : 1;
@@ -172,6 +176,7 @@ export function Viewer(props: Props) {
         .filter((r) => r.x >= -0.01 && r.y >= -0.01 && r.x + r.w <= 1.01 && r.y + r.h <= 1.01),
     );
     if (rects.length === 0) return setSelected(null);
+    const first = range.getClientRects()[0] ?? box;
     const last = range.getClientRects()[range.getClientRects().length - 1] ?? box;
     const outer = wrap.getBoundingClientRect();
     setSelected({
@@ -180,8 +185,28 @@ export function Viewer(props: Props) {
       rects,
       x: Math.min(last.right - outer.left, outer.width - 300),
       y: last.bottom - outer.top + 6,
+      top: first.top - outer.top,
     });
   };
+
+  // The note opens where it's seen whole, without scrolling the page: focusing a box scrolls every container above
+  // it to show it, so the note is placed first (above the selection when it would fall below the view) and focused
+  // without scrolling; only when it fits neither way does the viewer itself scroll, by the rest.
+  useLayoutEffect(() => {
+    const pop = popover.current;
+    const root = scroller.current;
+    const wrap = inner.current;
+    if (!editing || !selected || !pop || !root || !wrap) return setNoteTop(null);
+    const view = root.getBoundingClientRect();
+    const origin = wrap.getBoundingClientRect().top;
+    const height = pop.offsetHeight;
+    const above = selected.top - 6 - height;
+    const top = origin + selected.y + height > view.bottom && origin + above >= view.top ? above : selected.y;
+    setNoteTop(top);
+    const overflow = origin + top + height - view.bottom;
+    if (overflow > 0) root.scrollTop += overflow + 8;
+    pop.querySelector("textarea")?.focus({ preventScroll: true });
+  }, [editing, selected]);
 
   const save = () => {
     if (!selected || !note.trim()) return;
@@ -276,7 +301,8 @@ export function Viewer(props: Props) {
               className="ez-float ez-popover"
               role="dialog"
               aria-label="Comment on the selected text"
-              style={{ left: Math.max(8, selected.x - 140), top: selected.y }}
+              ref={popover}
+              style={{ left: Math.max(8, selected.x - 140), top: noteTop ?? selected.y }}
               onMouseUp={(e) => e.stopPropagation()}
             >
               <blockquote className="ez-quote">{selected.quote}</blockquote>
@@ -286,8 +312,6 @@ export function Viewer(props: Props) {
               <textarea
                 id="ez-new-comment"
                 className="ez-textarea"
-                // biome-ignore lint/a11y/noAutofocus: the user just asked to write this
-                autoFocus
                 rows={3}
                 placeholder="What should change here?"
                 value={note}

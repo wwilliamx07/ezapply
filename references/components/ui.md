@@ -157,6 +157,11 @@ to bottom:
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
    or while Claude works.
+   **Sending blocks at once:** from the press of anything that starts a turn (these buttons, Send, Enter) until the
+   companion has answered the send and the state read after it says Claude works, the buttons and Send are
+   disabled and the box is read-only (it keeps its focus); a ref holds it within the same frame, so a double click
+   or a second Enter sends one message, not two. *Why not just "while Claude works":* the state says so only once
+   the companion's answer arrives, and a second press in that gap queued a second message.
 8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
@@ -190,21 +195,27 @@ leaving it untouched. Below 900 px the
 documents become a row of tabs and the panel goes under the viewer. Every grid item has `min-width: 0`, so a row
 that scrolls sideways never widens the page.
 
-**The panel:** one button that decides the document and moves on: **Approve Document**, or **Request Changes**
-once it has a comment or a request. Either goes to the next document still to decide (after this one, then from
-the top). On the last one left it reads **Send to Claude** and sends the answer, with a line under it saying what
-that does to this document (approves it as shown, or asks for its changes). An approved document shows **Undo
-approval** in its place, the same size and shape but in the accent's soft tint instead of its fill, so it reads as
-the way back rather than the next step; once every document is decided (a send that failed, or the user went back
-to one), **Send to Claude** under it. *Why one button:* approving and sending were two presses in two places, and
-the last approval was always followed by the send. The checks (pages, over the resume page limit, the text layer
-an applicant-tracking system reads, encryption); the document's **links** (each web, mail or phone address once,
-with the page it's first on, openable from the list; "No web or email links" when there are none), so a link the
-build dropped is noticed before the document goes to an employer; since the last review (first time, unchanged since you approved it or asked for changes, or the list
-of changes, each pressed to show it on the page); the comments (each with its number, the quoted words, the note,
-edit and remove); and "Anything else to change?" for the whole document. A comment or a request asks for changes
-and takes back an approval, so removing them afterwards leaves the document to decide again rather than approved.
-The answer sent is unchanged: a document with no comment and no request is the approved one.
+**The panel**, top to bottom: the checks (pages, over the resume page limit, the text layer an applicant-tracking
+system reads, encryption); the document's **links** (each web, mail or phone address once, with the page it's
+first on, openable from the list; "No web or email links" when there are none), so a link the build dropped is
+noticed before the document goes to an employer; since the last review (first time, unchanged since you approved
+it or asked for changes, or the list of changes, each pressed to show it on the page); the comments (each with its
+number, the quoted words, the note, edit and remove); "Anything else to change?" for the whole document; and under
+it, the one button. A comment or a request asks for changes and takes back an approval, so removing them
+afterwards leaves the document to decide again rather than approved. The answer sent is unchanged: a document with
+no comment and no request is the approved one.
+
+**The one button** decides the document and moves on: **Approve Document**, or **Request Changes** once it has a
+comment or a request. Either goes to the next document still to decide (after this one, then from the top). On the
+last one left it reads **Send to Claude** and sends the answer, with a line under it saying what that does to this
+document (approves it as shown, or asks for its changes). An approved document shows **Undo approval** in its
+place, the same size and shape but in the accent's soft tint instead of its fill, so it reads as the way back
+rather than the next step; once every document is decided (a send that failed, or the user went back to one),
+**Send to Claude** under it. *Why one button:* approving and sending were two presses in two places, and the last
+approval was always followed by the send. *Why under the edits box:* the decision follows what the user just wrote
+(a comment or a request turns it into Request Changes). It stays stuck to the panel's bottom edge while the rest
+scrolls, so it's in reach however long the panel gets; below 900 px, where the page scrolls rather than the panel,
+it sits in place.
 
 **Drafts** (`draft.ts`: each document's request, comments and approval) are kept in the tab's `sessionStorage` under the review's id, so a reload doesn't lose
 what the user wrote; unavailable storage only means they aren't kept. Sending clears them.
@@ -234,7 +245,12 @@ from the start. **Why pdf.js, not the browser's viewer:** the same in every brow
   button by the selection. A selection that starts or ends inside a word takes the whole word, so the agent gets
   "building", not "uilding". The comment keeps the quoted words (spaces collapsed, at most 600 characters) and
   where they are, as boxes in fractions of the page's size (`PageRect`), merged per line, so they hold at any
-  zoom. While the note is written the selection stays highlighted; Ctrl+Enter adds it, Escape cancels. Comments
+  zoom. While the note is written the selection stays highlighted; Ctrl+Enter adds it, Escape cancels.
+  **Commenting never moves the page:** the note's box opens under the selection, or above it when there's no room
+  below in the view, and is focused without scrolling (focusing scrolls every container above a box, the page
+  included); only when it fits neither way does the viewer alone scroll by the rest. A new comment becomes the
+  active one, and the panel brings an active comment into view by scrolling itself only (`scrollWithin`), not with
+  `scrollIntoView`, which also scrolled the page, down to the panel under the viewer on a narrow window. Comments
   show as highlights with their number in the page's left margin, where it covers no text. Without
   `onComment` (onboarding's previews) text can be selected but not commented on.
 - **Changes since the last review:** inserted words highlighted on the text layer, a removal as a red marker

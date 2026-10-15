@@ -107,6 +107,9 @@ describe("the side panel", () => {
     expect(await screen.findByText(/the application on Workday/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Tailor documents/ }));
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: /Fill form/ }) as HTMLButtonElement).disabled).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Fill form/ }));
     await waitFor(() => expect(t.calls.filter(([m]) => m === "panel.send")).toHaveLength(2));
     expect(t.calls.filter(([m]) => m === "panel.send").map(([, p]) => p)).toEqual([
@@ -115,6 +118,37 @@ describe("the side panel", () => {
     ]);
     // Filling shows the application's conversation.
     expect(screen.getByRole("tab", { name: "Application" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("blocks every way of starting a turn from the first press until the send is answered", async () => {
+    const t = fakeTransport({
+      tab: { kind: "application", text: "Acme: Software Developer: the application on Workday", tabId: 7 },
+    });
+    const call = t.transport.call;
+    let answer: () => void = () => {};
+    t.transport.call = vi.fn(async (method: string, params: unknown) => {
+      if (method === "panel.send") await new Promise<void>((r) => (answer = r));
+      return call(method as never, params as never);
+    }) as PanelTransport["call"];
+    render(<PanelApp transport={t.transport} />);
+    const tailor = await screen.findByRole("button", { name: /Tailor documents/ });
+    await screen.findByText(/the application on Workday/);
+    await waitFor(() => expect((tailor as HTMLButtonElement).disabled).toBe(false));
+    const box = screen.getByLabelText("Message");
+
+    fireEvent.click(tailor);
+    fireEvent.click(tailor);
+    expect((tailor as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Fill form/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(box, { target: { value: "and shorter" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => answer());
+    await waitFor(() => expect((tailor as HTMLButtonElement).disabled).toBe(false));
+    expect(t.calls.filter(([m]) => m === "panel.send")).toEqual([
+      ["panel.send", { key: TAILOR, text: REQUESTS.tailor }],
+    ]);
   });
 
   it("switches between a posting's documents and application conversations, following the one Claude works in", async () => {

@@ -201,6 +201,57 @@ export function settle(doc: Document, quietMs = 250, maxMs = 4000): Promise<void
   });
 }
 
+/**
+ * Count the page's own `fetch` and XHR requests started from now until `stop()`, so a wait can last until the
+ * ones it saw start have come back. Both are wrapped meanwhile; `stop` puts back each one the page hasn't replaced
+ * since. Nothing about a request is kept.
+ */
+export function watchRequests(doc: Document): { pending(): number; stop(): void } {
+  const w = win(doc) as Window & typeof globalThis;
+  let pending = 0;
+  const restore: (() => void)[] = [];
+  const fetch = w.fetch;
+  if (typeof fetch === "function") {
+    const wrapped = function (this: unknown, ...args: Parameters<typeof fetch>) {
+      pending++;
+      try {
+        return fetch.apply(this, args).finally(() => pending--);
+      } catch (err) {
+        pending--;
+        throw err;
+      }
+    } as typeof fetch;
+    w.fetch = wrapped;
+    restore.push(() => {
+      if (w.fetch === wrapped) w.fetch = fetch;
+    });
+  }
+  const proto = w.XMLHttpRequest?.prototype;
+  if (proto) {
+    const send = proto.send;
+    const wrappedSend = function (this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
+      pending++;
+      this.addEventListener("loadend", () => pending--, { once: true });
+      try {
+        return send.call(this, body);
+      } catch (err) {
+        pending--;
+        throw err;
+      }
+    };
+    proto.send = wrappedSend;
+    restore.push(() => {
+      if (proto.send === wrappedSend) proto.send = send;
+    });
+  }
+  return {
+    pending: () => Math.max(0, pending),
+    stop: () => {
+      for (const f of restore) f();
+    },
+  };
+}
+
 /** Poll for a condition (cheap and robust against portals re-rendering). */
 export async function waitFor<R>(
   fn: () => R | null | undefined | false,

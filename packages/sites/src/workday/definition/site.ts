@@ -1,4 +1,4 @@
-import { settle, text, waitFor } from "@ezapply/engine/dom";
+import { settle, text, waitFor, watchRequests } from "@ezapply/engine/dom";
 import { titledJob } from "@ezapply/engine/standard";
 import { T } from "@ezapply/engine/timing";
 import type { SiteDefinition } from "@ezapply/engine/types";
@@ -73,12 +73,24 @@ export const workday: SiteDefinition = {
      * After a move, wait for the new step to show its fields: Workday moves the progress bar before the step
      * renders, and in two live runs a get_form straight after go_next read an empty step four times (its
      * questions were there a second or two later). The review page has no fields, so it isn't waited for.
+     *
+     * Then for the requests the step started: on a step filled before, Workday fetches each dropdown's values
+     * after rendering it and shows the saved choice only once they're in. Seen live after going back and forward:
+     * the page went quiet with those requests still out, and the read gave every dropdown as empty.
      */
     afterStep: async (doc, moved) => {
-      if (moved && detectPage(doc, 0) !== "review") {
+      if (!moved || detectPage(doc, 0) === "review") return settle(doc, T.stepQuietMs, T.stepMaxMs);
+      const requests = watchRequests(doc);
+      try {
         await waitFor(() => workdayFields(doc, WORKDAY_WIDGETS).length > 0, T.stepFieldsMs, 150);
+        await settle(doc, T.stepQuietMs, T.stepMaxMs);
+        if (requests.pending() > 0) {
+          await waitFor(() => requests.pending() === 0, T.stepRequestsMs, 100);
+          await settle(doc, T.stepQuietMs, T.stepMaxMs);
+        }
+      } finally {
+        requests.stop();
       }
-      await settle(doc, T.stepQuietMs, T.stepMaxMs);
     },
     afterAction: (doc) => settle(doc, T.pageActionQuietMs, T.pageActionMaxMs),
   },
