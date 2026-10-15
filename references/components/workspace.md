@@ -126,6 +126,12 @@ already held. The rule is in `EZAPPLY.md` too, so it holds whichever skill is ru
   every session and subagent gets while the server is connected, therefore repeat the rules that must never
   be missing (untrusted content, application requirements, never submit) and give the absolute path of
   `EZAPPLY.md` with "Read it if it isn't in your context".
+- `EZAPPLY.md` itself imports `@profile/preferences.md`, so the user's preferences are in every session's
+  context, whichever skill runs or none (a revision asked in the panel often runs without one). A workspace with
+  no preferences file leaves the line as plain text, without an error. A session keeps the preferences it
+  started with: a resumed session doesn't load `CLAUDE.md` again, so a change made on the setup page applies from
+  the next conversation. *Why an import, not a "read `preferences.md`" step:* the step sat in two skills only,
+  among other reads, and documents and free-text answers came out ignoring the preferences.
 - `ezapply init` adds the import line if the user removed it. `workspace_check` (item `agent_file`, first
   and required) and `ezapply doctor` (`agent file`) fail when `EZAPPLY.md` is missing or `CLAUDE.md` has no
   `@EZAPPLY.md` line (`agentFileStatus` in `companion/src/status.ts`; a mention in backticks doesn't count,

@@ -62,7 +62,8 @@ Stored answers to screening questions.
 
 ## Preferences (`profile/preferences.md`)
 Free text: tone for cover letters, what to emphasize, what never to mention, target roles and locations,
-whether to write cover letters by default. Done at 10+ words.
+whether to write cover letters by default. Done at 10+ words. `EZAPPLY.md` imports the file, so the agent has it
+in every session without reading it ([how](workspace.md#how-it-stays-in-context)).
 
 ## Repo selection (`profile/repos.yaml`)
 `repos[] { fullName, source: "app" | "public-url", note? }`, written by `repos_selection_set`. See

@@ -59,6 +59,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   user's own skills stopped competing with ezapply's ([agent](components/agent.md#the-process-processts)).
 - **`EZAPPLY.md` holds only what every call needs;** document editing, the attach mode and the form rules went to
   the skills and tool descriptions that use them ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
+- **The preferences are imported by `EZAPPLY.md`,** not read by a skill step, so every session has them whichever
+  skill runs ([workspace](components/workspace.md#how-it-stays-in-context)).
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
 - **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
 - **One button on the review page**, under the edits box and stuck to the panel's foot, approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
@@ -102,6 +104,11 @@ What's built but hasn't run live, and what to check first. Each site's page list
   read 1.25M tokens of context, a tailoring then an application 36 calls and 2.48M, about 29.7k of it the
   starting context on every call. The Workday nested-menu paths are an adapter change of their own: check them in
   a run with no other Workday change ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
+
+- **The preferences in context:** checked that Claude Code loads `profile/preferences.md` through `EZAPPLY.md`'s
+  import with the panel's `--setting-sources project,local`, and skips it quietly when missing. Not yet run: a
+  tailoring and an application that follow a tone and a "never mention" entry without reading the file
+  ([workspace](components/workspace.md#how-it-stays-in-context)).
 
 - **Tailoring edits:** in a live tailoring, check that the agent rereads only the passages it changed (not whole
   files), that a cover letter comes back near a full page (`freeLines` 0–2) without a second page, that the

@@ -10,9 +10,8 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
    `posting_update_meta`; a requisition or job id the posting shows goes in `reqId` (never in the company or
    role). If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
    and follow it: a required format, page limit or single PDF changes what you produce.
-2. Read `profile/profile.yaml`, `profile/preferences.md`, every claim (`claims_list`, if not already
-   called in this session), and
-   the template (template main from `workspace_check` or `templates/resume/template.json`).
+2. Read `profile/profile.yaml`, every claim (`claims_list`, if not already called in this session), and the
+   template (template main from `workspace_check` or `templates/resume/template.json`).
 3. If `postings/<id>/resume.tex` does not exist, copy the template main file there. If `template.json`
    lists `contentFiles` (files the main file `\input`s, e.g. `sections/experience.tex`), copy each to the same
    path relative to `resume.tex`: the posting folder comes first on TeX's search path, so the copies are

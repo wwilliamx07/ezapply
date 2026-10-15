@@ -101,7 +101,7 @@ function spot(container: HTMLElement, control: Element, driver: WidgetDriver, fo
   return {
     container,
     driver,
-    // Custom questions are keyed by long numbers (`question_38624172002`); their prompt reads better and is as stable.
+    // Custom questions are keyed by long numbers (`question_1000000172`); their prompt reads better and is as stable.
     key: !id || /^question_/.test(id) ? slug(label).slice(0, 40) : id,
     label,
     section: section(container, form),

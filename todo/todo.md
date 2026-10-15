@@ -22,6 +22,11 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
+| — | [The extension's reconnect storm](extension-reconnect-storm/overview.md) | High | S | — |
+| — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
+| — | ["Locked by another program" when nothing holds the file](spurious-file-locks/overview.md) | Medium | S | — |
+| — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
+| — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
@@ -38,9 +43,13 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | 11 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
 | 12 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
 | 13 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
+| — | [Lint for broken Markdown links and stale comments](repo-lint/overview.md) | Low | S | — |
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
 
 Why this order:
+- **Bugs first**, in the table's order: the reconnect storm and the agent stopping at its first tool call break a
+  session outright; the rest cost turns or quality on every run.
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
   later item. Removing the onboarding and repos skills comes before refactoring the rest, which moves every other
   mechanical step into code.
@@ -52,8 +61,12 @@ Why this order:
 
 ## Groups
 
-- **The agent:** Cut the tokens a panel conversation spends, Remove the onboarding and repos skills, Refactor
-  the skills, A writing spec for claims, Compatibility with various agents.
+- **Bugs:** The extension's reconnect storm, The panel's agent stops when ezapply's tools aren't connected yet,
+  "Locked by another program" when nothing holds the file, Form calls on a tab run out of order, CI timeouts on
+  Windows.
+- **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
+  touch, Remove the onboarding and repos skills, Refactor the skills, A writing spec for claims, Compatibility with
+  various agents.
 - **Adapter building:** Agents that try to break a new adapter, Application forms on an
   employer's own page.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts, Run
@@ -62,4 +75,5 @@ Why this order:
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`), so the manager reads and extends those; it adds no database. Tracker, Job
   search, Job alerts, Auto mode.
-- **Upkeep:** Remove the upgrade shims, A harness that runs the user flows.
+- **Upkeep:** Remove the upgrade shims, A harness that runs the user flows, Lint for broken Markdown links and stale
+  comments.

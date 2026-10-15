@@ -1,0 +1,14 @@
+# Lint for broken Markdown links and stale comments: details
+
+- A first pass with the stale-name rule over `packages/*/src` hits only ids from employers' pages (a Dayforce
+  control id, SuccessFactors widget names, Phenom job ids): that's what the allowlist is for. Comments on the upgrade
+  shims are current until "Remove the upgrade shims" deletes their code.
+- A name only in comments, with no code using it, is the strongest sign; a name used in another package counts as
+  existing.
+- The skills' tool names and call shapes stay with `cli/test/skill-calls.test.ts`; the checker doesn't repeat it.
+- Workspace paths in the shipped templates (`profile/answers.yaml`, `postings/<id>/notes.md`) aren't repo files:
+  check them against `WORKSPACE_DIRS` and the files `init` writes, or leave them out.
+- A lint step rather than a test, so it runs before the build and fails fast.
+
+**References when built:** `development.md` (lint and tests), `CLAUDE.md`'s line on what
+`test/references.test.ts` checks.

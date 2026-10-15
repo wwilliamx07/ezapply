@@ -10,7 +10,7 @@ description: Write or revise a cover letter for the active job posting using the
 - `## Application requirements` in `postings/<id>/notes.md` (write it first if missing, see EZAPPLY.md):
   word or page limits, who to address, reference numbers, questions the letter must answer, whether a
   letter is wanted at all.
-- `profile/preferences.md` for tone, emphasis and things never to mention. `profile/profile.yaml`.
+- `profile/profile.yaml`. The user's preferences (tone, emphasis, never mention) are already in your context.
 - `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a
   quick version: the top requirements and the matching claims, from the claims (`claims_list`, if not already
   called in this session).
@@ -68,7 +68,7 @@ When the user gives a sample letter whose format they like:
    user to compare it with the example; adjust what they point out until they approve.
 
 Never reuse the example's sentences, claims or voice in the user's letters. Only its format carries over.
-Tone comes from `profile/preferences.md`.
+Tone comes from the user's preferences.
 
 ## Report and iterate
 Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode

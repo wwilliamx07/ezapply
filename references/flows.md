@@ -114,7 +114,7 @@ The `ezapply-resume` skill:
    `notes.md` has no `## Application requirements`, write it (documents wanted, single PDF → `bundleRequired`,
    format, naming, limits, addressee, deadline) and mention them to the user. Every later skill (cover
    letter, bundle, apply) follows it. Any request about a posting does this first, per `EZAPPLY.md`.
-2. Read the profile, preferences, every claim (`claims_list`, already called at the first request per
+2. Read the profile (the preferences are already in context, imported by `EZAPPLY.md`), every claim (`claims_list`, already called at the first request per
    `EZAPPLY.md`) and the template; copy the template's main file to
    `postings/<id>/resume.tex` if it isn't there (it keeps the template's `% !TEX program` comment, so it
    builds with the same engine), along with the files it `\input`s (`contentFiles` in `template.json`) at the

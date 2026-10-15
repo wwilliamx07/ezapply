@@ -25,11 +25,11 @@ there ([embedded applications](../extension.md#embedded-applications)), with its
 
 Prompts are the controls' labels (`promptOf`), help text the `<id>-description` element, errors `aria-invalid` with
 its message or `#<id>-error`. Required: `aria-required`, or a required mark in the label. Ids go through
-`cssEscape` before they're put in a selector: a multi-select's id ends in `[]` (`question_38624172002[]`), which
+`cssEscape` before they're put in a selector: a multi-select's id ends in `[]` (`question_1000000172[]`), which
 is not a valid CSS identifier as written.
 
 **Ids.** Greenhouse's own fields by control id (`application.first_name`); its custom questions, keyed by long
-numbers (`question_38624172002`), by the prompt's slug, which reads better and is as stable. Section: the heading
+numbers (`question_1000000172`), by the prompt's slug, which reads better and is as stable. Section: the heading
 before the field within the form (the EEO block's "Voluntary Self-Identification"), else "Application".
 
 **Hints** by id: names, email, phone, the phone's country (`contact.phone.countryCode`), and the EEO fields
