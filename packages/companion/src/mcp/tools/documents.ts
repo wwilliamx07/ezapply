@@ -14,9 +14,10 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
       description:
         "Compile a .tex file (under postings/ or templates/) to a PDF next to it, without shell escape. Returns the " +
         "PDF, page count, and diagnostics with line numbers (overfull boxes, missing glyphs). *resume*/*cv* files are " +
-        "checked against the page limit; over it, `overflow` gives the lines past it and their text. Within it, " +
+        "checked against the page limit, *cover*/*letter* files against one page; over it, `overflow` gives the " +
+        "lines past it and their text. Within it, `freeLines` is how many more lines fit on the last page, and " +
         "`lint` lists layout problems: a word or two alone on a bullet's last line, right-aligned dates out of " +
-        "line, free lines at the bottom of the last page at the limit, text off the page. Successful builds are snapshotted to .history/. Engine: the file's " +
+        "line, 3+ free lines at the limit, text off the page. Successful builds are snapshotted to .history/. Engine: the file's " +
         `\`% !TEX program\` comment, else tex.engine (engine, engineFrom say which). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),

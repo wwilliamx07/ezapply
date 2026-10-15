@@ -13,9 +13,9 @@ import {
 } from "@cantoo/pdf-lib";
 import { createCanvas } from "@napi-rs/canvas";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { lintLayout } from "../src/documents/pdf/lint.js";
+import { freeLines, lintLayout } from "../src/documents/pdf/lint.js";
 import { parsePageRanges } from "../src/documents/pdf/pages.js";
-import { pdfInfo, pdfLines, pdfText } from "../src/documents/pdf/toolkit.js";
+import { type PageLines, pdfInfo, pdfLines, pdfText } from "../src/documents/pdf/toolkit.js";
 import { DocumentsService } from "../src/documents/service.js";
 import {
   detectTexProgram,
@@ -168,6 +168,16 @@ describe("layout lint", () => {
     ]);
     expect(lintLayout(top, { pageLimit: 2 })).toEqual([]);
     expect(lintLayout(top)).toEqual([]);
+    const free = freeLines(top[0] as PageLines) ?? 0;
+    expect(free).toBeGreaterThanOrEqual(3);
+    // One more line at the bottom takes one free line away.
+    const fuller = await page([
+      { y: 710, text: "Jane Doe" },
+      { y: 696, text: "Experience" },
+      { y: 682, text: "Skills" },
+      { y: 668, text: "Projects" },
+    ]);
+    expect(freeLines(fuller[0] as PageLines)).toBe(free - 1);
     const off = await page([
       { y: 700, text: "Jane Doe" },
       { x: 560, y: 680, text: "a line that runs past the edge" },
@@ -418,7 +428,18 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     );
     const short = await docs.compile("postings/p2/resume.tex");
     expect(short.lint).toEqual([expect.objectContaining({ kind: "underfilled", page: 1 })]);
+    expect(short.freeLines).toBeGreaterThanOrEqual(3);
     expect(short.hint).toMatch(/1 layout issue in `lint`/);
+
+    // A cover letter is one page: a second one is overflow, and a short one is underfilled.
+    await writeFile(join(root, "postings/p2/cover.tex"), twoPages);
+    expect(await docs.compile("postings/p2/cover.tex")).toMatchObject({ pageLimit: 1, pageLimitExceeded: true });
+    await writeFile(
+      join(root, "postings/p2/cover.tex"),
+      `\\documentclass{article}\\pagestyle{empty}\\begin{document}\n${lines}\n\\end{document}\n`,
+    );
+    const letter = await docs.compile("postings/p2/cover.tex");
+    expect(letter.lint).toEqual([expect.objectContaining({ kind: "underfilled" })]);
   }, 180_000);
 
   it("reports errors with line numbers", async () => {

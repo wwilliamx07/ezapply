@@ -71,11 +71,13 @@ Anything else fails with `path_not_allowed`.
    the engine output when the log has nothing parsable.
 5. On success: copy the PDF to `<dir>/<name>.pdf`, count pages, check the page limit, lint the layout, snapshot,
    and return
-   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, lint?, diagnostics, logPath, durationMs, snapshot, hint? }`.
+   `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, lint?, freeLines?, diagnostics, logPath, durationMs, snapshot, hint? }`.
    Failures also carry `engine` and `engineFrom`.
 
 - **Page limit:** files whose name contains `resume` or `cv` are checked against `resume.pageLimit`
-  (default 1); `maxPages` overrides it for any file. Over the limit, `overflow { lines, text }` holds the text of
+  (default 1), and files whose name contains `cover` or `letter` against one page; `maxPages` overrides it for
+  any file. *Why a letter has a limit:* without one, nothing measured its free space, and agents left letters
+  well short of the page (the skill asks for a full one). Over the limit, `overflow { lines, text }` holds the text of
   the pages past it (`pdfText`, first 400 characters) and its non-empty line count, and the hint says how
   many lines to cut. A live resume took five compiles to fit when the result said only "2 pages": three lines
   of skills had spilled over.
@@ -90,8 +92,8 @@ Anything else fails with `path_not_allowed`.
     flagged four bullets ending in three or four words, common in a full resume, and each fix costs a compile.
   - `ragged-right`: a right-aligned entry (the span after a gap of over 1.5 em, ending in the right quarter:
     dates, places) ends more than 1.5 pt from the edge most such entries share.
-  - `underfilled`: at the page limit, three or more lines' worth free at the bottom of the last page, with the
-    margins taken as equal top and bottom. Room for the next strongest bullet.
+  - `underfilled`: at the page limit, `freeLines` (below) is 3 or more. Room for the next strongest bullet.
+    One or two free lines aren't flagged: chasing them costs a compile each, and `freeLines` already says so.
   - `off-page`: a line runs past the page's edge.
 
   Overfull and underfull lines come from the log (diagnostics), not the lint. *Why a lint and not an image of
@@ -99,6 +101,10 @@ Anything else fails with `path_not_allowed`.
   mechanical. A rendered page image costs about 2.5k tokens of context, re-sent on every later turn of the
   session, two per tailoring, to find what these checks name exactly. Changes to a
   template's look are the user's to ask for.
+- **Free lines** (`freeLines` in `pdf/lint.ts`): within the limit, how many more lines fit below the last page's
+  lowest line, with the bottom margin taken as equal to the space above the highest line and a line as the
+  page's median line spacing. Returned on every build within its limit, so "one more line fits" is known
+  rather than guessed; the skills aim for 0–2 ([workspace](workspace.md#the-agent-file-ezapplymd)).
 - **History:** each successful build copies the `.tex` and `.pdf` to `<dir>/.history/<timestamp>/`, and
   `pdf_merge` its output the same way. The newest 30 snapshots per folder are kept. "Go back to the previous version" restores from there.
 

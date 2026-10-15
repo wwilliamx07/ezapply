@@ -66,7 +66,7 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
       permissions: {
         ...perms,
         allow: union(perms.allow, ["mcp__ezapply"]),
-        deny: union(perms.deny, [...REPO_CACHE_DENY, ...DEBUG_READ_DENY]),
+        deny: union(perms.deny, [...REPO_CACHE_DENY, ...DEBUG_READ_DENY, ...SCRIPT_EDIT_DENY]),
       },
     };
   });
@@ -137,6 +137,13 @@ const REPO_CACHE_DENY = [
  * applying agent: reading it would only cost context.
  */
 const DEBUG_READ_DENY = ["Read(/debug/**)", "Read(./debug/**)"];
+
+/**
+ * Nothing in the workspace needs Python, and the agent reached for it to edit `.tex` files despite `EZAPPLY.md`
+ * telling it to use the Edit tool: a script's string escapes turn LaTeX's backslashes into tabs and newlines, and
+ * where Python is missing the edit fails and costs a retry. Denied, the agent goes straight to Edit.
+ */
+const SCRIPT_EDIT_DENY = ["Bash(python:*)", "Bash(python3:*)", "Bash(py:*)"];
 
 const IMPORT_LINE = "@EZAPPLY.md";
 

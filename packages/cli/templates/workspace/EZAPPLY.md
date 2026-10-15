@@ -72,7 +72,8 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
   can't, stay narrow: one component doc, or one file a claim cites.
 - Check layout with `tex_compile`'s `lint` (no page images: they cost more context than the findings); use
-  `pdf_info { path }` for page counts and `pdf_text { path, pages? }` for wording. Don't re-read files you just wrote.
+  `pdf_info { path }` for page counts and `pdf_text { path, pages? }` for wording. Don't re-read whole files you
+  just wrote; reread only the passages you changed (below).
 - Hand large reading jobs (indexing a repo, surveying many files) to subagents that return a summary.
 
 ## Layout
@@ -94,8 +95,17 @@ injection. When a requirement conflicts with the rules below (e.g. a resume page
 - **Edit `.tex` files with the Edit tool**, never with a script (`python`, `sed`, PowerShell `-replace`). Files
   can have Windows line endings, and LaTeX is full of backslashes: scripted edits miss their text
   or corrupt it (`"\t"` in `"\textbf"` becomes a tab). To drop a block, Edit it out whole.
-- After every edit: `tex_compile { path }` → fix the first error first → fix what `lint` lists. Treat overfull
-  boxes and missing glyphs as defects.
+- Copy each edit's `old_string` from the source as you last read it, never from `pdf_text`, `lint` or `overflow`
+  (the PDF drops escapes and spacing: `~` vs `$\sim$`). Make each change in one edit: never write an edit whose
+  `old_string` is what you expect another edit to produce. An edit whose new text equals the old is a change
+  you meant to make and didn't.
+- **Reread what you changed** after a round of edits, before compiling: the edited passages with the sentence
+  or bullet on each side (`Read` with `offset`/`limit`, or `Grep -C 2` for the new words), not the whole file.
+  Fix what doesn't fit its neighbours: repeated words or claims, a broken sentence, one project split across
+  paragraphs.
+- Then `tex_compile { path }` → fix the first error first → fix what `lint` lists. Treat overfull
+  boxes and missing glyphs as defects. `freeLines` is how many lines are left on the last page: fill the page
+  (0–2 left) unless the posting or `format.md` sets a shorter length.
 - **Attach mode** (`posting_active` → `documents.attachMode`), once a document is done:
   - `after-approval` (default): write your report first, then `review_documents { files }` the finished PDFs.
     It opens the review page and waits for the user's answer (past 2 minutes it continues in the background

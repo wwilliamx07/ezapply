@@ -2,3 +2,7 @@
 - investigate increased tool failures, agent started using toolsearch, not sure if this was always a thing. might be because too many tools causing lazy loading?
 - agent doesnt read preferences
 - Claude Code stopped unexpectedly: Error: MCP tool mcp__ezapply__permission_ask (passed via --permission-prompt-tool) not found. Available MCP tools: mcp__claude_ai_Claude_Docs__create, mcp__claude_ai_Claude_Docs__read, mcp__claude_ai_Claude_Docs__update, mcp__claude_ai_Claude_Docs__delete, mcp__claude_ai_Claude_Docs__query, mcp__cla
+- after having the companion open for a long time, extension flickers quickly between connected and unconnected state. unknown how to reproduce.
+- ci timeout too low
+- clear stale comments, links. add lint rules to enforce this
+- file locked by another program bug

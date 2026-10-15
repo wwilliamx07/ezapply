@@ -26,20 +26,23 @@ its placeholders (company, role, date, addressee if the posting names one), and 
    interests the user, drawn from the posting. No clichés ("I am writing to express…", "passionate").
 2. **Two evidence paragraphs:** each ties one or two requirements to a specific project or role, citing
    what the user built and how, from claims or profile. Mirror the posting's language only where true.
+   Everything about one project or role goes in one paragraph: never split it across two.
 3. **Close (1–2 sentences):** what they'd bring, and availability to talk.
 
 If `format.md` exists, follow its structure (paragraph count, salutation, sign-off, subject line, length)
 instead of the defaults above. The evidence rules below still apply.
 
 Constraints:
-- One page and roughly 250–380 words, unless `format.md` sets another length.
+- One full page (`freeLines` 0–2), unless the posting or `format.md` sets another length. Fill it with more
+  of the evidence (a further project or result, more on how the user built something), never with filler.
 - No skills or results without evidence. Never mention gaps apologetically.
 - Put a `% src:` comment beside each paragraph listing the claim ids used.
 - Escape LaTeX specials in anything taken from the posting.
 
 ## Build and check
-`tex_compile { path }` (must be one page; fix what `lint` lists) → read the letter once as the hiring manager
-would. Cut filler and repeated claims.
+`tex_compile { path }` (must be one page; fix what `lint` lists; `underfilled` or `freeLines` above 2 means
+add evidence) → read the body once as the hiring manager would, between the markers. Cut filler and
+repeated claims. After a tweak, reread the changed paragraphs whole before compiling (EZAPPLY.md).
 
 ## Build from an example
 When the user gives a sample letter whose format they like:

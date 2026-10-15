@@ -55,7 +55,7 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    `{ type: "stdio", command: <node>, args: [<dist/main.js>, "mcp"] }`; other servers are kept.
 8. **`.claude/settings.json`**: merged so `enabledMcpjsonServers` includes `ezapply` (no approval prompt),
    `permissions.allow` includes `mcp__ezapply`, `permissions.deny` includes Edit, Write and NotebookEdit
-   on `repo-cache/**` and Read on `debug/**`, and `autoMemoryEnabled` is `false` unless the user set it
+   on `repo-cache/**`, Read on `debug/**` and Bash for `python`, `python3` and `py`, and `autoMemoryEnabled` is `false` unless the user set it
    ([why](workspace.md#claude-code-settings)).
 9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Then
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when

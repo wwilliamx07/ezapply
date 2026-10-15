@@ -40,10 +40,11 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
    cut about that much in one pass, tightening wording first, then dropping the weakest bullet. Never
    shrink fonts, margins or spacing below the template's.
 3. Within the page, fix what `lint` lists: a word or two alone on a bullet's last line (cut a few words, or
-   say a little more), a right-aligned date out of line. `underfilled` means room is left: add the next
-   strongest evidence-backed bullet.
-5. `pdf_text { path, pages? }`: headings intact, sensible reading order, key terms present as plain text.
-6. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
+   say a little more), a right-aligned date out of line. `freeLines` says how much room is left: at 3 or more
+   (`underfilled`), add the next strongest evidence-backed bullet or lengthen a strong one by about that many
+   lines; at 1–2, a line or two more on a bullet that wraps short.
+4. `pdf_text { path, pages? }`: headings intact, sensible reading order, key terms present as plain text.
+5. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
 
 ## Report
 Give 3–6 lines: what changed and why, plus any gaps you did not claim, and the PDF path. Then follow the

@@ -42,6 +42,12 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Layout is linted, not looked at.** `tex_compile` names layout problems from where the text sits; no tool renders
   a page as an image, which cost more context than the findings on every later turn
   ([documents](components/documents.md#compile-compile)).
+- **Tailored documents fill the page.** `tex_compile` reports `freeLines`, a cover letter has a one-page limit, and
+  the skills aim for 0–2 lines left: agents judging the space themselves stopped well short
+  ([documents](components/documents.md#compile-compile)).
+- **Edits are reread, narrowly.** After a round of edits the agent rereads only the changed passages and their
+  neighbours: never rereading saved tokens but let edits clash; python is denied in the workspace so `.tex`
+  edits go through the Edit tool ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
 - **Form tools that change the page return it** (`go_next`, `add_repeatable`, `remove_repeatable`), and long option
   lists go out as a count: each extra read was a turn re-sending the whole conversation
   ([forms](mcp-tools.md#forms)).
@@ -82,6 +88,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
   (one `get_form` in four steps), but still called `list_options` before filling three steps' dropdowns. Not yet
   checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long list, and the lint's findings against the
   PDF. What the runs cost, and what to cut next, is in the todo item "Cut the tokens a panel conversation spends".
+
+- **Tailoring edits:** in a live tailoring, check that the agent rereads only the passages it changed (not whole
+  files), that a cover letter comes back near a full page (`freeLines` 0–2) without a second page, that the
+  python deny sends `.tex` edits to the Edit tool, and that `freeLines` matches the page as rendered.
 
 - **The side panel:** opened by the toolbar button, and a whole application from it with the real Claude Code (setup, a review, question and
   approval cards, Stop, Reset, long waits).

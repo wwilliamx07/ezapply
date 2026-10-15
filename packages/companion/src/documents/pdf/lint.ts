@@ -111,23 +111,16 @@ function raggedRight(pages: PageLines[], left: number, width: number): LayoutIss
 }
 
 /**
- * At the page limit, free space at the bottom of the last page: with margins taken as equal top and bottom,
- * three or more empty lines' worth is room for more of the strongest content.
+ * At the page limit, free space at the bottom of the last page: three or more empty lines' worth is room for more
+ * of the strongest content. One or two aren't flagged (the compile's `freeLines` says so): chasing them costs a
+ * compile each.
  */
 function underfilled(pages: PageLines[], pageLimit: number | undefined): LayoutIssue[] {
   const last = pages[pages.length - 1];
-  if (!last || pageLimit === undefined || pages.length !== pageLimit || last.lines.length < 2) return [];
-  const top = Math.max(...last.lines.map((l) => l.y + l.size));
+  if (!last || pageLimit === undefined || pages.length !== pageLimit) return [];
+  const lines = freeLines(last);
+  if (lines === undefined || lines < 3) return [];
   const lowest = last.lines.reduce((lo, l) => (l.y < lo.y ? l : lo));
-  const free = lowest.y - 0.25 * lowest.size - (last.height - top);
-  const gaps = last.lines
-    .slice(1)
-    .map((l, i) => (last.lines[i] as TextLine).y - l.y)
-    .filter((g) => g > 0)
-    .sort((a, b) => a - b);
-  const lineHeight = gaps[Math.floor(gaps.length / 2)] ?? 1.2 * lowest.size;
-  const lines = Math.floor(free / lineHeight);
-  if (lines < 3) return [];
   return [
     {
       kind: "underfilled",
@@ -136,6 +129,24 @@ function underfilled(pages: PageLines[], pageLimit: number | undefined): LayoutI
       message: `About ${lines} lines are free at the bottom of page ${last.page}: room for more of the strongest content.`,
     },
   ];
+}
+
+/**
+ * How many more lines fit below a page's lowest line: the bottom margin is taken as equal to the space above the
+ * highest line, and a line as the page's median line spacing. Undefined for a page with under two lines.
+ */
+export function freeLines(page: PageLines): number | undefined {
+  if (page.lines.length < 2) return undefined;
+  const top = Math.max(...page.lines.map((l) => l.y + l.size));
+  const lowest = page.lines.reduce((lo, l) => (l.y < lo.y ? l : lo));
+  const free = lowest.y - 0.25 * lowest.size - (page.height - top);
+  const gaps = page.lines
+    .slice(1)
+    .map((l, i) => (page.lines[i] as TextLine).y - l.y)
+    .filter((g) => g > 0)
+    .sort((a, b) => a - b);
+  const lineHeight = gaps[Math.floor(gaps.length / 2)] ?? 1.2 * lowest.size;
+  return Math.max(0, Math.floor(free / lineHeight));
 }
 
 function short(text: string): string {

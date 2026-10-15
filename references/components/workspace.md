@@ -17,8 +17,8 @@ ezapply-home/
   state.json               the active posting id, what the profile and cover fields last matched, library
                            documents said not to be templates, repos put off
   .mcp.json                Claude Code → `node <cli>/main.js mcp`
-  .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/ and
-                           reads of debug/
+  .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/,
+                           reads of debug/ and running python
   .claude/skills/          ezapply-onboard, -repos, -index-repo, -resume, -cover-letter, -bundle, -apply, -answers
   profile/                 profile.yaml, answers.yaml, preferences.md, repos.yaml
   templates/resume/        the user's LaTeX resume + template.json
@@ -63,7 +63,7 @@ the skills ([call shapes](#call-shapes)). Sections:
   `posting_active`, call `claims_list` once (every claim, compact: about 14 KB, ~3.5k tokens, for 73 claims
   in 8 repos). Knowledge docs, `repo-cache/` and (re-)indexing only when the claims can't answer something,
   and then narrowly (one component doc, or one cited file). Layout from `tex_compile`'s `lint`, never a page image; don't re-read
-  files just written; hand large reading jobs to subagents. *Why every claim at once:* a fresh session
+  whole files just written, only the passages changed (below); hand large reading jobs to subagents. *Why every claim at once:* a fresh session
   doesn't know which projects matter, and a relevance-filtered retrieval (a search tool, embeddings)
   saves little at this size while risking a claim silently left off the resume; the first real session
   showed the agent improvising exactly this compact read. *Why a tool and not a Grep:* Grep repeats the file path and a line number on every line and lists every `impact: null`, which
@@ -73,8 +73,10 @@ the skills ([call shapes](#call-shapes)). Sections:
   cost about 3.5k tokens to write into the cache (at twice the input price) and a tenth of that per later
   turn.
 - **Layout** and **documents** conventions (copy templates into the posting folder, with the files in
-  `template.json`'s `contentFiles`; `.tex` edited with the Edit tool only; the per-file engine from
-  `% !TEX program`, compile → fix errors and `lint`, history, ATS text check, escape LaTeX specials), and the
+  `template.json`'s `contentFiles`; `.tex` edited with the Edit tool only, each `old_string` copied from the
+  source and never the predicted result of another edit; the changed passages reread with their neighbours
+  before compiling; the per-file engine from `% !TEX program`, compile → fix errors and `lint`, fill the page
+  to `freeLines` 0–2, history, ATS text check, escape LaTeX specials), and the
   **attach mode**: in `after-approval`, review
   finished documents in the browser and attach approved ones (approval in chat doesn't count); in
   `immediately`, attach right away; attach when the application is at the file step, else when filling.
@@ -92,7 +94,24 @@ Bash, and those scripts miss their text (posting copies' line endings vary betwe
 searching with `\n` or with other whitespace finds nothing) or corrupt it (`"\textbf"` in a non-raw string turns
 `\t` into a tab and leaves `extbf`). Each failure costs a turn or two and risks a corrupted document. The Edit
 tool matches the file as it is. Saying "no Python" alone wouldn't do: `sed` and PowerShell `-replace` fail the
-same ways.
+same ways. The rule alone didn't stop it either, so the workspace's settings also deny `python`
+([settings](#claude-code-settings)).
+
+*Why the other edit rules:* of the Edit tool's failures on tailored documents, the rest had three causes: an
+`old_string` taken from the rendered page rather than the source (its spacing and escapes differ from the
+source's), an edit whose `old_string` was the text another edit in the same message
+was expected to produce (it wasn't), and edits whose new text equalled the old (a change decided on and never
+written). Each costs a turn, and the last loses the change silently.
+
+*Why reread the changed passages, and only those:* never rereading saves tokens, but edits made blind to their
+context read badly together: a phrase repeated across two edits, a sentence that no
+longer follows the one before, one project's points split across two paragraphs of a letter, each sent back
+from the review. Rereading only the changed passages with a sentence or bullet on each side catches these
+for a few hundred tokens, much less than a review round.
+
+*Why fill the page:* left to judge the space themselves, agents stopped well short of the bottom, wary of a
+second page, and the user asked for more in the review. `freeLines` measures it, and a cover letter now has a
+one-page limit so the compile checks it ([documents](documents.md#compile-compile)).
 
 *Why "read the answer bank before asking":* in one session the agent ran `ezapply-resume` first for an "apply"
 request, never came back to the apply skill's step 1, and asked the user two questions their answer bank
@@ -142,8 +161,8 @@ parameters without showing its shape fails. Renaming a parameter therefore means
 | `ezapply-onboard` | First run, "set me up", missing checklist items, or `workspace_changes` listing changes | First, "Keeping the workspace current": lists the changes in a line each, says which the request in hand needs (`affects`), asks whether to update now, after this posting or later (`later` marked in one call: repos for a day unless the user says longer, all of them or the ones named, saying until when; anything else for the chat; `deferred` answers "what did I put off?"), then in dependency order re-imports a template from its source (confirmed, carrying over onboarding fixes from the old copy), updates the profile from the resume template's diff alone (keeping what the resume never held, asking before dropping a job or degree), updates the cover's name and contact fields, re-indexes pushed repos with `ezapply-index-repo` (re-reading the claims if already read), and asks before deleting a deselected repo's knowledge; each marked done. *Why in this skill, not one of its own:* it's the setup skill, and these bring parts of setup up to date. Then onboarding, on the setup page: `onboarding {}` opens it (or gives its `url` to pass on) and returns; each task arrives as a message in the panel's general conversation, is done as it says (with the companion's `how`) and reported with `onboarding { taskId, result: { ok, note? } }`, whose `note` the page shows; the same call reopens the page to change a step. Never asks in chat for what the page collects. *Why so short:* what each task needs is in its `how`, from the companion, so the skill doesn't repeat it ([ui](ui.md#the-agents-side-tasks)). *Why a page:* asking in chat for paths, choices of repos, an address and screening answers cost a turn each |
 | `ezapply-repos` | Choosing or changing repos | Lists accessible repos, proposes a selection (leaving out forks without the user's commits, archived, tiny, dotfile/config, profile-README repos), saves it |
 | `ezapply-index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does and name their files; a re-index extends the existing docs and reads `repo_diff`, not the repo ([procedure](knowledge-base.md#indexing-procedure-the-ezapply-index-repo-skill)) |
-| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, `lint` and ATS checks, self-check, then review (in `after-approval`) |
-| `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body, `format.md` structure if present, one-page build loop, then review (in `after-approval`) |
+| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, `lint` and ATS checks, room left (`freeLines`) filled with the next strongest evidence, self-check, then review (in `after-approval`) |
+| `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body (one project or role per paragraph, never split), `format.md` structure if present, a full page unless a length is set, one-page build loop, then review (in `after-approval`) |
 | `ezapply-bundle` | One PDF required (posting, form or user) | Order (the posting's if given), conversions, merge with bookmarks and normalized pages, size checks; the bundle is reviewed as its own document in `after-approval` |
 | `ezapply-apply` | Fill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); stops on `postingMismatch`; uploads only approved documents in `after-approval`, every one of them (resume and cover letter both into a single file field that takes several, `multiple: true`), and goes back for any `notAttached` at review; passes a `tabHidden` hint to the user once, and a `browserBehind` hint when a field (a date) isn't taken; fills an application embedded in a careers page in place (results carry `frameId`); names no site: it explains the schema's facts once (page kinds, `lastPage`, the add buttons' kinds, saved items, dependent lists) and follows the `siteNotes` a site's first read in the session gives ([site notes](../mcp-tools.md#site-notes)); and passes on the hint of a form call waiting for a site's access (the user clicks Allow access in the small ezapply window it opened, then the agent calls again); form text treated as untrusted; each step started with `get_form` (or the step `go_next` returned), labels read as written (a level on a numeric scale takes a number), rows and items added until they match the profile's lists, rows beyond them removed only if the user doesn't want them, then step-by-step filling with sources (one `fill_fields` per step, one retry call for the failures, `list_options` with `fieldIds` only when the option wording decides the answer), questions in chat (after reading the answer bank), attestations ("I certify…", a notice read, the terms) ticked every time without asking unless they attest what the profile and answers don't establish, so the choice doesn't vary between runs, resolved answers offered for saving (see [answer bank](profile-and-templates.md#answer-bank-profileanswersyaml)), hand-off at review (on a one-page application, `lastPage`, once Submit is the only way on) built from `get_form`'s `handoff`; inline item forms saved with their `save` button; every add button's section matched to the profile (work, education, languages, certifications, links); `screenshot` only as a last resort, for a page that `get_form`, `browser_status` and the user can't explain, never to read fields |
 | `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants; an answer the user saves gets `sensitive: false`), Edit tool rather than a shell append, validation |
@@ -153,9 +172,10 @@ parameters without showing its shape fails. Renaming a parameter therefore means
   works from any shell. No token is stored here.
 - `.claude/settings.json` (merged, the user's other settings kept): `enabledMcpjsonServers: ["ezapply"]`,
   `permissions.allow: ["mcp__ezapply"]`, and `permissions.deny` for `Edit`, `Write` and `NotebookEdit` on
-  `repo-cache/**` (both `/repo-cache/**` and `./repo-cache/**` forms), and `Read` on `debug/**` (both forms):
+  `repo-cache/**` (both `/repo-cache/**` and `./repo-cache/**` forms), `Read` on `debug/**` (both forms):
   the debug records hold the user's filled values and pages, are for working on ezapply, and would only cost
-  the applying agent context. `autoMemoryEnabled: false` is added
+  the applying agent context; and `Bash` for `python`, `python3` and `py`: nothing in the workspace needs
+  Python, and the agent used it to script `.tex` edits ([why not](#the-agent-file-ezapplymd)). `autoMemoryEnabled: false` is added
   when the file doesn't set it (a value the user set is kept): Claude Code's auto memory loads a memory index
   and instructions for writing memories into every session, and has Claude spend turns writing notes. Here
   those notes would duplicate what the workspace already holds (profile, answer bank, preferences,

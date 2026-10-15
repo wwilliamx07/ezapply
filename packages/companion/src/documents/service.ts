@@ -8,7 +8,7 @@ import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Opener } from "../util/open.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
-import { type LayoutIssue, lintLayout } from "./pdf/lint.js";
+import { freeLines, type LayoutIssue, lintLayout } from "./pdf/lint.js";
 import type { PageSizeName } from "./pdf/pages.js";
 import {
   type MergeInput,
@@ -57,6 +57,8 @@ export interface CompileResult {
   overflow?: { lines: number; text: string };
   /** Layout problems on the pages (pdf/lint.ts), when the document is within its page limit. */
   lint?: LayoutIssue[];
+  /** Within the limit: how many more lines fit at the bottom of the last page (pdf/lint.ts `freeLines`). */
+  freeLines?: number;
   diagnostics: TexDiagnostic[];
   logPath: string;
   durationMs: number;
@@ -130,11 +132,11 @@ export class DocumentsService {
     const pdf = join(dir, `${name}.pdf`);
     await writeFileAtomic(pdf, new Uint8Array(await readFile(engineRun.pdfPath)));
     const pages = (await pdfInfo(pdf)).pages;
-    const pageLimit = opts.maxPages ?? (/resume|cv/i.test(name) ? config.resume.pageLimit : undefined);
+    const pageLimit = opts.maxPages ?? pageLimitOf(name, config.resume.pageLimit);
     const pageLimitExceeded = pageLimit !== undefined && pages > pageLimit;
     const overflow = pageLimitExceeded ? await overflowOf(pdf, pageLimit, pages) : undefined;
     // Over the limit, the cuts come first and will move every line: lint what fits.
-    const lint = pageLimitExceeded ? [] : await lintOf(pdf, pageLimit);
+    const { lint, freeLines } = pageLimitExceeded ? { lint: [] } : await lintOf(pdf, pageLimit);
     const snapshot = await this.snapshot(dir, [texPath, pdf]);
 
     return {
@@ -146,6 +148,7 @@ export class DocumentsService {
       ...(pageLimit !== undefined ? { pageLimit, pageLimitExceeded } : {}),
       ...(overflow ? { overflow } : {}),
       ...(lint.length ? { lint } : {}),
+      ...(freeLines !== undefined ? { freeLines } : {}),
       diagnostics,
       logPath,
       durationMs,
@@ -307,10 +310,33 @@ async function overflowOf(pdf: string, limit: number, pages: number): Promise<Co
   return { lines, text: text.length > 400 ? `${text.slice(0, 400)}…` : text };
 }
 
-/** The layout checks; a document the checks can't read is reported as having no issues, never as a failed build. */
-async function lintOf(pdf: string, pageLimit: number | undefined): Promise<LayoutIssue[]> {
+/**
+ * The page limit a file's name implies: a resume's is `resume.pageLimit`, and a cover letter is one page. The
+ * letter's limit is what lets the compile flag one left half empty: without it, the free space went unreported and
+ * letters came back with a third of the page blank.
+ */
+function pageLimitOf(name: string, resumeLimit: number): number | undefined {
+  if (/resume|cv/i.test(name)) return resumeLimit;
+  if (/cover|letter/i.test(name)) return 1;
+  return undefined;
+}
+
+/**
+ * The layout checks and the free lines on the last page; a document the checks can't read is reported as having
+ * no issues, never as a failed build.
+ */
+async function lintOf(
+  pdf: string,
+  pageLimit: number | undefined,
+): Promise<{ lint: LayoutIssue[]; freeLines?: number }> {
   const pages = await pdfLines(pdf).catch(() => null);
-  return pages ? lintLayout(pages, pageLimit === undefined ? {} : { pageLimit }) : [];
+  if (!pages) return { lint: [] };
+  const last = pages[pages.length - 1];
+  const free = last ? freeLines(last) : undefined;
+  return {
+    lint: lintLayout(pages, pageLimit === undefined ? {} : { pageLimit }),
+    ...(free !== undefined ? { freeLines: free } : {}),
+  };
 }
 
 function noEngine(configured: EngineId | "auto"): EzError {
