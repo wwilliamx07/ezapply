@@ -22,7 +22,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
-| — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~M | The token cuts' live run in `references/status.md` |
+| — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
 | 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | — | ~M | — |

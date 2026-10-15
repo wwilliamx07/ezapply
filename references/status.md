@@ -51,6 +51,14 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Form tools that change the page return it** (`go_next`, `add_repeatable`, `remove_repeatable`), and long option
   lists go out as a count: each extra read was a turn re-sending the whole conversation
   ([forms](mcp-tools.md#forms)).
+- **A miss is the query.** No tool lists a field's options: `fill_fields` returns the 10 closest on a miss, and a
+  nested menu's item named alone comes back with its full path; listing first cost a turn each time
+  ([forms](mcp-tools.md#forms)).
+- **The panel's Claude Code leaves the user's setup out:** only the workspace's MCP servers and settings, the tools
+  the panel uses with one shell, no bundled skills. The starting context, re-read on every call, halved, and the
+  user's own skills stopped competing with ezapply's ([agent](components/agent.md#the-process-processts)).
+- **`EZAPPLY.md` holds only what every call needs;** document editing, the attach mode and the form rules went to
+  the skills and tool descriptions that use them ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
 - **No database.** Per-posting `meta.json` and `form-log.jsonl` ([postings](components/postings.md#no-database)).
 - **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
 - **One button on the review page**, under the edits box and stuck to the panel's foot, approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
@@ -85,9 +93,15 @@ What's built but hasn't run live, and what to check first. Each site's page list
   board's frame recognised by the same hosts when access to websites is withheld.
 
 - **The token cuts:** one live Workday application used `go_next`'s and `add_repeatable`'s `form`
-  (one `get_form` in four steps), but still called `list_options` before filling three steps' dropdowns. Not yet
-  checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long list, and the lint's findings against the
-  PDF. What the runs cost, and what to cut next, is in the todo item "Cut the tokens a panel conversation spends".
+  (one `get_form` in four steps). Not yet checked: `remove_repeatable`'s `form`, the `optionCount` cap on a long
+  list, and the lint's findings against the PDF. Since then, and not yet run in the panel: the narrowed Claude Code
+  (skills, the permission cards, approvals saved in `settings.local.json` and the subscription login all still
+  work; PowerShell where Git Bash is missing), a miss's closest options retried without listing first, the cut
+  `EZAPPLY.md` and `ezapply-apply` still followed (its supporting files read when they apply), and each round's
+  edits and compile in one message. Then compare with the runs before them: a tailoring took 23 API calls and
+  read 1.25M tokens of context, a tailoring then an application 36 calls and 2.48M, about 29.7k of it the
+  starting context on every call. The Workday nested-menu paths are an adapter change of their own: check them in
+  a run with no other Workday change ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
 
 - **Tailoring edits:** in a live tailoring, check that the agent rereads only the passages it changed (not whole
   files), that a cover letter comes back near a full page (`freeLines` 0–2) without a second page, that the

@@ -3,8 +3,8 @@
 The companion runs Claude Code headless and relays what it does, so the user can work with it from the
 extension's side panel instead of a terminal. Claude Code is still the
 only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as
-running `claude` in the workspace by hand; the companion only starts it, writes the user's messages to it and
-reads what it does.
+running `claude` in the workspace by hand, without the user's own Claude Code setup ([below](#the-process-processts));
+the companion only starts it, writes the user's messages to it and reads what it does.
 
 It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Code to the companion
 (`CompanionOptions.claude`; `ezapply` won't start without it). A companion without it (tests) has an
@@ -43,12 +43,24 @@ reached.
 | `--replay-user-messages` | Each message is echoed (`isReplay: true`) when Claude takes it, so the panel can show it as taken |
 | `--permission-mode <mode>` `--model <alias>` `--effort <level>` | The panel's settings ([below](#permission-mode-model-and-effort)), always given, so the user's own Claude Code defaults don't decide them behind the panel |
 | `--permission-prompt-tool mcp__ezapply__permission_ask` | What would prompt in the terminal asks the panel instead ([cards](#cards-needsts)) |
-| `--disallowedTools AskUserQuestion` | Questions go through `ask_user`: Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen questions |
+| `--strict-mcp-config --mcp-config .mcp.json` | Only the workspace's MCP servers: not the user's own, claude.ai connectors among them |
+| `--setting-sources project,local` | The workspace's settings (its permission rules, and the approvals saved in `settings.local.json`), not the user's: no user-level plugins or skills. The subscription login isn't a setting and still applies, and so do managed (organization) settings. So do none of the user's own permission rules in `~/.claude/settings.json`: in the panel only the workspace's rules stand |
+| `--tools <shell>,Read,Edit,Write,Glob,Grep,Skill,ToolSearch,Agent` | Only the built-in tools the panel's work uses (`PANEL_TOOLS`), with one shell (`panelShell`): Bash, or PowerShell on Windows without Git Bash (Claude Code's Bash needs it). Not AskUserQuestion: questions go through `ask_user`, since Claude Code's own tool holds 1 to 4 questions of 2 to 4 options and no text entry, and one step of an application can have a dozen. Agent stays for repo indexing and other large reading jobs |
 | `--append-system-prompt <PANEL_PROMPT>` | Where its words go: the user reads them in a narrow panel and never sees a terminal; questions go on `ask_user` cards, commands are approved in the panel. A posting's conversation also gets its part's line (`PART_PROMPTS`, [below](#conversations-servicets)). The skills say the rest |
 | `--session-id <uuid>` / `--resume <uuid>` | A new conversation's session, or the one it had |
 
 Not `--bare`: bare mode skips the workspace's skills, `.mcp.json`, settings and `CLAUDE.md`, and doesn't use a
-subscription login. The environment gets `EZAPPLY_SESSION=<session id>`, which the MCP relay sends as
+subscription login.
+
+**Why the user's setup stays out.** The starting context is re-read on every API call, and most of it was the
+user's: in a one-message run in a workspace (Claude Code 2.1), the defaults started at about 41.8k tokens and these arguments at
+about 19.5k, mostly from `--tools` (each shell's schema alone is several thousand tokens, so one shell, not both).
+Beyond the tokens, a document skill of the user's that claims resumes and cover letters competed with ezapply's
+skills. Bash rather than PowerShell where both exist because the workspace's deny rules and the agent's habits are
+Bash's (`init` writes the python denies for both).
+
+The environment gets `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1` (Claude Code's bundled skills: about 2.5k tokens, none
+of them the panel's) and `EZAPPLY_SESSION=<session id>`, which the MCP relay sends as
 `x-ezapply-session`, so the companion knows which conversation a tool call (an `ask_user`) comes from, and
 loses `CLAUDE_AUTO_BACKGROUND_TASKS`: in `-p` a long MCP call holds the turn, as `ask_user` and `review_documents`
 need, unless that variable is set, which would end the turn with the question open.
@@ -67,7 +79,7 @@ the same turn.
 Verified against Claude Code 2.1 with a throwaway MCP server: a message sent
 mid-call was answered in the same turn, an interrupt ended the turn and the process went on to the next message,
 the permission tool got `{ tool_name, input, tool_use_id }` for a command that needed approval and its deny message
-reached Claude word for word, `AskUserQuestion` disallowed left Claude asking in text, and `total_cost_usd` in each
+reached Claude word for word, with `AskUserQuestion` unavailable Claude asked in text, and `total_cost_usd` in each
 `result` is the session's total so far.
 
 ## The stream (`stream.ts`)

@@ -143,7 +143,11 @@ const DEBUG_READ_DENY = ["Read(/debug/**)", "Read(./debug/**)"];
  * telling it to use the Edit tool: a script's string escapes turn LaTeX's backslashes into tabs and newlines, and
  * where Python is missing the edit fails and costs a retry. Denied, the agent goes straight to Edit.
  */
-const SCRIPT_EDIT_DENY = ["Bash(python:*)", "Bash(python3:*)", "Bash(py:*)"];
+const SCRIPT_EDIT_DENY = ["Bash(python:*)", "Bash(python3:*)", "Bash(py:*)"].flatMap((r) => [
+  r,
+  // The panel's shell is PowerShell on Windows without Git Bash (`panelShell`).
+  r.replace("Bash", "PowerShell"),
+]);
 
 const IMPORT_LINE = "@EZAPPLY.md";
 

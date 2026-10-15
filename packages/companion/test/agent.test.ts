@@ -1,12 +1,20 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import type { AgentEvent } from "@ezapply/protocol";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NeedsYou } from "../src/agent/needs.js";
-import { agentArgs, type ClaudeCommand, PANEL_PROMPT, PART_PROMPTS, sessionId } from "../src/agent/process.js";
+import {
+  agentArgs,
+  type ClaudeCommand,
+  PANEL_PROMPT,
+  PANEL_TOOLS,
+  PART_PROMPTS,
+  panelShell,
+  sessionId,
+} from "../src/agent/process.js";
 import { AgentService } from "../src/agent/service.js";
 import { readStreamLine, toolSummary } from "../src/agent/stream.js";
 import { MemoryStore } from "../src/github/secrets.js";
@@ -194,11 +202,42 @@ describe("reading Claude Code's stream-json", () => {
     expect(fresh.join(" ")).toContain(
       "--permission-mode auto --model sonnet --effort medium --permission-prompt-tool mcp__ezapply__permission_ask",
     );
-    expect(fresh.join(" ")).toContain("--disallowedTools AskUserQuestion");
+    // Only the workspace's setup, and only the tools the panel uses: one shell, and no AskUserQuestion.
+    expect(fresh.join(" ")).toContain("--strict-mcp-config --mcp-config .mcp.json --setting-sources project,local");
+    const tools = (args: string[]) => (args[args.indexOf("--tools") + 1] as string).split(",");
+    expect(tools(fresh)).toEqual(["Bash", ...PANEL_TOOLS]);
+    expect(tools(agentArgs("abc", false, undefined, undefined, "PowerShell"))[0]).toBe("PowerShell");
+    expect(tools(fresh)).not.toContain("AskUserQuestion");
     expect(fresh).not.toContain("--bare");
     expect(agentArgs("abc", true).slice(-2)).toEqual(["--resume", "abc"]);
     const chosen = agentArgs("abc", false, { permissionMode: "default", model: "opus", effort: "max" }).join(" ");
     expect(chosen).toContain("--permission-mode default --model opus --effort max --permission-prompt-tool");
+  });
+
+  it("gives the panel Bash where Claude Code can run it, else PowerShell on Windows", () => {
+    const none = () => null;
+    expect(panelShell({}, "linux", none, () => false)).toBe("Bash");
+    expect(panelShell({}, "win32", none, () => false)).toBe("PowerShell");
+    const git = "C:\\Git\\cmd\\git.exe";
+    const bash = win32.join("C:\\Git", "bin", "bash.exe");
+    expect(
+      panelShell(
+        {},
+        "win32",
+        () => git,
+        (p) => p === bash,
+      ),
+    ).toBe("Bash");
+    expect(
+      panelShell(
+        {},
+        "win32",
+        () => git,
+        () => false,
+      ),
+    ).toBe("PowerShell");
+    const env = { CLAUDE_CODE_GIT_BASH_PATH: "D:\\bash.exe" };
+    expect(panelShell(env, "win32", none, (p) => p === "D:\\bash.exe")).toBe("Bash");
   });
 
   it("keeps a posting's tailoring and filling conversations to their part in the system prompt", () => {

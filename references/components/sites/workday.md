@@ -88,7 +88,7 @@ after one dropdown was the previous one's, and live, first attempts read the wro
   changed (a reused portal); none → React's `onClick`; still none → wait for the page to go quiet and open once more.
 - The choice is checked against the button's label, with React's `onClick` on the option as the fallback.
 - **Closing.** After a choice the list closes by itself and the driver waits until it's gone. Without one
-  (`list_options`, a miss) it must be closed: Escape on the button, then, if the list is still open (its
+  (a miss, or the tests' `listOptions`) it must be closed: Escape on the button, then, if the list is still open (its
   `aria-expanded` still true, or, without one, the list still there after `dropdownEscapeCloseMs`), a press on the
   button, as a person would. A button without
   `aria-expanded` is never pressed after a choice: a list still animating away would open again.
@@ -108,6 +108,13 @@ matching nothing goes to `unmatched` with the options its search showed while th
 miss doesn't stop a skills list); one Workday chose itself on Enter (single-select prompts do) goes to
 `inexact`; one chosen but not kept is named in the error, not `unmatched`, so the agent doesn't look for other
 wordings of an option it found. `"Job Board > LinkedIn"` walks nested menus. Values already selected are skipped.
+- **An item named without its category.** A single name that matched nothing may be an item inside a category:
+  on the fill's first such miss the top-level menu is opened, each category with children (`hasChildren`, up to 8)
+  is opened in turn and its items read, and the miss's suggestions lead with the full paths of the items that match
+  ("Job Board > LinkedIn" for "LinkedIn"); later misses in the same fill reuse what was read. *Why:* live, a
+  how-did-you-hear field took four fills (the top level, a wrong path, then the item), each a turn re-reading the
+  conversation. Built from the moves `selectPath` already makes on a nested path (open the menu, press a category,
+  read its items); not yet seen live ([status](../../status.md)).
 - **Waiting for results.** Typing waits until the options differ from those before and one of them holds the query
   (`answersQuery`; every 100 ms, up to `typeaheadResultsMs`, then once more after React's Enter handler), or until
   "No Items." has stayed for `typeaheadNoResultsMs` (it also shows while results load). Reading once the DOM went

@@ -216,7 +216,6 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
       tabId: page(tabId).tabId,
       ...(frameId ? { frameId } : {}),
     }),
-    "form.listOptions": async ({ tabId, frameId, fieldId }) => api(tabId, frameId).listOptions(fieldId),
     "form.searchOptions": async ({ tabId, frameId, fieldId, query }) =>
       api(tabId, frameId).searchOptions(fieldId, query),
     "form.fill": async ({ tabId, frameId, fills }) => api(tabId, frameId).fill(fills),
@@ -915,14 +914,11 @@ describe("form tools over MCP", () => {
       tabId: 7,
     });
 
-    const options = await callJson(client, "list_options", {
-      fieldIds: ["my-information.countryDropdown", "application-questions.degreeLevel", "nope.nope"],
+    // A value that matches nothing returns the options, closest first: the miss is the query.
+    const miss = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "application-questions.degreeLevel", value: "Master's degree", source: "profile" }],
     });
-    expect(options.data).toMatchObject({
-      "my-information.countryDropdown": [{ label: "Canada" }, { label: "United States of America" }, {}],
-      "application-questions.degreeLevel": [{ label: "Undergraduate" }, { label: "Masters" }, { label: "Ph.D" }],
-      "nope.nope": { error: expect.stringMatching(/get_form/) },
-    });
+    expect(miss.data.results[0]).toMatchObject({ ok: false, availableOptions: ["Masters", "Undergraduate", "Ph.D"] });
 
     // A clean success is just { fieldId, ok }; a read-back that differs from the value is kept.
     const fill = await callJson(client, "fill_fields", {
@@ -993,6 +989,7 @@ describe("form tools over MCP", () => {
     expect(log.map((e) => e.event)).toEqual([
       "fill",
       "fill",
+      "fill",
       "remove",
       "upload",
       "remove-row",
@@ -1003,19 +1000,19 @@ describe("form tools over MCP", () => {
       "step-check",
       "next",
     ]);
-    expect(log[5]).toMatchObject({ event: "step-check", step: "My Information", warnings: [] });
-    expect(log[0]).toMatchObject({
+    expect(log[6]).toMatchObject({ event: "step-check", step: "My Information", warnings: [] });
+    expect(log[1]).toMatchObject({
       fieldId: "my-information.legalName--firstName",
       value: "Jane",
       source: "profile",
       ok: true,
     });
-    expect(log[2]).toMatchObject({
+    expect(log[3]).toMatchObject({
       fieldId: "application-questions.coverLetter",
       removed: ["cover.pdf"],
       reason: "left from a previous application",
     });
-    expect(log[4]).toMatchObject({ sectionId: "work-experience-2", removed: "Work Experience 2", ok: true });
+    expect(log[5]).toMatchObject({ sectionId: "work-experience-2", removed: "Work Experience 2", ok: true });
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");

@@ -94,6 +94,12 @@ describe("filling", () => {
     expect(nested).toMatchObject({ ok: true, readBack: ["Company Website", "LinkedIn"] });
   });
 
+  it("answers an item named without its category with its full path", async () => {
+    const [miss] = await api.fill([{ fieldId: id("formField-source"), value: "Indeed" }]);
+    expect(miss).toMatchObject({ ok: false, availableOptions: ["Job Board > Indeed"] });
+    expect(document.querySelector('[data-automation-widget="wd-popup"]')).toBeNull(); // menu closed afterwards
+  });
+
   it("lists and searches options", async () => {
     expect((await api.listOptions(id("formField-countryDropdown"))).map((o) => o.label)).toContain("Canada");
     const found = await api.searchOptions(id("formField-source"), "job");

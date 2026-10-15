@@ -86,8 +86,9 @@ the page re-extracts, and an unknown id fails with "call get_form again". No cal
   `afterField` wait after each. Then the page is read again: a field showing an error keeps `ok: true` with
   "Filled, but the page reports: …". With `waitForStaleErrors`, fields filled but still showing an error get up to
   `afterFieldMaxMs` for it to clear first (Oracle's lists, seen live).
-- **`listOptions`:** the driver's `list`, else the options the field shows. **`searchOptions`:** the driver's
-  `search`, else `messages.noSearch`.
+- **`listOptions`:** the driver's `list`, else the options the field shows. No bridge method or tool reaches it
+  (`list_options` was removed: listing before filling cost a turn each time); the site tests read a field's
+  options through it. **`searchOptions`:** the driver's `search`, else `messages.noSearch`.
 - **`upload`:** builds a `File` from the companion's base64 in the page's own window and hands it to the driver.
 - **`remove`:** the driver's `remove`; a text, textarea or number field without one is cleared, its driver filling it with `""`, and done only when it reads back empty; else `messages.cantRemove(kind)`.
 - **`addRepeatable`:** presses the button and waits (`addRowMs`) for `repeat.added` to grow. A `save.*` button

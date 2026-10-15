@@ -195,8 +195,10 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
         "resume, cover letter or bundle) and wait for the answer (default up to 10 minutes): documents approved, " +
         "and for each one to change, the user's request and comments on passages ({ page, quote, note }: the words " +
         "they selected and what to change there). The page shows the PDFs as they are now, so after any rebuild call this again with " +
-        "the changed files. Only approval on the page lets upload_file attach a document, in the version shown. " +
-        "With reviewId instead of files: wait again for a review that timed out.",
+        "the changed files. Only approval on the page lets upload_file attach a document, in the version shown: " +
+        "if the user says it's approved in chat, ask them to press it on the page. Write your report before " +
+        "calling. done: false means no answer yet: ask whether they saw the page, then call with reviewId to wait " +
+        "again.",
       inputSchema: {
         files: z
           .array(z.string())

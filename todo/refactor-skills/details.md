@@ -37,11 +37,11 @@ explicitly.
 `contentFiles` into the posting folder (only if absent), sets status `drafting`, and returns the brief: the posting's
 text, the `## Application requirements` block (or `missing`, so the agent writes it), `preferences.md`, the
 profile's relevant parts, and `claims_list`. One call replaces five to seven reads and the skill's setup section.
-The evidence map stays the agent's work. The subagent that "Cut the tokens" proposes for it reads from this
-brief.
+The evidence map stays the agent's work.
 
-**Edits and compiles** follow "Cut the tokens a panel conversation spends" (an edit and its compile in one
-message, then `tex_edit`). Whatever it lands is the starting point here.
+**Edits and compiles** already go in one message. If the turns they take still show in a run, a
+`tex_edit { path, edits[] }` tool applies exact replacements and returns the compile (JSON arguments avoid the
+escaping that rules out scripted edits).
 
 **`bundle_build { inputs?, extras?, output? }`** replaces `ezapply-bundle`. By default it uses cover, resume, then
 the given `library/` extras. It recompiles a `.tex` newer than its PDF, labels and titles from the profile and
@@ -80,9 +80,6 @@ values.
   mid-application (§4). Until then, the brief's tail carries the answers given in this application.
 - **The hand-off is a panel card** built from `handoff`, not a message the agent composes. The agent adds one line
   for anything it couldn't fill.
-
-The form tools' own turn savings (deleting `list_options`, and a `fill_fields` miss that returns the closest
-options) are in "Cut the tokens a panel conversation spends".
 
 ## 4. One session per step
 **Why.** A filling conversation re-reads every earlier step's form and fills on every call. Compaction doesn't help
@@ -125,17 +122,13 @@ prefix either, since the delegating agent writes it.
   blocks, deferred tool names. Find out whether any of it lands before parts 1 to 3 and varies between sessions. If
   it does, the brief goes where it can be matched, or the design changes before anything is built.
 - Does a step's session cost less than the same step late in one long conversation, on a long Workday application?
-  The comparison includes the cache write when a step waits on the user past the TTL, which token-use's
-  `promptCacheTtl` note covers.
+  The comparison includes the cache write when a step waits on the user past the cache's TTL (1h in the
+  panel's requests).
 
 ## 5. The skills themselves
 - **Judgement only.** Each skill lists the decisions the agent makes, in order, and what each draws on. Code does
   the rest, and the tool's description covers how to call it. Rare branches go in supporting files beside
-  `SKILL.md`: carried-over applications, building from an example, rebuilding an index after a force-push.
-- **One place per rule.** `EZAPPLY.md` keeps only what applies in every conversation: untrusted content, no
-  fabrication, application requirements, never submit, keep context lean. Everything about documents goes to the
-  document skills, and everything about forms to `ezapply-apply`. Situational advice (`tabHidden`,
-  `browserBehind`, `postingMismatch`) stays in the result's `hint` and is removed from the skills.
+  `SKILL.md`, as `ezapply-apply`'s already do: building from an example, rebuilding an index after a force-push.
 - **Descriptions** say when to use the skill and nothing more, so that they compete less with the user's own
   skills.
 - **`ezapply-answers`** shrinks to merging duplicates and placing wordings, once `toSave` and `variants` are
@@ -143,12 +136,12 @@ prefix either, since the delegating agent writes it.
 - **`ezapply-index-repo`.** `repo_sync` returns `mode` (`current`, `reindex`, `full`, `rebuild`) and leaves the
   paths that can't change a fact out of `changedSince`. "A writing spec for claims and repo documentation" changes
   the claim rules after this item.
-- **Sizes.** Aim for `ezapply-apply` under ~1.5k tokens and each document skill under ~1k. Compare with the sizes
-  in "Cut the tokens a panel conversation spends".
-- `cli/test/skill-calls.test.ts` checks every call shape, including those in supporting files.
+- **Sizes.** Aim for `ezapply-apply` under ~1.5k tokens (now ~2.6k, characters / 4) and each document skill under
+  ~1k (the resume and cover-letter skills are ~1.4k each).
 
 ## 6. Measuring and the references
-Run a tailoring and a Workday application, measured as in "Cut the tokens a panel conversation spends". Compare
+Run a tailoring and a Workday application, measured from the transcripts as in "Cut the tokens a panel
+conversation spends". Compare
 turns, tokens and the following: whether the review opened, questions asked that the bank already held, fields
 left to the user, and fields filled wrong. The live run's checks go into `references/status.md`.
 

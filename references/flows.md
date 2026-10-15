@@ -121,7 +121,8 @@ The `ezapply-resume` skill:
    same relative paths; set status `drafting`.
 3. Write `notes.md`: requirements, key terms, an **evidence map** from each requirement to claim ids or
    profile entries, and gaps (never presented as skills).
-4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet.
+4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet, each
+   round's Edits and its `tex_compile` in one message, then a reread of the changed passages.
 5. Loop: `tex_compile` (must be exactly one page; `*resume*`/`*cv*` files are checked against the page
    limit, and `overflow` says how much ran over; within it, `lint` names layout problems) → fix what `lint`
    lists → `pdf_text` for ATS order → self-check each bullet against its evidence.
@@ -175,10 +176,10 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    on one `ask_user` card per step, with Claude's suggestion where it has one (in chat without a panel), and a resolved miss or a new answer offered for saving to the answer bank; the
    skills that fit the role, not necessarily all), one `add_repeatable { addButtonIds }` for every row or item
    missing from each list against the profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a
-   `source` per value, then one retry call for all the failures (from their `availableOptions`), never one
-   field per call (`unmatched` typeahead entries come with the options their search showed; a date the page
-   doesn't take is typed by the user); `list_options` first only for questions whose option wording decides the answer, all in
-   one call; `upload_file` for documents (every approved one: on Workday's single Resume/CV field, which
+   `source` per value, then one retry call for all the failures (from a miss's closest options), never one
+   field per call and never listing options first (`unmatched` typeahead entries come with the options their
+   search showed, and an item named without its category with its full path; a date the page doesn't take is
+   typed by the user); `upload_file` for documents (every approved one: on Workday's single Resume/CV field, which
    takes several files, the resume and the cover letter both; `notAttached` in the upload result lists what's
    left); `go_next`. To change an earlier step, `go_back` to it,
    fix, and `go_next` forward again. Values carried over from the last

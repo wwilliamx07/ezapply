@@ -89,7 +89,6 @@ say, and the response brings it back in its `debug`. The `tab.*` methods ignore 
 | `browser.status` | `{}` → `BrowserStatus { extensionVersion, tabs[] }` (each tab's `frames`: embedded applications) |
 | `panel.update` | `PanelUpdate { event?, changed?, cards? }` → `{}`: relayed to the open side panels; `cards` (how many wait) also sets the toolbar badge while none is open ([extension](extension.md#the-side-panel)) |
 | `form.get` | `{ tabId?, frameId? }` → `FormSchema` (with `frameId` when read in a frame). Every `form.*` method takes `frameId`: act on that frame of the tab, an application embedded in another site's page, instead of the tab's own page ([embedded applications](extension.md#embedded-applications)) |
-| `form.listOptions` | `{ tabId?, fieldId }` → `OptionInfo[]` |
 | `form.searchOptions` | `{ tabId?, fieldId, query }` → `OptionInfo[]` |
 | `form.fill` | `{ tabId?, fills: FillAction[] }` → `FillResult[]` |
 | `form.upload` | `{ tabId?, fieldId, file: UploadFile }` → `FillResult` |
@@ -128,7 +127,8 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `checkbox`, `checkbox-group`, `file`.
 - `FillAction`: `{ fieldId, value }`; `form.fill` takes at least one.
 - `FillValue`: a string, a string array, or a boolean. `FillResult`: `{ fieldId, ok, readBack?, error?,
-  availableOptions?, unmatched?, inexact? }`: `unmatched[] { value, suggestions[] }` lists typeahead entries
+  availableOptions?, optionCount?, unmatched?, inexact? }` (`optionCount` is the companion's, when it cut
+  `availableOptions` to the closest: [mcp-tools](../mcp-tools.md#forms)): `unmatched[] { value, suggestions[] }` lists typeahead entries
   that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which
   Workday selected an option itself. `OptionInfo`: `{ label, hasChildren? }` (children = a nested menu).
 - `NextResult`: `{ advanced, pageKind, step?, errors[], messages?, refusedReason? }`; `advanced` = the step

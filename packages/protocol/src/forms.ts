@@ -30,7 +30,7 @@ export const Field = z.object({
   kind: FieldKind,
   /** Known options (radio, checkbox-group, sometimes dropdowns). */
   options: z.array(z.string()).optional(),
-  /** Options only appear after opening/searching: use list_options or search_options. */
+  /** Options only appear after opening or searching: fill_fields returns them on a miss, search_options searches. */
   optionsLazy: z.boolean().optional(),
   dateParts: z.array(z.enum(["MM", "DD", "YYYY"])).optional(),
   multiple: z.boolean().optional(),
@@ -122,8 +122,10 @@ export const FillResult = z.object({
   ok: z.boolean(),
   readBack: z.union([z.string(), z.array(z.string()), z.boolean(), z.null()]).optional(),
   error: z.string().optional(),
-  /** Options seen when the requested one could not be matched. */
+  /** Options seen when the requested one could not be matched (the closest, when there were many). */
   availableOptions: z.array(z.string()).optional(),
+  /** How many options there were, when `availableOptions` holds only the closest. */
+  optionCount: z.number().int().optional(),
   /** Typeahead entries that matched no option, each with the options its search showed. */
   unmatched: z.array(z.object({ value: z.string(), suggestions: z.array(z.string()) })).optional(),
   /** Typeahead entries for which Workday selected an option itself that isn't an exact match. */
@@ -225,7 +227,6 @@ const TabParam = z.object({
 /** Extension-served form methods (added to ExtensionApi). */
 export const FormMethods = {
   "form.get": { params: TabParam, result: FormSchema },
-  "form.listOptions": { params: TabParam.extend({ fieldId: z.string() }), result: z.array(OptionInfo) },
   "form.searchOptions": {
     params: TabParam.extend({ fieldId: z.string(), query: z.string() }),
     result: z.array(OptionInfo),

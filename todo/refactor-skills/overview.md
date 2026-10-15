@@ -17,8 +17,8 @@ step's form on every call. Fields that the site prefills from the resume are oft
 4. Each step runs in a fresh session. The companion writes its first message in a fixed order (skill, profile,
    answers, posting, then the step), so everything before the step matches the cache. Check that it does before
    building it.
-5. Rewrite each remaining skill to its judgement, and keep only rules that apply everywhere in `EZAPPLY.md`.
-6. Measure a tailoring and an application against the runs in "Cut the tokens a panel conversation spends", then
+5. Rewrite each remaining skill to its judgement.
+6. Measure a tailoring and an application against the runs in `references/status.md` ("The token cuts"), then
    update the references.
 
 [details](details.md)

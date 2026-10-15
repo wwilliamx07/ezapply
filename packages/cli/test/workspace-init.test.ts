@@ -69,7 +69,8 @@ describe("Claude Code config", () => {
     await initWorkspace(config);
     const doc = await readFile(join(config.workspace, "EZAPPLY.md"), "utf8");
     expect(doc).not.toContain("{{EZAPPLY}}");
-    expect(doc).toMatch(/node ".+main\.js" doctor/);
+    // A hint's `ezapply <command>`, as Claude can run it.
+    expect(doc).toMatch(/`node ".+main\.js" <command>`/);
     // No background daemon: nothing to start, stop or restart.
     expect(doc).not.toMatch(/main\.js" (start|stop|restart)|`(start|stop|restart)`/);
     expect(doc).toMatch(/first request about a posting, right after `posting_active`,\s+call `claims_list`/);

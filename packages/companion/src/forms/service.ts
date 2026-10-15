@@ -7,7 +7,6 @@ import {
   type FillResult,
   type FillValue,
   type FormSchema,
-  type OptionInfo,
   type PageAction,
   type PostingApplication,
   type PostingMeta,
@@ -153,7 +152,7 @@ export interface BrowserBehind {
 }
 
 /** Form tools that only read the page: a page without focus doesn't matter to them. */
-const READS_PAGE = new Set(["get_form", "list_options", "search_options", "screenshot"]);
+const READS_PAGE = new Set(["get_form", "search_options", "screenshot"]);
 
 /**
  * The form tools' logic: which tab to act on, which posting an action belongs to, the form-log.jsonl audit
@@ -242,28 +241,6 @@ export class FormsService {
     if (given.has(site)) return undefined;
     given.add(site);
     return notes;
-  }
-
-  async listOptions(fieldId: string, tabId?: number) {
-    return this.onTab({ tool: "list_options", params: { fieldId } }, tabId, (t) =>
-      t.bridge.call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000),
-    );
-  }
-
-  /**
-   * Options of several fields in one call (every dropdown question on a step), so Claude doesn't spend a turn
-   * per field. The adapter opens them one after another; a field that fails reports its own error.
-   */
-  async listOptionsMany(fieldIds: string[], tabId?: number) {
-    return this.onTab({ tool: "list_options", params: { fieldIds } }, tabId, async (t) => {
-      const out: Record<string, OptionInfo[] | { error: string }> = {};
-      for (const fieldId of fieldIds) {
-        out[fieldId] = await this.bridge
-          .call("form.listOptions", { fieldId, tabId: t.tab.tabId, timing: t.timing }, 20_000)
-          .catch((err: unknown) => ({ error: EzError.from(err).message }));
-      }
-      return out;
-    });
   }
 
   async searchOptions(fieldId: string, query: string, tabId?: number) {
@@ -939,15 +916,72 @@ function pickTab<T extends FormTab>(tabs: T[]): T | undefined {
 /**
  * A clean success that reads back exactly what was asked for says nothing new, so it's just `{ fieldId, ok }`.
  * A read-back that differs (a matched option's full text, a changed case), any error, and typeahead entries
- * that matched nothing or only roughly are kept whole.
+ * that matched only roughly are kept whole; a miss keeps its closest options (`closestOnMiss`).
  */
 export function leanFillResult(r: FillResult, value: FillValue | undefined): FillResult {
-  if (!r.ok || r.error || r.availableOptions || r.unmatched || r.inexact || value === undefined) return r;
+  if (r.availableOptions || r.unmatched) return closestOnMiss(r, value);
+  if (!r.ok || r.error || r.inexact || value === undefined) return r;
   const back = r.readBack;
   const same = Array.isArray(value)
     ? Array.isArray(back) && back.length === value.length && value.every((v, i) => back[i] === v)
     : back === value || (typeof value !== "boolean" && back === String(value));
   return same ? { fieldId: r.fieldId, ok: true } : r;
+}
+
+/** How many options a miss returns: the closest to what was asked for. */
+export const MISS_OPTIONS = 10;
+
+/**
+ * A miss is the query: the options closest to the value, closest first, and `optionCount` when there were more. A
+ * whole list (a select can carry hundreds) would be re-read with every later call, and listing a field before
+ * filling it was a turn each time; a close guess that misses finds the right option in one retry.
+ */
+function closestOnMiss(r: FillResult, value: FillValue | undefined): FillResult {
+  const out = { ...r };
+  const asked = typeof value === "boolean" || value === undefined ? "" : Array.isArray(value) ? value.join(" ") : value;
+  if (r.availableOptions) {
+    out.availableOptions = closestOptions(asked, r.availableOptions, MISS_OPTIONS);
+    if (r.availableOptions.length > MISS_OPTIONS) out.optionCount = r.availableOptions.length;
+  }
+  if (r.unmatched) {
+    out.unmatched = r.unmatched.map((u) => ({
+      ...u,
+      suggestions: closestOptions(u.value, u.suggestions, MISS_OPTIONS),
+    }));
+  }
+  return out;
+}
+
+/**
+ * The `n` options most like `wanted`: one that holds it (or that it holds) first, then by shared letter pairs
+ * (Dice), so "Master's degree" ranks "Masters" above "Ph.D". Ties keep the page's order.
+ */
+export function closestOptions(wanted: string, options: string[], n: number): string[] {
+  const flat = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  const pairs = (s: string) => {
+    const t = s.replace(/ /g, "");
+    return new Set(Array.from({ length: Math.max(0, t.length - 1) }, (_, i) => t.slice(i, i + 2)));
+  };
+  const w = flat(wanted);
+  const wp = pairs(w);
+  const score = (o: string) => {
+    const f = flat(o);
+    if (!w || !f) return 0;
+    if (f.includes(w) || w.includes(f)) return 2;
+    const op = pairs(f);
+    let shared = 0;
+    for (const p of op) if (wp.has(p)) shared++;
+    return wp.size + op.size ? (2 * shared) / (wp.size + op.size) : 0;
+  };
+  return [...new Set(options)]
+    .map((o, i) => ({ o, i, s: score(o) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .slice(0, n)
+    .map((x) => x.o);
 }
 
 /**
@@ -1076,7 +1110,7 @@ function olderExtension(method: string, what: string) {
  * Option lists longer than this go out as `optionCount` only. A native select can carry hundreds (a
  * certificate dropdown with 400 issuers, the same language list on every language row): on a live run they were
  * most of a 42k-character get_form, re-sent with every later turn. fill_fields matches the closest option and
- * returns the options when nothing matches, and list_options and search_options read them when needed.
+ * returns the closest options when nothing matches, and search_options reads them when needed.
  */
 export const MAX_INLINE_OPTIONS = 25;
 

@@ -85,7 +85,7 @@ export const TIMING_DOCS: Record<TimingKey, string> = {
   typeaheadClearMs: "typeahead: after clearing a search that didn't run, wait before typing it again",
   typeaheadResultsQuietMs: "typeahead: after the results show, wait for quiet",
   typeaheadResultsMaxMs: "typeahead: but never longer than this",
-  typeaheadMenuQuietMs: "typeahead: after opening its menu (nested menus, list_options), wait for quiet",
+  typeaheadMenuQuietMs: "typeahead: after opening its menu (nested menus, a miss), wait for quiet",
   typeaheadMenuMaxMs: "typeahead: but never longer than this",
   typeaheadOptionsMs: "typeahead: wait for options to be on screen before picking one",
   typeaheadSelectQuietMs: "typeahead: after picking an option, wait for quiet",

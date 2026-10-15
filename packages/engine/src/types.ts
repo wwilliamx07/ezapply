@@ -188,7 +188,7 @@ export interface WidgetDriver {
   value(c: HTMLElement): Field["currentValue"];
   /** Options the page shows up front (radios, pills). */
   options?(c: HTMLElement): string[] | undefined;
-  /** Options appear only when the widget is opened or searched (`list_options`). */
+  /** Options appear only when the widget is opened or searched (a fill that misses, `search_options`). */
   lazyOptions?: boolean;
   dateParts?(c: HTMLElement): Field["dateParts"];
   /** Whether it takes several values; undefined leaves `multiple` off the field. */

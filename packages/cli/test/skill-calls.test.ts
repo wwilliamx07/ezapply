@@ -39,7 +39,12 @@ beforeAll(async () => {
   await client.close();
 
   const paths = [join(TEMPLATES, "workspace", "EZAPPLY.md")];
-  for (const d of await readdir(join(TEMPLATES, "skills"))) paths.push(join(TEMPLATES, "skills", d, "SKILL.md"));
+  // SKILL.md and the supporting files beside it.
+  for (const d of await readdir(join(TEMPLATES, "skills"))) {
+    for (const f of await readdir(join(TEMPLATES, "skills", d))) {
+      if (f.endsWith(".md")) paths.push(join(TEMPLATES, "skills", d, f));
+    }
+  }
   files = await Promise.all(
     paths.map(async (p) => ({
       name: relative(TEMPLATES, p).split("\\").join("/"),

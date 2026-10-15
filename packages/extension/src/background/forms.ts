@@ -219,8 +219,6 @@ export const formHandlers: FormHandlers = {
       (schema) => ({ ...schema, tabId: t.tabId, ...(t.frameId !== undefined ? { frameId: t.frameId } : {}) }) as never,
     );
   },
-  "form.listOptions": async ({ fieldId, timing, debug, ...at }) =>
-    callAdapter(await target(at), "listOptions", [fieldId], { timing, debug }),
   "form.searchOptions": async ({ fieldId, query, timing, debug, ...at }) =>
     callAdapter(await target(at), "searchOptions", [fieldId, query], { timing, debug }),
   "form.fill": async ({ fills, timing, debug, ...at }) =>

@@ -193,9 +193,68 @@ async function selectPath(c: HTMLElement, path: string[]): Promise<{ selected: s
   return { selected };
 }
 
+/** Categories a miss looks inside, at most: each is opened in turn. */
+const MAX_CATEGORIES = 8;
+
+/**
+ * A nested menu's categories and their items, read on a fill's first miss and kept for its later ones: the top
+ * level is opened once, and each category once.
+ */
+type Categories = Map<string, string[]>;
+
+async function readCategories(c: HTMLElement): Promise<Categories> {
+  const input = () => c.querySelector<HTMLElement>(`${within(SEL.multiSelect, "input")}, input`);
+  const openTop = async (): Promise<HTMLElement[]> => {
+    key(input() ?? c, "Escape");
+    await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
+    const el = input();
+    if (!el) return [];
+    press(el);
+    await settle(c.ownerDocument, T.typeaheadMenuQuietMs, T.typeaheadMenuMaxMs);
+    return promptOptions(c);
+  };
+  const out: Categories = new Map();
+  const names = [
+    ...new Set(
+      (await openTop())
+        .map(optionInfo)
+        .filter((o) => o.hasChildren)
+        .map((o) => o.label),
+    ),
+  ];
+  for (const [i, name] of names.slice(0, MAX_CATEGORIES).entries()) {
+    const options = i === 0 ? promptOptions(c) : await openTop();
+    const option = options.find((o) => text(o) === name);
+    if (!option) continue;
+    const before = promptSignature(c);
+    press(option);
+    const items = await waitFor(() => {
+      const o = promptOptions(c);
+      return o.length && promptSignature(c) !== before ? o : null;
+    }, T.typeaheadOptionsMs);
+    out.set(name, [...new Set((items ?? []).map(text))]);
+  }
+  if (names.length) key(input() ?? c, "Escape");
+  branch("typeahead categories", { categories: [...out.keys()] });
+  return out;
+}
+
+/** The full paths of the items that match `leaf` ("Job Board > LinkedIn" for "LinkedIn"). */
+function pathsTo(categories: Categories, leaf: string): string[] {
+  const w = lower(leaf);
+  const paths: string[] = [];
+  for (const [name, items] of categories) {
+    for (const item of items) if (lower(item).includes(w) || w.includes(lower(item))) paths.push(`${name} > ${item}`);
+  }
+  return paths;
+}
+
 /**
  * Select each value on its own: one that matches nothing is reported in `unmatched` with the options its search
- * showed, and the rest are still selected (seen live: a skills list stopped at its first unmatched entry).
+ * showed, and the rest are still selected (seen live: a skills list stopped at its first unmatched entry). A
+ * single name that matched nothing may be an item inside a category: its suggestions lead with the full paths of
+ * the items that match, so the retry names the path instead of guessing a category (live, a how-did-you-hear
+ * field took four fills: the top level, a wrong path, then the item).
  * When Workday selects an option itself on Enter (single-select prompts do), it's reported in `inexact`. A value
  * whose option was pressed but didn't stay selected is in the error, apart from those that matched nothing: "No
  * option matches" for those sent the agent looking for other values of an option it had found.
@@ -205,6 +264,7 @@ async function fillTypeahead(c: HTMLElement, values: string[]): Promise<FillOutc
   const unkept: string[] = [];
   const inexact: { value: string; selected: string }[] = [];
   const input = () => c.querySelector("input") ?? c;
+  let categories: Categories | undefined;
   for (const value of values) {
     const path = value
       .split(/\s*>\s*/)
@@ -221,8 +281,13 @@ async function fillTypeahead(c: HTMLElement, values: string[]): Promise<FillOutc
     key(input(), "Escape");
     await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
     const added = selectedItems(c).filter((s) => !before.has(lower(s)));
-    if (added.length) inexact.push({ value, selected: added.join(", ") });
-    else unmatched.push({ value, suggestions: outcome.options.slice(0, 15) });
+    if (added.length) {
+      inexact.push({ value, selected: added.join(", ") });
+      continue;
+    }
+    if (path.length === 1) categories ??= await readCategories(c);
+    const paths = path.length === 1 && categories ? pathsTo(categories, leaf) : [];
+    unmatched.push({ value, suggestions: [...new Set([...paths, ...outcome.options])].slice(0, 15) });
   }
   key(input(), "Escape");
   const readBack = selectedItems(c);

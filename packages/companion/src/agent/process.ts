@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, win32 } from "node:path";
 import { createInterface } from "node:readline";
 import {
   type AgentModel,
@@ -9,6 +9,7 @@ import {
   type ConversationPart,
   DEFAULT_AGENT_SETTINGS,
 } from "@ezapply/protocol";
+import { which } from "../util/proc.js";
 import { readStreamLine, type StreamItem } from "./stream.js";
 
 /** How to run Claude Code: the native `claude.exe`, or the npm install's `claude.cmd` (only runs through cmd). */
@@ -74,9 +75,8 @@ export interface AgentProcessOptions {
  * - `--permission-mode`, `--model` and `--effort` from the panel's settings, always, so the user's own Claude Code
  *   defaults don't decide them behind the panel.
  * - `--permission-prompt-tool`: what would prompt in the terminal asks the panel instead.
- * - `--disallowedTools AskUserQuestion`: questions go through `ask_user`, which holds a whole step's questions
- *   and text answers; Claude Code's own tool holds four questions of four options.
  * - `--append-system-prompt`: `PANEL_PROMPT`, and for a posting's conversation its part's line (`PART_PROMPTS`).
+ * - The user's own Claude Code setup stays out (`PANEL_SCOPE`): it was half of every call's starting context.
  * - Not `--bare`: bare mode skips the workspace's skills, `.mcp.json` and settings, and the subscription login.
  */
 export function agentArgs(
@@ -84,6 +84,7 @@ export function agentArgs(
   resume: boolean,
   settings: AgentSettings = DEFAULT_AGENT_SETTINGS,
   part?: ConversationPart,
+  shell: PanelShell = "Bash",
 ): string[] {
   return [
     "-p",
@@ -101,12 +102,51 @@ export function agentArgs(
     settings.effort,
     "--permission-prompt-tool",
     PERMISSION_TOOL,
-    "--disallowedTools",
-    "AskUserQuestion",
+    ...PANEL_SCOPE,
+    "--tools",
+    [shell, ...PANEL_TOOLS].join(","),
     "--append-system-prompt",
     part ? `${PANEL_PROMPT} ${PART_PROMPTS[part]}` : PANEL_PROMPT,
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
   ];
+}
+
+/**
+ * What the panel's Claude Code loads beyond the workspace: nothing. The user's own MCP servers (claude.ai connectors
+ * among them), plugins and user-level skills cost tokens on every call, and a document skill of theirs that claims
+ * resumes and cover letters competes with ezapply's. Only `.mcp.json`'s servers, and the project and local settings
+ * (the workspace's permission rules, and the approvals the user saved there); the subscription login isn't a setting
+ * and still applies. Bundled skills go too (`DISABLE_BUNDLED_SKILLS`, an environment variable).
+ */
+const PANEL_SCOPE = ["--strict-mcp-config", "--mcp-config", ".mcp.json", "--setting-sources", "project,local"];
+
+/** Claude Code's switch for its bundled skills, set on the panel's process. */
+export const DISABLE_BUNDLED_SKILLS = "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS";
+
+/**
+ * The built-in tools the panel's work uses, beside one shell (`panelShell`); the rest are schemas re-read on every
+ * call. AskUserQuestion isn't among them: questions go through `ask_user`, which holds a whole step's questions and
+ * text answers. Agent stays for repo indexing and other large reading jobs.
+ */
+export const PANEL_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "Skill", "ToolSearch", "Agent"];
+
+export type PanelShell = "Bash" | "PowerShell";
+
+/**
+ * One shell, not both: each is a large schema. Bash where Claude Code can run it, since the workspace's rules are
+ * written for it (no `python` for edits); on Windows that needs Git Bash, and without it PowerShell.
+ */
+export function panelShell(
+  env: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+  find: (bin: string) => string | null = which,
+  exists: (path: string) => boolean = existsSync,
+): PanelShell {
+  if (platform !== "win32") return "Bash";
+  if (env.CLAUDE_CODE_GIT_BASH_PATH && exists(env.CLAUDE_CODE_GIT_BASH_PATH)) return "Bash";
+  const git = find("git");
+  // Git for Windows puts git.exe in cmd\ (or bin\), and bash.exe in bin\ beside it.
+  return git && exists(win32.join(win32.dirname(win32.dirname(git)), "bin", "bash.exe")) ? "Bash" : "PowerShell";
 }
 
 /**
@@ -146,8 +186,12 @@ export class AgentProcess {
 
   constructor(private readonly opts: AgentProcessOptions) {
     const { file, shell } = opts.claude;
-    const args = [...opts.claude.args, ...agentArgs(opts.sessionId, opts.resume, opts.settings, opts.part)];
-    const env: NodeJS.ProcessEnv = { ...(opts.env ?? process.env), [SESSION_ENV]: opts.sessionId };
+    const base = opts.env ?? process.env;
+    const args = [
+      ...opts.claude.args,
+      ...agentArgs(opts.sessionId, opts.resume, opts.settings, opts.part, panelShell(base)),
+    ];
+    const env: NodeJS.ProcessEnv = { ...base, [SESSION_ENV]: opts.sessionId, [DISABLE_BUNDLED_SKILLS]: "1" };
     // A long MCP call (ask_user, a review) must hold the turn, which is -p's default; the user's own setting
     // to background such calls would end the turn with the question open.
     delete env.CLAUDE_AUTO_BACKGROUND_TASKS;

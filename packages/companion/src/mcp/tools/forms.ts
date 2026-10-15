@@ -59,33 +59,6 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
   );
 
   server.registerTool(
-    "list_options",
-    {
-      title: "List field options",
-      description:
-        "List the options of dropdowns or typeaheads (for typeahead, the top level; options with hasChildren " +
-        "open a sub-menu, so select them with a path like 'Job Board > LinkedIn'). Pass every field you need " +
-        "on the step as fieldIds in one call: the result maps each id to its options. Not needed before " +
-        "fill_fields: a value that matches nothing returns the options.",
-      inputSchema: {
-        fieldId: z.string().optional().describe("One field; returns its options as a list."),
-        fieldIds: z.array(z.string()).min(1).optional().describe("Several fields; returns { fieldId: options }."),
-        tabId,
-      },
-      annotations: { readOnlyHint: true },
-    },
-    tool(
-      s.log,
-      "list_options",
-      async ({ fieldId, fieldIds, tabId }: { fieldId?: string; fieldIds?: string[]; tabId?: number }) => {
-        if (fieldIds) return s.forms.listOptionsMany(fieldId ? [fieldId, ...fieldIds] : fieldIds, tabId);
-        if (fieldId) return s.forms.listOptions(fieldId, tabId);
-        throw new EzError(ErrorCode.BadRequest, "Give fieldIds (or one fieldId).");
-      },
-    ),
-  );
-
-  server.registerTool(
     "search_options",
     {
       title: "Search typeahead",
@@ -111,7 +84,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "for nested menus; each entry is matched on its own); true/false for a checkbox; labels for checkbox " +
         'groups; "YYYY-MM-DD", "YYYY-MM" or "YYYY" for dates. Fill the whole step in one call. Returns ' +
         "`results` per field: { fieldId, ok: true } when the field reads back exactly the value; else the " +
-        "read-back, error, options when nothing matched, `unmatched` (typeahead entries with the options their " +
+        "read-back, error, the closest options when nothing matched (`optionCount` when there were more), " +
+        "`unmatched` (typeahead entries with the options their " +
         "search showed) and `inexact` (an option the page chose itself: check it). Never passwords, or EEO " +
         "answers the user hasn't given.",
       inputSchema: {

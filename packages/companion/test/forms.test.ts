@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionBridge } from "../src/bridge/server.js";
 import { type CallRecord, extractFiles, pruneDebug, stripBulk } from "../src/forms/debug.js";
 import { debugReport } from "../src/forms/debug-report.js";
-import { FormsService, leanForm, MAX_INLINE_OPTIONS } from "../src/forms/service.js";
+import {
+  closestOptions,
+  FormsService,
+  leanFillResult,
+  leanForm,
+  MAX_INLINE_OPTIONS,
+  MISS_OPTIONS,
+} from "../src/forms/service.js";
 import { loadTiming, TIMING_FILE, timingFileTemplate } from "../src/forms/timing.js";
 import { createLogger } from "../src/logger.js";
 import type { PostingsService } from "../src/postings/service.js";
@@ -63,10 +70,10 @@ describe("form calls on one tab", () => {
     const b = slowBridge();
     const f = forms(b.bridge);
     const results = await Promise.all([
-      f.listOptions("gender", 7),
-      f.listOptions("disability", 7),
-      f.listOptions("veteran", 7),
-      f.listOptions("country", 8),
+      f.searchOptions("gender", "q", 7),
+      f.searchOptions("disability", "q", 7),
+      f.searchOptions("veteran", "q", 7),
+      f.searchOptions("country", "q", 8),
     ]);
     expect(results.map((r) => (r as { label: string }[])[0]?.label)).toEqual([
       "options of gender",
@@ -97,7 +104,10 @@ describe("form calls on one tab", () => {
       },
     } as unknown as ExtensionBridge;
     const f = forms(failing);
-    const [first, second] = await Promise.allSettled([f.listOptions("broken", 7), f.listOptions("gender", 7)]);
+    const [first, second] = await Promise.allSettled([
+      f.searchOptions("broken", "q", 7),
+      f.searchOptions("gender", "q", 7),
+    ]);
     expect(first.status).toBe("rejected");
     expect(second).toMatchObject({ status: "fulfilled", value: [{ label: "options of gender" }] });
   });
@@ -228,7 +238,7 @@ describe("debug mode", () => {
     const dir = await mkdtemp(join(tmpdir(), "ezapply-debug-"));
     try {
       const f = forms(slowBridge().bridge, workspaceAt(dir));
-      await f.listOptions("gender", 7);
+      await f.searchOptions("gender", "q", 7);
       await f.debugIdle();
       await expect(readdir(join(dir, "debug"))).rejects.toThrow();
     } finally {
@@ -276,7 +286,7 @@ describe("debug mode", () => {
           sent.push({ method, debug: params.debug });
           if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
           if (method === "tab.show") return { tabId: 7, emulated: true, hidden: false };
-          if (method === "form.listOptions") return [{ label: "Yes" }];
+          if (method === "form.searchOptions") return [{ label: "Yes" }];
           return {
             adapter: "workday",
             url: tab(7).url,
@@ -289,7 +299,7 @@ describe("debug mode", () => {
         },
       } as unknown as ExtensionBridge;
       const f = forms(bridge, workspaceAt(dir));
-      await f.listOptions("gender", 7);
+      await f.searchOptions("gender", "q", 7);
       await f.debugIdle();
       // The page before the call is saved by a tool call's first adapter call only (e2e.test.ts sees the rest).
       expect(sent.filter((s) => s.method.startsWith("form.")).map((s) => s.debug)).toEqual([
@@ -297,7 +307,7 @@ describe("debug mode", () => {
       ]);
       expect(sent.filter((s) => !s.method.startsWith("form.")).every((s) => s.debug === undefined)).toBe(true);
       const session = join(dir, "debug", `${new Date().toISOString().slice(0, 10)}-no-posting`);
-      const record = JSON.parse(await readFile(join(session, "0001-list_options.json"), "utf8"));
+      const record = JSON.parse(await readFile(join(session, "0001-search_options.json"), "utf8"));
       expect(record.notes.noTrace).toEqual([expect.stringMatching(/built before it/)]);
       expect(await debugReport(session)).toMatch(/No adapter trace in 1 calls/);
     } finally {
@@ -371,5 +381,37 @@ describe("leanForm", () => {
       { id: "yes-no", label: "yes-no", kind: "dropdown", currentValue: null, options: ["Yes", "No"] },
       { id: "free", label: "free", kind: "dropdown", currentValue: null },
     ]);
+  });
+});
+
+describe("a fill that misses", () => {
+  it("returns the closest options, closest first, and how many there were", () => {
+    const issuers = Array.from({ length: 400 }, (_, i) => `Issuer ${i}`);
+    const options = [...issuers.slice(0, 200), "Amazon Web Services (AWS)", ...issuers.slice(200)];
+    const r = leanFillResult(
+      { fieldId: "cert", ok: false, error: "No option matches", availableOptions: options },
+      "AWS",
+    );
+    expect(r.availableOptions).toHaveLength(MISS_OPTIONS);
+    expect(r.availableOptions?.[0]).toBe("Amazon Web Services (AWS)");
+    expect(r.optionCount).toBe(401);
+    expect(closestOptions("Master's degree", ["Undergraduate", "Ph.D", "Masters"], 10)).toEqual([
+      "Masters",
+      "Undergraduate",
+      "Ph.D",
+    ]);
+  });
+
+  it("ranks a typeahead entry's suggestions the same way, nested paths included", () => {
+    const r = leanFillResult(
+      {
+        fieldId: "source",
+        ok: false,
+        unmatched: [{ value: "LinkedIn", suggestions: ["Company Website", "Job Board > LinkedIn"] }],
+      },
+      "LinkedIn",
+    );
+    expect(r.unmatched?.[0]?.suggestions).toEqual(["Job Board > LinkedIn", "Company Website"]);
+    expect(r.optionCount).toBeUndefined();
   });
 });

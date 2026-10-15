@@ -39,10 +39,19 @@ Constraints:
 - Put a `% src:` comment beside each paragraph listing the claim ids used.
 - Escape LaTeX specials in anything taken from the posting.
 
+## Editing `cover.tex`
+- **Use the Edit tool**, never a script (`python`, `sed`, PowerShell `-replace`): scripted edits miss LaTeX's
+  backslashes or corrupt them. Copy each `old_string` from the source as you last read it, never from `pdf_text`
+  or `lint`, and make each change in one edit.
+- **One message per round:** the round's Edits, then `tex_compile` in the same message. Then reread the changed
+  paragraphs whole and fix what doesn't fit (a repeated claim, one project split across paragraphs) in the next
+  round.
+- Keep the template's `% !TEX program` line: don't switch engines to fit the page.
+
 ## Build and check
-`tex_compile { path }` (must be one page; fix what `lint` lists; `underfilled` or `freeLines` above 2 means
-add evidence) → read the body once as the hiring manager would, between the markers. Cut filler and
-repeated claims. After a tweak, reread the changed paragraphs whole before compiling (EZAPPLY.md).
+`tex_compile { path }` (must be one page; fix the first error first, then what `lint` lists, never from page
+images; `underfilled` or `freeLines` above 2 means add evidence) → read the body once as the hiring manager
+would, between the markers. Cut filler and repeated claims.
 
 ## Build from an example
 When the user gives a sample letter whose format they like:
@@ -62,8 +71,9 @@ Never reuse the example's sentences, claims or voice in the user's letters. Only
 Tone comes from `profile/preferences.md`.
 
 ## Report and iterate
-Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode (EZAPPLY.md):
-in `after-approval`, `review_documents { files }` it (with the resume if that's ready and not yet approved).
-Handle tweaks ("more concise", "mention X"), from chat or the review page, by
-editing, recompiling, reporting in one line, and reviewing again in `after-approval`. Every build is saved in
-`.history/`, so earlier versions can be restored on request.
+Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode
+(`posting_active` → `documents.attachMode`): in `after-approval` (the default), `review_documents { files }` it
+(with the resume if that's ready and not yet approved); in `immediately` it's ready to attach (`open_file` only
+when asked). Handle tweaks ("more concise", "mention X"), from chat or the review page, by editing, recompiling,
+reporting in one line (from `pdf_text { path, sinceReviewed: true }` after a review), and reviewing again in
+`after-approval`. Every build is saved in `.history/`, so earlier versions can be restored on request.
