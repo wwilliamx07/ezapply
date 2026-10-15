@@ -96,11 +96,11 @@ Anything else fails with `path_not_allowed`.
 
   Overfull and underfull lines come from the log (diagnostics), not the lint. *Why a lint and not an image of
   the page:* tailoring changes only the text inside a template the user approved, so what goes wrong is
-  mechanical. A rendered page (the removed `pdf_render` tool) cost about 2.5k tokens of context each, re-sent
-  on every later turn of the session, two per tailoring, to find what these checks name exactly. Changes to a
+  mechanical. A rendered page image costs about 2.5k tokens of context, re-sent on every later turn of the
+  session, two per tailoring, to find what these checks name exactly. Changes to a
   template's look are the user's to ask for.
-- **History:** each successful build copies the `.tex` and `.pdf` to `<dir>/.history/<timestamp>/`. The
-  newest 30 snapshots are kept. "Go back to the previous version" restores from there.
+- **History:** each successful build copies the `.tex` and `.pdf` to `<dir>/.history/<timestamp>/`, and
+  `pdf_merge` its output the same way. The newest 30 snapshots per folder are kept. "Go back to the previous version" restores from there.
 
 ## Review before attaching
 How a finished document reaches an application is the **attach mode**, `documents.attach` in
@@ -113,8 +113,8 @@ The default is the reviewing one because what's attached goes to an employer; a 
 switch.
 
 **The review page** (`ReviewService`, `documents/review.ts`; the page itself is the UI package's,
-[ui](ui.md#the-review-page-reviewid)). `review_documents { files }` takes 1–6 PDFs from one posting folder, reads
-their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the `Opener`. Opening reads what
+[ui](ui.md#the-review-page-reviewid)). `review_documents { files }` takes 1–6 PDFs from one posting folder
+(anything else is `bad_request`), reads their bytes, and opens `http://127.0.0.1:<port>/review/<id>?t=<token>` through the `Opener`. Opening reads what
 the page shows beside each document: its page count, page size, text layer and encryption (`pdfInfoOf` on the
 bytes; a file that isn't a readable PDF has none), its text per page (`pdfText` on the bytes), and the version the
 user last answered a review of, by its name in the posting folder (`reviewed.json`). The page shows each PDF in
@@ -140,10 +140,9 @@ Claude Code moves an MCP call still running after 120 s to the background and de
 notification, so a long wait doesn't hold the chat. On a timeout, `review_documents { reviewId }` waits again;
 an answer given while nothing waits is kept, and the next wait returns it at once. When no browser opened, the
 call returns right away with the URL for Claude to give the user, since nobody would see the page otherwise.
-*Why one tool:* opening and waiting used to be two tools (`review_open`, `review_wait`). In one
-session the agent opened three reviews without waiting, and the user's change requests sat in
-the companion until they asked why they'd been dropped. The skills now also say the page is a snapshot: after
-any rebuild, review the changed files again.
+*Why one tool:* with a separate call to wait, an agent opened three reviews without waiting, and the user's
+change requests sat in the companion until they asked why they'd been dropped. The skills also say the page is a
+snapshot: after any rebuild, review the changed files again.
 
 Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
@@ -175,14 +174,14 @@ anything either.
 
 ## Log parsing (`tex/log.ts`)
 `parseTexLog` turns a TeX log (file-line-error style, unwrapped lines) into up to 60 de-duplicated
-diagnostics `{ severity, kind, message, file?, line? }`. Kinds: `error`, `missing-file`, `missing-font`,
+diagnostics `{ severity, kind, message, file?, line? }`, errors first. Kinds: `error`, `missing-file`, `missing-font`,
 `missing-glyph`, `overfull`, `underfull`, `undefined-reference`, `rerun`, `warning`. Skills treat overfull
 boxes and missing glyphs as defects to fix.
 
 ## Diff (`tex_diff`)
-`latexdiff --flatten old new` → `<new>-diff.tex` next to the new file, compiled (no page limit) to a
-change-highlighted `<new>-diff.pdf`. Optional: without latexdiff it
-fails with a hint.
+`latexdiff --flatten old new` → `<new>-diff.tex` next to the new file, compiled like any `.tex` (with a page
+limit of 99, so it's never over) to a change-highlighted `<new>-diff.pdf`. Optional: without latexdiff it fails
+with `not_found` and a hint.
 
 ## PDF toolkit (`pdf/toolkit.ts`)
 
@@ -201,15 +200,17 @@ wrapped in a scale-and-translate that fits it centred on the target paper (turne
 orientation, honouring `/Rotate` and MediaBoxes that don't start at 0,0), its annotation coordinates
 (`Rect`, `QuadPoints`, `Vertices`, `L`, `CL`, `InkList`; `RD` scaled only) moved the same way, and its
 MediaBox set to the target (other boxes dropped). A page that already has the target size in either
-orientation is left alone. It used to redraw such pages as form XObjects, which drops annotations, so a
-Letter resume bundled after an A4 transcript lost its clickable LinkedIn and GitHub links.
+orientation is left alone. The page isn't redrawn as a form XObject: that drops annotations, and a Letter resume
+bundled after an A4 transcript lost its clickable LinkedIn and GitHub links that way.
 
 `open_file` goes through the `Opener` (`util/open.ts`): a PDF, image or text file opens in the browser the
 extension runs in, anything else (and everything when that browser isn't known or found) through
 `explorer.exe` / `open` / `xdg-open`; started detached without a shell and not waited for, so a viewer it
 launches is never killed by a timeout ([companion](companion.md#opening-pages-and-files-utilopents)).
 
-Encrypted or unreadable PDFs fail with `bad_request` and a clear message rather than being skipped.
+An encrypted or unreadable PDF given to merge or compress fails with `bad_request` and a clear message rather
+than being skipped (`pdf_info` reports `encrypted` instead); a bad page range is `bad_request` too
+(`pdf/pages.ts`).
 Outputs are written atomically; a target another program holds open (Acrobat locks the PDFs it shows) fails
 with a hint to close it. When compressing misses the target and Ghostscript isn't installed, the hint carries
 this OS's install command.

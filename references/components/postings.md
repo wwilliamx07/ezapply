@@ -9,12 +9,12 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
 1. **Canonical URL** (`canonicalizeUrl`): lowercase host, trailing slashes dropped, only query parameters
    that identify a job kept: the common ones (`jobid`, `job_id`, `jid`, `jk`, `currentjobid`, `id`, `reqid`) and
    every registry site's `jobParams` ([registry](sites.md#the-registry); Greenhouse's `gh_jid`, Phenom's `jobseqno`,
-   SuccessFactors' `career_job_req_id` with `company`, each explained on its site's page), and on
-   Workday the leading locale segment (`/en-US/`) dropped: Workday links to the same job with and without
-   it. On Oracle (`oracleJobPath`) the language segment is dropped and so is everything after the job id, so
-   a capture on the application pages (`…/job/123/apply/section/1`) is the job's own posting. Each registry site
-   says its own (`canonicalPath`): Lever drops `/apply` and Ashby `/application`, so a capture of the
-   application is the posting's ([registry](sites.md#the-registry)). A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
+   SuccessFactors' `career_job_req_id` with `company`, each explained on its site's page). The path is what the
+   URL's registry site says (`canonicalPath`, [registry](sites.md#the-registry)): Workday drops the leading locale
+   segment (`/en-US/`), since it links to the same job with and without it; Oracle (`oracleJobPath`) the language
+   segment and everything after the job id, so a capture on the application pages (`…/job/123/apply/section/1`)
+   is the job's own posting; Dayforce the locale and what follows the job id; Lever drops `/apply` and Ashby
+   `/application`, and Phenom reads `hvhapply` as `apply`, so a capture of the application is the posting's. A capture whose canonical URL matches an existing posting reuses that folder. Stored postings are
    matched by their `canonicalUrl` and by their `url` canonicalized again, so postings saved before a
    canonicalization change still match.
 2. **Extraction** (`extractPosting`, below) from the visible HTML.
@@ -22,8 +22,9 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
    `unknown`, role to the page title); `-2`, `-3`… on collision.
 4. **Files written**: `capture/raw.html` (body verbatim), `capture/visible.html`, `capture/visible.txt`,
    `capture/jsonld.json`, `posting.md`, then `meta.json`.
-5. **Metadata merge**: on a re-capture, values Claude already corrected (company, role, requisition,
-   location, deadline, `bundleRequired`, status) win over fresh extraction. The tenant is read from the URL
+5. **Metadata merge**: on a re-capture, the stored company, role, requisition, location, deadline,
+   `bundleRequired` and status win over fresh extraction, which only fills gaps, so what Claude corrected stays.
+   The URL, page title, site and tab are the new capture's. The tenant is read from the URL
    and Claude never sets it, so a fresh reading replaces an older one (that's how postings saved while
    myworkdaysite tenants were misread as `wd5` get fixed).
    **The application** (below) is looked for in the page; a re-capture keeps one the user set, else takes what
@@ -48,8 +49,9 @@ reaches `posting.md`.
   shared with the adapter, `WORKDAY_POSTING`; its titles are only the role). `extract.ts` names no site: a new site
   needing one gets a reader there, never a branch ([building adapters](../building-adapters.md#5-a-posting-reader-only-if-needed-sitereaderts)).
 - Metadata, in order of trust: JSON-LD `JobPosting` (title, hiring organization, identifier, location) →
-  the site's reader (role, location, requisition) → the page title split on separators
-  on ` | `, ` - `, ` – ` (unless the reader says the title is only the role; Oracle titles read "<role> - <Company> Careers") → company from the
+  the site's reader (role, location, requisition) → the page title (role and company only: "<role> at
+  <company>", else split on ` | `, ` - `, ` – `, ` — `, with words like "Careers" dropped from the company;
+  not when the reader says the title is only the role; Oracle titles read "<role> - <Company> Careers") → company from the
   URL: on a registry site's `providerHosts` ([registry](sites.md#the-registry)) what its `company` reads there (a
   Workday tenant; a Greenhouse, Lever or Ashby board's first path segment), else nothing, since the host names the
   provider (an Oracle Cloud pod, a Dayforce or SuccessFactors data centre), not the employer; on LinkedIn and
@@ -77,17 +79,14 @@ Which application a posting is tied to, so the form tools can tell its tab from 
 - **Else a job the page's URL names for an embedded board** (`hostPageJob`: Greenhouse's `gh_jid` on a
   company's careers page), `host-page-job`, with no tenant.
 - **Postings captured earlier** get it from `capture/raw.html` the first time they're active in a form call
-  (`application(id)`), and it's saved; one with nothing found isn't searched again until the companion restarts
-  or its `reqId` changes.
+  (`application(id)`), and it's saved; one with nothing found isn't searched again until the companion restarts,
+  its `reqId` changes or it's captured again.
 - **Later:** the first form call that changes a page stores the tab's (`bound`), and `posting_activate
   { id, tabId }` the tab the user names (`user`); `setApplication`.
 
-On real captures it tied two postings captured on one employer's careers site to their Workday
-requisitions by the page's Apply link, and another employer's to its Greenhouse job by `gh_jid`. Pages from a
-school's job board (Symplicity), employers' own career sites, iCIMS and SAP SuccessFactors link to nothing in the
-registry: those are
-bound on first use. (SuccessFactors' career site joined the registry since; a page linking to it with
-`career_job_req_id` would now be tied by that link.)
+Verified on real captures: employers' careers pages are tied to their Workday requisitions by the page's Apply
+link, and to a Greenhouse job by `gh_jid`. Pages that link to nothing in the registry (a school's job board, many
+employers' own career sites, iCIMS) are bound on first use.
 
 ## Other operations
 - `list()`: every posting with a valid `meta.json`, newest update first (invalid ones are logged and
@@ -103,8 +102,8 @@ bound on first use. (SuccessFactors' career site joined the registry since; a pa
   folder names (`[\w.-]+`, not `.` or `..`) and refuses anything else with `bad_request`: an id like `../x`
   would otherwise resolve outside `postings/`. `list()` skips folders with other names.
 - `updateMeta(id, patch)`: validated, serialized, bumps `updatedAt`. A `reqId` is trimmed, and one of more than
-  three words is refused as a title (`checkReqId`): seen, "Evergreen - Software Engineer, Intern, 2027, CAN",
-  which compares with no application's job id.
+  three words is refused as a title (`checkReqId`): agents have put a job title there, which compares with no
+  application's job id. An unknown id is `not_found`.
 
 ## Folder layout
 See [data-formats.md](../data-formats.md#postings) for every file. Besides the capture files, a posting
@@ -114,14 +113,13 @@ compiler output, `.previews/` (rendered pages, left by older versions), and `for
 ## Status
 `captured`, `drafting`, `attached`, `filled`, `submitted`, `archived`. Skills set `drafting`; the form
 tools move it forward automatically (`attached` on upload, `filled` at review, `submitted` on the
-confirmation page), never backward, and only for the posting whose tenant (a Workday tenant, an Oracle career site, a Greenhouse board…) the application
-tab is on
-([mcp-tools](../mcp-tools.md#forms)). `archived` is set by hand.
+confirmation page), never backward, and only for the posting the application tab is credited to
+([which posting](../mcp-tools.md#forms)). `archived` is set by hand.
 
 ## No database
 The posting folder is the application record: `meta.json` (status and details) and `form-log.jsonl`
-(every fill, upload and step, with the source of each value). A database (the original plan had SQLite) would only
-duplicate that, so there is none; lookups go through `postings_list`.
+(every fill, upload and step, with the source of each value). A database would only duplicate that, so there is
+none; lookups go through `postings_list`.
 
 ## Duplicates
 `postings_list` with `company` (substring over company and tenant) finds earlier applications to the same

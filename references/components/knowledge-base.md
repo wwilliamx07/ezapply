@@ -33,18 +33,18 @@ claims:
 ```
 5–20 claims per repo, each one resume-bullet sized. Numbers only when the code or docs contain them.
 
-**Why files, not line ranges.** Claims used to cite `evidence: [{ path, lines, hash }]`: line ranges, with a
-hash of the cited lines stamped at indexing so a later check could flag a claim whose lines changed. Nothing
-downstream read the lines (`claims_list` leaves evidence out, and tailoring works from the claim text), so
-they cost tokens to write and re-verify for no use. And a hash flags any edit under a claim, including
-reformatting, without saying whether the claim still holds. What a re-index needs is which claims a change
-might affect, and file paths answer that: `repo_sync` lists the claims whose `files` include a changed path
-(`affectedClaims`). Files written in the old form are still read (each evidence entry as its `path`) and are
-rewritten as `files` by the next `knowledge_mark_indexed`, keeping the file's comments; `schemaVersion` stayed 1.
+**Why files, not line ranges.** Nothing downstream reads cited lines (`claims_list` leaves them out, and
+tailoring works from the claim text), so line ranges would cost tokens to write and re-verify for no use, and a
+hash of the cited lines would flag any edit under a claim, reformatting included, without saying whether the
+claim still holds. What a re-index needs is which claims a change might affect, and file paths answer that:
+`repo_sync` lists the claims whose `files` include a changed path (`affectedClaims`). Claims in the older
+`evidence: [{ path, lines, hash }]` form are still read (each entry as its `path`) and are rewritten as `files`
+by the next `knowledge_mark_indexed`, keeping the file's comments; `schemaVersion` is 1 for both.
 
 ## Reading them
 `claims_list` returns every repo's claims as compact text (`RepoService.allClaims`): the repo once as a
-heading, then `- id: claim`, with `(impact: …)` only when there is one. It's how Claude reads the knowledge
+heading, then `- id: claim`, with `(impact: …)` only when there is one; a repo whose `claims.yaml` doesn't
+parse gets one line saying to run `claims_check`. It's how Claude reads the knowledge
 base at the start of work on a posting; the knowledge docs and the repo cache are opened only when a claim
 can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
 
@@ -82,9 +82,9 @@ can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
 5. `knowledge_mark_indexed`; tell the user in 3–5 lines what the project is and its strongest claims (full
    index) or what changed in the knowledge base (re-index).
 
-*Why diffs:* a re-index after a few commits used to re-survey and re-read whole components, often most of
-the repo, to account for a handful of changed lines. The diff is usually a small fraction of that, and the
-existing docs already hold the rest. `repo_diff` caps its output (60k characters) so asking for too much
+*Why diffs:* re-surveying and re-reading whole components after a few commits reads most of the repo to
+account for a handful of changed lines. The diff is usually a small fraction of that, and the existing docs
+already hold the rest. `repo_diff` caps its output (60k characters) so asking for too much
 can't flood the context.
 
 Reading uses Claude Code's own Read, Grep and Glob, and `repo_diff`. Nothing in the cache is edited, built,

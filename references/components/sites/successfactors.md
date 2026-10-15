@@ -4,7 +4,7 @@ One of [the sites](../sites.md): only what this site does differently from [the 
 
 **Why.** SuccessFactors is among the most used providers ([why these three](../sites.md#why-these-three)). Its career site hosts
 every employer of a data centre on one host (`career17.sapsf.com`, `career2.successfactors.eu`…), and its application
-sits behind a candidate account, so it was built from a page the user saved from their own application.
+sits behind a candidate account, so it was built from a page saved from a real application.
 
 **Pages.** The application is `…/career?company=<company>&career_job_req_id=<requisition>&career_ns=job_application`
 (or the older `…/sfcareer/jobreqcareer?jobId=<requisition>&company=<company>`); once the candidate is signed in it can
@@ -48,8 +48,8 @@ expanding. A field showing only text (the account's Username) is left out. The d
   component keeps, its words in the `.radioLabel` beside it. `radioGroupDriver` (`widgets.ts`) clicks the choice,
   which reaches the component's `_itemSelect` (an `onclick` on the `<id>_radio` span around it, read from its
   script), and reads `aria-checked` back. Answering one can show follow-up questions under it (`cascadedQuestions`),
-  read on the next `get_form`. Seen on a live application; before this driver such questions weren't listed at all,
-  and the agent couldn't answer them. Where an employer's Fiori setting renders real `input[type=radio]`s instead
+  read on the next `get_form`. Without this driver such questions aren't listed at all (seen on a live
+  application). Where an employer's Fiori setting renders real `input[type=radio]`s instead
   (the same script), the native radio driver takes the field;
 - text (`input[data-testid='sfTextField']`, a pay field's `type=currency` too); and textareas, native selects,
   native radios and checkboxes, which SuccessFactors' field factory can render (read from its script) but no page seen
@@ -92,8 +92,8 @@ page, filtered as you type. The driver finds its component in juic's registry (`
 
 **Why not clicks.** The list is built in a popup only when opened, from the server's pages, and that popup's markup
 wasn't saved. The component needs neither, and lists every option. **The risk:** these are juic's internals (the
-registry, the model's controller and its argument order), read from the page's scripts. They have since worked on a
-live application: lists listed, searched and chosen, and read back.
+registry, the model's controller and its argument order), read from the page's scripts. They work on a live
+application: lists listed, searched and chosen, and read back.
 
 ## Documents
 My Documents holds the Resume/CV, Cover Letter and Additional Documents, each an `.RCMFormField.attachmentField` with
@@ -109,17 +109,16 @@ keeps an empty slot with a plus beside what it holds, so it takes several (`mult
   slot shows a tick ("File is uploaded successfully"). Done when a new name shows, failed with the field's own message
   when one shows. A **replacement under the same name** (a new `resume.pdf` over the old one) adds no name, so for a
   replacement the slot's own signs decide: it names the file, isn't uploading, and either shows a tick it didn't have
-  before or was seen uploading. Counting names alone reported such a replacement as failed. An optional document
+  before or was seen uploading. Counting names alone would report such a replacement as failed. An optional document
   already there has to be removed first: its icon would delete it, not replace it.
-- **The page can re-render.** Seen live: a couple of seconds into an upload to Additional Documents, right after a
-  cover letter's, SuccessFactors rendered the whole application again. Every element was new, answers filled before
-  it were gone, the cover letter just uploaded no longer showed in its field, and neither did the new document,
-  though SuccessFactors had kept it (it showed on a later visit). What sets it off isn't known; the next upload to the
-  same field didn't do it. The driver stops waiting once its field leaves the page and finds the field again by its
-  label. If the new field shows the file, the result is `ok` with an `error` telling the agent to read the form again
-  and refill what's empty. If it doesn't, the upload fails with a message to upload again once the form is read, and
-  to remove a duplicate if one shows later. Before this, the driver waited the full `uploadMs` on the detached field
-  and only said the upload didn't appear. That's also why the notes say to upload documents first, one at a time.
+- **The page can re-render.** Seen live, a few seconds into an upload (one following another), SuccessFactors can
+  render the whole application again: every element is new, answers not yet saved are gone, and the documents just
+  uploaded don't show in their fields, though SuccessFactors has kept them. What sets it off isn't known; it doesn't
+  happen on every upload. So the driver stops waiting once its field leaves the page (rather than waiting out
+  `uploadMs` on the detached field) and finds the field again by its label. If the new field shows the file, the
+  result is `ok` with an `error` telling the agent to read the form again and refill what's empty. If it doesn't,
+  the upload fails with a message to upload again once the form is read, and to remove a duplicate if one shows
+  later. That's also why the notes say to upload documents first, one at a time.
 - **Remove:** presses the bin, then OK in the confirmation dialog where the employer has one ("Are you sure you want to
   delete this file?"); the document is deleted on SuccessFactors' side at once (`deleteResumeOrCoverLetter`,
   `deleteAttachment`). A required document can't be removed, only replaced, and the removal says so.
@@ -146,7 +145,7 @@ refuses.
 
 **The job** is the page's heading ("Operations Analyst (1000)") without the requisition, which comes from the
 hidden `#career_job_req_id` (else the heading's parenthetical). **Other pages:** a page with a password field and no
-form is `auth`; a confirmation is told by the page's own text, without its notes (the welcome above the form thanks
+fields of the application is `auth`; a confirmation is told by the page's own text, without its notes (the welcome above the form thanks
 the candidate "for your interest", which `CONFIRMATION_TEXT` would take for one). Neither was seen. There's no posting
 page on this site to act on: postings are on the employer's careers site.
 
@@ -161,9 +160,9 @@ page on this site to act on: postings are on the employer's careers site.
   debug mode on. There, the application was read and tied to its posting by the page's requisition; lists were listed,
   searched and chosen through the component (country and province hinted by their field names); row dates were
   taken; documents went in through the popup, a second one into Additional Documents included; and an optional
-  document was removed after its dialog, while the required resume's removal was refused. The live run also found
-  three gaps, now fixed in jsdom only: question radios weren't read, a same-named replacement was reported as failed,
-  and an upload waited out its time on a field the page had re-rendered ([documents](#documents)).
+  document was removed after its dialog, while the required resume's removal was refused. The question radios, a
+  same-named replacement and the re-render ([documents](#documents)) are handled from what that run showed, and
+  checked in jsdom only.
 
 **Not yet tried:** the question radio driver, a same-named replacement and the re-render handling live; the province
 list enabled and loaded after a country is chosen in the same call; adding and removing a row; Apply's errors; a

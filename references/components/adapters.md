@@ -15,7 +15,7 @@ definitions are in [the sites package](sites.md#the-package), each in `<site>/de
 | `types.ts` | `SiteDefinition` and its parts (`PageRules`, `RepeatRules`, `FillRules`, `SiteWaits`, `Messages`), `FieldSpot`, `RowSpot`, `AddButtonSpot`, `WidgetDriver` |
 | `extract.ts` | `extract(site, doc, url)`: the page as a schema, plus the field registry the API works from |
 | `api.ts` | `createAdapter(site, doc, getUrl)`: the API the background calls; `install(site)`; `ADAPTER_VERSION` |
-| `standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singleStep`, `titledJob`), standard waits and messages |
+| `standard.ts` | Helpers for plain HTML and ARIA forms: prompts, choice labels, headings, the submit-by-text test, confirmation text, single-page rules (`singlePageKind`, `singleStep`, `titledJob`, `noRepeats`), standard waits and messages |
 | `dom.ts` | DOM helpers: text, visibility, events, `settle`, `waitFor`, `matchOption`, `answersQuery` (whether options can be a search's results), `parseDate`, React props, `reactFiber` (a node's fiber in the current tree), `watchRequests` (the page's own fetch and XHR requests in flight, counted while a wait needs them), `win(node)` |
 | `timing.ts` | `T` (the waits in use), `useSiteWaits`, `setTiming`; `watchWaits` and `waitName` for the debug trace |
 | `guard.ts` | `installSubmitGuard(doc, isSubmit)` ([never submitting](#never-submitting)) |
@@ -30,10 +30,10 @@ SAP SuccessFactors (a `site.ts`, with its picklist and attachment drivers in `wi
 
 **Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
 other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
-differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 150 to 165 lines each; Phenom,
-with steps and rows, about 330; Dayforce, with steps, records, Personal Information's own form and phone numbers
-read as two fields, about 490; SuccessFactors, one page with rows and documents, about 320, plus 350 of drivers for
-its own framework's widgets.
+differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 160 to 170 lines each; Phenom,
+with steps and rows, about 420; Dayforce, with steps, records, Personal Information's own form and phone numbers
+read as two fields, about 490; SuccessFactors, one page with rows and documents, about 330, plus about 440 of
+drivers for its own framework's widgets.
 
 **Why TypeScript, not data.** A definition is code: typed, able to hold a small function where a selector isn't
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
@@ -56,7 +56,7 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 | `fields(doc)` | Every field in page order, as `FieldSpot`s: container, driver (optional), key, prompt (`label`), section title, required, and optionally automation id, help, error, profile hint |
 | `addButtons(doc)` | `AddButtonSpot`s: element, key (`add.work-experience`, `save.languages`), label, section, and `kind`: `row` (adds a row of fields), `form` (opens an inline form), `save` (an inline form's Save, or a form that's part of the step), `edit` (opens a saved item's form again) |
 | `rows(doc, sections)` | Rows the page can delete (a section with its own delete button), and saved items (a section of its own with no fields: Oracle's tiles) |
-| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, `nextBlocked?` (why Next can't go on from the page as it is, checked before pressing: a requirement the page would enforce with a native dialog), back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the one-page sites' own title. A site whose pages show no title leaves it out |
+| `page` | Page kind, step, step key (what changes on a move: index and title, or the URL), errors, notices, page actions and their buttons, next, `nextBlocked?` (why Next can't go on from the page as it is, checked before pressing: a requirement the page would enforce with a native dialog), back, button labels, `isSubmit`, and `job?` (the job the page says it's the application for: its title, a requisition it shows; the engine puts it in `FormSchema.job`, and the companion uses it to tell which posting a tab belongs to when its URL can't: [which posting](../mcp-tools.md#forms)). Every site has `job`: Workday's `jobTitleHeading`, Oracle's flow heading, the others' job heading (with its requisition on Phenom and Dayforce). A site whose pages show no title leaves it out |
 | `repeat` | What a deletable thing is called, what an add makes more of and a removal fewer of, the delete button (revealed first where the site hides it), confirming a removal, and an inline form's errors |
 | `fill` | `order` (`given`, or `page` for dependent lists), `waitForStaleErrors`, `scrollBeforeUpload`, `newErrorsOnly` (a page that keeps old errors on screen) |
 | `waits` | `afterField`, `afterRow`, `afterStep(doc, moved)`, `afterAction` ([waits](#waits-owned-by-the-site)) |
@@ -64,7 +64,8 @@ environment, and in a jsdom window inside a Node test, which is how the companio
 
 ## Extraction (`extract.ts`)
 For each `FieldSpot`, its driver gives the kind, the current value, known options, `optionsLazy`, date parts and
-`multiple`; the spot gives the rest. Then:
+`multiple`; the spot gives the rest. A spot that names no driver and that none of the site's recognises is left
+out. Then:
 - **Ids:** `<section slug>.<key>`, with `#2`, `#3` for repeats, so rows stay distinct.
 - **Sections** in page order, titled by the spots' section titles. A row from `rows()` marks its section
   `removable`; a saved item becomes a section of its own, `removable` and `saved`, with no fields.
@@ -111,16 +112,14 @@ Drivers are per widget library, never per site: a new site uses the existing one
 handles gets a shared driver named after it, and only a widget of the site's own gets a driver in the site's
 folder ([building adapters](../building-adapters.md#principles)).
 
-A `WidgetDriver` is one kind of widget: `kind`, `is(container)`, `value`, and optionally `options`,
-`lazyOptions`, `dateParts`, `multiple`, `fill(container, value)`, `list`, `search`, `remove`,
-`upload`. Every fill acts, waits, reads back, and returns `{ ok, readBack, error?, availableOptions?, unmatched? }`.
+A `WidgetDriver` is one kind of widget: `kind`, `is(container)`, `value`, `fill(container, value)`, and
+optionally `options`, `lazyOptions`, `dateParts`, `multiple`, `list`, `search`, `remove`, `upload`. Every fill acts, waits, reads back, and returns `{ ok, readBack, error?, availableOptions?, unmatched? }`.
 Options are matched by `matchOption` (`dom.ts`), case-insensitive: the option itself; the option without its
 trailing parenthetical, or the parenthetical alone ("Python" for "Python (Programming Language)"); a prefix either
 way; a substring. Each rule after the exact one must single out one label, so "Yes" picks "Yes, I will require
 sponsorship" only when no other option begins so, and "Canada" takes Greenhouse's "Canada +1" and Dayforce's
-"🇨🇦 +1 Canada". A miss returns the options seen. The agent reads every read-back, so a loose pick is seen. A
-stricter mode that took only exact wordings served deterministic autofill and went with it
-([status](../status.md#deterministic-autofill-removed)).
+"🇨🇦 +1 Canada". A miss returns the options seen. There's no exact-wording mode: the agent reads every read-back,
+so a loose pick is seen, and nothing fills without the model ([status](../status.md#decisions)).
 
 ### Shared drivers (`widgets/`)
 | Driver | For |
@@ -136,7 +135,7 @@ stricter mode that took only exact wordings served deterministic autofill and we
 | `toggleButtonsDriver(selector \| { buttons?, label?, pressed?, multiple? })` (`buttons.ts`) | A choice of toggle buttons (Ashby's Yes / No; Oracle's pills, by their own label and pressed class), as a radio; with `multiple`, a checkbox group that `remove_items` unpresses. A button is pressed only when it must change (a pressed toggle may unpress itself), with React's `onClick` as the fallback |
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
 | `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites/successfactors.md)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
-| `fileDriver({ input?, names, entries?, dropZone?, reactDrop?, removeButton?, confirmRemoval?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input, then a drop on the field (or the site's `dropZone`, through its React `onDrop` first with `reactDrop`). Done only when the page shows a **new** file of that name: one more of that name, or, with `entries`, an element that wasn't there before, so a same-named file the page replaces counts. A field without an input that already holds a file says to remove it first. Removed by its own button, confirming a dialog when the site gives `confirmRemoval` |
+| `fileDriver({ input?, names, entries?, dropZone?, reactDrop?, removeButton?, confirmRemoval?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input; if the page shows nothing within `uploadMs`, a drop on the field (or the site's `dropZone`, through its React `onDrop` first with `reactDrop`). Done only when the page shows a **new** file of that name: one more of that name, or, with `entries`, an element that wasn't there before, so a same-named file the page replaces counts. A field with neither an input nor a drop zone that already holds a file says to remove it first. Removed by its own button, confirming a dialog when the site gives `confirmRemoval` |
 
 **The combobox types a key too.** Lever's location field searches on keyup, not on input (seen live): setting
 the value found nothing. The driver sets the value, then sends the last character as a key event. When a search
@@ -145,9 +144,10 @@ used; each is matched against the value anyway.
 
 ### react-select, through its props
 react-select (Greenhouse, many React forms) is driven through the component itself: the fiber of its input leads
-up to the component whose props hold `options`, `onChange`, `onMenuOpen` and `getOptionLabel`. `list` reads the
-options without opening anything; `fill` calls `onChange` with the matching option (an array for a multi-select);
-`remove` calls `onChange` without the values.
+up to the nearest component whose props hold `options`, `onChange` and `onMenuOpen` (react-select's own; wrappers
+above it lack the last), labelling options by its `getOptionLabel` where it has one. `list` reads the options
+without opening anything; `fill` calls `onChange` with the matching option (an array for a multi-select);
+`remove` calls `onChange` without the values, on a multi-select only.
 
 **Lists that load as you type** are searched by `search` and by `fill`: an async select (`loadOptions`), and any
 list with no options at all, which is a page fetching on `onInputChange` and passing the results in as `options`
@@ -193,19 +193,17 @@ through juic's component registry and the attachment view's upload popup
 ([sites](sites/successfactors.md#the-paginated-picklist-through-its-component)). Each such driver holds everything about its
 widget: how it's recognised, read, listed, searched, filled and cleared.
 
-**Why Workday and Oracle were reworked.** When they moved onto the engine, their fillers and readers
-moved unchanged: each "driver" handed its kind back to one `fillField` switch and to `currentValue` and
-`knownOptions` switches, the kind was decided twice (the drivers' `is` and `fieldKind` / `rowKind`), and their
-text, radio, checkbox, checkbox-group and file code were copies of the shared drivers, which had drifted apart (the
-shared ones took a reformatted phone number and refused read-only inputs; Workday's tried React's handlers where
-the shared ones press the label). Now each widget of their own is a real driver in a file of its own, the plain
-controls and files use the shared drivers with options for what really differs, and the switches are gone. The
-golden schemas and every behaviour test stayed equal. One fix came with it: an Oracle checkbox group of native
-checkboxes (not pills) was filled as pills, so no option ever matched; it now uses the shared checkbox group.
+**One driver per widget, and no site copies of the plain controls.** A site's plain controls and files use the
+shared drivers, with options for what really differs (Workday's `fallback: "react"`, Oracle's `react: false`);
+the kind is decided once, by the driver, with no switch on kind elsewhere. Why: site copies of the shared code
+drift apart, and a kind decided twice can disagree (an Oracle group of native checkboxes was once filled as pills,
+so no option matched).
 
 ## Waits, owned by the site
 Each site owns its waits. Its registry entry (`SiteInfo.waits`, in its `registry.ts`) gives every named wait
-a value; today every site starts from `STANDARD_WAITS`, measured on Workday. Its definition's `waits` say what to
+a value; every site starts from `STANDARD_WAITS`, measured on Workday, and lengthens those its server needs
+(Phenom's and Dayforce's `stepMs`, Dayforce's and SuccessFactors' `uploadMs`, Dayforce's `addRowMs`; why, beside
+each in its `registry.ts`). Its definition's `waits` say what to
 wait for after each field, row, step move and page action: `standardWaits` settles the page for as long as the
 waits say; Workday's `afterStep` also waits (up to `stepFieldsMs`) for the new step's fields, since Workday moves
 the progress bar before the step renders, and then (up to `stepRequestsMs`) for the requests the step started
@@ -227,9 +225,8 @@ results 100 ms, uploads 200 and 250 ms, a step's fields 150 ms) keep it.
 **Why every wait is tunable.** Live Workday fills once ran slowly (dropdowns about 2.5 to 3 s each, a 15-dropdown
 step in 49 s). Most waits end as soon as their condition holds, but some cost their full length on every field when
 the page never goes quiet or a check never matches, and which ones wasn't measured. The file lets a wait be shortened
-without a rebuild, to see what breaks. Six dropdown waits set to 200 ms (from 1 to 2 s) then ran four live
-applications in one day, on Workday and Oracle, with 128 fills and no dropdown failing to open, so those are the
-defaults now.
+without a rebuild, to see what breaks. Six dropdown waits set to 200 ms (from 1 to 2 s) ran four live
+applications on Workday and Oracle, 128 fills, with no dropdown failing to open, so those are the defaults.
 
 ## Debug mode: the adapter trace
 With [debug mode](../development.md#debugging-a-live-run-debug-mode) on, every adapter call records what
@@ -247,8 +244,8 @@ beside the result, never in it, and the companion writes it into the call's reco
   and whether its condition, quiet or its maximum ended it; how each value was matched against the options; each
   field's start, end and outcome; and the branches the fillers take only sometimes, which they name themselves
   (Workday: `dropdown re-open`, `date entered again`, `date part set directly`, `typeahead search again`, `selected on Enter`,
-  `upload by drop`, and each dropdown's `listbox`: the listboxes on screen, the one read, its options; Oracle:
-  `search the list`, `typeahead search again` and the list's options).
+  and each dropdown's `listbox`: the listboxes on screen, the one read, its options; Oracle:
+  `search the list`, `typeahead search again` and the list's options; the shared file driver: `upload by drop`).
 - **Around it:** the page's state before and after (URL, step, `document.visibilityState`, `hasFocus()`); its DOM
   changes, summarised (the topmost element of each addition and removal, with its size, and changes to
   `aria-expanded`, `aria-selected`, `aria-invalid`, `value`, `disabled` and `hidden`), which shows a listbox opening
@@ -259,7 +256,8 @@ beside the result, never in it, and the companion writes it into the call's reco
   so it isn't timed), after it, and at each field that fails: its section (the nearest fieldset, section, group,
   region or form), every popup or listbox open on screen, and the last one the page took away during that field,
   since a dropdown's list closes before its fill returns. The page's removals are watched for that and kept as
-  elements, serialised only if the field fails. Cleaned of scripts, styles, stylesheet links, SVG contents and
+  elements, serialised only if the field fails. A section that is the whole body or too large to be worth it is
+  replaced by the field's own container. Cleaned of scripts, styles, `link`s, `noscript`, SVG contents and
   inline handlers, with live values written into attributes (never a password's): debugging needs the values,
   and the companion's export scrubs them. A shadow root's contents aren't copied.
 
@@ -270,7 +268,7 @@ named branches and listbox notes. Without debug every reporting function returns
 a call runs as it did before. Checked on the behavioural fixture: the same six-field Workday fill took the same
 time with debug on and off (within a few ms of 3.5 s over six runs each).
 
-**Naming waits without touching every call site.** A wait's length is passed as `T.someWait`. While debug is on,
+**Naming waits without touching every call site.** A wait's length is passed as `T.<name>` (`T.dropdownOpenMs`). While debug is on,
 `watchWaits` turns `T`'s values into getters that note each key read, so `waitFor(fn, T.dropdownOpenMs)` reads
 `dropdownOpenMs` just before the call and the wait takes the latest name read with its length (`pollMs` aside,
 which every `waitFor` reads for its interval). After the call they're plain values again. Labelling the waits at
@@ -292,7 +290,8 @@ its hooks come off after 15 minutes regardless.
   click, mouse and pointer down/up, Enter and Space, and `submit` cancel any **untrusted** (script-generated) event
   aimed at a submit control, and record it (`blockedSubmitAttempts`). Real user clicks are trusted and go through.
 - Each site's `isSubmit`: Workday's and Oracle's own tests; Greenhouse, Lever and Ashby use `isSubmitByText`: a
-  `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application". Phenom goes by
+  `type=submit` button or input, or a control reading "Submit", "Send", "Submit (my) application", or whose text (with
+  its `aria-label`) begins with "Submit". Phenom goes by
   the words alone, since its Next is a `type=submit` button too; Dayforce by its Submit's hook and the words, since
   its forms' Update buttons are `type=submit`; SuccessFactors by Apply's hook (`_submitBtn`) and the words "Apply" or
   "Submit". On a one-page
@@ -302,37 +301,26 @@ its hooks come off after 15 minutes regardless.
 
 ## Tests
 - **Golden schemas** (`<site>/test/golden.test.ts` and `golden/*.json`, for Workday and Oracle): `getForm()` of every Workday and Oracle fixture state
-  and live snapshot, written before the two moved onto the engine. The ported adapters give the same JSON, apart
-  from the new schema facts. `UPDATE_GOLDEN=1` rewrites them after an intended change.
+  and saved page, so a change to either adapter that changes what a page reads as shows in their diff; a missing
+  file is written. `UPDATE_GOLDEN=1` rewrites them after an intended change.
 - **Conformance** (`sites/test/conformance.test.ts`), for every registry site on the page its `test/page.ts` builds
-  (Workday's and Oracle's fixtures, the others' saved live pages): a definition, a bundle entry and a page exist; every wait is set; every field has
+  (Workday's and Oracle's fixtures, the others' saved live pages): a directory per registry site and none else; its registry entry, definition, bundle entry, notes and page exist, and it's in `SITE_DEFINITIONS`, `SITE_NOTES` and (with a `reader.ts`) `POSTING_READERS`; every wait is set; every field has
   a prompt and a kind; ids are the same on two reads; the guard blocks Submit by click and by Enter, and `next`
   never presses it.
 - **Signatures** (`conformance.test.ts` and `registry.test.ts`): every saved live page of every site matches its own site's
   [signature](sites.md#the-registry) and no other's, and a careers page that only links to
   boards, loads their embed scripts, frames them or has a form of its own matches none. The saved pages are found from each
   site's `fixtures/`.
-- **Drivers** (`engine/test/widgets.test.ts`) on minimal markup: each native control, react-select (with the stale stored
-  fiber), Ant Design's Select on a model of rc-select's context (labels that are React elements, a disabled list), toggle buttons, a combobox that searches on keyup, a file field, a select that settles late, a month
-  picker that ignores typing, and a UI5 date picker heard through its change event.
-- **Sites from live pages** (each site's `test/live.test.ts`): extraction from each saved Greenhouse, Lever and Ashby
-  application and Phenom step, and Phenom's `next` refusing step 1 without a resume; Dayforce's Candidate Info
-  step, its Submit told by hook and words, its posting and confirmation told apart from its scripts' messages, and
-  its records (markup from the portal's scripts, inside the saved page): an open one as a section with its Update, a
-  saved one as a saved item deleted through its dialog. SuccessFactors' application: the one page with Apply as the
-  way on, the job from its heading, the profile's named and hinted fields, lists, dates with their parts, rows and
-  their Add, the documents, a collapsed section still read, Apply told from Save; and, with juic's registry, the
-  picklists, the upload popup and the delete dialog modelled from its scripts: a list listed, searched and chosen
-  through its component, a disabled list refused, a row removed, documents uploaded beside others and replaced, an
-  optional one removed after its dialog and a required one refused.
+- **Drivers** (`engine/test/widgets.test.ts`): each shared driver on a minimal model of its widget (rc-select's
+  context included), with what was seen live to go wrong (a stale stored fiber, a search on
+  keyup, a list that settles late, a calendar that ignores typing).
+- **Sites from live pages** (each site's `test/live.test.ts`): extraction from its saved pages, and what came from
+  the site's scripts rather than a saved page (Dayforce's records, SuccessFactors' juic components) on markup
+  modelled from them, and its refusals (Phenom's `next` on step 1 without a resume).
 - The Workday and Oracle behaviour tests and the companion's e2e tests run on `createAdapter` with their
-  definitions (`sites/test/adapters.ts`: `createWorkdayApi`, `createOracleApi`).
-- **The debug trace** (`sites/test/trace.test.ts`, on the Workday fixture): with debug off nothing is installed or recorded,
-  and every hook comes off when the trace is taken; a filled dropdown's trace has the press, the listbox read, the
-  match and its named waits with planned and actual times; a wait the companion shortened keeps its name; a failed
-  field is saved with its section and the list it read, and the page before and after; the date's second entry and
-  the dropdown re-open show as branches; the page's errors and requests are recorded without a query or body; a
-  trace left running is dropped by the next call.
+  definitions (`sites/test/adapters.ts`: `createWorkdayApi`, `createOracleApi`, `createGreenhouseApi`).
+- **The debug trace** (`sites/test/trace.test.ts`, on the Workday fixture): nothing installed or recorded without
+  debug and every hook off once the trace is taken; then what the trace records ([above](#debug-mode-the-adapter-trace)).
 
 ## Checking a site live
 The Greenhouse, Lever and Ashby definitions were checked against live public forms with a script, not

@@ -87,12 +87,10 @@ otherwise.
   second injection of the same version is a no-op. The extension holds every site (`<all_urls>`) so it can read
   any page for that ([why](components/sites.md#the-registry)).
 
-**Why no daemon.** Earlier builds ran the companion as a background daemon: `ezapply mcp` started it on
-demand, it stopped after 15 minutes idle, and the terminal wrapper polled it every second. Since ezapply is
-only ever used while the user has it open, the daemon bought nothing and cost an extra process, on-demand
-starts (with a wait for the extension each time), idle bookkeeping, a state file and polling. The one thing it
-did that a foreground `ezapply` doesn't is stay up between sessions, which matters to nobody: the tools only run
-for Claude, and Claude runs inside `ezapply`.
+**Why no daemon.** ezapply is only ever used while the user has it open, so a background companion would buy
+nothing and cost an extra process, on-demand starts (each with a wait for the extension), idle bookkeeping, a
+state file and polling. The one thing it would do that a foreground `ezapply` doesn't is stay up between
+sessions, which matters to nobody: the tools only run for Claude, and Claude runs inside `ezapply`.
 
 ## Transports
 
@@ -159,7 +157,6 @@ Formats of every file: [data-formats.md](data-formats.md).
   program with the URL; other files, and everything when no browser is known or its program isn't found,
   go to the OS opener. Never through a shell, never waited for; tests pass a stub
   ([companion](components/companion.md#opening-pages-and-files-utilopents)).
-- **Logging.** pino to `~/.ezapply/logs/companion.log` only (the terminal is Claude's), level from
-  `EZAPPLY_LOG_LEVEL`, with page content, form values and tokens redacted by field path. The file is
-  rotated when it passes 5 MB, checked at start and every 10 minutes (every run appends to it), keeping
-  `companion.log.1` and `.2`.
+- **Logging.** pino to `~/.ezapply/logs/companion.log` only (the terminal shows only `ezapply`'s own lines),
+  level from `EZAPPLY_LOG_LEVEL`, with page content, form values and tokens redacted by field path; rotation is
+  in [data-formats](data-formats.md#logscompanionlog).

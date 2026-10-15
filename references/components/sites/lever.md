@@ -13,7 +13,7 @@ checkbox, textarea, text. Required: the `.required` mark or the control's `requi
 
 **Ids.** Lever's own fields by name (`name`, `email`, `urls[GitHub]` as `urls-github`); custom cards and survey questions
 (`cards[<uuid>][field0]`, `surveysResponses[<uuid>]…`) by the prompt's slug. Section: the `h4` before the question
-(the cards' titles).
+(the cards' titles), else "Main".
 
 **Hints** by name: `name` (full name), `email`, `phone`, `location` (city), and the LinkedIn, GitHub and
 Portfolio URLs.

@@ -17,7 +17,8 @@ site's own page, `references/components/sites/<site>.md`. What the next live run
   A saved page is scrubbed before it's committed (`references/development.md`, "Live snapshots are scrubbed").
 - **No zod in the bundles.** A definition, and the registry entries it imports, use the protocol only through its
   import-free subpaths (`@ezapply/protocol/sites`, `/timing`) or as types.
-- **Tests:** fillers on the behavioural fixtures (`src/<site>/test/fixture.ts`), extraction on the saved pages
-  (`test/live.test.ts`), and each one's `golden.test.ts` for what the agent sees. A golden diff is a change to the
-  agent's view of the page; explain it.
+- **Tests:** every site's URL rules (`src/<site>/test/url.test.ts`), extraction on its saved pages
+  (`test/live.test.ts`) and its conformance page (`test/page.ts`, for `test/conformance.test.ts`); where a site has
+  them (Workday, Oracle), fillers on the behavioural fixture (`test/fixture.ts`) and `golden.test.ts` for what the
+  agent sees. A golden diff is a change to the agent's view of the page; explain it.
 - `use…` functions here aren't React hooks (Biome's `useHookAtTopLevel` is off for this package and the engine).

@@ -34,16 +34,16 @@ each site's bundle). The sites package also keeps each site's tests beside it, i
   If type errors look stale after a `tsconfig` change, delete `packages/*/tsconfig.tsbuildinfo`.
 - **esbuild** bundles the extension (`packages/extension/build.mjs`) and the UI package's pages
   (`packages/ui/build.mjs`; React 19, pdf.js, [ui](components/ui.md#the-build-npm-run-build--w-ezapplyui)).
-- **Biome** lints and formats (2-space indent, 120 columns, double quotes, organized imports). It skips
-  `dist`, the live HTML snapshots in each site's `fixtures/` (third-party markup), the golden
+- **Biome** lints and formats (2-space indent, 120 columns, double quotes, organized imports, the `recommended`
+  rules), and skips what `.gitignore` does. It also skips `dist`, the live HTML snapshots in each site's `fixtures/` (third-party markup), the golden
   schemas in `sites/src/<site>/test/golden/` (written by the test), and `ui/src/review/textlayer.css` (pdf.js's rules,
   kept as they came). Its React rules apply wherever React is a
   dependency, the extension included since it bundles the side panel; the adapter engine's `use…` functions
   aren't hooks, so `useHookAtTopLevel` is off for `packages/engine/` and `packages/sites/`.
-- **Line endings:** `.gitattributes` pins LF everywhere (Biome rejects CRLF). On Windows, after a fresh
-  clone with the old settings, renormalize with `git rm --cached -r . && git reset --hard` (on a clean tree).
+- **Line endings:** `.gitattributes` pins LF everywhere (Biome rejects CRLF). On Windows, a working tree
+  checked out with CRLF is renormalized with `git rm --cached -r . && git reset --hard` (on a clean tree).
 - **Vitest** runs every `packages/*/test/**/*.test.{ts,tsx}`, each site's `packages/sites/src/*/test/**/*.test.ts`
-  and the repo's own `test/*.test.ts` (20 s default
+  and the repo's own `test/**/*.test.ts` (20 s default
   timeout). A test that needs a DOM says so in its first line (`// @vitest-environment jsdom`); the UI's component
   tests use Testing Library.
 
@@ -170,7 +170,7 @@ saves the page before each call and at every failed field, with a screenshot whe
 1. Read the report. For a failure, read its call's trace and its `NNNN-fail-<fieldId>.html`, and find where the
    adapter's picture of the page and the real page diverged: the listbox it read, the options it saw, the wait
    that ran out, the DOM change it didn't expect.
-2. Export the page (`ezapply debug export <session> <NNNN> [before|after|fail-<fieldId>]`,
+2. Export the page (`ezapply debug export <session|latest> <NNNN> [before|after|fail-<fieldId>]`,
    [cli](components/cli.md#debug-export)). The user looks at the fixture candidate before it goes into
    the site's `fixtures/`; scrub what's left by hand ([live snapshots](#live-snapshots-are-scrubbed)),
    then add an extraction test to its `test/live.test.ts`.

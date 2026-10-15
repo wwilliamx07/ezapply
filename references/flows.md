@@ -19,9 +19,9 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 1. Under `ezapply`, the setup page opens when ezapply starts while setup isn't finished, or from the panel's
    Setup; what needs Claude goes to the panel's agent as messages ([tasks](components/ui.md#the-agents-side-tasks)).
    Asked to set the user up, Claude calls `onboarding {}`, which opens the page (or gives Claude the link).
-2. The page shows the `workspace_check` items as steps, done ones ticked: `tex`, `extension`, `github_login`,
-   `repos_selected`, `knowledge_indexed`, `resume_template`, `profile`, `cover_template`, `answer_bank`
-   (required), and `preferences`, `library` (optional). It opens on the first required step not done.
+2. The page shows the `workspace_check` items as steps, done ones ticked
+   ([the items](components/companion.md#readiness-checklist-workspace_check)). It opens on the first required step
+   not done.
 3. **TeX:** if missing, the page shows the install command for this OS and hands Claude an `install-tex` task;
    Claude runs it once the user approves it (an approval card in the panel). No restart is needed.
 4. **Extension:** the page gives the steps and folder for the user's browser and opens the pairing window

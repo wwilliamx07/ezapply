@@ -29,11 +29,10 @@ only the apply pages name (the job page's own `…/job/<id>/` is another id).
 (`EXAMGLOBAL1000001EXTERNALENGLOBAL` holds `1000001`, `GLOBA0001R0000000001EXTERNALENCA` holds `R-0000000001`), so
 Phenom's registry entry has its own `sameJob` (`phenomSameJob`): the two are one job when one holds the other's
 letters and digits, the shorter has a digit and four characters, and a digit at either end doesn't run on into a
-digit of the longer. Verified against a live tenant, where it mattered twice: a job page lists similar jobs with
-their own Apply links, so the capture found several applications and, comparing the posting's `reqId` exactly,
-chose none; then the apply tab's `jobSeqNo` was compared with that `reqId` and the tab refused as another job's
-(`postingMismatch`) until the user bound it. The rule is Phenom's alone: on other sites a loose comparison could
-take `jr123` for `r123`.
+digit of the longer. Without it (seen on a live tenant), a job page listing similar jobs with their own Apply links
+tied its posting to none of them, its `reqId` matching no `jobSeqNo` exactly, and the apply tab was refused as
+another job's (`postingMismatch`). The rule is Phenom's alone: on other sites a loose comparison could take `jr123`
+for `r123`.
 
 **Steps.** A step bar of `li[atm-id]`, the current one `aria-current="step"`; seen live: `personalInformation`
 (My information), `workAndEducation` (My experience), `jobSpecificQuestions` (Application questions),
@@ -41,7 +40,9 @@ take `jr123` for `r123`.
 `applicationReview` (Review, the `review` page kind). The step key is the step's id and the URL. Next is
 `button#next` and Previous `button#previous`. Opening a step by its URL sends the browser back to step 1, so every
 step is reached through Next. Next saves the step to the employer's system before the next one shows (5 to 15 s
-live), so Phenom's `stepMs` is 30 s.
+live), so Phenom's `stepMs` is 30 s. Page kinds: `review` on `applicationReview`, else `step` with the form or any
+field, else `confirmation` by its text, else `posting` with the Apply link, else `unknown`. The job is the header's
+`.job-summary .job-title`, "Role (R-0000000001)" giving the title and the requisition (`reqId`).
 
 **Submit by its words.** Phenom's Next is a `type=submit` button, so `isSubmitByText` (which counts every
 `type=submit`) would have made the guard block it. Phenom's `isSubmit` goes by the control's text, `aria-label` or
@@ -67,11 +68,10 @@ driver goes by the control:
   container is the options' own box (react-jsonschema-form's `.field-radio-group` or `.checkboxes`, else a
   `role=radiogroup` or `role=group`, else the `.form-group` holding them) and whose label is the question (the
   box's `label[for]`, else the group's label that wraps no option, else the fieldset's legend). Its key is the box's
-  id when that reads as a name, else the question's slug. Why: read one input at a time, each option was a field
-  whose container was the whole `.form-group`, so the checkbox driver read and ticked the first option whatever was
-  asked (on a live tenant, an education question answered "High School Diploma/GED" ticked "Doctorate", and every
-  option read as ticked), radios fell to the text driver (required text fields labelled "Yes" and "No"), and the
-  question was never read. No saved Phenom page has such a question: the markup is react-jsonschema-form's, tested
+  id when that reads as a name, else the question's slug. Why: read one input at a time, each option is a field
+  whose container is the whole `.form-group`, so (seen on a live tenant) the checkbox driver read and ticked the
+  first option whatever was asked and every option read as ticked, radios fell to the text driver (required text
+  fields labelled "Yes" and "No"), and the question was never read. No saved Phenom page has such a question: the markup is react-jsonschema-form's, tested
   on it added to step 3, plus radios straight in the group with ids ending in their option, as the live step 1 read;
 - the resume, above the form on every step (`.resume-section`: a hidden file input behind "Upload resume", the file's
   name from its download link `.has-resume a.downloadFile`), and "Additional attachments" on step 2. The name is the

@@ -12,12 +12,14 @@ so a change here is a change to the contract between them.
 | `browser.ts` | `TabInfo` (`tabId`, `windowId`, `url`, `title`, `active`, `focused?`, `lastAccessed?`, `site` (the site the page shows, else its URL's: [telling a site](extension.md#telling-a-pages-site-framests)), `frames?`: the form sites' frames inside the page, each a `FrameInfo { frameId, url, site }`), `BrowserStatus`, `BrowserInfo` |
 | `sites.ts` | `SiteInfo`, the shape of a [registry entry](sites.md#the-registry), and `HOST_PERMISSIONS` (`<all_urls>`: the extension's host permissions, [why](sites.md#the-registry)); no zod (`@ezapply/protocol/sites`). The sites themselves are in `@ezapply/sites`: the protocol names none |
 | `panel.ts` | The side panel's agent ([agent](agent.md)): `AgentEvent`, `AgentStatus`, `AskSpec`, `AskQuestion`, `AskAnswers` and their checks (`askSpecProblems`, `askAnswerProblems`), the cards (`AskCard`, `PermissionCard`, `Card`), the conversation keys (`GENERAL_CONVERSATION`, `ConversationPart`, `conversationKey`, `postingConversation`); the panel's bridge methods (`PanelMethods`: [agent](agent.md#the-panels-side-panelts)) and their types (`PanelState`, `PanelPosting`, `PanelConversation`, `DocumentState`, `PanelTabParams`, `PanelTab`, `PanelUpdate`); the agent's settings (`AgentSettings`, `AgentPermissionMode`, `AgentModel`, `AgentEffort`, `DEFAULT_AGENT_SETTINGS`) |
+| `pages.ts` | Types only (exported with `export type`): the review and onboarding pages' state, answers and steps (`ReviewPageState`, `ReviewAnswer`, `PageRect`, `OnboardState`, …), so the pages import them without bundling anything ([ui](ui.md#how-a-page-talks-to-the-companion)) |
+| `textdiff.ts` | The word diff between two versions of a document's text (`tokenizePages`, `diffWords`, `diffPages`, `describeHunk`), shared by the companion's `pdf_text { sinceReviewed }` and the review page; no imports (`@ezapply/protocol/textdiff`) ([ui](ui.md#what-changed-since-the-last-review-changests-protocolsrctextdiffts)) |
 | `errors.ts` | `ErrorCode`, `ErrorPayload`, `EzError` |
 | `timing.ts` | `STANDARD_WAITS` (every adapter wait, in ms: the values a site starts from, measured on Workday), `Timing`, `TIMING_DOCS`, `resolveTiming(base, overrides, scale)` (a site's waits with the user's overrides); no imports (`@ezapply/protocol/timing`) ([waits owned by the site](adapters.md#waits-owned-by-the-site)) |
 
-The package exports `.` (everything), and `./sites` and `./timing` for the in-page adapters and the site registry:
-those import nothing, and importing them through `.` would pull zod into the page bundle (it did for the
-waits, making each adapter 850 KB instead of 60 KB).
+The package exports `.` (everything), `./sites` and `./timing` for the in-page adapters and the site registry, and
+`./textdiff` for the review page: those import nothing, and importing them through `.` would pull zod into the
+bundle (for the waits, it made each adapter 850 KB instead of 60 KB).
 
 ## Bridge handshake
 
@@ -36,7 +38,8 @@ WebSocket, JSON text frames, one message per frame.
    when the extension paired without one), or `reject { error }` followed by a close.
 3. Then either side sends `request` / `response`; the extension sends `ping` every 20 s and gets `pong`.
 
-The companion closes the socket if no `hello` arrives within 5 s.
+The companion closes the socket if no `hello` arrives within 5 s, and closes every socket with 1001 when `ezapply`
+stops, which the extension treats as a plain disconnect (retries with backoff).
 
 | Close code | Name | Meaning | Extension reaction |
 |---|---|---|---|
@@ -71,11 +74,12 @@ through anything that builds a tool result.
 | Method | Params → result |
 |---|---|
 | `posting.capture` | `CapturePayload` → `CaptureResult { postingId, isNew, company?, role? }` |
+| `panel.*` | The side panel's methods (`PanelMethods` in `panel.ts`), relayed by the extension from its panels: [agent](agent.md#the-panels-side-panelts) |
 
 `ExtensionApi` (served by the extension). Every `form.*` and `tab.*` method also takes `timing?` (name → ms):
 the adapter's waits for that call, resolved by the companion from `autofill-timing.yaml` against the tab's
 site's waits; the keys are `STANDARD_WAITS`'s in `timing.ts` ([waits](adapters.md#waits-owned-by-the-site)). Unknown
-keys are ignored and an older extension strips the field, so it came without a version bump. They also take
+keys are ignored and an older extension strips the field. They also take
 `debug?` (`DebugRequest { before?, after?, failures? }`), sent only while debug mode is on: the adapter
 records its trace for the call, and the page's markup before it, after it and at each failed field as the flags
 say, and the response brings it back in its `debug`. The `tab.*` methods ignore it.
@@ -83,19 +87,20 @@ say, and the response brings it back in its `debug`. The `tab.*` methods ignore 
 | Method | Params → result |
 |---|---|
 | `browser.status` | `{}` → `BrowserStatus { extensionVersion, tabs[] }` (each tab's `frames`: embedded applications) |
+| `panel.update` | `PanelUpdate { event?, changed?, cards? }` → `{}`: relayed to the open side panels; `cards` (how many wait) also sets the toolbar badge while none is open ([extension](extension.md#the-side-panel)) |
 | `form.get` | `{ tabId?, frameId? }` → `FormSchema` (with `frameId` when read in a frame). Every `form.*` method takes `frameId`: act on that frame of the tab, an application embedded in another site's page, instead of the tab's own page ([embedded applications](extension.md#embedded-applications)) |
 | `form.listOptions` | `{ tabId?, fieldId }` → `OptionInfo[]` |
 | `form.searchOptions` | `{ tabId?, fieldId, query }` → `OptionInfo[]` |
 | `form.fill` | `{ tabId?, fills: FillAction[] }` → `FillResult[]` |
 | `form.upload` | `{ tabId?, fieldId, file: UploadFile }` → `FillResult` |
-| `form.remove` | `{ tabId?, fieldId, values? }` → `RemoveResult { fieldId, ok, removed, remaining, notFound?, error? }` (no `values` = all). Added without a version bump; an older extension answers "Unknown method" |
-| `form.removeRepeatable` | `{ tabId?, sectionId }` → `RemoveRowResult { sectionId, ok, removed?, error? }`. Added without a version bump, like `form.remove` |
+| `form.remove` | `{ tabId?, fieldId, values? }` → `RemoveResult { fieldId, ok, removed, remaining, notFound?, error? }` (no `values` = all). An older extension answers "Unknown method" |
+| `form.removeRepeatable` | `{ tabId?, sectionId }` → `RemoveRowResult { sectionId, ok, removed?, error? }`. An older extension answers "Unknown method", as for `form.remove` |
 | `form.addRepeatable` | `{ tabId?, addButtonId }` → `{ ok, error? }` |
 | `form.next` | `{ tabId? }` → `NextResult` |
-| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. Added without a version bump |
+| `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. An older extension answers "Unknown method" |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` (always the whole tab) |
-| `tab.show` | `{ tabId?, frameId? }` → `{ tabId, emulated, hidden, focused? }`: turn on focus emulation for the tab ([extension](extension.md#focus-emulation-emulationts)), then report whether the page says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (absent when the page can't be read). `emulated` false: it couldn't, and nothing else was done. Sent before every form call ([the tab at full speed](../mcp-tools.md#forms)). Added without a version bump; it switched to the tab and raised its window (`activate`, `focusWindow`) until focus emulation replaced that, also without one. An older extension fails it (it requires `activate`, or answers "Unknown method"), and the companion goes ahead without it |
+| `tab.show` | `{ tabId?, frameId? }` → `{ tabId, emulated, hidden, focused? }`: turn on focus emulation for the tab ([extension](extension.md#focus-emulation-emulationts)), then report whether the page says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (absent when the page can't be read). `emulated` false: it couldn't, and nothing else was done. Sent before every form call, with a 5 s timeout ([the tab at full speed](../mcp-tools.md#forms)). An older extension that fails it (another form of it, or "Unknown method") doesn't fail the call: the companion goes ahead without it (`FormsService.show`) |
 
 ## Form schema
 
@@ -121,8 +126,7 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   `currentValue` (string, string[], boolean or null), `error?`, `hint? { profileKey }`.
 - `FieldKind`: `text`, `textarea`, `number`, `password`, `date`, `dropdown`, `typeahead`, `radio`,
   `checkbox`, `checkbox-group`, `file`.
-- `FillAction`: `{ fieldId, value }`. (A `strict?` flag, for deterministic autofill, was removed with it; an
-  extension built before that still accepts it, and nothing sends it.)
+- `FillAction`: `{ fieldId, value }`; `form.fill` takes at least one.
 - `FillValue`: a string, a string array, or a boolean. `FillResult`: `{ fieldId, ok, readBack?, error?,
   availableOptions?, unmatched?, inexact? }`: `unmatched[] { value, suggestions[] }` lists typeahead entries
   that matched nothing, with the options their search showed; `inexact[] { value, selected }` those for which
@@ -147,27 +151,17 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
 `internal`.
 
 ## Changing the protocol
-- Additive, optional fields: no version bump (both sides ignore unknown fields). Examples: code-less
-  pairing added the optional `welcome.pairingToken`, and idle shutdown added `hello.pendingCapture` and
-  close code 4005 (4005 went again with the background daemon; the companion now closes with 1001 when its
-  chat ends, which every extension treats as a plain disconnect); later `TabInfo.focused` and
-  `lastAccessed`, `Section.removable`, `CapturePayload.frameUrl`, `FormSchema.backLabel` and the
-  `form.removeRepeatable` and `form.back` methods, `hello.browser`, the `timing` param, and `addButtons[].section`,
-  `FormSchema.messages`, `NextResult.messages` and `FillResult.unmatched`/`inexact`.
-  `PROTOCOL_VERSION` stayed 2 through these. Later, also without a bump: `FillAction.strict` (since removed), and
-  `addButtons[].kind`, `Section.saved` and `FormSchema.lastPage`; then `tab.show`'s `focused`, and
-  `FormSchema.job`; then `tab.show`'s `focusWindow` and `windowFocused` (since removed); then `TabInfo.frames`, the `frameId`
-  param of the form methods and `tab.show`, and `FormSchema.frameId`. An older extension ignores `frameId` and
-  acts on the tab's own page, which isn't an application, so the call fails with "not an application page"
-  rather than landing anywhere else. Then `CapturePayload.site`, and `TabInfo.site` (and `FrameInfo.site`) going by
-  the page's body before its URL, which changes what a site is, not the schema. Then the form methods' `debug`
-  param and the response's `debug`: an older extension strips the param and answers without a trace (the companion's
-  record notes it), and an older companion strips the response's field.
+- Additive, optional fields and new methods: no version bump (zod strips unknown fields on both sides, and an
+  unknown method answers `bad_request` "Unknown method", which the companion turns into a hint to rebuild the
+  extension, `olderExtension` in `forms/service.ts`). Design such an addition so the older side fails safe: an
+  older extension ignores `frameId` and acts on the tab's own page, which isn't an application, so the call fails
+  with "not an application page" rather than landing anywhere else; it strips `debug` and answers without a trace
+  (the companion's record notes it), and an older companion strips the response's `debug`.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
   then refuse each other with a hint naming the side to rebuild.
 - A new site: no bump. `SiteId` is a string, so neither side rejects a message for naming a site, and `hello`
   compares the two sides' sites instead: an extension and a companion built with different sites refuse each other
-  at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know. Until version 11,
-  `SiteId` was an enum, and each new site bumped the version for that reason.
+  at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know. (As an enum, it
+  needed a bump for every new site.)
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

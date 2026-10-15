@@ -12,11 +12,9 @@ Required: the control's `required`, a heading label with Ashby's required class 
 inputs carry no `required`), or a trailing `*`.
 
 **Why the path, not the class.** Most questions are `.ashby-application-form-field-entry`, but a radio or
-checkbox group is a plain `div[data-field-path]` around a fieldset with classes of its own. The definition first
-went by the class, built from one page that had no such groups, and in the first real application
-(another employer's form) it missed all seven: "Degree Type", "How many prior internships", the work, cohort and
-location choices, sponsorship and the office question. The agent then filled two of them by ids it guessed from a
-screenshot, which failed as unknown fields. `ashby-groups.html` (that page, employer details replaced) now keeps it covered.
+checkbox group is a plain `div[data-field-path]` around a fieldset with classes of its own. Going by the class, a
+live application's radio and checkbox groups were all missing from the form, so the agent couldn't fill them by id.
+`ashby-groups.html`, a page with such groups (employer details replaced), keeps it covered.
 
 **Ids.** Ashby's own fields by their path without the prefix (`_systemfield_email` → `application.email`); a board's
 questions by the prompt's slug. Everything is in one section, "Application".
@@ -33,10 +31,9 @@ never submitting ([how the boards were verified](../sites.md#what-was-verified-a
 - **Ashby** (one company's posting): text, the Yes/No buttons, a textarea, and the location by its full name; a city's
   name alone matched several places and came back with their suggestions, as intended. The consent field's selector came
   from this run.
-- **Ashby, a real application** (through the extension): text fields, the location (after the
-  city alone matched several places and the agent searched), the Yes/No buttons, the resume upload. Every radio
-  and checkbox group was missing (above); after the fix, filling a radio group and two
-  checkbox groups on the live page (fake values, never submitted) took and read back. The graduation date is a
-  date picker read as text: the agent typed a month and year and the page showed the first of that month.
+- **Ashby, through the extension** on a live application: text fields, the location (a city alone matched several
+  places, then a search found it), the Yes/No buttons, the resume upload, and, with the path rule (above), radio and
+  checkbox groups (fake values, never submitted), each read back. A graduation date picker is read as text: a typed
+  month and year shows as the first of that month.
 
 **Not yet tried:** the confirmation page.

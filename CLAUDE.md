@@ -27,8 +27,8 @@ lives in `todo/`.
   still has to check, until it has.
 - **Found something wrong or missing?** Fix the reference, even when it isn't part of the current task.
 - Start at the "By task" table in `references/README.md`, which says what to read for each kind of change, and
-  keep it and the index current. The adapters, the companion and the CLI have their own `CLAUDE.md` with the
-  rules for that code.
+  keep it and the index current. The sites (with the engine), the companion and the CLI have their own `CLAUDE.md`
+  with the rules for that code.
 
 ## `todo/` holds only work that isn't built
 
