@@ -110,8 +110,15 @@ from the review. Rereading only the changed passages with a sentence or bullet o
 for a few hundred tokens, much less than a review round.
 
 *Why fill the page:* left to judge the space themselves, agents stopped well short of the bottom, wary of a
-second page, and the user asked for more in the review. `freeLines` measures it, and a cover letter now has a
-one-page limit so the compile checks it ([documents](documents.md#compile-compile)).
+second page, and the user asked for more in the review. `freeLines` measures it, a cover letter has a one-page
+limit so the compile checks it ([documents](documents.md#compile-compile)), and the review refuses an
+underfilled document without a reason ([documents](documents.md#review-before-attaching)).
+
+*Why a letter's paragraph count follows the evidence:* a fixed two evidence paragraphs (the skill's and the
+default template's placeholder) fills about two-thirds of the template's page, so the count capped the letter
+below the full page it asks for. One paragraph per project or role, added strongest first until the page is full,
+also keeps a project's points together, which the user asked for again and again in reviews. The placeholder
+in a user's own template still shows two, so the skill says its count isn't the letter's.
 
 *Why "read the answer bank before asking":* in one session the agent ran `ezapply-resume` first for an "apply"
 request, never came back to the apply skill's step 1, and asked the user two questions their answer bank

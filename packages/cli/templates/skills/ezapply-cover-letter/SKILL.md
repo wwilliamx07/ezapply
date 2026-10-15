@@ -21,12 +21,14 @@ description: Write or revise a cover letter for the active job posting using the
 ## Write `postings/<id>/cover.tex`
 Copy the template main file (and any `contentFiles` from `template.json`, at the same relative paths), fill
 its placeholders (company, role, date, addressee if the posting names one), and write the body (between the
-`% BODY START` / `% BODY END` markers when the template has them):
+`% BODY START` / `% BODY END` markers when the template has them). The placeholder body only marks where the
+letter goes; its paragraph count isn't the letter's. The structure is:
 1. **Opening (2–3 sentences):** the specific role and a concrete, true reason this company or team
    interests the user, drawn from the posting. No clichés ("I am writing to express…", "passionate").
-2. **Two evidence paragraphs:** each ties one or two requirements to a specific project or role, citing
-   what the user built and how, from claims or profile. Mirror the posting's language only where true.
-   Everything about one project or role goes in one paragraph: never split it across two.
+2. **One evidence paragraph per project or role**, strongest first: each ties one or two requirements to it,
+   citing what the user built and how, from claims or profile. Mirror the posting's language only where true.
+   Everything about one project or role goes in its paragraph: never split it across two. Add the next
+   strongest until the page is full (usually two or three, sometimes four).
 3. **Close (1–2 sentences):** what they'd bring, and availability to talk.
 
 If `format.md` exists, follow its structure (paragraph count, salutation, sign-off, subject line, length)
@@ -35,6 +37,7 @@ instead of the defaults above. The evidence rules below still apply.
 Constraints:
 - One full page (`freeLines` 0–2), unless the posting or `format.md` sets another length. Fill it with more
   of the evidence (a further project or result, more on how the user built something), never with filler.
+  When the evidence runs out first, the letter stays short.
 - No skills or results without evidence. Never mention gaps apologetically.
 - Put a `% src:` comment beside each paragraph listing the claim ids used.
 - Escape LaTeX specials in anything taken from the posting.
@@ -50,8 +53,12 @@ Constraints:
 
 ## Build and check
 `tex_compile { path }` (must be one page; fix the first error first, then what `lint` lists, never from page
-images; `underfilled` or `freeLines` above 2 means add evidence) → read the body once as the hiring manager
-would, between the markers. Cut filler and repeated claims.
+images; `underfilled` or `freeLines` above 2 means add evidence, before fixing a short line) → read the body
+once as the hiring manager would, between the markers. Cut filler and repeated claims.
+
+`review_documents` refuses a letter with 3 or more free lines. Pass `short: [{ file, reason }]` only when it's
+meant to be shorter, with the reason: a length in `notes.md` or `format.md`, a line in `profile/preferences.md`,
+the user's words, or the evidence that ran out (and what you left out).
 
 ## Build from an example
 When the user gives a sample letter whose format they like:

@@ -74,9 +74,9 @@ Anything else fails with `path_not_allowed`.
    `{ ok, engine, engineFrom, pdf, pages, pageLimit?, pageLimitExceeded?, overflow?, lint?, freeLines?, diagnostics, logPath, durationMs, snapshot, hint? }`.
    Failures also carry `engine` and `engineFrom`.
 
-- **Page limit:** files whose name contains `resume` or `cv` are checked against `resume.pageLimit`
-  (default 1), and files whose name contains `cover` or `letter` against one page; `maxPages` overrides it for
-  any file. *Why a letter has a limit:* without one, nothing measured its free space, and agents left letters
+- **Page limit** (`page-limit.ts`, shared with the review): files whose name contains `resume` or `cv` are
+  checked against `resume.pageLimit` (default 1), and files whose name contains `cover` or `letter` against one
+  page; `maxPages` overrides it for any file. *Why a letter has a limit:* without one, nothing measured its free space, and agents left letters
   well short of the page (the skill asks for a full one). Over the limit, `overflow { lines, text }` holds the text of
   the pages past it (`pdfText`, first 400 characters) and its non-empty line count, and the hint says how
   many lines to cut. A live resume took five compiles to fit when the result said only "2 pages": three lines
@@ -94,6 +94,9 @@ Anything else fails with `path_not_allowed`.
     dates, places) ends more than 1.5 pt from the edge most such entries share.
   - `underfilled`: at the page limit, `freeLines` (below) is 3 or more. Room for the next strongest bullet.
     One or two free lines aren't flagged: chasing them costs a compile each, and `freeLines` already says so.
+    With it, the hint is about the free space alone (how many lines, to fill with evidence before the rest of
+    the lint, and that the review will refuse it) rather than "N layout issues". *Why:* given only the count,
+    an agent fixed a short line in an underfilled letter by cutting words, leaving more of the page empty.
   - `off-page`: a line runs past the page's edge.
 
   Overfull and underfull lines come from the log (diagnostics), not the lint. *Why a lint and not an image of
@@ -131,6 +134,17 @@ the last one left sends it). The files are served from the bytes read when the r
 what they saw even if Claude rebuilds meanwhile. Answering records each document with no request and no comment as
 approved, and returns the others with the user's request and comments (`{ page, quote, note }`: the agent gets the
 quoted words, not where they sit on the page).
+
+**An underfilled document isn't reviewed** (`checkFilled`). A resume or cover letter (by name, as for the page
+limit) at its page limit whose last page has 3 or more free lines is `bad_request`, naming each file and its free
+lines, unless `short: [{ file, reason }]` names it. The reason is for a document meant to be shorter: a length
+the posting or `format.md` sets, the user's preferences or words, or evidence that ran out. It's logged, not shown
+on the page or stored. A PDF without readable text, or one not at its limit, isn't checked (pdf.js can wait
+forever on bytes that aren't a PDF, so only what `pdfInfoOf` read with a text layer is measured). *Why a refusal:*
+with the lint and `freeLines` in the compile result, agents still sent letters with a third of the page empty
+to review, and the user had to ask for more; review is the step they can't skip. *Why a reason and not a hard
+stop:* a shorter letter is sometimes right, and padding one to fill the page breaks "no fabrication"; the reason
+makes the agent check it has one. *Why not on the page:* the user judges the letter itself.
 
 **What changed since the last review.** When a review is answered, each of its documents is recorded in
 `postings/<id>/reviewed.json` ([format](../data-formats.md#postingsidreviewedjson-companionsrcdocumentsreviewts)) with its hash, whether it was

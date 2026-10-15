@@ -74,9 +74,9 @@ beforeEach(async () => {
 });
 
 /** Start review_documents (it waits for the answer) and get the page's URL once the review is open. */
-async function startReview(client: Client, files: string[], opened = openedUrls) {
+async function startReview(client: Client, files: string[], opened = openedUrls, short?: unknown[]) {
   const before = opened.length;
-  const result = callJson(client, "review_documents", { files });
+  const result = callJson(client, "review_documents", { files, ...(short ? { short } : {}) });
   const url = await waitUntil(() => (opened.length > before ? opened.at(-1) : undefined));
   return { result, url, token: new URL(url).searchParams.get("t") ?? "" };
 }
@@ -1474,12 +1474,58 @@ describe("form tools over MCP", () => {
     await client.close();
   });
 
+  it("refuses to review an underfilled resume or cover letter unless `short` says why", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    const full = Array.from({ length: 37 }, (_, i) => `Line ${i + 1} of the letter`);
+    await writeFile(join(folder, "cover.pdf"), await textPdf(full.slice(0, 3)));
+    await writeFile(join(folder, "resume.pdf"), await textPdf(full));
+    await writeFile(join(folder, "notes.pdf"), await textPdf(full.slice(0, 3)));
+    const client = await mcpClient();
+    const cover = `postings/${cap.postingId}/cover.pdf`;
+
+    const refused = await callJson(client, "review_documents", {
+      files: [cover, `postings/${cap.postingId}/resume.pdf`],
+    });
+    expect(refused.data.error).toMatchObject({
+      code: "bad_request",
+      message: expect.stringMatching(/^Underfilled: cover\.pdf \(about \d+ lines free\)\. /),
+      hint: expect.stringMatching(/short: \[\{ file, reason \}\]/),
+    });
+    // A file not named like a resume or a letter has no page to fill.
+    const other = await callJson(client, "review_documents", {
+      files: [`postings/${cap.postingId}/notes.pdf`],
+      timeoutSeconds: 5,
+    });
+    expect(other.data).toMatchObject({ done: false });
+    // With a reason it opens; the reason must name a file being reviewed.
+    expect(
+      (
+        await callJson(client, "review_documents", {
+          files: [cover],
+          short: [{ file: "postings/other/cover.pdf", reason: "The posting asks for 150 words." }],
+        })
+      ).data.error.code,
+    ).toBe("bad_request");
+    const allowed = await callJson(client, "review_documents", {
+      files: [cover],
+      short: [{ file: cover, reason: "The posting asks for 150 words at most." }],
+      timeoutSeconds: 5,
+    });
+    expect(allowed.data).toMatchObject({ done: false, files: ["cover.pdf"] });
+    await client.close();
+  }, 30_000);
+
   it("shows what changed since the last review, to the page and to the agent", async () => {
     const ext = fakeExtension();
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
     const folder = join(dir, "ws", "postings", cap.postingId);
     const resume = `postings/${cap.postingId}/resume.pdf`;
+    // Three lines on a page: underfilled, so each review says why it's short.
+    const short = [{ file: resume, reason: "A three-line sample resume." }];
     const lines = ["Jane Doe", "Led a team of four engineers.", "Wrote the on-call runbook used by twelve teams."];
     await writeFile(join(folder, "resume.pdf"), await textPdf(lines));
     const client = await mcpClient();
@@ -1488,7 +1534,7 @@ describe("form tools over MCP", () => {
     expect((await callJson(client, "pdf_text", { path: resume, sinceReviewed: true })).data).toMatchObject({
       firstReview: true,
     });
-    const first = await startReview(client, [resume]);
+    const first = await startReview(client, [resume], openedUrls, short);
     const firstState = await (await fetch(`${first.url.replace("?", "/state?")}`)).json();
     // A real PDF: the page gets its checks.
     expect(firstState.files[0]).toMatchObject({
@@ -1500,7 +1546,7 @@ describe("form tools over MCP", () => {
     await first.result;
 
     // Unchanged: the next review says so.
-    const same = await startReview(client, [resume]);
+    const same = await startReview(client, [resume], openedUrls, short);
     const sameState = await (await fetch(`${same.url.replace("?", "/state?")}`)).json();
     expect(sameState.files[0].previous).toMatchObject({ same: true, approved: false });
     await answerReview(same.url, [{ index: 0, request: "Still four." }]);
@@ -1516,7 +1562,7 @@ describe("form tools over MCP", () => {
         { page: 1, removed: "twelve", before: "the on-call runbook used by" },
       ],
     });
-    const next = await startReview(client, [resume]);
+    const next = await startReview(client, [resume], openedUrls, short);
     const nextState = await (await fetch(`${next.url.replace("?", "/state?")}`)).json();
     expect(nextState.files[0].previous).toMatchObject({ same: false, approved: false });
     expect(nextState.files[0].previous.pages[0]).toContain("Led a team of four engineers.");

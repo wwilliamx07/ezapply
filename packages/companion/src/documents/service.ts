@@ -8,6 +8,7 @@ import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Opener } from "../util/open.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { pageLimitOf } from "./page-limit.js";
 import { freeLines, type LayoutIssue, lintLayout } from "./pdf/lint.js";
 import type { PageSizeName } from "./pdf/pages.js";
 import {
@@ -159,13 +160,22 @@ export class DocumentsService {
               `The document is ${pages} pages; the limit is ${pageLimit}. ${overflow ? `${overflow.lines} lines run past it (overflow.text). ` : ""}` +
               "Cut about that much: tighten wording or drop the weakest content. Do not shrink fonts or margins.",
           }
-        : lint.length
+        : lint.some((i) => i.kind === "underfilled")
           ? {
+              // Named first and on its own: given only "N layout issues", an agent fixed a short line by cutting
+              // words and sent a letter with a third of the page empty to review.
               hint:
-                `${lint.length} layout issue${lint.length === 1 ? "" : "s"} in \`lint\`. Fix them in the text, then recompile. ` +
-                "Do not shrink fonts or margins.",
+                `About ${freeLines} lines are free on the last page: add about that much evidence first, then the ` +
+                "rest of `lint`. review_documents refuses an underfilled document unless `short` gives the reason " +
+                "for a shorter one. Fill it with content, never with larger fonts or spacing.",
             }
-          : {}),
+          : lint.length
+            ? {
+                hint:
+                  `${lint.length} layout issue${lint.length === 1 ? "" : "s"} in \`lint\`. Fix them in the text, then recompile. ` +
+                  "Do not shrink fonts or margins.",
+              }
+            : {}),
     };
   }
 
@@ -308,17 +318,6 @@ async function overflowOf(pdf: string, limit: number, pages: number): Promise<Co
   const text = extra.map((p) => p.text).join("\n");
   const lines = text.split("\n").filter((l) => l.trim()).length;
   return { lines, text: text.length > 400 ? `${text.slice(0, 400)}…` : text };
-}
-
-/**
- * The page limit a file's name implies: a resume's is `resume.pageLimit`, and a cover letter is one page. The
- * letter's limit is what lets the compile flag one left half empty: without it, the free space went unreported and
- * letters came back with a third of the page blank.
- */
-function pageLimitOf(name: string, resumeLimit: number): number | undefined {
-  if (/resume|cv/i.test(name)) return resumeLimit;
-  if (/cover|letter/i.test(name)) return 1;
-  return undefined;
 }
 
 /**

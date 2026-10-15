@@ -429,7 +429,7 @@ describe.skipIf(!engine)(`tex_compile (${engine?.id ?? "no engine installed"})`,
     const short = await docs.compile("postings/p2/resume.tex");
     expect(short.lint).toEqual([expect.objectContaining({ kind: "underfilled", page: 1 })]);
     expect(short.freeLines).toBeGreaterThanOrEqual(3);
-    expect(short.hint).toMatch(/1 layout issue in `lint`/);
+    expect(short.hint).toMatch(/^About \d+ lines are free on the last page: add about that much evidence first/);
 
     // A cover letter is one page: a second one is overflow, and a short one is underfilled.
     await writeFile(join(root, "postings/p2/cover.tex"), twoPages);

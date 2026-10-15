@@ -132,9 +132,10 @@ The `ezapply-resume` skill:
 ## 5. Cover letter ("write a cover letter")
 The `ezapply-cover-letter` skill: same inputs plus `templates/cover/format.md` if the user supplied an example.
 Copy the template to `postings/<id>/cover.tex`, fill the per-letter fields, write the body between the
-`% BODY START` / `% BODY END` markers (opening, two evidence paragraphs with each project in one of them, close;
-a full page unless the posting or `format.md` sets a length), compile to one page, fix what `lint` lists and
-fill what `freeLines` leaves, report.
+`% BODY START` / `% BODY END` markers (opening, one evidence paragraph per project or role until the page is full,
+close; shorter only when the posting or `format.md` sets a length or the evidence runs out), compile to one
+page, fix what `lint` lists and fill what `freeLines` leaves, report; the review refuses it underfilled
+unless `short` says why.
 
 ## 6. Bundle ("put them in one PDF")
 The `ezapply-bundle` skill (also triggered by "all files in one PDF" in the recorded requirements): record `bundleRequired`, order (posting's order, else cover → resume → extras),

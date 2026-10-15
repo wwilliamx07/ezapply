@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { extname, relative, sep } from "node:path";
+import { basename, extname, relative, sep } from "node:path";
 import {
   ErrorCode,
   EzError,
@@ -28,7 +28,9 @@ import {
 import { readJson, writeJsonAtomic } from "../util/fs.js";
 import { htmlPage } from "../util/html.js";
 import type { Workspace } from "../workspace/workspace.js";
-import { pdfInfoOf, pdfText } from "./pdf/toolkit.js";
+import { pageLimitOf, UNDERFILLED_LINES } from "./page-limit.js";
+import { freeLines } from "./pdf/lint.js";
+import { pdfInfoOf, pdfLines, pdfText } from "./pdf/toolkit.js";
 
 /** A review waits this long for the user. */
 const REVIEW_TTL_MS = 2 * 60 * 60_000;
@@ -84,6 +86,12 @@ const AnswerBody = z.object({
     )
     .max(MAX_REVIEW_FILES),
 });
+
+/** A document meant to be shorter than its page, and why (review_documents' `short`). */
+export interface ShortDocument {
+  file: string;
+  reason: string;
+}
 
 interface ReviewFile {
   /** Relative to the posting folder, with forward slashes. */
@@ -149,8 +157,14 @@ export class ReviewService {
     return mode;
   }
 
-  /** Start a review of PDFs from one posting folder; a newer review for that posting replaces an open one. */
-  async open(inputs: string[]): Promise<{ reviewId: string; url: string; postingId: string; files: string[] }> {
+  /**
+   * Start a review of PDFs from one posting folder; a newer review for that posting replaces an open one. A resume
+   * or cover letter left underfilled is refused unless `short` names it with a reason (`checkFilled`).
+   */
+  async open(
+    inputs: string[],
+    short: ShortDocument[] = [],
+  ): Promise<{ reviewId: string; url: string; postingId: string; files: string[] }> {
     if (inputs.length === 0 || inputs.length > MAX_REVIEW_FILES) {
       throw new EzError(ErrorCode.BadRequest, `Review 1 to ${MAX_REVIEW_FILES} documents at a time.`);
     }
@@ -178,6 +192,7 @@ export class ReviewService {
     const pid = postingId as string;
     const reviewed = await this.reviewed(pid);
     await Promise.all(files.map((f) => this.read(f, reviewed)));
+    await this.checkFilled(pid, files, short);
     const id = randomBytes(9).toString("base64url");
     const session: Session = {
       id,
@@ -471,6 +486,51 @@ export class ReviewService {
   }
 
   // ---- internals ---------------------------------------------------------------------------------
+
+  /**
+   * Refuse a resume or cover letter at its page limit whose last page has `UNDERFILLED_LINES` or more free, unless
+   * `short` names it with a reason. Agents stopped well short of the page despite the compile's `underfilled` lint
+   * and sent the draft to review, where the user had to ask for more; a refusal is the step they can't skip. The
+   * reason is the way past for a letter meant to be shorter (a length the posting, `format.md`, the user's
+   * preferences or their words set, or evidence that ran out): it's logged, not shown on the page. A PDF without
+   * readable text is let through, as the lint lets it build.
+   */
+  private async checkFilled(postingId: string, files: ReviewFile[], short: ShortDocument[]): Promise<void> {
+    const excused = new Map<string, string>();
+    for (const s of short) {
+      const where = this.locate(this.ws.resolveAllowed(s.file, ["postings"]));
+      if (!where || where.postingId !== postingId) {
+        throw new EzError(ErrorCode.BadRequest, `short names a file that isn't one being reviewed: ${s.file}`);
+      }
+      excused.set(where.name, s.reason);
+    }
+    const resumeLimit = (await this.ws.readConfig()).resume.pageLimit;
+    const under: string[] = [];
+    for (const f of files) {
+      const limit = pageLimitOf(basename(f.name, extname(f.name)), resumeLimit);
+      // Only a PDF `read` could parse with text: pdf.js can wait forever on bytes that aren't one.
+      if (limit === undefined || !f.info?.hasTextLayer || f.info.pages !== limit) continue;
+      const pages = await pdfLines(new Uint8Array(f.bytes)).catch(() => null);
+      const last = pages?.[pages.length - 1];
+      if (!pages || !last || pages.length !== limit) continue;
+      const free = freeLines(last);
+      if (free === undefined || free < UNDERFILLED_LINES) continue;
+      const reason = excused.get(f.name);
+      if (reason) {
+        this.log.info({ posting: postingId, file: f.name, freeLines: free, reason }, "review of a short document");
+        continue;
+      }
+      under.push(`${f.name} (about ${free} lines free)`);
+    }
+    if (under.length === 0) return;
+    throw new EzError(
+      ErrorCode.BadRequest,
+      `Underfilled: ${under.join(", ")}. The page isn't full.`,
+      "Add about that much of the strongest evidence, recompile and review again. If it is meant to be shorter, " +
+        "pass short: [{ file, reason }] with the reason: a length the posting, format.md or the user's preferences " +
+        "set, the user's own words, or the evidence that ran out (and what was left out).",
+    );
+  }
 
   /** What the page shows beside a document: its pages and text layer, and the version last reviewed. */
   private async read(f: ReviewFile, reviewed: ReviewedFile): Promise<void> {

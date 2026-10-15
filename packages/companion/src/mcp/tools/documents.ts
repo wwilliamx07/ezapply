@@ -1,6 +1,7 @@
 import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { ShortDocument } from "../../documents/review.js";
 import type { Services } from "../../services.js";
 import { tool } from "../result.js";
 
@@ -198,7 +199,8 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
         "the changed files. Only approval on the page lets upload_file attach a document, in the version shown: " +
         "if the user says it's approved in chat, ask them to press it on the page. Write your report before " +
         "calling. done: false means no answer yet: ask whether they saw the page, then call with reviewId to wait " +
-        "again.",
+        "again. A resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
+        "with the reason it's meant to be shorter.",
       inputSchema: {
         files: z
           .array(z.string())
@@ -207,13 +209,31 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
           .optional()
           .describe("PDFs under postings/<id>/, e.g. postings/<id>/resume.pdf."),
         reviewId: z.string().optional().describe("A review that timed out, to wait for again (instead of files)."),
+        short: z
+          .array(z.object({ file: z.string(), reason: z.string().trim().min(10).max(500) }))
+          .max(6)
+          .optional()
+          .describe(
+            "Documents meant to be shorter than the page, each with why: a length the posting, format.md or the " +
+              "user's preferences set, the user's words, or the evidence that ran out.",
+          ),
         timeoutSeconds: z.number().int().min(5).max(900).default(600),
       },
     },
     tool(
       s.log,
       "review_documents",
-      async ({ files, reviewId, timeoutSeconds }: { files?: string[]; reviewId?: string; timeoutSeconds: number }) => {
+      async ({
+        files,
+        reviewId,
+        short,
+        timeoutSeconds,
+      }: {
+        files?: string[];
+        reviewId?: string;
+        short?: ShortDocument[];
+        timeoutSeconds: number;
+      }) => {
         if ((files === undefined) === (reviewId === undefined)) {
           throw new EzError(
             ErrorCode.BadRequest,
@@ -222,7 +242,7 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
           );
         }
         if (reviewId !== undefined) return { reviewId, ...(await s.reviews.wait(reviewId, timeoutSeconds * 1000)) };
-        const review = await s.reviews.open(files as string[]);
+        const review = await s.reviews.open(files as string[], short);
         const openedIn = await s.opener.url(review.url).catch(() => null);
         if (!openedIn) {
           // Nobody will see the page unless the agent gives the user the link, so don't wait first.

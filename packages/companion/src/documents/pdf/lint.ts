@@ -1,3 +1,4 @@
+import { UNDERFILLED_LINES } from "../page-limit.js";
 import type { PageLines, TextLine, TextSpan } from "./toolkit.js";
 
 /**
@@ -119,14 +120,17 @@ function underfilled(pages: PageLines[], pageLimit: number | undefined): LayoutI
   const last = pages[pages.length - 1];
   if (!last || pageLimit === undefined || pages.length !== pageLimit) return [];
   const lines = freeLines(last);
-  if (lines === undefined || lines < 3) return [];
+  if (lines === undefined || lines < UNDERFILLED_LINES) return [];
   const lowest = last.lines.reduce((lo, l) => (l.y < lo.y ? l : lo));
   return [
     {
       kind: "underfilled",
       page: last.page,
       text: short(lowest.text),
-      message: `About ${lines} lines are free at the bottom of page ${last.page}: room for more of the strongest content.`,
+      message:
+        `About ${lines} lines are free at the bottom of page ${last.page}: add about that much of the strongest ` +
+        "evidence (another project, or more on how something was built). Don't cut words to fix a short line while " +
+        "the page is underfilled.",
     },
   ];
 }

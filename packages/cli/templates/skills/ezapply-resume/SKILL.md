@@ -55,7 +55,9 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 3. Within the page, fix what `lint` lists: a word or two alone on a bullet's last line (cut a few words, or
    say a little more), a right-aligned date out of line. `freeLines` says how much room is left: at 3 or more
    (`underfilled`), add the next strongest evidence-backed bullet or lengthen a strong one by about that many
-   lines; at 1–2, a line or two more on a bullet that wraps short.
+   lines; at 1–2, a line or two more on a bullet that wraps short. `review_documents` refuses a resume left
+   underfilled; pass `short: [{ file, reason }]` only when the evidence has run out (say what's left out) or the
+   user asked for it.
 4. `pdf_text { path, pages? }`: headings intact, sensible reading order, key terms present as plain text.
 5. **Self-check:** re-read every changed bullet next to its cited evidence. Fix anything overstated.
 
