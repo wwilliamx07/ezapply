@@ -18,7 +18,10 @@ step's form on every call. Fields that the site prefills from the resume are oft
    answers, posting, then the step), so everything before the step matches the cache. Check that it does before
    building it.
 5. Rewrite each remaining skill to its judgement.
-6. Measure a tailoring and an application against the runs in `references/status.md` ("The token cuts"), then
+6. Code checks what a program can under the agent's own checks: numbers and skills without evidence, missing
+   sources, words the user said never to use, sensitive answers not asked, separate files where one is required,
+   claims the user edited.
+7. Measure a tailoring and an application against the runs in `references/status.md` ("The token cuts"), then
    update the references.
 
 [details](details.md)

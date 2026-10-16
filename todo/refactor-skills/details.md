@@ -139,13 +139,52 @@ prefix either, since the delegating agent writes it.
 - **Sizes.** Aim for `ezapply-apply` under ~1.5k tokens (now ~2.6k, characters / 4) and each document skill under
   ~1k (the resume and cover-letter skills are ~1.4k each).
 
-## 6. Measuring and the references
+## 6. Checks under the judgement
+The skills ask the agent to check its own work against rules a program can check. The check stays in the skill;
+code adds a net under it that catches what the self-check misses, the way `review_documents` refuses an
+underfilled resume. Each finding goes where the agent already looks (`tex_compile`'s `lint`, a tool's
+refusal), with a `hint`.
+
+- **Numbers without evidence.** A number in a changed line of a tailored `.tex` (against the template, as
+  `tex_diff` compares) that appears in no claim, profile entry or the posting is a `lint` finding
+  `unsourced-number`. The skills' "use only numbers in the evidence" stays; this catches the slips.
+- **`% src:` comments.** Every changed or added bullet needs one, and each id must be a claim id from
+  `claims_list` or a path in `profile.yaml`. Missing or unknown ids are `lint` findings, and `review_documents`
+  refuses a document with any, as it refuses an underfilled one.
+- **Never mention.** The terms under "Never mention" in `preferences.md`, matched as words in the tailored
+  `.tex` text and in `fill_fields` values with `source: judgment`: a `lint` finding, and a warning on the fill
+  result. The preference reaches the agent through `EZAPPLY.md` today and nothing checks it.
+- **The skills line.** A skill in the resume's skills line that no claim's `skills`, profile `skills` entry or
+  work highlight names is a `lint` finding `unbacked-skill`.
+- **Sensitive answers are asked.** `fill_fields` refuses a fill whose `answerId` names an entry with
+  `sensitive: true` unless its `source` is `user` and an `ask_user` card in this application returned it. The
+  rule is the skill's ("ask for `sensitive: true`"); the agent sometimes fills the stored suggestion instead.
+- **Exact bank matches.** `get_form` marks a question field whose label equals an `answers.yaml` `canonical` or
+  variant (after normalising case and punctuation) with `bankMatch: answerId`. The model still decides the
+  value, the polarity and the option; it stops spending turns finding exact matches, and a near-match by meaning
+  stays its work.
+- **Separate files on a bundled application.** `upload_file` refuses `resume.pdf` or `cover.pdf` on a posting
+  with `bundleRequired`, pointing at the bundle.
+- **Claims the user edited.** `claims_check` refuses a change to a claim with `user_edited: true` against the
+  last indexed `claims.yaml`, so a re-index can't reword it; the skill's "ask the user" stays for a contradiction.
+- **The component split.** `repo_sync` on a full index returns the folders over the depth policy's thresholds
+  (15 source files or 2k lines, to depth 3), counted without the paths it filters out; the skill keeps naming
+  and grouping them.
+- **Explore and Plan.** `EZAPPLY.md` says to delegate reading only to general-purpose subagents, since the
+  built-in Explore and Plan don't load it. Check whether the workspace's `.claude/settings.json` can deny those
+  subagent types (a permission rule on `Agent`); if it can, the line goes.
+
+Not checked by code, since a pattern would be wrong too often: polarity, attestations, matching a question to
+the bank by meaning, the evidence map, and the profile's update from a resume diff.
+
+## 7. Measuring and the references
 Run a tailoring and a Workday application, measured from the transcripts as in "Cut the tokens a panel
 conversation spends". Compare
 turns, tokens and the following: whether the review opened, questions asked that the bank already held, fields
 left to the user, and fields filled wrong. The live run's checks go into `references/status.md`.
 
 References: `workspace.md` (skills, `EZAPPLY.md`), `mcp-tools.md` (`document_start`, `bundle_build`, `get_form`'s `prefilled` and `stale`,
-`repo_sync`'s `mode`; `ezapply-bundle` removed), `agent.md` (review messages, skill invocation, sessions per step),
+`repo_sync`'s `mode` and component split; `fill_fields`' and `upload_file`'s refusals, `bankMatch`,
+`claims_check`'s `user_edited` rule; `ezapply-bundle` removed), the `lint` findings in `documents.md`, `agent.md` (review messages, skill invocation, sessions per step),
 `documents.md` (the review opening itself), `ui.md` (the hand-off card, step dividers), `flows.md`,
 `profile-and-templates.md` (the bank written by code), and the decisions in `status.md`.

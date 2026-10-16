@@ -26,7 +26,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
-| 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | — | ~M | — |
+| 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | Medium | M | — |
 | 2 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | Remove the onboarding and repos skills |
 | 3 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
 | 4 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |

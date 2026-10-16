@@ -1,10 +1,16 @@
 # Remove the onboarding and repos skills
 
-**What.** Drop the `ezapply-onboard` and `ezapply-repos` skills; what they do is done mechanically instead.
+**What.** Drop the `ezapply-onboard` and `ezapply-repos` skills. The setup page already does onboarding and
+choosing repos; what's out of date in the workspace is shown on a card in the panel (and on the setup page), and
+the user's choice there runs the update. The agent keeps only the updates that need judgement, as tasks.
 
-**Why.** These flows can be done completely mechanically, so they needn't depend on the agent.
+**Why.** Choosing repos repeats a step the page has. Keeping the workspace current costs the agent a call at the
+start of every session, and its rule of asking first lives in a prompt. On a card the user's yes is given before
+anything changes, and nothing is spent when nothing changed.
 
 **Plan.**
-1. Move each step the two skills drive into code or the setup page.
-2. Remove the skills and anything that points at them.
-3. Update the references.
+1. Remove the repos skill and the onboarding half: the page adds a repo by its address and opens at a step.
+2. The companion shows the changes; code does the mechanical updates, the agent the rest as tasks.
+3. Remove the skill, clean it out of existing workspaces, and update the references.
+
+[details](details.md)
