@@ -13,7 +13,7 @@ ezapply tailors your documents and form answers to the posting, based on your pr
 - **Local.** Everything runs on your machine and only while you have it open. Your data stays there, except
   what you put into an application and what Claude Code sends to Claude.
 
-https://github.com/user-attachments/assets/463a4da3-7829-4a26-b54b-6d94c6b25df6
+https://github.com/user-attachments/assets/3c2ab175-f1ae-4ce7-ae9b-e8cafdc77d9b
 
 ## Setup
 
