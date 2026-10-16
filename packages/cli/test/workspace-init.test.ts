@@ -149,6 +149,19 @@ describe("skills", () => {
   });
 });
 
+describe("the agent settings an older build kept", () => {
+  it("are removed, since the extension keeps them now; the conversations stay", async () => {
+    const agent = join(config.workspace, "agent");
+    await mkdir(agent, { recursive: true });
+    await writeFile(join(agent, "settings.json"), JSON.stringify({ schemaVersion: 1, effort: "high" }));
+    await writeFile(join(agent, "conversations.json"), "{}");
+    const report = await initWorkspace(config);
+    await expect(stat(join(agent, "settings.json"))).rejects.toThrow();
+    expect(await readFile(join(agent, "conversations.json"), "utf8")).toBe("{}");
+    expect(report.updated.some((u) => u.includes("the extension keeps the agent settings"))).toBe(true);
+  });
+});
+
 describe("default cover letter template", () => {
   it("is installed into an empty workspace", async () => {
     await initWorkspace(config);

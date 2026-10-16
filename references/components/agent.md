@@ -113,7 +113,7 @@ tool's arguments cut to 160 characters),
 `agy` (`EZAPPLY_ANTIGRAVITY` if set, else on PATH) in the workspace, with `antigravityArgs`:
 `--input-format stream-json --output-format stream-json` without `-p` (one process for the conversation, messages
 `{ event: "user", message: { content } }` on stdin, as Claude Code's; one sent during a turn runs as the next turn),
-`--effort` (the same five levels), `--mode plan` for Plan only, and `--conversation <id>` to continue. No
+`--effort` (the same five levels), `--model` when one is chosen, `--mode plan` for Plan only, and `--conversation <id>` to continue. No
 `--print-timeout`: its default waits for a turn however long (a call held 150 seconds kept the turn). Its environment
 has `AGY_CLI_DISABLE_AUTO_UPDATE=true`: otherwise each start (at most once every 15 minutes) launches `agy`'s
 auto-updater in a console of its own, which Windows shows as a window flashing by; only `true` turns it off, not
@@ -137,7 +137,7 @@ auto-updater in a console of its own, which Windows shows as a window flashing b
 - **No control requests** (one ends its session), so the backend says `switches: false`. Stop kills the process,
   the turn ends as interrupted, and the next message continues the conversation in a new process (verified:
   killed mid-call, the next process remembered the turn before). A mode change ends the process like an effort
-  change. No model: the panel's are Claude's, so Antigravity's own default runs.
+  change, and so does a model change: `--model` names one `agy models` listed, or none for its own default.
 - **Its stream** (`AntigravityReader`), each line `{ event, <event>: { … } }`: `init` (the model and its built-in
   tools; MCP tools aren't listed, so nothing says whether ezapply's server connected and the check below is
   skipped), `step_update` (`step_index`, counting on across turns; `state` `ACTIVE`, `DONE` or `ERROR`;
@@ -184,17 +184,24 @@ conversations, withdraws their open cards, removes them from `conversations.json
 of logs (`agent/<id>/`). Nothing is kept for `claude --resume`, since the posting they were about is gone.
 
 ## Permission mode, model and effort
-Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { agent, permissionMode, model,
-effort }`, kept in the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply. The
-defaults (`DEFAULT_AGENT_SETTINGS`) are Claude Code, Auto, Sonnet and medium effort.
+Chosen in the panel, under the chat bar, for every conversation, and **kept by the extension**, in the browser
+(`AgentPrefs { agent, choices }` in `storage.local`, [extension](extension.md#the-agent-settings)): the agent, and
+each agent's own mode, model and effort (`AgentChoice`), so choosing an agent brings back what it last ran with. The
+panel reads them from storage itself, so they show at once, before ezapply answers, and hold across Reset, a
+restart of ezapply, and a change of workspace. The companion holds them only in memory (`setPrefs`): the
+extension gives them on every connection, before anything the panel asks on it, and on every change
+(`panel.settings`), and until then they're the defaults. *Why the extension's:* the panel is where they're shown
+and changed; read back through the companion, they showed only once it answered, a beat after the panel opened, and
+the companion had to write a file to keep what the browser already could. What a conversation runs with is
+`effectiveSettings(prefs, installed)` (`AgentSettings`), the same in the panel and the companion: the chosen agent's
+choice, or its defaults (`DEFAULT_AGENT_CHOICES`: Claude Code with Auto, Sonnet and medium effort; Antigravity with
+Don't ask, its own default model and medium effort) for one never chosen.
 
 **The agent** (`claude` or `antigravity`) is offered only when both are installed (`PanelState.agent.agents`); a
-kept agent no longer installed reads as the first that is, and choosing one that isn't is refused. A session is with
-one agent: each conversation records its `agent`, and a message to one whose session was with the other starts a
-new session (the old one to `earlier`) with a notice. A change ends the running process like effort (below).
-Antigravity's conversations show its two modes (Don't ask, Plan only) and the effort, and no model. **The effort
-is kept per agent:** choosing an agent brings back the effort last chosen with it (medium for one never chosen),
-since the two think differently at the same level and Antigravity's most is `high`; the mode and model are shared.
+chosen agent not installed runs as the first that is, its choice kept for when it is. A session is with one agent:
+each conversation records its `agent`, and a message to one whose session was with the other starts a new session
+(the old one to `earlier`) with a notice. A change ends the running process like effort (below). Antigravity's
+conversations show its two modes (Don't ask, Plan only), its models and the effort.
 
 | Mode | The panel says | Does |
 |---|---|---|
@@ -204,28 +211,33 @@ since the two think differently at the same level and Antigravity's most is `hig
 | `plan` | Plan only | Claude reads and plans, and changes nothing |
 | `dontAsk` | Don't ask | Only what the rules allow runs; anything else is denied without asking |
 
-Models: the aliases `fable`, `opus`, `sonnet` (default), `haiku`, each the latest of its family (`sonnet` is
-Sonnet 5.5 with Claude Code 2.1). Effort: `low`, `medium` (default), `high`, `xhigh`, `max` (Claude Code's
-`--effort`). Each setting is read on its own, so one an older build kept that's no longer offered (`model:
-"default"`) falls back to its default alone.
+Claude Code's models: the aliases `fable`, `opus`, `sonnet` (default), `haiku`, each the latest of its family
+(`sonnet` is Sonnet 5.5 with Claude Code 2.1). Antigravity's depend on the account, so the companion lists them with
+`agy models` the first time the panel's state is read (it fetches them, so they come a moment later, as a state
+change) and offers them as `PanelState.agent.models.antigravity`, beside "Default model" (no `--model`); a chosen
+one shows by its id until the list is in. Effort: `low`, `medium` (default), `high`, `xhigh`, `max` (both CLIs'
+`--effort`). Stored settings are read field by field (`readAgentPrefs`), so one an older build kept that's no
+longer offered falls back to its default alone, and a choice an agent can't take (a Claude model that isn't an
+alias, an Antigravity mode it doesn't offer) runs as its default.
 *Not offered:* `bypassPermissions`. Postings are untrusted text, and the approval cards are what stands between
 a prompt injected into one and a command run on the user's machine; Claude Code also refuses to switch a session to
-it unless it was launched with `--dangerously-skip-permissions`. A model's full name isn't offered either: the
+it unless it was launched with `--dangerously-skip-permissions`. A Claude model's full name isn't offered either: the
 aliases follow new releases, and a fixed list can't be mistyped.
 
-**A change applies to the running conversation** (`setSettings`), after it's written. The mode and model at once:
+**A change applies to the running conversation** (`setPrefs`). Claude Code's mode and model at once:
 the process gets Claude Code's control requests `{ subtype: "set_permission_mode", mode }` and `{ subtype:
 "set_model", model }`, which Claude Code 2.1 takes mid-session, between tool calls. A refusal (`control_response`
 with `subtype: "error"`) is a notice in that conversation ("Claude Code didn't switch the …"); the setting stays
 kept and applies when the conversation next starts. **Effort from the next message:** Claude Code has no
 `set_effort`, and its `apply_flag_settings { effortLevel }` is accepted but wasn't seen to change how much a turn
 thinks, so the process ends (at once when idle, after its turn while it works) and the next message resumes the
-session with the new `--effort` (or, for a new agent, starts its new one). The change answers without waiting
-for that exit (Claude Code can take seconds to end): the next process starts once it has, so two never hold one
-session. Processes start with the settings as flags.
+session with the new `--effort` (or, for a new agent, starts its new one); so does any change for Antigravity,
+which takes no switches. The change answers without waiting for that exit (Claude Code can take seconds to end):
+the next process starts once it has, so two never hold one session. The same settings given again (on a
+reconnection) change nothing. Processes start with the settings as flags.
 
-**On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json`, `settings.json`
-and each session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest
+**On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json` and each
+session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest
 state winning (it's written again when taken).
 
 ## Cards (`needs.ts`)
@@ -259,7 +271,7 @@ own and no web page can reach it.
 | `panel.tab { tabId, url, title, site }` | What the tab is to the active posting: its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page |
 | `panel.send { key, text }` | The user's message to a conversation (`general`, or a posting's `tailor` or `fill`); a posting's makes its posting active first, since the skills work on the active one |
 | `panel.stop`, `panel.reset { key }` | Stop the turn; a new session for the conversation |
-| `panel.settings { permissionMode?, model?, effort? }` | Change the agent's settings ([above](#permission-mode-model-and-effort)); returns them. `panel.state` carries them as `agent.settings` |
+| `panel.settings AgentPrefs` | The extension's agent settings, on every connection and change ([above](#permission-mode-model-and-effort)); returns what conversations now run with. `panel.state` carries the agents installed (`agent.agents`) and Antigravity's models (`agent.models`) |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
 | `panel.activate { postingId }` | Make a posting active (the panel's picker) |
 | `panel.deletePosting { postingId }` | Delete a posting for good: its conversations (`forgetPosting`), then its folder (`PostingsService.delete`). Refused while it has a review open |

@@ -85,6 +85,12 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
     report.updated.push(".claude/skills/");
   }
   await removeLegacySkills(join(root, ".claude", "skills"), report);
+  // The panel's agent settings were kept here before the extension kept them; nothing reads this any more.
+  const oldSettings = join(root, "agent", "settings.json");
+  if (await exists(oldSettings)) {
+    await rm(oldSettings, { force: true });
+    report.updated.push(`${oldSettings} (removed: the extension keeps the agent settings)`);
+  }
   await initAntigravity(root, skillsSrc, report, opts.antigravityHome);
   await writeLauncher(root, report);
   return report;

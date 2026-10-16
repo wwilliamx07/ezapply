@@ -69,6 +69,8 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
    their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
    skill with one of those names is kept and reported.
+   Also `agent/settings.json`, where an earlier version kept the panel's agent settings, is removed: the
+   extension keeps them now ([agent](agent.md#permission-mode-model-and-effort)).
 10. **Antigravity's files** (`initAntigravity`): `AGENTS.md` (the user's) created as a stub including `EZAPPLY.md`
    and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
    `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, `mcp(ezapply/*)` in

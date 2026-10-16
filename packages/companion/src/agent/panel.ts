@@ -71,7 +71,7 @@ export class PanelService {
     const s = this.s();
     const [active, all, setup] = await Promise.all([s.postings.activeId(), s.postings.list(), this.setup()]);
     return {
-      agent: { ...s.agent.state(), settings: await s.agent.settings(), agents: s.agent.agents() },
+      agent: { ...s.agent.state(), agents: s.agent.agents(), models: s.agent.models() },
       activePostingId: active,
       postings: all.slice(0, RECENT_POSTINGS).map((m) => panelPosting(m, active)),
       cards: s.needs.list(),

@@ -5,16 +5,16 @@ import { PANEL_PORT, type PanelMessage, type PanelRequest } from "../panel/trans
 import { setCardsWaiting } from "./badge.js";
 import type { CompanionConnection } from "./connection.js";
 import { tabSites } from "./frames.js";
-import type { ConnState } from "./settings.js";
-import { store } from "./settings.js";
+import { AGENT_PREFS, type ConnState, store } from "./settings.js";
 
 const ports = new Set<chrome.runtime.Port>();
 
 /**
  * The background's side of the side panel: each open panel holds a port; its `panel.*` calls are relayed to the
  * companion over the paired bridge, and what only the extension can do (capture a tab, tell a tab's site, open a
- * tab) is done here. The companion hears how many panels are open (`panel.watch`) on every change and on every
- * connection, and its updates (`panel.update`) go to every open panel.
+ * tab) is done here. The companion hears how many panels are open (`panel.watch`) and the agent settings the
+ * extension keeps (`panel.settings`) on every change and on every connection, and its updates (`panel.update`) go
+ * to every open panel.
  */
 export function servePanels(
   connection: CompanionConnection,
@@ -38,9 +38,21 @@ export function servePanels(
       );
     });
   });
+  // The agent settings are the extension's: the companion holds them only in memory, so it hears them on every
+  // connection (before the panel's calls, which follow on the same connection) and on every change.
+  const relayPrefs = async () => {
+    if (connection.connected)
+      await connection.request("panel.settings", await store.agentPrefs()).catch(() => undefined);
+  };
+  ext.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[AGENT_PREFS]) void relayPrefs();
+  });
   connection.onState((s) => {
+    if (s.state === "connected") {
+      void relayPrefs();
+      watch();
+    }
     broadcast({ type: "push", push: { type: "connection", state: panelConnection(s) } });
-    if (s.state === "connected") watch();
   });
   // "This tab" follows the window's current tab.
   const tabChanged = () => broadcast({ type: "push", push: { type: "tab" } });

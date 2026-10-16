@@ -615,3 +615,35 @@ describe("tab.show with focus emulation", () => {
     expect(chromeStub.tabs.update).not.toHaveBeenCalled();
   });
 });
+
+describe("the agent settings", () => {
+  it("gives the kept settings to the companion on connecting and on every change, before telling the panels", async () => {
+    const { servePanels } = await import("../src/background/panel.js");
+    const prefs = { agent: "claude", choices: { claude: { permissionMode: "plan", model: "opus", effort: "high" } } };
+    chromeStub.storage.local.get.mockResolvedValue({ agentPrefs: prefs } as never);
+    let onState: ((s: { state: string }) => void) | undefined;
+    const request = vi.fn(async (_m: string, _p: unknown) => ({}));
+    const connection = {
+      connected: false,
+      request,
+      onState: (fn: (s: { state: string }) => void) => (onState = fn),
+      ensureConnected: async () => {},
+    };
+    const changed = chromeStub.storage.onChanged.addListener.mock.calls.length;
+    servePanels(connection as never, async () => ({ ok: false, error: "" }));
+    connection.connected = true;
+    onState?.({ state: "connected" });
+    await vi.waitFor(() => expect(request).toHaveBeenCalledWith("panel.settings", prefs));
+    // A change in storage (from any window's panel) goes on too; others don't.
+    const storageChanged = chromeStub.storage.onChanged.addListener.mock.calls.at(changed)?.[0] as unknown as (
+      c: Record<string, unknown>,
+      area: string,
+    ) => void;
+    request.mockClear();
+    storageChanged({ port: {} }, "local");
+    storageChanged({ agentPrefs: { newValue: prefs } }, "local");
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(request).toHaveBeenCalledWith("panel.settings", prefs);
+    chromeStub.storage.local.get.mockResolvedValue({} as never);
+  });
+});

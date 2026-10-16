@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
 import { win32 } from "node:path";
 import {
-  type AgentModel,
   type AgentPermissionMode,
   type AgentSettings,
   type ConversationPart,
-  DEFAULT_AGENT_SETTINGS,
+  DEFAULT_AGENT_CHOICES,
 } from "@ezapply/protocol";
 import { SESSION_ENV } from "../endpoints.js";
 import { which } from "../util/proc.js";
@@ -58,7 +57,7 @@ export function claudeBackend(claude: ClaudeCommand): AgentBackend {
 export function agentArgs(
   sessionId: string,
   resume: boolean,
-  settings: AgentSettings = DEFAULT_AGENT_SETTINGS,
+  settings: AgentSettings = { agent: "claude", ...DEFAULT_AGENT_CHOICES.claude },
   part?: ConversationPart,
   shell: PanelShell = "Bash",
 ): string[] {
@@ -73,7 +72,7 @@ export function agentArgs(
     "--permission-mode",
     settings.permissionMode,
     "--model",
-    settings.model,
+    settings.model ?? "sonnet",
     "--effort",
     settings.effort,
     "--permission-prompt-tool",
@@ -200,7 +199,7 @@ export class AgentProcess implements AgentSession {
   }
 
   /** Switch the model mid-session (`set_model`). Returns the request's id. */
-  setModel(model: AgentModel): string {
+  setModel(model: string): string {
     const id = `model-${++this.controlSeq}`;
     this.write({ type: "control_request", request_id: id, request: { subtype: "set_model", model } });
     return id;

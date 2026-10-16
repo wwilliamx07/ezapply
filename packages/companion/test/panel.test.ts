@@ -159,21 +159,20 @@ describe("the side panel over the bridge", () => {
     const state = await peer.request("panel.state", {});
     expect(state).toMatchObject({ agent: { status: "idle" }, activePostingId: id, cards: [] });
     expect(state.postings[0]).toMatchObject({ id, site: "workday", active: true });
-    expect(state.agent.settings).toEqual({
-      agent: "claude",
-      permissionMode: "auto",
-      model: "sonnet",
-      effort: "medium",
-    });
     expect(state.agent.agents).toEqual(["claude"]);
-    expect(await peer.request("panel.settings", { model: "opus" })).toEqual({
+    expect(state.agent.models).toEqual({});
+    // The extension's settings: what conversations run with comes back.
+    const choice = { permissionMode: "auto", model: "opus", effort: "medium" } as const;
+    expect(await peer.request("panel.settings", { agent: "claude", choices: { claude: choice } })).toEqual({
       agent: "claude",
-      permissionMode: "auto",
-      model: "opus",
-      effort: "medium",
+      ...choice,
     });
-    expect((await peer.request("panel.state", {})).agent.settings.model).toBe("opus");
-    await expect(peer.request("panel.settings", { permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
+    await expect(
+      peer.request("panel.settings", {
+        agent: "claude",
+        choices: { claude: { ...choice, permissionMode: "bypassPermissions" as "plan" } },
+      }),
+    ).rejects.toThrow();
     const conv = await peer.request("panel.conversation", { key: `${id}/tailor` });
     expect(conv.posting?.requirements).toEqual(["One PDF with resume and cover letter", "Cover letter required"]);
     expect(conv.documents).toEqual([

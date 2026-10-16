@@ -1,7 +1,9 @@
-import type { CapturePayload } from "@ezapply/protocol";
+import { type AgentPrefs, type CapturePayload, readAgentPrefs } from "@ezapply/protocol";
 import { ext } from "../ext.js";
 
 export const DEFAULT_PORT = 17373;
+/** The storage key of the panel's agent settings (`AgentPrefs`). */
+export const AGENT_PREFS = "agentPrefs";
 
 export interface Settings {
   port: number;
@@ -47,5 +49,13 @@ export const store = {
   async activeLabel(): Promise<string | null> {
     const { activeLabel } = await ext.storage.local.get("activeLabel");
     return typeof activeLabel === "string" ? activeLabel : null;
+  },
+  /** The panel's agent settings: the extension keeps them, and gives them to the companion (`servePanels`). */
+  async agentPrefs(): Promise<AgentPrefs> {
+    const { agentPrefs } = await ext.storage.local.get(AGENT_PREFS);
+    return readAgentPrefs(agentPrefs);
+  },
+  async saveAgentPrefs(p: AgentPrefs): Promise<void> {
+    await ext.storage.local.set({ [AGENT_PREFS]: p });
   },
 };

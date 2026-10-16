@@ -2,16 +2,15 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-  AgentEffort,
   type AgentEvent,
   AgentKind,
-  AgentModel,
-  AgentPermissionMode,
-  AgentSettings,
+  AgentPrefs,
+  type AgentSettings,
   type AgentStatus,
-  DEFAULT_AGENT_SETTINGS,
+  DEFAULT_AGENT_PREFS,
   ErrorCode,
   EzError,
+  effectiveSettings,
   GENERAL_CONVERSATION,
   postingConversation,
 } from "@ezapply/protocol";
@@ -19,7 +18,7 @@ import { z } from "zod";
 import type { Logger } from "../logger.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
 import type { Workspace } from "../workspace/workspace.js";
-import type { AgentBackend, AgentSession } from "./backend.js";
+import type { AgentBackend, AgentModelOption, AgentSession } from "./backend.js";
 import type { NeedsYou } from "./needs.js";
 import type { StreamItem } from "./stream.js";
 
@@ -93,8 +92,8 @@ interface Live {
  * and refuses while it works, since two agents filling forms or editing one posting's files would collide.
  *
  * On disk, in the workspace's `agent/`: `conversations.json` (each conversation's session, earlier sessions ended
- * by Reset), `<conversation>/<session>.jsonl` (a posting's under `<posting>/<part>/`) (the session's events, for the panel's history) and `settings.json`
- * (the permission mode and model chosen in the panel).
+ * by Reset) and `<conversation>/<session>.jsonl` (a posting's under `<posting>/<part>/`) (the session's events, for the panel's history).
+ * The agent settings are the extension's, held here in memory (`setPrefs`).
  */
 export class AgentService {
   private live: Live | null = null;
@@ -102,9 +101,11 @@ export class AgentService {
   private readonly stateListeners = new Set<() => void>();
   private fileWrites: Promise<unknown> = Promise.resolve();
   private readonly logWrites = new Map<string, Promise<unknown>>();
-  private current: AgentSettings | null = null;
-  /** Each agent's own effort (read with `current`), so switching back to an agent brings back its effort. */
-  private efforts: Partial<Record<AgentKind, AgentEffort>> = {};
+  /** The extension's agent settings, the defaults until it gives them (on connecting). */
+  private prefs: AgentPrefs = DEFAULT_AGENT_PREFS;
+  /** Each agent's models, listed once (`AgentBackend.models`), when it has a list. */
+  private readonly modelLists = new Map<AgentKind, Promise<AgentModelOption[]>>();
+  private readonly listedModels: Partial<Record<AgentKind, AgentModelOption[]>> = {};
   private upgraded: Promise<void> | null = null;
   /** The last process asked to end, until it has: the next one starts after it, so two never share a session. */
   private closing: Promise<void> = Promise.resolve();
@@ -284,55 +285,44 @@ export class AgentService {
     return (await this.readFile()).conversations[key]?.totalCostUsd;
   }
 
-  /**
-   * The permission mode, model and effort conversations run with (`agent/settings.json`). Each is read on its own:
-   * one missing or no longer offered (an older build's `model: "default"`) falls back to its default alone. The
-   * effort is the chosen agent's own (`efforts`); an older build's file has only `effort`, which is its agent's.
-   */
-  async settings(): Promise<AgentSettings> {
-    if (this.current) return this.current;
-    const raw = await readJson(this.settingsPath()).catch(() => null);
-    const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-    const d = DEFAULT_AGENT_SETTINGS;
-    const agents = this.agents();
-    const kept = AgentKind.catch(d.agent).parse(o.agent);
-    const efforts = o.efforts && typeof o.efforts === "object" ? (o.efforts as Record<string, unknown>) : {};
-    this.efforts = {};
-    for (const k of AgentKind.options) {
-      const e = AgentEffort.safeParse(efforts[k] ?? (k === kept ? o.effort : undefined));
-      if (e.success) this.efforts[k] = e.data;
-    }
-    // An agent no longer installed: the first one that is.
-    const agent = agents.includes(kept) ? kept : (agents[0] ?? kept);
-    this.current = {
-      agent,
-      permissionMode: AgentPermissionMode.catch(d.permissionMode).parse(o.permissionMode),
-      model: AgentModel.catch(d.model).parse(o.model),
-      effort: this.efforts[agent] ?? d.effort,
-    };
-    return this.current;
+  /** What conversations run with: the extension's settings for the agent in use (`effectiveSettings`). */
+  settings(): AgentSettings {
+    return effectiveSettings(this.prefs, this.agents());
   }
 
   /**
-   * Change the settings: kept for every conversation from now on. The mode and model are switched in the running
-   * process at once (Claude Code takes them mid-session, between tool calls); a refusal comes back as a notice.
-   * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, without waiting for its
-   * exit, else after its turn) and the next message resumes the session with the new `--effort`; so does any change
-   * for an agent that takes no switches (`AgentBackend.switches`), and a change of agent. The effort is kept per
-   * agent: a change of agent without an effort brings back that agent's own.
+   * Each agent's models the panel offers beyond its fixed ones: Antigravity's, from `agy models`, listed the first
+   * time they're asked for (it fetches them, so it takes a moment); the state changes once they're in.
    */
-  async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
-    const before = await this.settings();
-    const agent = change.agent ?? before.agent;
-    const effort =
-      change.effort ?? (agent === before.agent ? before.effort : this.efforts[agent]) ?? DEFAULT_AGENT_SETTINGS.effort;
-    const next = AgentSettings.parse({ ...before, ...change, effort });
-    if (!this.agents().includes(next.agent))
-      throw new EzError(ErrorCode.BadRequest, `${next.agent} isn't installed.`, "Install it and start ezapply again.");
-    const efforts = { ...this.efforts, [next.agent]: next.effort };
-    await writeJsonAtomic(this.settingsPath(), { schemaVersion: 1, ...next, efforts });
-    this.efforts = efforts;
-    this.current = next;
+  models(): Partial<Record<AgentKind, AgentModelOption[]>> {
+    for (const k of this.agents()) {
+      const list = this.opts.backends?.[k]?.models;
+      if (!list || this.modelLists.has(k)) continue;
+      const listing = list().catch((err: unknown) => {
+        this.opts.log.warn({ err: String(err), agent: k }, "agent: couldn't list the models");
+        return [];
+      });
+      this.modelLists.set(k, listing);
+      void listing.then((models) => {
+        this.listedModels[k] = models;
+        this.stateChanged();
+      });
+    }
+    return { ...this.listedModels };
+  }
+
+  /**
+   * The extension's settings, given on connecting and on every change: held for every conversation from now on.
+   * The mode and model are switched in the running process at once (Claude Code takes them mid-session, between tool
+   * calls); a refusal comes back as a notice. Effort has no switch Claude Code was seen to honour, so the process
+   * ends (now if idle, without waiting for its exit, else after its turn) and the next message resumes the session
+   * with the new `--effort`; so does any change for an agent that takes no switches (`AgentBackend.switches`), and a
+   * change of agent.
+   */
+  async setPrefs(prefs: AgentPrefs): Promise<AgentSettings> {
+    const before = this.settings();
+    this.prefs = AgentPrefs.parse(prefs);
+    const next = this.settings();
     const l = this.live;
     if (l?.process.alive) {
       const switches = l.backend.switches !== false;
@@ -340,7 +330,8 @@ export class AgentService {
       const modelChanged = next.model !== before.model;
       if (switches && modeChanged)
         l.switching.set(l.process.setPermissionMode(next.permissionMode), `permission mode to ${next.permissionMode}`);
-      if (switches && modelChanged) l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
+      if (switches && modelChanged && next.model)
+        l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
       const restart = !switches && (modeChanged || modelChanged);
       if (restart || next.effort !== before.effort || next.agent !== before.agent) {
         if (l.busy) l.restartAfterTurn = true;
@@ -348,8 +339,7 @@ export class AgentService {
         else void this.closeLive();
       }
     }
-    this.opts.log.info({ ...next }, "agent: settings changed");
-    this.stateChanged();
+    if (JSON.stringify(next) !== JSON.stringify(before)) this.opts.log.info({ ...next }, "agent: settings changed");
     return next;
   }
 
@@ -581,10 +571,6 @@ export class AgentService {
       next.catch(() => undefined),
     );
     await next.catch((err) => this.opts.log.warn({ err: (err as Error).message }, "agent: could not write the log"));
-  }
-
-  private settingsPath(): string {
-    return this.opts.workspace.path(AGENT_DIR, "settings.json");
   }
 
   private logPath(key: string, sessionId: string): string {

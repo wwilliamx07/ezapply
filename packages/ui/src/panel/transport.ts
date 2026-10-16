@@ -1,4 +1,4 @@
-import type { PanelMethods, PanelTab, PanelUpdate, ParamsOf, ResultOf } from "@ezapply/protocol";
+import type { AgentPrefs, PanelMethods, PanelTab, PanelUpdate, ParamsOf, ResultOf } from "@ezapply/protocol";
 
 type Methods = typeof PanelMethods;
 export type PanelMethod = keyof Methods & string;
@@ -18,7 +18,9 @@ export type PanelPush =
   | { type: "update"; update: PanelUpdate }
   | { type: "connection"; state: ConnectionState }
   /** The window's current tab changed (switched, navigated): read "this tab" again. */
-  | { type: "tab" };
+  | { type: "tab" }
+  /** The agent settings changed (here, or in another window's panel). */
+  | { type: "prefs"; prefs: AgentPrefs };
 
 export type CaptureOutcome = { ok: true; postingId: string; label: string } | { ok: false; error: string };
 
@@ -40,5 +42,11 @@ export interface PanelTransport {
   /** The extension's own settings (its options page: the port, pairing). */
   openSettings(): Promise<void>;
   connection(): Promise<ConnectionState>;
+  /**
+   * The agent settings, which the extension keeps (in the browser, so they show at once) and gives to ezapply; a
+   * change reaches every open panel as a `prefs` push.
+   */
+  prefs(): Promise<AgentPrefs>;
+  savePrefs(prefs: AgentPrefs): Promise<void>;
   subscribe(fn: (push: PanelPush) => void): () => void;
 }

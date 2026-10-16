@@ -4,10 +4,13 @@ import {
   AgentKind,
   AgentModel,
   AgentPermissionMode,
+  type AgentPrefs,
   type AgentSettings,
   type Card,
   type ConversationPart,
+  changeAgentPrefs,
   conversationKey,
+  effectiveSettings,
   GENERAL_CONVERSATION,
   type PanelConversation,
   type PanelPosting,
@@ -97,11 +100,8 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   selectedRef.current = selected;
 
   const fail = useCallback((err: unknown) => setError((err as Error).message ?? String(err)), []);
-  /**
-   * Settings changed here and not yet read back from ezapply: the bar shows them at once, since a change that ends
-   * the agent's process can take a moment to answer.
-   */
-  const [pendingSettings, setPendingSettings] = useState<Partial<AgentSettings>>({});
+  /** The agent settings, from the extension's storage: there at once, before ezapply answers. */
+  const [prefs, setPrefs] = useState<AgentPrefs | null>(null);
   const refreshState = useCallback(async () => {
     setState(await transport.call("panel.state", {}));
   }, [transport]);
@@ -125,6 +125,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         setConn(push.state);
         if (push.state.state === "connected") refreshAll();
       } else if (push.type === "tab") void refreshTab();
+      else if (push.type === "prefs") setPrefs(push.prefs);
       else if (push.update.event && push.update.event.conversation === selectedRef.current) {
         const event = push.update.event.event;
         setConv((c) => (c ? { ...c, events: withEvent(c.events, event) } : c));
@@ -138,6 +139,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       setConn(c);
       if (c.state === "connected") refreshAll();
     });
+    void transport.prefs().then(setPrefs, fail);
     return stop;
   }, [transport, refreshAll, refreshTab, refreshState, refreshConv, fail]);
 
@@ -153,6 +155,16 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 
   const connected = conn.state === "connected" && state !== null;
   const agent = state?.agent;
+  // Before ezapply says which agents are installed, the chosen one is taken to be.
+  const installed = agent?.agents ?? (prefs ? [prefs.agent] : []);
+  const settings = prefs ? effectiveSettings(prefs, installed) : null;
+  const changeSettings = (change: Partial<AgentSettings>) => {
+    if (!prefs) return;
+    const next = changeAgentPrefs(prefs, installed, change);
+    setPrefs(next);
+    // The background gives them to ezapply.
+    void transport.savePrefs(next).catch(fail);
+  };
   const working = agent?.status === "working" || agent?.status === "starting";
   const workingHere = working && agent?.conversation === selected;
   const workingElsewhere = working && agent?.conversation !== selected;
@@ -470,7 +482,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
-        <Conversation events={conv?.events ?? []} agent={AGENTS[agent?.settings.agent ?? "claude"]} />
+        <Conversation events={conv?.events ?? []} agent={AGENTS[settings?.agent ?? "claude"]} />
         {cards.length > 0 ? (
           <section className="ez-panel-needs" aria-label="Needs you" ref={needsRef}>
             <p className="ez-label">Needs you · {cards.length}</p>
@@ -524,24 +536,13 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           onStop={() => void transport.call("panel.stop", {}).catch(fail)}
         />
         <div className="ez-panel-settings">
-          {agent?.settings ? (
+          {settings ? (
             <AgentSettingsBar
-              settings={{ ...agent.settings, ...pendingSettings }}
-              agents={agent.agents}
-              disabled={!connected || agent.status === "unavailable"}
-              onChange={(change) => {
-                setPendingSettings((p) => ({ ...p, ...change }));
-                void transport
-                  .call("panel.settings", change)
-                  .then(() => refreshState())
-                  .catch(fail)
-                  // Drop what this change set, unless a later change has set it since.
-                  .finally(() =>
-                    setPendingSettings((p) =>
-                      Object.fromEntries(Object.entries(p).filter(([k, v]) => change[k as keyof AgentSettings] !== v)),
-                    ),
-                  );
-              }}
+              settings={settings}
+              agents={installed}
+              antigravityModels={agent?.models.antigravity}
+              disabled={agent?.status === "unavailable"}
+              onChange={changeSettings}
             />
           ) : null}
           {conv?.totalCostUsd !== undefined ? (
@@ -851,23 +852,32 @@ function AgentLine({
 }
 
 /**
- * The agent, permission mode, model and effort, kept by ezapply and applied to the running conversation: Claude
- * Code's mode and model at once, the rest from its next message. The agent is offered only when more than one is
- * installed. Antigravity has two modes (headless, it runs what its rules allow, or plans) and no model to choose.
+ * The agent, and its own permission mode, model and effort: kept by the extension, and applied by ezapply to the
+ * running conversation (Claude Code's mode and model at once, the rest from its next message). The agent is offered
+ * only when more than one is installed. Antigravity has two modes (headless, it runs what its rules allow, or plans)
+ * and the models `agy models` lists, or its own default.
  */
 function AgentSettingsBar({
   settings,
   agents,
+  antigravityModels,
   disabled,
   onChange,
 }: {
   settings: AgentSettings;
   agents: AgentKind[];
+  antigravityModels?: { id: string; label: string }[];
   disabled: boolean;
   onChange: (change: Partial<AgentSettings>) => void;
 }) {
   const claude = settings.agent === "claude";
   const modes = claude ? MODES : ANTIGRAVITY_MODES;
+  // The chosen model shows before the list is in (or once it's no longer listed), by its id.
+  const listed = antigravityModels ?? [];
+  const antigravity =
+    settings.model && !claude && !listed.some((m) => m.id === settings.model)
+      ? [...listed, { id: settings.model, label: settings.model }]
+      : listed;
   // Antigravity runs anything but Plan only as Don't ask.
   const mode = claude || settings.permissionMode === "plan" ? settings.permissionMode : "dontAsk";
   return (
@@ -919,7 +929,23 @@ function AgentSettingsBar({
             </option>
           ))}
         </select>
-      ) : null}
+      ) : (
+        <select
+          className="ez-select ez-select-sm ez-select-gives"
+          aria-label="Model"
+          title="Antigravity's model. Applies from the next message."
+          value={settings.model ?? ""}
+          disabled={disabled}
+          onChange={(e) => onChange({ model: e.target.value || undefined })}
+        >
+          <option value="">Default model</option>
+          {antigravity.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      )}
       <select
         className="ez-select ez-select-sm ez-select-gives"
         aria-label="Effort"

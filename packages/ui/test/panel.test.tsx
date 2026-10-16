@@ -1,5 +1,13 @@
 // @vitest-environment jsdom
-import type { AgentEvent, AskQuestion, Card, PanelConversation, PanelState } from "@ezapply/protocol";
+import {
+  type AgentEvent,
+  type AgentPrefs,
+  type AskQuestion,
+  type Card,
+  DEFAULT_AGENT_PREFS,
+  type PanelConversation,
+  type PanelState,
+} from "@ezapply/protocol";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Conversation, PanelApp, REQUESTS, withEvent } from "../src/panel/App.js";
@@ -27,8 +35,8 @@ function state(over: Partial<PanelState> = {}): PanelState {
     agent: {
       status: "idle",
       queued: 0,
-      settings: { agent: "claude", permissionMode: "auto", model: "sonnet", effort: "medium" },
       agents: ["claude"],
+      models: {},
     },
     activePostingId: POSTING.id,
     postings: [POSTING],
@@ -53,9 +61,13 @@ function fakeTransport(opts: {
   state?: PanelState;
   conv?: PanelConversation;
   tab?: Awaited<ReturnType<PanelTransport["tab"]>>;
+  prefs?: AgentPrefs;
 }) {
   const listeners = new Set<(p: PanelPush) => void>();
   const calls: [string, unknown][] = [];
+  /** The agent settings saved, in order. */
+  const saved: AgentPrefs[] = [];
+  let prefs = opts.prefs ?? DEFAULT_AGENT_PREFS;
   let st = opts.state ?? state();
   let cv = opts.conv ?? conversation();
   const transport: PanelTransport = {
@@ -78,6 +90,11 @@ function fakeTransport(opts: {
     openTab: vi.fn(async () => {}),
     openSettings: vi.fn(async () => {}),
     connection: vi.fn(async () => opts.conn ?? { state: "connected" as const }),
+    prefs: vi.fn(async () => prefs),
+    savePrefs: vi.fn(async (p: AgentPrefs) => {
+      prefs = p;
+      saved.push(p);
+    }),
     subscribe: (fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
@@ -86,6 +103,7 @@ function fakeTransport(opts: {
   return {
     transport,
     calls,
+    saved,
     push: (p: PanelPush) =>
       act(() => {
         for (const fn of listeners) fn(p);
@@ -163,8 +181,8 @@ describe("the side panel", () => {
           status: "working",
           conversation: FILL,
           queued: 0,
-          settings: state().agent.settings,
           agents: ["claude"],
+          models: {},
         },
       }),
     });
@@ -249,7 +267,7 @@ describe("the side panel", () => {
     confirm.mockRestore();
   });
 
-  it("shows the permission mode, model and effort, and changes them through ezapply", async () => {
+  it("shows the permission mode, model and effort, and keeps a change in the extension", async () => {
     const t = fakeTransport({});
     render(<PanelApp transport={t.transport} />);
     const mode = (await screen.findByRole("combobox", { name: "Permission mode" })) as HTMLSelectElement;
@@ -257,81 +275,68 @@ describe("the side panel", () => {
     const effort = screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement;
     expect([mode.value, model.value, effort.value]).toEqual(["auto", "sonnet", "medium"]);
     expect([...mode.options].map((o) => o.value)).not.toContain("bypassPermissions");
-    t.setState(
-      state({
-        agent: {
-          ...state().agent,
-          settings: { agent: "claude", permissionMode: "default", model: "sonnet", effort: "medium" },
-        },
-      }),
-    );
     fireEvent.change(mode, { target: { value: "default" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "default" }]));
-    await waitFor(() => expect(mode.value).toBe("default"));
+    expect(mode.value).toBe("default");
     fireEvent.change(model, { target: { value: "opus" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { model: "opus" }]));
     fireEvent.change(effort, { target: { value: "max" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { effort: "max" }]));
+    expect(t.saved.at(-1)).toEqual({
+      agent: "claude",
+      choices: { claude: { permissionMode: "default", model: "opus", effort: "max" } },
+    });
+    // The extension gives them to ezapply: the panel sends nothing itself.
+    expect(t.calls.some(([m]) => m === "panel.settings")).toBe(false);
   });
 
-  it("offers the agent only when more than one is installed, and Antigravity's two modes and no model", async () => {
-    const t = fakeTransport({});
+  it("shows the kept settings before ezapply answers", async () => {
+    const t = fakeTransport({
+      conn: { state: "connecting" },
+      prefs: { agent: "claude", choices: { claude: { permissionMode: "plan", model: "haiku", effort: "high" } } },
+    });
     render(<PanelApp transport={t.transport} />);
-    await screen.findByRole("combobox", { name: "Effort" });
-    expect(screen.queryByRole("combobox", { name: "Agent" })).toBeNull();
-    t.setState(
-      state({
+    const effort = (await screen.findByRole("combobox", { name: "Effort" })) as HTMLSelectElement;
+    expect(effort.value).toBe("high");
+    expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("haiku");
+    expect(t.calls.some(([m]) => m === "panel.state")).toBe(false);
+  });
+
+  it("keeps each agent's own settings, with Antigravity's two modes and its listed models", async () => {
+    const t = fakeTransport({
+      state: state({
         agent: {
           ...state().agent,
-          settings: { agent: "antigravity", permissionMode: "auto", model: "sonnet", effort: "max" },
           agents: ["claude", "antigravity"],
+          models: { antigravity: [{ id: "model-b", label: "Model B" }] },
         },
       }),
-    );
-    t.push({ type: "update", update: { changed: true } });
+    });
+    render(<PanelApp transport={t.transport} />);
     const agent = (await screen.findByRole("combobox", { name: "Agent" })) as HTMLSelectElement;
+    fireEvent.change(screen.getByRole("combobox", { name: "Model" }), { target: { value: "opus" } });
+    fireEvent.change(agent, { target: { value: "antigravity" } });
     expect(agent.value).toBe("antigravity");
-    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
     const mode = screen.getByRole("combobox", { name: "Permission mode" }) as HTMLSelectElement;
     expect([...mode.options].map((o) => o.value)).toEqual(["plan", "dontAsk"]);
     expect(mode.value).toBe("dontAsk");
-    const effort = screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement;
-    expect(effort.options.length).toBe(5);
-    expect(effort.value).toBe("max");
-    fireEvent.change(mode, { target: { value: "plan" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "plan" }]));
+    const model = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect([...model.options].map((o) => o.textContent)).toEqual(["Default model", "Model B"]);
+    expect(model.value).toBe("");
+    fireEvent.change(model, { target: { value: "model-b" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Effort" }), { target: { value: "low" } });
+    // Back to Claude Code: its own model and effort return.
     fireEvent.change(agent, { target: { value: "claude" } });
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { agent: "claude" }]));
-  });
-
-  it("shows a settings change at once, before ezapply answers", async () => {
-    const t = fakeTransport({
-      state: state({ agent: { ...state().agent, agents: ["claude", "antigravity"] } }),
+    expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("opus");
+    expect((screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement).value).toBe("medium");
+    expect(t.saved.at(-1)).toEqual({
+      agent: "claude",
+      choices: {
+        claude: { permissionMode: "auto", model: "opus", effort: "medium" },
+        antigravity: { permissionMode: "dontAsk", model: "model-b", effort: "low" },
+      },
     });
-    const call = t.transport.call as unknown as ReturnType<typeof vi.fn>;
-    const inner = call.getMockImplementation() as (m: string, p: unknown) => Promise<unknown>;
-    let answer = () => {};
-    call.mockImplementation((m: string, p: unknown) =>
-      m === "panel.settings" ? new Promise((r) => (answer = () => r(inner(m, p)))) : inner(m, p),
-    );
-    render(<PanelApp transport={t.transport} />);
-    const agent = (await screen.findByRole("combobox", { name: "Agent" })) as HTMLSelectElement;
-    fireEvent.change(agent, { target: { value: "antigravity" } });
+    // A change from another window's panel shows here too.
+    t.push({ type: "prefs", prefs: { ...(t.saved.at(-1) as AgentPrefs), agent: "antigravity" } });
     expect(agent.value).toBe("antigravity");
-    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
-    // ezapply kept the change: the state read after it says so.
-    t.setState(
-      state({
-        agent: {
-          ...state().agent,
-          agents: ["claude", "antigravity"],
-          settings: { ...state().agent.settings, agent: "antigravity" },
-        },
-      }),
-    );
-    answer();
-    await waitFor(() => expect(t.calls.filter(([m]) => m === "panel.state").length).toBeGreaterThan(1));
-    expect(agent.value).toBe("antigravity");
+    expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("model-b");
   });
 
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {
@@ -398,8 +403,8 @@ describe("the side panel", () => {
           status: "working",
           conversation: TAILOR,
           queued: 0,
-          settings: state().agent.settings,
           agents: ["claude"],
+          models: {},
         },
       }),
     );

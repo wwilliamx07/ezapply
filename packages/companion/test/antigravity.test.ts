@@ -8,6 +8,7 @@ import {
   AntigravityReader,
   antigravityArgs,
   antigravityBackend,
+  antigravityModels,
   firstMessage,
 } from "../src/agent/antigravity.js";
 import type { AgentCommand } from "../src/agent/child.js";
@@ -133,8 +134,8 @@ describe("reading the Antigravity CLI's stream-json", () => {
     expect(items.at(-1)).toMatchObject({ type: "turnEnd", event: { ok: true } });
   });
 
-  it("runs agy with stream-json both ways, the panel's effort, Plan only, and the conversation to continue", () => {
-    expect(antigravityArgs("medium", "dontAsk")).toEqual([
+  it("runs agy with stream-json both ways, the panel's effort and model, Plan only, and the conversation to continue", () => {
+    expect(antigravityArgs({ effort: "medium", permissionMode: "dontAsk" })).toEqual([
       "--input-format",
       "stream-json",
       "--output-format",
@@ -142,9 +143,27 @@ describe("reading the Antigravity CLI's stream-json", () => {
       "--effort",
       "medium",
     ]);
-    expect(antigravityArgs("max", "plan", "c1").slice(5)).toEqual(["max", "--mode", "plan", "--conversation", "c1"]);
+    expect(antigravityArgs({ effort: "max", permissionMode: "plan", model: "m1" }, "c1").slice(5)).toEqual([
+      "max",
+      "--model",
+      "m1",
+      "--mode",
+      "plan",
+      "--conversation",
+      "c1",
+    ]);
     expect(firstMessage("hi", "fill")).toBe(
       `<ezapply-panel>\n${ANTIGRAVITY_PROMPT} ${PART_PROMPTS.fill}\n</ezapply-panel>\n\nhi`,
+    );
+  });
+
+  it("lists agy's models, skipping the line before them, and none when agy fails", async () => {
+    expect(await antigravityModels(AGY)).toEqual([
+      { id: "model-a-high", label: "Model A (High)" },
+      { id: "model-b", label: "Model B" },
+    ]);
+    expect(await antigravityModels({ file: process.execPath, args: ["-e", "process.exit(3)"], shell: false })).toEqual(
+      [],
     );
   });
 });
@@ -260,27 +279,30 @@ describe("the agent service with Antigravity", () => {
     expect((await starts()).length).toBe(1);
   });
 
-  it("starts the next message in a new process when the mode changes, with Plan only's flag", async () => {
+  it("starts the next message in a new process when the mode or model changes, with their flags", async () => {
     make();
     await agent.send("general", "one");
     await after("general", 1);
-    await agent.setSettings({ permissionMode: "plan" });
+    await agent.setPrefs({
+      agent: "antigravity",
+      choices: { antigravity: { permissionMode: "plan", model: "model-b", effort: "medium" } },
+    });
     await agent.send("general", "two");
     await after("general", 2);
     const all = await starts();
     expect(all.length).toBe(2);
-    expect(all[1]).toEqual(expect.arrayContaining(["--mode", "plan", "--conversation"]));
+    expect(all[1]).toEqual(expect.arrayContaining(["--model", "model-b", "--mode", "plan", "--conversation"]));
     expect(events.some(([, e]) => e.kind === "notice")).toBe(false);
   });
 
   it("starts a conversation anew when the agent changes, keeping the earlier session", async () => {
     make("both");
     expect(agent.agents()).toEqual(["claude", "antigravity"]);
-    await agent.setSettings({ agent: "claude" });
+    await agent.setPrefs({ agent: "claude", choices: {} });
     await agent.send("general", "one");
     await after("general", 1);
     const before = (await conversations()).conversations.general?.sessionId;
-    await agent.setSettings({ agent: "antigravity" });
+    await agent.setPrefs({ agent: "antigravity", choices: {} });
     await agent.send("general", "two");
     await after("general", 2);
     const after2 = (await conversations()).conversations.general;

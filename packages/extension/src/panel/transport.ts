@@ -1,5 +1,7 @@
+import { readAgentPrefs } from "@ezapply/protocol";
 import { HOST_PERMISSIONS } from "@ezapply/protocol/sites";
 import type { CaptureOutcome, ConnectionState, PanelPush, PanelTransport } from "@ezapply/ui/panel";
+import { AGENT_PREFS, store } from "../background/settings.js";
 import { ext } from "../ext.js";
 
 /** Messages on the panel's port, both ways (background/panel.ts serves them). */
@@ -89,6 +91,13 @@ export function portTransport(): PanelTransport {
   setInterval(() => {
     if (!connected) void ask<ConnectionState>({ type: "connection" }).then(seen, () => undefined);
   }, CHECK_MS);
+  // The agent settings live in the extension's storage, which the panel reads itself: a change from any window's panel.
+  ext.storage.onChanged.addListener((changes, area) => {
+    const change = area === "local" ? changes[AGENT_PREFS] : undefined;
+    if (!change) return;
+    const prefs = readAgentPrefs(change.newValue);
+    for (const fn of [...listeners]) fn({ type: "prefs", prefs });
+  });
   return {
     call: (method, params) => ask({ type: "call", method, params }),
     capture() {
@@ -104,6 +113,8 @@ export function portTransport(): PanelTransport {
     // An extension page may open the options page itself: nothing to relay.
     openSettings: () => ext.runtime.openOptionsPage(),
     connection: () => ask<ConnectionState>({ type: "connection" }).then(seen),
+    prefs: () => store.agentPrefs(),
+    savePrefs: (prefs) => store.saveAgentPrefs(prefs),
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);

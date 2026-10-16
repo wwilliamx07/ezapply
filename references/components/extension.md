@@ -21,7 +21,7 @@ on the companion's review page.
 | `src/background/frames.ts` | [Telling a page's site](#telling-a-pages-site-framests): `pageSite` (runs in the page: the first site whose signature its document matches), `tabSite` (a tab's own page), `tabSites` (a tab and its frames on a form site), `frameSite`, and `frameUrl` |
 | `src/background/access.ts` | `askForAccess`: a form call that finds its page's origin withheld opens `grant.html` (or brings it forward) and waits for the grant ([access](#access-to-websites)) |
 | `src/grant/grant.ts`, `static/grant.html` | The access window: names the host that needed it, and its **Allow access** click makes the `permissions.request` (`originsFrom`: `<all_urls>` or host patterns only, from its URL) |
-| `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label |
+| `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label, the agent settings ([agent settings](#the-agent-settings)) |
 | `src/background/badge.ts` | Toolbar badge and tooltip, with the number of cards waiting in the panel (`setCardsWaiting`) |
 | `src/env.d.ts` | Stylesheet imports (the panel's) for TypeScript |
 | `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. From `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
@@ -116,11 +116,21 @@ over a runtime port (`ezapply-panel`) to the background:
 - **`openTab`**: an `http(s)` address in a new tab of the panel's window (the posting's application).
 - **`connection`**: the connection's state, as the badge shows it.
 - **`openSettings`**: the options page, opened by the panel itself (`runtime.openOptionsPage`), with nothing relayed.
+- **`prefs`**, **`savePrefs`**: the agent settings, read and written by the panel page in `storage.local` itself
+  ([below](#the-agent-settings)), with nothing relayed.
 
 The background pushes to every open panel: the connection's state when it changes, "the tab changed" when a tab is
 activated or navigates, and the companion's `panel.update`s. It tells the companion how many panels are open
 (`panel.watch`) when one opens or closes and on every connection. The panel's port is opened again if the
 background restarts (Chrome ends an idle service worker); calls made meanwhile fail with "try again".
+
+### The agent settings
+The agent, and each agent's own permission mode, model and effort, are the extension's: `agentPrefs` in
+`storage.local` ([format](../data-formats.md#extension-storage), [what they do](agent.md#permission-mode-model-and-effort)).
+The panel reads them there itself, so they show the moment it opens, and writes a change there. Every open panel
+hears a change (`storage.onChanged`, a `prefs` push), so another window's shows it too. The background gives them
+to the companion, which keeps them only in memory: on every connection, before it tells the panels they're
+connected (so before anything they ask on it), and on every change (`panel.settings`).
 
 ## Capture
 The panel's **Capture**, or Alt+Shift+P, on an `http(s)` page → ask for access to every site, synchronously in

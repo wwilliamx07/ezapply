@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
-import type { AgentEvent } from "@ezapply/protocol";
+import {
+  type AgentEvent,
+  type AgentPrefs,
+  type AgentSettings,
+  changeAgentPrefs,
+  DEFAULT_AGENT_PREFS,
+} from "@ezapply/protocol";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -269,6 +275,12 @@ describe("the agent service", () => {
   let needs: NeedsYou;
   let agent: AgentService;
   let events: [string, AgentEvent][];
+  /** The extension's settings, as the panel changes them. */
+  let prefs: AgentPrefs;
+  const set = (change: Partial<AgentSettings>) => {
+    prefs = changeAgentPrefs(prefs, agent.agents(), change);
+    return agent.setPrefs(prefs);
+  };
   const env = (extra: Record<string, string> = {}) => ({ ...process.env, STUB_LOG: join(dir, "starts.log"), ...extra });
 
   beforeEach(async () => {
@@ -276,6 +288,7 @@ describe("the agent service", () => {
     workspace = new Workspace(dir);
     needs = new NeedsYou();
     events = [];
+    prefs = DEFAULT_AGENT_PREFS;
   });
   afterEach(async () => {
     await agent?.close();
@@ -433,40 +446,33 @@ describe("the agent service", () => {
     });
     await agent.send("p1/tailor", "one");
     await after("p1/tailor", 1);
-    expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({
+    expect(await set({ permissionMode: "plan" })).toEqual({
       agent: "claude",
       permissionMode: "plan",
       model: "sonnet",
       effort: "medium",
     });
-    await agent.setSettings({ model: "haiku" });
+    await set({ model: "haiku" });
     await waitFor(async () => ((await switches()).length === 2 ? true : null), 5000);
     expect(await switches()).toEqual([
       { subtype: "set_permission_mode", mode: "plan" },
       { subtype: "set_model", model: "haiku" },
     ]);
-    // Unchanged settings send nothing; a mode the panel doesn't offer is refused.
-    await agent.setSettings({ model: "haiku" });
-    await expect(agent.setSettings({ permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
-    expect(JSON.parse(await readFile(join(dir, "agent", "settings.json"), "utf8"))).toEqual({
-      schemaVersion: 1,
-      agent: "claude",
-      permissionMode: "plan",
-      model: "haiku",
-      effort: "medium",
-      efforts: { claude: "medium" },
-    });
+    // The same settings again (the extension gives them on every connection) send nothing; a mode the panel
+    // doesn't offer is refused.
+    await set({ model: "haiku" });
+    const kept = prefs;
+    await expect(set({ permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
+    prefs = kept;
+    // Nothing is written to the workspace: the extension keeps them.
+    await expect(readFile(join(dir, "agent", "settings.json"), "utf8")).rejects.toThrow();
 
-    // ezapply started again: the settings are read back, and the next process starts with them.
+    // ezapply started again: the defaults until the extension gives its settings, which the next process starts with.
     await agent.close();
     events = [];
     make();
-    expect(await agent.settings()).toEqual({
-      agent: "claude",
-      permissionMode: "plan",
-      model: "haiku",
-      effort: "medium",
-    });
+    expect(agent.settings()).toEqual({ agent: "claude", permissionMode: "auto", model: "sonnet", effort: "medium" });
+    await agent.setPrefs(prefs);
     await agent.send("p1/tailor", "two");
     await after("p1/tailor", 1);
     expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku --effort medium");
@@ -477,7 +483,7 @@ describe("the agent service", () => {
     make();
     await agent.send("p1/tailor", "one");
     await after("p1/tailor", 1);
-    await agent.setSettings({ effort: "high" });
+    await set({ effort: "high" });
     expect(agent.state()).toEqual({ status: "idle", queued: 0 });
     await agent.send("p1/tailor", "two");
     await after("p1/tailor", 2);
@@ -488,7 +494,7 @@ describe("the agent service", () => {
     // While it works, the process stays until the turn ends.
     await agent.send("p1/tailor", "slow");
     await waitFor(async () => (agent.state().status === "working" ? true : null), 5000);
-    await agent.setSettings({ effort: "low" });
+    await set({ effort: "low" });
     expect(agent.state().status).toBe("working");
     agent.stop();
     await after("p1/tailor", 3);
@@ -537,7 +543,7 @@ describe("the agent service", () => {
     agent = new AgentService({ workspace, needs, log, backends: { claude: slow }, env: env() });
     await agent.send("general", "one");
     expect(started).toBe(1);
-    await agent.setSettings({ effort: "high" });
+    await set({ effort: "high" });
     expect(agent.state()).toEqual({ status: "idle", queued: 0 });
     const sent = agent.send("general", "two");
     await new Promise((r) => setTimeout(r, 50));
@@ -548,53 +554,50 @@ describe("the agent service", () => {
     expect(started).toBe(2);
   });
 
-  it("reads each setting on its own, so one an older build kept falls back alone", async () => {
-    await mkdir(join(dir, "agent"), { recursive: true });
-    await writeFile(
-      join(dir, "agent", "settings.json"),
-      JSON.stringify({ schemaVersion: 1, permissionMode: "plan", model: "default" }),
-    );
-    make();
-    expect(await agent.settings()).toEqual({
-      agent: "claude",
-      permissionMode: "plan",
-      model: "sonnet",
+  it("runs the chosen agent with its own settings, or the first installed when the chosen one isn't", async () => {
+    const idle = { name: "Idle", start: () => ({}) } as unknown as AgentBackend;
+    agent = new AgentService({ workspace, needs, log, backends: { claude: idle, antigravity: idle }, env: env() });
+    await set({ effort: "high" });
+    expect(await set({ agent: "antigravity" })).toEqual({
+      agent: "antigravity",
+      permissionMode: "dontAsk",
       effort: "medium",
     });
+    await set({ model: "gemini-flash" });
+    expect(await set({ agent: "claude" })).toMatchObject({ agent: "claude", model: "sonnet", effort: "high" });
+    expect(await set({ agent: "antigravity" })).toMatchObject({ model: "gemini-flash" });
+    // Only Claude Code installed: Antigravity's settings wait, kept, for when it is.
+    agent = new AgentService({ workspace, needs, log, backends: { claude: idle }, env: env() });
+    expect(await agent.setPrefs(prefs)).toMatchObject({ agent: "claude", effort: "high" });
   });
 
-  it("keeps the effort per agent, and brings it back with its agent, also after a restart", async () => {
-    await mkdir(join(dir, "agent"), { recursive: true });
-    // An older build's file: its one effort is the kept agent's.
-    await writeFile(
-      join(dir, "agent", "settings.json"),
-      JSON.stringify({ schemaVersion: 1, agent: "claude", effort: "high" }),
-    );
-    const idle = { name: "Idle", start: () => ({}) } as unknown as AgentBackend;
-    const both = () =>
-      new AgentService({ workspace, needs, log, backends: { claude: idle, antigravity: idle }, env: env() });
-    agent = both();
-    expect(await agent.settings()).toMatchObject({ agent: "claude", effort: "high" });
-    // A new agent starts at the default, and keeps its own from then on.
-    expect(await agent.setSettings({ agent: "antigravity" })).toMatchObject({ effort: "medium" });
-    await agent.setSettings({ effort: "low" });
-    expect(await agent.setSettings({ agent: "claude" })).toMatchObject({ effort: "high" });
-    // Both at once: the effort given is the new agent's.
-    expect(await agent.setSettings({ agent: "antigravity", effort: "max" })).toMatchObject({ effort: "max" });
-    expect(JSON.parse(await readFile(join(dir, "agent", "settings.json"), "utf8")).efforts).toEqual({
-      claude: "high",
-      antigravity: "max",
+  it("lists an agent's models once, and says the state changed when they're in", async () => {
+    let listed = 0;
+    const idle = {
+      name: "Idle",
+      start: () => ({}),
+      models: async () => {
+        listed++;
+        return [{ id: "m1", label: "Model one" }];
+      },
+    } as unknown as AgentBackend;
+    agent = new AgentService({ workspace, needs, log, backends: { claude: idle, antigravity: idle }, env: env() });
+    let changed = 0;
+    agent.onState(() => changed++);
+    expect(agent.models()).toEqual({});
+    await waitFor(async () => (changed >= 2 ? true : null), 5000);
+    expect(agent.models()).toEqual({
+      claude: [{ id: "m1", label: "Model one" }],
+      antigravity: [{ id: "m1", label: "Model one" }],
     });
-    agent = both();
-    expect(await agent.settings()).toMatchObject({ agent: "antigravity", effort: "max" });
-    expect(await agent.setSettings({ agent: "claude" })).toMatchObject({ effort: "high" });
+    expect(listed).toBe(2);
   });
 
   it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {
     make({ STUB_REFUSE_SWITCH: "1" });
     await agent.send("p1/tailor", "one");
     await after("p1/tailor", 1);
-    await agent.setSettings({ permissionMode: "plan" });
+    await set({ permissionMode: "plan" });
     await waitFor(async () => (events.some(([, e]) => e.kind === "notice") ? true : null), 5000);
     expect(events.find(([, e]) => e.kind === "notice")?.[1]).toMatchObject({
       level: "warn",

@@ -168,13 +168,15 @@ to bottom:
    waiting), or that Claude isn't available (Claude Code wasn't found when ezapply started).
 9. **Settings line:** the agent (Claude Code or Antigravity, only when both are installed), the permission mode
    (for Claude Code Ask first, Accept edits, Auto, Plan only, Don't ask; for Antigravity Plan only and Don't ask;
-   what each does in its title), Claude Code's model (Fable, Opus, Sonnet, Haiku), and the effort (Low to Max),
-   which ezapply keeps and applies to the running conversation, Claude Code's mode and model at once, the rest from
-   its next message
-   ([agent](agent.md#permission-mode-model-and-effort)); a change shows at once, before ezapply answers; and the
-   conversation's cost so far (the amount, its title saying what it is). It stays one row at any panel width: each
-   select is as wide as its chosen option (`field-sizing: content`), and in Chrome's narrowest panel the agent
-   and the effort are cut short, never the mode or the model.
+   what each does in its title), the model (Claude Code's Fable, Opus, Sonnet, Haiku; Antigravity's "Default
+   model" and the ones ezapply listed), and the effort (Low to Max), each agent's own. The extension keeps them
+   (`transport.prefs`, `savePrefs`, a `prefs` push when another panel changes them), so they show as the panel
+   opens, before ezapply answers, and a change shows at once; ezapply applies them to the running conversation
+   ([agent](agent.md#permission-mode-model-and-effort)). What they come to is `effectiveSettings`, with the agents
+   installed from the state (until it's read, the chosen one). Then the conversation's cost so far (the amount,
+   its title saying what it is). It stays one row at any panel width: each select is as wide as its chosen option
+   (`field-sizing: content`), and in Chrome's narrowest panel the agent, Antigravity's model and the effort are
+   cut short, never the mode or Claude Code's model.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

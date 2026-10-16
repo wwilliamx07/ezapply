@@ -30,6 +30,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Antigravity without approvals.** Its headless mode can't ask anyone, so it runs on the user's own allow rules
   plus ezapply's tools, never with its skip-permissions flag; a denied call ends the turn with a notice
   ([agent](components/agent.md#antigravity-antigravityts)).
+- **The extension keeps the agent settings,** each agent's own mode, model and effort, and gives them to the
+  companion, which holds them in memory: the panel shows them as it opens instead of after ezapply answers
+  ([agent](components/agent.md#permission-mode-model-and-effort)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
   guard are shared and a site is a registry entry plus a definition ([adapters](components/adapters.md)).
 - **Everything about a site in one directory** (`packages/sites/src/<site>/`), with a list per side (registry,
@@ -106,6 +109,11 @@ What's built but hasn't run live, and what to check first. Each site's page list
   skills' Claude Code wording (the Edit tool, subagents) trips it. Also that no console window flashes when it
   starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
   once with the next message starting the new one.
+
+- **The agent settings kept by the extension** ([agent](components/agent.md#permission-mode-model-and-effort)):
+  that they show as the panel opens and come back with their agent, that a reconnection (ezapply restarted) gives
+  them before the next message starts a process, and that an Antigravity model chosen from the list runs
+  (`--model`; the list's format was checked against `agy models` itself).
 
 - **The form-filling fixes,** from live Workday records: Back on the review page (refused as Submit
   before), a returning step's dropdowns read once their values' requests are back (read as empty and refilled

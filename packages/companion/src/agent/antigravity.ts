@@ -1,6 +1,6 @@
-import type { AgentEffort, AgentEvent, AgentPermissionMode, ConversationPart } from "@ezapply/protocol";
+import type { AgentEvent, AgentSettings, ConversationPart } from "@ezapply/protocol";
 import { SESSION_ENV } from "../endpoints.js";
-import type { AgentBackend, AgentSession, AgentSessionOptions } from "./backend.js";
+import type { AgentBackend, AgentModelOption, AgentSession, AgentSessionOptions } from "./backend.js";
 import { type AgentCommand, findCommand, LineProcess } from "./child.js";
 import { PART_PROMPTS } from "./process.js";
 import { type StreamItem, toolSummary } from "./stream.js";
@@ -15,10 +15,49 @@ export function findAntigravity(
 
 /**
  * Antigravity as the panel's agent: one `AntigravityProcess` per conversation. It takes no control requests, so a
- * mode or model change starts the next message in a new process (`switches: false`).
+ * mode or model change starts the next message in a new process (`switches: false`). Its models depend on the
+ * account, so they're listed (`agy models`).
  */
 export function antigravityBackend(command: AgentCommand): AgentBackend {
-  return { name: "Antigravity", switches: false, start: (opts) => new AntigravityProcess({ ...opts, command }) };
+  return {
+    name: "Antigravity",
+    switches: false,
+    start: (opts) => new AntigravityProcess({ ...opts, command }),
+    models: (env) => antigravityModels(command, env),
+  };
+}
+
+/** How long `agy models` may take: it fetches the list. */
+const MODELS_TIMEOUT_MS = 30_000;
+
+/**
+ * The models `agy models` lists, one per line as `<id>\t<name>` after a "Fetching…" line, which is skipped (it has
+ * no tab). Empty when it fails or takes too long.
+ */
+export function antigravityModels(
+  command: AgentCommand,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<AgentModelOption[]> {
+  return new Promise((resolve) => {
+    const models: AgentModelOption[] = [];
+    let timer: NodeJS.Timeout | undefined;
+    const child = new LineProcess({
+      command,
+      args: ["models"],
+      cwd: process.cwd(),
+      env: { ...env, AGY_CLI_DISABLE_AUTO_UPDATE: "true" },
+      onLine: (line) => {
+        const [id, label] = line.split("\t").map((s) => s.trim());
+        if (id && label && !/\s/.test(id)) models.push({ id, label });
+      },
+      onExit: (code) => {
+        clearTimeout(timer);
+        resolve(code === 0 ? models : []);
+      },
+    });
+    timer = setTimeout(() => child.kill(), MODELS_TIMEOUT_MS);
+    timer.unref();
+  });
 }
 
 /**
@@ -30,18 +69,22 @@ export function antigravityBackend(command: AgentCommand): AgentBackend {
  *   rules don't allow is denied whatever the mode (`ezapply init` allows ezapply's tools there), and its `auto` isn't
  *   offered to every account. Not `--dangerously-skip-permissions`: postings are untrusted.
  * - `--conversation`: the conversation Antigravity named on an earlier run, to continue it.
- * - No model: the panel's are Claude's, so Antigravity's own default runs. No `--print-timeout`: its default waits
- *   for the turn however long a card takes.
+ * - `--model`: one `agy models` listed, chosen in the panel; none runs Antigravity's own default.
+ * - No `--print-timeout`: its default waits for the turn however long a card takes.
  */
-export function antigravityArgs(effort: AgentEffort, mode: AgentPermissionMode, conversation?: string): string[] {
+export function antigravityArgs(
+  settings: Pick<AgentSettings, "effort" | "permissionMode" | "model">,
+  conversation?: string,
+): string[] {
   return [
     "--input-format",
     "stream-json",
     "--output-format",
     "stream-json",
     "--effort",
-    effort,
-    ...(mode === "plan" ? ["--mode", "plan"] : []),
+    settings.effort,
+    ...(settings.model ? ["--model", settings.model] : []),
+    ...(settings.permissionMode === "plan" ? ["--mode", "plan"] : []),
     ...(conversation ? ["--conversation", conversation] : []),
   ];
 }
@@ -84,7 +127,7 @@ export class AntigravityProcess implements AgentSession {
     this.introduced = Boolean(conversation);
     this.child = new LineProcess({
       command: opts.command,
-      args: antigravityArgs(opts.settings.effort, opts.settings.permissionMode, conversation),
+      args: antigravityArgs(opts.settings, conversation),
       cwd: opts.cwd,
       // Its auto-updater starts in a console of its own, which Windows shows as a window flashing by; the user
       // updates agy themselves. Only "true" turns it off ("1" doesn't).

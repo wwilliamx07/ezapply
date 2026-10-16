@@ -1,4 +1,4 @@
-import type { AgentModel, AgentPermissionMode, AgentSettings, ConversationPart } from "@ezapply/protocol";
+import type { AgentPermissionMode, AgentSettings, ConversationPart } from "@ezapply/protocol";
 import type { StreamItem } from "./stream.js";
 
 /**
@@ -15,6 +15,17 @@ export interface AgentBackend {
    */
   readonly switches?: boolean;
   start(opts: AgentSessionOptions): AgentSession;
+  /**
+   * The models it offers beyond the panel's fixed ones (Antigravity's depend on the account, so it lists them);
+   * without, the panel offers its own list (Claude Code's aliases).
+   */
+  models?(env?: NodeJS.ProcessEnv): Promise<AgentModelOption[]>;
+}
+
+/** A model as the panel offers it: the id the agent takes, and its name. */
+export interface AgentModelOption {
+  id: string;
+  label: string;
 }
 
 export interface AgentSessionOptions {
@@ -46,7 +57,7 @@ export interface AgentSession {
   interrupt(): void;
   /** Switch mid-session. Returns the request's id, answered by a `controlResponse` item. */
   setPermissionMode(mode: AgentPermissionMode): string;
-  setModel(model: AgentModel): string;
+  setModel(model: string): string;
   /** End it once idle; kill it if it hasn't exited after `graceMs`. */
   close(graceMs?: number): Promise<void>;
   /** End it at once, with whatever it started. */

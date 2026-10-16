@@ -237,33 +237,112 @@ export type AgentStatus = z.infer<typeof AgentStatus>;
  */
 export const AgentPermissionMode = z.enum(["default", "acceptEdits", "auto", "plan", "dontAsk"]);
 export type AgentPermissionMode = z.infer<typeof AgentPermissionMode>;
-/** The model: an alias for the latest of a family (`sonnet` is Sonnet 5.5 as of Claude Code 2.1). */
+/** Claude Code's models: an alias for the latest of a family (`sonnet` is Sonnet 5.5 as of Claude Code 2.1). */
 export const AgentModel = z.enum(["fable", "opus", "sonnet", "haiku"]);
 export type AgentModel = z.infer<typeof AgentModel>;
-/** How hard Claude thinks (Claude Code's `--effort`). */
+/** How hard the agent thinks (Claude Code's and `agy`'s `--effort`). */
 export const AgentEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type AgentEffort = z.infer<typeof AgentEffort>;
 /**
- * The coding agent behind the panel. Antigravity (its CLI, `agy`) has no permission modes the panel can offer and
- * no Claude models: its conversations run with the workspace's allow rules and its own default model, and the
- * effort above `high` (its most) runs as `high`.
+ * The coding agent behind the panel. Antigravity (its CLI, `agy`) has no permission modes the panel can offer
+ * besides Plan only and Don't ask (its conversations run with the user's allow rules), and its own models.
  */
 export const AgentKind = z.enum(["claude", "antigravity"]);
 export type AgentKind = z.infer<typeof AgentKind>;
-/** The agent's settings, chosen in the panel; kept in the workspace's `agent/settings.json`. */
-export const AgentSettings = z.object({
-  agent: AgentKind,
+/** Antigravity's modes: headless, nobody can approve a call, so it runs what its rules allow, or only plans. */
+export const ANTIGRAVITY_PERMISSION_MODES: AgentPermissionMode[] = ["dontAsk", "plan"];
+/**
+ * What one agent runs with. `model` is one of `AgentModel` for Claude Code, and one `agy models` lists for
+ * Antigravity; none is the agent's own default.
+ */
+export const AgentChoice = z.object({
   permissionMode: AgentPermissionMode,
-  model: AgentModel,
+  model: z.string().min(1).max(200).optional(),
   effort: AgentEffort,
 });
-export type AgentSettings = z.infer<typeof AgentSettings>;
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
-  agent: "claude",
-  permissionMode: "auto",
-  model: "sonnet",
-  effort: "medium",
+export type AgentChoice = z.infer<typeof AgentChoice>;
+export const DEFAULT_AGENT_CHOICES: Record<AgentKind, AgentChoice> = {
+  claude: { permissionMode: "auto", model: "sonnet", effort: "medium" },
+  antigravity: { permissionMode: "dontAsk", effort: "medium" },
 };
+/**
+ * The agent settings the user chose in the panel: the agent, and each agent's own mode, model and effort, so
+ * switching back to one brings back what it ran with. The extension keeps them (`chrome.storage.local`) and gives
+ * them to the companion on connecting and on every change (`panel.settings`).
+ */
+export const AgentPrefs = z.object({
+  agent: AgentKind,
+  choices: z.object({ claude: AgentChoice.optional(), antigravity: AgentChoice.optional() }),
+});
+export type AgentPrefs = z.infer<typeof AgentPrefs>;
+export const DEFAULT_AGENT_PREFS: AgentPrefs = { agent: "claude", choices: {} };
+/** What a conversation runs with: the agent in use and its choice (`effectiveSettings`). */
+export const AgentSettings = AgentChoice.extend({ agent: AgentKind });
+export type AgentSettings = z.infer<typeof AgentSettings>;
+
+/**
+ * Prefs read from storage, each field on its own: one missing or no longer offered (an older build's) falls back to
+ * its default alone.
+ */
+export function readAgentPrefs(raw: unknown): AgentPrefs {
+  const o = obj(raw);
+  const choices = obj(o.choices);
+  const prefs: AgentPrefs = { agent: AgentKind.catch(DEFAULT_AGENT_PREFS.agent).parse(o.agent), choices: {} };
+  for (const k of AgentKind.options) {
+    const c = obj(choices[k]);
+    if (!choices[k]) continue;
+    const d = DEFAULT_AGENT_CHOICES[k];
+    const model = AgentChoice.shape.model.safeParse(c.model);
+    prefs.choices[k] = {
+      permissionMode: AgentPermissionMode.catch(d.permissionMode).parse(c.permissionMode),
+      ...(model.success && model.data ? { model: model.data } : d.model ? { model: d.model } : {}),
+      effort: AgentEffort.catch(d.effort).parse(c.effort),
+    };
+  }
+  return prefs;
+}
+
+/**
+ * The settings conversations run with: the chosen agent when it's installed (else the first that is), with its own
+ * choice, or the defaults for one never chosen. A choice the agent can't take falls back: a Claude model that isn't
+ * an alias, an Antigravity mode it doesn't offer.
+ */
+export function effectiveSettings(prefs: AgentPrefs, installed: readonly AgentKind[]): AgentSettings {
+  const agent = installed.includes(prefs.agent) ? prefs.agent : (installed[0] ?? prefs.agent);
+  const d = DEFAULT_AGENT_CHOICES[agent];
+  const c = prefs.choices[agent] ?? d;
+  if (agent === "claude") {
+    return {
+      agent,
+      permissionMode: c.permissionMode,
+      model: AgentModel.catch("sonnet").parse(c.model),
+      effort: c.effort,
+    };
+  }
+  return {
+    agent,
+    permissionMode: ANTIGRAVITY_PERMISSION_MODES.includes(c.permissionMode) ? c.permissionMode : d.permissionMode,
+    ...(c.model ? { model: c.model } : {}),
+    effort: c.effort,
+  };
+}
+
+/** The prefs with a change to the agent in use (`effectiveSettings`), or the agent chosen. */
+export function changeAgentPrefs(
+  prefs: AgentPrefs,
+  installed: readonly AgentKind[],
+  change: Partial<AgentSettings>,
+): AgentPrefs {
+  const { agent: next, ...rest } = change;
+  if (next) return { ...prefs, agent: next };
+  const current = effectiveSettings(prefs, installed);
+  const { agent, ...choice } = current;
+  return { agent, choices: { ...prefs.choices, [agent]: { ...choice, ...rest } } };
+}
+
+function obj(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
 
 // ---- the panel's methods over the bridge (the extension relays them from its side panel) ----
 
@@ -284,9 +363,10 @@ export const PanelState = z.object({
     status: AgentStatus,
     conversation: z.string().optional(),
     queued: z.number(),
-    settings: AgentSettings,
     /** The agents installed, which the panel offers. */
     agents: z.array(AgentKind),
+    /** Antigravity's models (`agy models`), once listed; Claude Code's are `AgentModel`. */
+    models: z.object({ antigravity: z.array(z.object({ id: z.string(), label: z.string() })).optional() }),
   }),
   activePostingId: z.string().nullable(),
   /** The newest postings, for the picker. */
@@ -338,10 +418,11 @@ export const PanelMethods = {
   "panel.stop": { params: Empty, result: z.object({ stopped: z.boolean() }) },
   "panel.reset": { params: z.object({ key: z.string() }), result: Empty },
   /**
-   * Change the agent's permission mode, model or effort: kept, and applied to a running conversation (the mode and
-   * model at once, the effort from its next message).
+   * The agent settings the extension keeps, sent on connecting and on every change: the companion holds them in
+   * memory and applies them to a running conversation (Claude Code's mode and model at once, the rest from its next
+   * message). Returns what conversations now run with.
    */
-  "panel.settings": { params: AgentSettings.partial(), result: AgentSettings },
+  "panel.settings": { params: AgentPrefs, result: AgentSettings },
   "panel.answer": { params: z.object({ cardId: z.string(), answers: AskAnswers }), result: Empty },
   "panel.reply": { params: z.object({ cardId: z.string(), message: z.string().min(1).max(20_000) }), result: Empty },
   "panel.permission": {

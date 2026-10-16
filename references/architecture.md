@@ -120,7 +120,7 @@ Every HTTP request must be addressed to the bound loopback host (`Host` check ag
 | `~/.ezapply/logs/companion.log` (+ `.1`, `.2`) | structured logs, personal data redacted, rotated at 5 MB | companion |
 | OS keychain, service `ezapply` | GitHub App client secret, GitHub user token | companion |
 | `~/ezapply-home/` | everything the user owns: profile, templates, knowledge, postings, library, repo cache | user, Claude, companion |
-| extension `storage.local` | port, pairing code, connection state, pending capture, active posting label | extension |
+| extension `storage.local` | port, pairing code, connection state, pending capture, active posting label, the panel's agent settings | extension |
 
 Formats of every file: [data-formats.md](data-formats.md).
 
