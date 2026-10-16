@@ -1,2 +1,0 @@
-- switching agents is slow
-- antigravity opens and closes a cli upon message

@@ -21,6 +21,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [The extension's reconnect storm](extension-reconnect-storm/overview.md) | High | S | — |
 | — | [Fill form is missing where the posting and the form share a page](fill-form-on-posting-page/overview.md) | High | S | — |
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
+| — | [Switching agents is slow, and Antigravity flashes a console window](agent-switch-lag/overview.md) | Medium | S | — |
 | — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
