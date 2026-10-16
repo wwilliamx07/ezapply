@@ -231,6 +231,6 @@ launches is never killed by a timeout ([companion](companion.md#opening-pages-an
 An encrypted or unreadable PDF given to merge or compress fails with `bad_request` and a clear message rather
 than being skipped (`pdf_info` reports `encrypted` instead); a bad page range is `bad_request` too
 (`pdf/pages.ts`).
-Outputs are written atomically; a target another program holds open (Acrobat locks the PDFs it shows) fails
-with a hint to close it. When compressing misses the target and Ghostscript isn't installed, the hint carries
+Outputs are written atomically; a PDF a viewer holds open (Acrobat locks the PDFs it shows) fails, after a short
+retry, with a hint to close it ([atomic writes](../architecture.md#cross-cutting-concerns)). When compressing misses the target and Ghostscript isn't installed, the hint carries
 this OS's install command.

@@ -1,10 +1,6 @@
 # ezapply: todo
 
-Only work that isn't built. Whatever is built, in whole or in part, is described in `references/` (what still needs
-a live run is in `references/status.md`) and in git history.
-
-Each item has its own directory: `overview.md` says what, why and the plan in a few lines; `details.md` holds the
-rest. Refer to items by title, not by their place in this list.
+Only work that isn't built, one directory per item; how items are written and kept is in [CLAUDE.md](CLAUDE.md).
 
 - **Value:** how much the item helps one person apply faster without lowering quality or honesty: High, Medium or
   Low. Items not yet rated show "—".
@@ -25,7 +21,6 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [The extension's reconnect storm](extension-reconnect-storm/overview.md) | High | S | — |
 | — | [Fill form is missing where the posting and the form share a page](fill-form-on-posting-page/overview.md) | High | S | — |
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
-| — | ["Locked by another program" when nothing holds the file](spurious-file-locks/overview.md) | Medium | S | — |
 | — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
@@ -63,9 +58,8 @@ Why this order:
 ## Groups
 
 - **Bugs:** The extension's reconnect storm, Fill form is missing where the posting and the form share a page,
-  The panel's agent stops when ezapply's tools aren't connected yet,
-  "Locked by another program" when nothing holds the file, Form calls on a tab run out of order, CI timeouts on
-  Windows.
+  The panel's agent stops when ezapply's tools aren't connected yet, Form calls on a tab run out of order, CI
+  timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
   touch, Remove the onboarding and repos skills, Refactor the skills, A writing spec for claims, Compatibility with
   various agents.

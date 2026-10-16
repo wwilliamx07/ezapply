@@ -1,4 +1,4 @@
-// The parts of CLAUDE.md's "references/ is the source of truth" rule a test can check: links and anchors resolve,
+// The parts of references/CLAUDE.md's rules a test can check: links and anchors resolve,
 // the index lists every page, and every MCP tool, site and skill has its place in the reference.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -84,7 +84,7 @@ describe("references", () => {
     const index = read(join(REFS, "README.md"));
     const pages = markdownIn(REFS)
       .map((p) => relative(REFS, p).replaceAll("\\", "/"))
-      .filter((p) => p !== "README.md");
+      .filter((p) => p !== "README.md" && p !== "CLAUDE.md");
     expect(pages.filter((p) => !index.includes(`](${p})`))).toEqual([]);
   });
 

@@ -146,7 +146,12 @@ Formats of every file: [data-formats.md](data-formats.md).
   `main.ts`).
 - **Path guards.** Every path Claude passes is resolved against the workspace and checked against the
   folders that operation may touch (`Workspace.resolveAllowed`).
-- **Atomic writes.** JSON and generated files are written to a temp file and renamed (`util/fs.ts`).
+- **Atomic writes.** JSON and generated files are written to a temp file and renamed (`util/fs.ts`). On Windows
+  the rename fails while anything has the target open, even for a moment: the panel reading a posting's
+  `meta.json` right after a write, a virus scan or the search indexer. So a failed rename (`EPERM`, `EBUSY`,
+  `EACCES`) is retried for about 2 s, as graceful-fs does, before it's reported as a lock; the hint asks the user
+  to close the file only for a PDF, which a viewer really holds open, and otherwise says to retry. Running the
+  companion's own reads through the writes' queue wouldn't be enough, since other programs open files too.
 - **One at a time where it matters.** Operations that would collide run through a per-key queue
   (`util/keyed-queue.ts`): captures and posting metadata updates, builds of the same `.tex` file (they share
   its `.build/` folder), syncs of the same repo (git's `index.lock`), and form calls on the same browser tab

@@ -10,5 +10,5 @@
   check them against `WORKSPACE_DIRS` and the files `init` writes, or leave them out.
 - A lint step rather than a test, so it runs before the build and fails fast.
 
-**References when built:** `development.md` (lint and tests), `CLAUDE.md`'s line on what
+**References when built:** `development.md` (lint and tests), `references/CLAUDE.md`'s line on what
 `test/references.test.ts` checks.

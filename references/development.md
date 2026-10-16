@@ -4,9 +4,9 @@
 
 ```
 ezapply/
-  CLAUDE.md                 rules for working on this repo (keep references/ current, todo/ lean)
-                            (more CLAUDE.md files sit beside the code they govern; see "Conventions")
-  references/               this reference (source of truth)
+  CLAUDE.md                 rules for the whole repo (keep references/ and todo/ current, no sensitive data)
+                            (each directory's own rules are in its CLAUDE.md; see "Conventions")
+  references/               this reference (source of truth); CLAUDE.md: how its pages are written
   README.md                 quick start
   todo/                     work not yet built: todo.md maps the items in order, one directory per item
   package.json              npm workspaces, scripts
@@ -116,11 +116,12 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 | `tex` | `ubuntu-latest` | Installs TeX Live (`latexmk`, XeLaTeX, pdfLaTeX, recommended and extra packages, Latin Modern), builds, and runs the documents and template tests with `EZAPPLY_REQUIRE_TEX=1` |
 
 ## Conventions
-- **Keep `references/` current** in the same change (see `CLAUDE.md`).
-- **Rules beside the code.** `packages/sites/CLAUDE.md`, `packages/companion/CLAUDE.md` and
-  `packages/cli/CLAUDE.md` hold the few hard rules for that code, with pointers into this folder. Claude Code loads
-  one when it works in that folder, so the rules reach an agent that went straight to the code without reading
-  here first. Keep them short; a rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
+- **Keep `references/` current** in the same change (see [CLAUDE.md](CLAUDE.md)).
+- **Rules beside what they govern.** The root `CLAUDE.md` holds only the rules for the whole repo; a directory's own
+  conventions are in its `CLAUDE.md`: `references/`, `todo/`, `packages/sites/`, `packages/companion/` and
+  `packages/cli/`. Claude Code loads one when it works in that folder, so the rules reach an agent that went
+  straight there without reading here first, and the root file stays short in every session. Keep them short; a
+  rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
   is different: it's the user's workspace file, shipped by `ezapply init`.)
 - **Thin tools, fat services.** An MCP tool validates, calls a service, returns JSON. Logic lives in
   services, which are wired explicitly in `main.ts`.

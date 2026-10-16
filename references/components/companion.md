@@ -39,7 +39,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `workspace/workspace.ts` | `Workspace`: paths, `resolveAllowed` guard, config and `state.json` (one write at a time, expired repo timers dropped on each; `dropDeferredRepos`); `WORKSPACE_DIRS` |
 | `config/app.ts`, `config/workspace.ts` | `~/.ezapply/config.json` (load with readable errors and the move from an earlier build's `daemon.json`, `updateAppConfig`) and `ezapply.config.json` schemas, token generators, `appDir()` |
 | `logger.ts` | pino logger to the log file only, with redaction and size-based rotation (`rotateLog`) |
-| `util/fs.ts` | `exists`, `readJson`, `writeFileAtomic` (text or bytes; a locked target gets a "close it" hint), `writeJsonAtomic` |
+| `util/fs.ts` | `exists`, `readJson`, `writeFileAtomic` (text or bytes; a locked target is retried, then reported → [atomic writes](../architecture.md#cross-cutting-concerns)), `writeJsonAtomic` |
 | `util/keyed-queue.ts` | `KeyedQueue`: one task at a time per key |
 | `util/hash.ts` | `hashFiles` (12 hex of SHA-256 over files' paths and contents, line endings normalised) and `hashValue` (over a value's JSON) |
 | `util/line-diff.ts` | `unifiedDiff`: a line diff with context, for the resume template's changes |

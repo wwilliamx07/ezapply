@@ -2,8 +2,8 @@
 
 The complete, current description of ezapply: what it's for, how it's built, and how every part works.
 **This folder is the source of truth**, including the reasons behind the design (the lean decisions log is
-[status.md](status.md#decisions)). Planned work is in `todo/` (its map is `todo/todo.md`). The
-repo's `CLAUDE.md` requires every change to keep this folder accurate and complete.
+[status.md](status.md#decisions)). Planned work is in `todo/` (its map is `todo/todo.md`). Every
+change keeps this folder accurate and complete; how its pages are written is in [CLAUDE.md](CLAUDE.md).
 
 ## By task
 Read these before the change, and update them with it. A folder with its own `CLAUDE.md` (the sites, the

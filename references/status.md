@@ -9,6 +9,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **No daemon.** The companion lives inside `./ezapply` and ends with it. Nothing runs in the
   background, so there is nothing to start, stop or keep secure while the user isn't applying
   ([architecture](architecture.md#processes-and-lifecycle)).
+- **A failed rename is retried before it's called a lock.** Windows refuses a rename while any handle is open on
+  the target, which readers and scanners hold for a moment; reporting the first failure sent the agent to ask the
+  user to close files they didn't have open ([architecture](architecture.md#cross-cutting-concerns)).
 - **Pairing without a code.** The extension pairs during a 15-minute window opened from the setup page or by
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
   `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension),
@@ -109,6 +112,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   read 1.25M tokens of context, a tailoring then an application 36 calls and 2.48M, about 29.7k of it the
   starting context on every call. The Workday nested-menu paths are an adapter change of their own: check them in
   a run with no other Workday change ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
+
+- **The rename retry:** a run on Windows with the panel open should no longer show "locked by another program"
+  for a posting's `meta.json` ([architecture](architecture.md#cross-cutting-concerns)).
 
 - **The preferences in context:** checked that Claude Code loads `profile/preferences.md` through `EZAPPLY.md`'s
   import with the panel's `--setting-sources project,local`, and skips it quietly when missing. Not yet run: a
