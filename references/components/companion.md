@@ -25,7 +25,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension; `onConnectionChange` (the side panel's watch ends with the connection) |
 | `bridge/pairing.ts` | `startPairing` (open the pairing window, optionally forgetting the paired extension) and `extensionFolders` (what to load, and whether it's built): shared by `extension_pair` and the onboarding page |
 | `onboarding/service.ts` | `OnboardingService`: the onboarding page's session, routes and actions, its state (from `workspace_check` and the services), the agent's task queue behind `onboarding`, and the watch that tells an open page what changed elsewhere; `skipReason` (repos not suggested) → [ui](ui.md#the-onboarding-page-onboard) |
-| `agent/` | `AgentService` (the panel's conversations, one Claude Code process at a time), `AgentProcess` and `findClaude`, `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user), `PanelService` (the side panel's `panel.*` methods and the updates pushed to it) → [agent](agent.md) |
+| `agent/` | `AgentService` (the panel's conversations, one agent process at a time), the agents' backends (Claude Code's `AgentProcess` and `findClaude`, Antigravity's `AntigravityProcess` and `findAntigravity`), `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user), `PanelService` (the side panel's `panel.*` methods and the updates pushed to it) → [agent](agent.md) |
 | `ui/assets.ts` | `UiAssets`: the UI package's files at `/ui/`, each page's HTML shell, `UI_CSP`, the base stylesheet's address → [ui](ui.md#serving-companionsrcuiassetsts) |
 | `ui/session.ts` | What the pages share: the token traded for a cookie (`presentedToken`, `pageCookie`, `tokenOk`), `sameOrigin`, `readJsonBody`, `sendJson`, `EventStreams` (Server-Sent Events) → [ui](ui.md#how-a-page-talks-to-the-companion) |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
@@ -183,7 +183,7 @@ Items in onboarding order, each `{ step, done, detail, required }`:
 |---|---|---|
 | `agent_file` | `EZAPPLY.md` exists and `CLAUDE.md` has an `@EZAPPLY.md` line | what's wrong: run `ezapply init`, or add the line |
 | `tex` | an engine resolves | the TeX install command for this OS |
-| `extension` | connected | "paired but not connected…" or "not paired: call extension_pair" |
+| `extension` | connected (at launch, paired is enough: see below) | "paired but not connected…" or "not paired: call extension_pair" |
 | `github_login` | logged in, and the app's callback port matches | app registered or not (not: ask whether to create a new app or connect an existing one); the port-mismatch fix |
 | `repos_selected` | at least one repo in `repos.yaml` | |
 | `knowledge_indexed` | a repo is selected and `knowledge/` has at least as many folders as repos are selected (a count, not a match by name) | indexed of selected |
@@ -195,7 +195,11 @@ Items in onboarding order, each `{ step, done, detail, required }`:
 | `attach_mode` (optional) | always | the attach mode and what it means |
 | `library` (optional) | always | file count |
 
-Returns `{ ready, nextStep?, items }`, where `nextStep` is the first required item not done. The onboarding page
+Returns `{ ready, nextStep?, items }`, where `nextStep` is the first required item not done. With `atLaunch`
+(only [`ezapply`'s start-up check](cli.md#ezapply-panelts)), a paired extension counts as done even before it
+connects: right after a start it can't have reconnected yet (it notices the companion within its 30 s alarm), so
+requiring the live connection would call every workspace unfinished and open the setup page on each launch.
+The onboarding page
 shows these items as its steps (`agent_file` as a banner, `attach_mode` within preferences;
 [ui](ui.md#the-onboarding-page-onboard)).
 

@@ -12,6 +12,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **A failed rename is retried before it's called a lock.** Windows refuses a rename while any handle is open on
   the target, which readers and scanners hold for a moment; reporting the first failure sent the agent to ask the
   user to close files they didn't have open ([architecture](architecture.md#cross-cutting-concerns)).
+- **At launch, paired is enough.** `ezapply`'s start-up readiness check counts a paired extension as set up, since
+  it can't have reconnected in the instant after the start; requiring the connection opened the setup page on
+  every launch ([companion](components/companion.md#readiness-checklist-workspace_check)).
 - **Pairing without a code.** The extension pairs during a 15-minute window opened from the setup page or by
   `extension_pair`, and is pinned by its id; typing the code was no safer, since it sits in the same
   `config.json` that opening a window needs ([pairing](flows.md#2-pairing-the-extension),
@@ -21,6 +24,12 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   companion took about 1.5 s of it ([cli](components/cli.md#commands)).
 - **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation; there's
   no Claude Code in the terminal, so there's one way to run ezapply ([cli](components/cli.md#commands)).
+- **The agent behind an interface.** The panel's service drives an agent backend, Claude Code's or Antigravity's, so
+  each agent reads its own protocol without touching the conversations, cards or history
+  ([agent](components/agent.md)).
+- **Antigravity without approvals.** Its headless mode can't ask anyone, so it runs on the user's own allow rules
+  plus ezapply's tools, never with its skip-permissions flag; a denied call ends the turn with a notice
+  ([agent](components/agent.md#antigravity-antigravityts)).
 - **One adapter engine, a definition per site.** Sites differ in markup, not in the API, so the API, fill loop and
   guard are shared and a site is a registry entry plus a definition ([adapters](components/adapters.md)).
 - **Everything about a site in one directory** (`packages/sites/src/<site>/`), with a list per side (registry,
@@ -89,6 +98,12 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
+
+- **Antigravity behind the panel** with ezapply itself ([agent](components/agent.md#antigravity-antigravityts)).
+  `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through
+  the panel. Check: a posting tailored and a form filled from the panel, an `ask_user` card held the full 15
+  minutes, how many turns the skills lose to denied commands and to reading each tool's schema, and whether the
+  skills' Claude Code wording (the Edit tool, subagents) trips it.
 
 - **The form-filling fixes,** from live Workday records: Back on the review page (refused as Submit
   before), a returning step's dropdowns read once their values' requests are back (read as empty and refilled

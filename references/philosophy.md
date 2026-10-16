@@ -7,10 +7,10 @@ user decides and submits.
 
 ## Principles
 
-1. **Claude Code is the only agent.** ezapply has no agent loop of its own. It exposes tools over MCP, and a
-   workspace of files and skills that tell Claude how to use them, and runs Claude Code headless so the user
-   works with it in the extension's side panel: the requests, the chat, Claude's questions and its requests for
-   approval are all there ([agent](components/agent.md)). Two more pages are for what is reading or form-filling
+1. **The user's coding agent is the only agent.** ezapply has no agent loop of its own. It exposes tools over MCP,
+   and a workspace of files and skills that tell the agent how to use them, and runs the agent headless (Claude
+   Code, or the Antigravity CLI) so the user works with it in the extension's side panel: the requests, the chat,
+   the agent's questions and its requests for approval are all there ([agent](components/agent.md)). Two more pages are for what is reading or form-filling
    rather than judgment: reviewing documents, and setting up. What a page needs judgment for goes to Claude, as a
    task the user sees it do. No page runs an agent of its own.
 2. **The user always submits.** Nothing in ezapply can submit an application. This is enforced in code,

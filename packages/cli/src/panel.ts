@@ -1,4 +1,5 @@
 import {
+  type AgentCommand,
   type AppConfig,
   type ClaudeCommand,
   type CompanionHandle,
@@ -13,8 +14,9 @@ export interface HostPanelOptions {
   config: AppConfig;
   /** The extension package folder, so extension_pair can say what to load. */
   extensionDir?: string;
-  /** Claude Code for the panel's agent. */
-  claude: ClaudeCommand;
+  /** The agents the panel can run (at least one): Claude Code and the Antigravity CLI. */
+  claude?: ClaudeCommand;
+  antigravity?: AgentCommand;
   log: Logger;
   /** Where the lines for the user go (stdout). */
   say?: (line: string) => void;
@@ -45,7 +47,7 @@ export async function hostPanel(opts: HostPanelOptions): Promise<number> {
   opts.onStarted?.(started);
   say(`ezapply is running (port ${started.port}).`);
   // Until setup is done there may be no extension, and so no panel: setup is a page of its own.
-  const ready = (await workspaceStatus(started.services).catch(() => null))?.ready ?? true;
+  const ready = (await workspaceStatus(started.services, { atLaunch: true }).catch(() => null))?.ready ?? true;
   if (!ready) {
     const { url } = started.services.onboarding.open();
     const openedIn = await started.services.opener.url(url).catch(() => null);
@@ -66,7 +68,8 @@ async function startHosted(opts: HostPanelOptions): Promise<CompanionHandle | st
     return await startCompanion({
       config,
       log: opts.log,
-      claude: opts.claude,
+      ...(opts.claude ? { claude: opts.claude } : {}),
+      ...(opts.antigravity ? { antigravity: opts.antigravity } : {}),
       ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
       ...(opts.companion?.appDataDir ? { appDataDir: opts.companion.appDataDir } : {}),
       ...(opts.companion?.saveConfig ? { saveConfig: opts.companion.saveConfig } : {}),

@@ -64,9 +64,14 @@ export function githubDetail(gh: GitHubStatus): string {
 /**
  * Onboarding / readiness checklist, in the order the onboarding page shows its steps.
  * Each item is cheap to compute so Claude can call this freely.
+ *
+ * `atLaunch` is for the check `ezapply` makes as it starts: a paired extension counts as set up, because it
+ * can't have reconnected yet (it notices the companion within its 30 s alarm), so requiring the live connection
+ * would call every workspace unfinished.
  */
 export async function workspaceStatus(
   s: Services,
+  opts: { atLaunch?: boolean } = {},
 ): Promise<{ ready: boolean; nextStep?: string; items: ChecklistItem[] }> {
   const items: ChecklistItem[] = [];
   const add = (step: string, done: boolean, detail: string, required = true) =>
@@ -82,7 +87,7 @@ export async function workspaceStatus(
   const bridge = s.bridge.status();
   add(
     "extension",
-    bridge.connected,
+    bridge.connected || (opts.atLaunch === true && bridge.paired),
     bridge.connected
       ? `connected${bridge.browser ? ` in ${browserLabel(bridge.browser.name)}` : ""}`
       : bridge.paired

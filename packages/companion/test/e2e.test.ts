@@ -30,6 +30,7 @@ import type { AppConfig } from "../src/config/app.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
 import { type CompanionHandle, type CompanionOptions, startCompanion } from "../src/main.js";
+import { workspaceStatus } from "../src/status.js";
 import type { Opener } from "../src/util/open.js";
 
 const EXT_A = "a".repeat(32);
@@ -435,6 +436,22 @@ describe("extension bridge", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(handle.services.bridge.status()).toMatchObject({ connected: false, browser: { name: "edge" } });
     await client.close();
+  });
+
+  it("counts a paired extension as set up at launch, before it has reconnected", async () => {
+    const extensionStep = async (atLaunch: boolean) =>
+      (await workspaceStatus(handle.services, { atLaunch })).items.find((i) => i.step === "extension")?.done;
+    expect(await extensionStep(true)).toBe(false);
+
+    const ext = fakeExtension();
+    expect((await ext.outcome).welcomed).toBe(true);
+    const closed = new Promise((r) => ext.ws.on("close", r));
+    ext.ws.close();
+    await closed;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(handle.services.bridge.status()).toMatchObject({ connected: false, paired: true });
+    expect(await extensionStep(true)).toBe(true);
+    expect(await extensionStep(false)).toBe(false);
   });
 });
 

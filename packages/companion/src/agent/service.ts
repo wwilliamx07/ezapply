@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   AgentEffort,
   type AgentEvent,
+  AgentKind,
   AgentModel,
   AgentPermissionMode,
   AgentSettings,
@@ -18,8 +19,8 @@ import { z } from "zod";
 import type { Logger } from "../logger.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
 import type { Workspace } from "../workspace/workspace.js";
+import type { AgentBackend, AgentSession } from "./backend.js";
 import type { NeedsYou } from "./needs.js";
-import { AgentProcess, type ClaudeCommand } from "./process.js";
 import type { StreamItem } from "./stream.js";
 
 /** The folder in the workspace that holds the conversations' records and logs. */
@@ -29,8 +30,12 @@ const Session = z.object({ sessionId: z.string(), startedAt: z.string(), endedAt
 const Conversation = z.object({
   sessionId: z.string(),
   startedAt: z.string(),
-  /** Claude Code has the session (it answered once), so the next process resumes it. */
+  /** The agent the session is with; absent in a record from before there was a choice (Claude Code). */
+  agent: AgentKind.default("claude"),
+  /** The agent has the session (it answered once), so the next process resumes it. */
   started: z.boolean().default(false),
+  /** The agent's own id for the session, when it names its sessions itself (Antigravity). */
+  agentSessionId: z.string().optional(),
   totalCostUsd: z.number().optional(),
   /** Sessions ended by Reset, newest last; `claude --resume <id>` still opens them. */
   earlier: z.array(Session).default([]),
@@ -55,16 +60,20 @@ export interface AgentServiceOptions {
   workspace: Workspace;
   needs: NeedsYou;
   log: Logger;
-  /** Claude Code; without it the agent is unavailable (tests, or Claude Code not installed). */
-  claude?: ClaudeCommand;
+  /**
+   * The coding agents installed (Claude Code's is `claudeBackend`, Antigravity's `antigravityBackend`); without one
+   * the agent is unavailable (tests, or none installed).
+   */
+  backends?: Partial<Record<AgentKind, AgentBackend>>;
   env?: NodeJS.ProcessEnv;
 }
 
 interface Live {
   key: string;
   sessionId: string;
-  process: AgentProcess;
-  /** Claude Code reported the session (its first `init`): a later failure isn't a bad resume. */
+  backend: AgentBackend;
+  process: AgentSession;
+  /** The agent reported the session (its first `init`): a later failure isn't a bad resume. */
   initialized: boolean;
   resumed: boolean;
   busy: boolean;
@@ -79,7 +88,7 @@ interface Live {
 }
 
 /**
- * The agent behind the panel: Claude Code, headless, one process per conversation (a posting's two, tailoring its
+ * The agent behind the panel: the coding agent chosen in the panel (Claude Code or Antigravity), headless, one process per conversation (a posting's two, tailoring its
  * documents and filling its application, or the general one), relaying what it does as events. One process runs at a time: switching conversations closes an idle one,
  * and refuses while it works, since two agents filling forms or editing one posting's files would collide.
  *
@@ -111,11 +120,16 @@ export class AgentService {
   }
 
   get available(): boolean {
-    return Boolean(this.opts.claude);
+    return this.agents().length > 0;
+  }
+
+  /** The agents installed, Claude Code first. */
+  agents(): AgentKind[] {
+    return AgentKind.options.filter((k) => this.opts.backends?.[k]);
   }
 
   state(): AgentState {
-    if (!this.opts.claude) return { status: "unavailable", queued: 0 };
+    if (!this.available) return { status: "unavailable", queued: 0 };
     const l = this.live;
     if (!l) return { status: "idle", queued: 0 };
     const status: AgentStatus = !l.initialized && l.untaken.length > 0 ? "starting" : l.busy ? "working" : "idle";
@@ -147,8 +161,7 @@ export class AgentService {
     checkKey(key);
     const body = text.trim();
     if (!body) throw new EzError(ErrorCode.BadRequest, "The message is empty.");
-    const claude = this.opts.claude;
-    if (!claude) throw unavailable();
+    if (!this.available) throw unavailable();
     await this.upgrade();
     // While a card of this conversation is open, Claude sits in the tool call that asked, and a message sent to it
     // would wait for that call (up to 10 minutes). So the message answers the card: a question's reply, or a deny
@@ -165,13 +178,13 @@ export class AgentService {
       if (this.live.busy) {
         throw new EzError(
           ErrorCode.BadRequest,
-          "Claude is still working in another conversation.",
+          `${this.live.backend.name} is still working in another conversation.`,
           "Stop it, or wait until it's done, then send this again.",
         );
       }
       await this.closeLive();
     }
-    const live = this.live ?? (await this.start(key, claude));
+    const live = this.live ?? (await this.start(key));
     const message = { id: randomUUID().slice(0, 8), text: body, at: new Date().toISOString() };
     live.untaken.push(message);
     live.busy = true;
@@ -202,7 +215,8 @@ export class AgentService {
       this.live = null;
     }
     this.opts.needs.withdraw(key);
-    await this.updateFile((f) => renewed(f, key));
+    const { agent } = await this.settings();
+    await this.updateFile((f) => renewed(f, key, agent));
     this.stateChanged();
   }
 
@@ -261,6 +275,8 @@ export class AgentService {
   /** The session's spend so far (Claude Code's estimate), when known. */
   async cost(key: string): Promise<number | undefined> {
     await this.upgrade();
+    // A turn's cost is written as it ends: read it after that write.
+    await this.fileWrites;
     return (await this.readFile()).conversations[key]?.totalCostUsd;
   }
 
@@ -273,7 +289,11 @@ export class AgentService {
     const raw = await readJson(this.settingsPath()).catch(() => null);
     const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     const d = DEFAULT_AGENT_SETTINGS;
+    const agents = this.agents();
+    const agent = AgentKind.catch(d.agent).parse(o.agent);
     this.current = {
+      // An agent no longer installed: the first one that is.
+      agent: agents.includes(agent) ? agent : (agents[0] ?? agent),
       permissionMode: AgentPermissionMode.catch(d.permissionMode).parse(o.permissionMode),
       model: AgentModel.catch(d.model).parse(o.model),
       effort: AgentEffort.catch(d.effort).parse(o.effort),
@@ -285,19 +305,26 @@ export class AgentService {
    * Change the settings: kept for every conversation from now on. The mode and model are switched in the running
    * process at once (Claude Code takes them mid-session, between tool calls); a refusal comes back as a notice.
    * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, else after its turn) and
-   * the next message resumes the session with the new `--effort`.
+   * the next message resumes the session with the new `--effort`; so does any change for an agent that takes no
+   * switches (`AgentBackend.switches`), and a change of agent.
    */
   async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
     const before = await this.settings();
     const next = AgentSettings.parse({ ...before, ...change });
+    if (!this.agents().includes(next.agent))
+      throw new EzError(ErrorCode.BadRequest, `${next.agent} isn't installed.`, "Install it and start ezapply again.");
     await writeJsonAtomic(this.settingsPath(), { schemaVersion: 1, ...next });
     this.current = next;
     const l = this.live;
     if (l?.process.alive) {
-      if (next.permissionMode !== before.permissionMode)
+      const switches = l.backend.switches !== false;
+      const modeChanged = next.permissionMode !== before.permissionMode;
+      const modelChanged = next.model !== before.model;
+      if (switches && modeChanged)
         l.switching.set(l.process.setPermissionMode(next.permissionMode), `permission mode to ${next.permissionMode}`);
-      if (next.model !== before.model) l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
-      if (next.effort !== before.effort) {
+      if (switches && modelChanged) l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
+      const restart = !switches && (modeChanged || modelChanged);
+      if (restart || next.effort !== before.effort || next.agent !== before.agent) {
         if (l.busy) l.restartAfterTurn = true;
         else await this.closeLive();
       }
@@ -340,17 +367,31 @@ export class AgentService {
     return this.upgraded;
   }
 
-  private async start(key: string, claude: ClaudeCommand, fresh = false): Promise<Live> {
-    if (fresh || !(await this.readFile()).conversations[key]) await this.updateFile((f) => renewed(f, key));
+  private async start(key: string, fresh = false): Promise<Live> {
+    const settings = await this.settings();
+    const backend = this.opts.backends?.[settings.agent];
+    if (!backend) throw unavailable();
+    const had = (await this.readFile()).conversations[key];
+    // A session is with one agent: on another, the conversation starts anew (the old one stays in `earlier`).
+    const switched = had?.started && had.agent !== settings.agent;
+    if (fresh || !had || switched) await this.updateFile((f) => renewed(f, key, settings.agent));
+    if (switched) {
+      this.emit(key, {
+        kind: "notice",
+        at: new Date().toISOString(),
+        level: "info",
+        text: `A new conversation with ${backend.name}: the earlier one was with another agent.`,
+      });
+    }
     const c = (await this.readFile()).conversations[key] as Conversation;
     const sessionId = c.sessionId;
     const resumed = c.started;
-    const settings = await this.settings();
     const part = postingConversation(key)?.part;
     const live: Live = {
       key,
       sessionId,
-      process: undefined as unknown as AgentProcess,
+      backend,
+      process: undefined as unknown as AgentSession,
       initialized: false,
       resumed,
       busy: false,
@@ -360,11 +401,11 @@ export class AgentService {
       switching: new Map(),
       restartAfterTurn: false,
     };
-    live.process = new AgentProcess({
-      claude,
+    live.process = backend.start({
       cwd: this.opts.workspace.root,
       sessionId,
       resume: resumed,
+      ...(c.agentSessionId ? { agentSessionId: c.agentSessionId } : {}),
       settings,
       ...(part ? { part } : {}),
       ...(this.opts.env ? { env: this.opts.env } : {}),
@@ -372,7 +413,7 @@ export class AgentService {
       onExit: (code, tail) => this.onExit(live, code, tail),
     });
     this.live = live;
-    this.opts.log.info({ conversation: key, resumed }, "agent: started Claude Code");
+    this.opts.log.info({ conversation: key, resumed, agent: backend.name }, "agent: started");
     return live;
   }
 
@@ -384,7 +425,7 @@ export class AgentService {
           if (!l.resumed) void this.updateFile((f) => markStarted(f, l.key, l.sessionId));
           this.stateChanged();
         }
-        if (!l.mcpChecked) {
+        if (!l.mcpChecked && item.mcpServers) {
           l.mcpChecked = true;
           const ours = item.mcpServers.find((s) => s.name === "ezapply");
           if (ours?.status !== "connected") {
@@ -393,13 +434,16 @@ export class AgentService {
               at: new Date().toISOString(),
               level: "error",
               text:
-                `ezapply's tools aren't connected to Claude (${ours ? ours.status : "not configured"}). ` +
+                `ezapply's tools aren't connected to ${l.backend.name} (${ours ? ours.status : "not configured"}). ` +
                 "Run `ezapply init` in the workspace, then Reset this conversation.",
             });
           }
         }
         return;
       }
+      case "agentSession":
+        void this.updateFile((f) => withAgentSession(f, l.key, l.sessionId, item.id));
+        return;
       case "taken": {
         const m = l.untaken.shift();
         if (m) this.emit(l.key, { kind: "user", at: m.at, id: m.id, text: m.text, taken: true });
@@ -435,7 +479,7 @@ export class AgentService {
             kind: "notice",
             at: new Date().toISOString(),
             level: "warn",
-            text: `Claude Code didn't switch the ${what}${item.error ? `: ${item.error}` : ""}. It applies when this conversation next starts.`,
+            text: `${l.backend.name} didn't switch the ${what}${item.error ? `: ${item.error}` : ""}. It applies when this conversation next starts.`,
           });
         }
         return;
@@ -446,9 +490,9 @@ export class AgentService {
   private onExit(l: Live, code: number | null, tail: string): void {
     if (this.live === l) this.live = null;
     const at = new Date().toISOString();
-    // A session Claude Code no longer has (its transcript deleted) can't be resumed: start afresh with the
+    // A session the agent no longer has (its transcript deleted) can't be resumed: start afresh with the
     // messages that were waiting, once.
-    if (l.resumed && !l.initialized && l.untaken.length > 0 && this.opts.claude) {
+    if (l.resumed && !l.initialized && l.untaken.length > 0) {
       this.opts.log.warn({ conversation: l.key, code }, "agent: resume failed; starting a new session");
       const waiting = l.untaken;
       void (async () => {
@@ -458,7 +502,7 @@ export class AgentService {
           level: "warn",
           text: "The earlier conversation couldn't be reopened, so this is a new one.",
         });
-        const fresh = await this.start(l.key, this.opts.claude as ClaudeCommand, true);
+        const fresh = await this.start(l.key, true);
         for (const m of waiting) {
           fresh.untaken.push(m);
           fresh.busy = true;
@@ -470,12 +514,12 @@ export class AgentService {
     }
     if (l.busy || l.untaken.length > 0) {
       const why = tail.split("\n").find((s) => s.trim()) ?? `exit code ${code}`;
-      this.opts.log.warn({ conversation: l.key, code }, "agent: Claude Code exited mid-turn");
+      this.opts.log.warn({ conversation: l.key, code }, "agent: exited mid-turn");
       this.emit(l.key, {
         kind: "notice",
         at,
         level: "error",
-        text: `Claude Code stopped unexpectedly: ${why.slice(0, 300)}`,
+        text: `${l.backend.name} stopped unexpectedly: ${why.slice(0, 300)}`,
       });
     }
     this.stateChanged();
@@ -540,13 +584,19 @@ export class AgentService {
 }
 
 /** A new session for `key`; the one it had, if Claude Code ever had it, goes to `earlier`. */
-function renewed(f: ConversationsFile, key: string): ConversationsFile {
+function renewed(f: ConversationsFile, key: string, agent: AgentKind): ConversationsFile {
   const now = new Date().toISOString();
   const old = f.conversations[key];
   const earlier = old
     ? [...old.earlier, ...(old.started ? [{ sessionId: old.sessionId, startedAt: old.startedAt, endedAt: now }] : [])]
     : [];
-  const next: Conversation = { sessionId: randomUUID(), startedAt: now, started: false, earlier: earlier.slice(-50) };
+  const next: Conversation = {
+    sessionId: randomUUID(),
+    startedAt: now,
+    agent,
+    started: false,
+    earlier: earlier.slice(-50),
+  };
   return { ...f, conversations: { ...f.conversations, [key]: next } };
 }
 
@@ -554,6 +604,12 @@ function markStarted(f: ConversationsFile, key: string, sessionId: string): Conv
   const c = f.conversations[key];
   if (!c || c.sessionId !== sessionId) return f;
   return { ...f, conversations: { ...f.conversations, [key]: { ...c, started: true } } };
+}
+
+function withAgentSession(f: ConversationsFile, key: string, sessionId: string, id: string): ConversationsFile {
+  const c = f.conversations[key];
+  if (!c || c.sessionId !== sessionId || c.agentSessionId === id) return f;
+  return { ...f, conversations: { ...f.conversations, [key]: { ...c, agentSessionId: id } } };
 }
 
 function withCost(f: ConversationsFile, key: string, sessionId: string, cost: number): ConversationsFile {
@@ -571,7 +627,7 @@ function checkKey(key: string): void {
 function unavailable(): EzError {
   return new EzError(
     ErrorCode.BadRequest,
-    "Claude Code isn't available to ezapply.",
-    "Install Claude Code (https://claude.com/claude-code) and start ezapply again.",
+    "No coding agent is available to ezapply.",
+    "Install Claude Code (https://claude.com/claude-code) or the Antigravity CLI, and start ezapply again.",
   );
 }

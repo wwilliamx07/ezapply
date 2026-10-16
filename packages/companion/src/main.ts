@@ -1,8 +1,10 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { antigravityBackend } from "./agent/antigravity.js";
+import type { AgentCommand } from "./agent/child.js";
 import { NeedsYou } from "./agent/needs.js";
 import { PanelService } from "./agent/panel.js";
-import type { ClaudeCommand } from "./agent/process.js";
+import { type ClaudeCommand, claudeBackend } from "./agent/process.js";
 import { AgentService } from "./agent/service.js";
 import { ExtensionBridge } from "./bridge/server.js";
 import { type AppConfig, appDir, updateAppConfig } from "./config/app.js";
@@ -46,8 +48,9 @@ export interface CompanionOptions {
   ui?: UiAssets;
   /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
-  /** Claude Code, for the panel's agent; without it the agent is unavailable (tests). */
+  /** Claude Code and the Antigravity CLI, the agents the panel can run; with neither it is unavailable (tests). */
   claude?: ClaudeCommand;
+  antigravity?: AgentCommand;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
 }
@@ -170,7 +173,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     workspace,
     needs,
     log: log.child({ svc: "agent" }),
-    ...(opts.claude ? { claude: opts.claude } : {}),
+    backends: {
+      ...(opts.claude ? { claude: claudeBackend(opts.claude) } : {}),
+      ...(opts.antigravity ? { antigravity: antigravityBackend(opts.antigravity) } : {}),
+    },
   });
 
   const onboarding = new OnboardingService(

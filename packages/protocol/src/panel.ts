@@ -243,10 +243,27 @@ export type AgentModel = z.infer<typeof AgentModel>;
 /** How hard Claude thinks (Claude Code's `--effort`). */
 export const AgentEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type AgentEffort = z.infer<typeof AgentEffort>;
+/**
+ * The coding agent behind the panel. Antigravity (its CLI, `agy`) has no permission modes the panel can offer and
+ * no Claude models: its conversations run with the workspace's allow rules and its own default model, and the
+ * effort above `high` (its most) runs as `high`.
+ */
+export const AgentKind = z.enum(["claude", "antigravity"]);
+export type AgentKind = z.infer<typeof AgentKind>;
 /** The agent's settings, chosen in the panel; kept in the workspace's `agent/settings.json`. */
-export const AgentSettings = z.object({ permissionMode: AgentPermissionMode, model: AgentModel, effort: AgentEffort });
+export const AgentSettings = z.object({
+  agent: AgentKind,
+  permissionMode: AgentPermissionMode,
+  model: AgentModel,
+  effort: AgentEffort,
+});
 export type AgentSettings = z.infer<typeof AgentSettings>;
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = { permissionMode: "auto", model: "sonnet", effort: "medium" };
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  agent: "claude",
+  permissionMode: "auto",
+  model: "sonnet",
+  effort: "medium",
+};
 
 // ---- the panel's methods over the bridge (the extension relays them from its side panel) ----
 
@@ -268,6 +285,8 @@ export const PanelState = z.object({
     conversation: z.string().optional(),
     queued: z.number(),
     settings: AgentSettings,
+    /** The agents installed, which the panel offers. */
+    agents: z.array(AgentKind),
   }),
   activePostingId: z.string().nullable(),
   /** The newest postings, for the picker. */

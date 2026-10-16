@@ -27,6 +27,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 | The `ezapply` command | [cli.md](components/cli.md) |
 | Anything touching paths, tokens, the user's data or page content reaching the agent | [security.md](security.md) |
 | Build, tests, CI, conventions | [development.md](development.md) |
+| Auditing the whole repo (`/garden`) | [Conventions](development.md#conventions), then every `CLAUDE.md` |
 
 ## Contents
 

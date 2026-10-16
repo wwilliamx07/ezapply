@@ -69,7 +69,12 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
    their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
    skill with one of those names is kept and reported.
-10. **Launcher** (`writeLauncher`): `ezapply.cmd` on Windows (`@echo off` then `"<node>" "<main.js>" %*`), `ezapply`
+10. **Antigravity's files** (`initAntigravity`): `AGENTS.md` (the user's) created as a stub including `EZAPPLY.md`
+   and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
+   `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, `mcp(ezapply/*)` in
+   its `settings.json`'s `permissions.allow` ([why](workspace.md#antigravity)). Tests pass no settings folder, so they
+   never touch the real one.
+11. **Launcher** (`writeLauncher`): `ezapply.cmd` on Windows (`@echo off` then `"<node>" "<main.js>" %*`), `ezapply`
    elsewhere (`#!/bin/sh` then `exec "<node>" "<main.js>" "$@"`, mode 755), rewritten every time. So
    `ezapply` runs from the workspace without the CLI on PATH: a global `npm link` needs write access to
    npm's global folder, which many installs (a system Node on macOS, for one) don't give.
@@ -107,14 +112,15 @@ tools wait up to 15 minutes.)
 ## `ezapply` (`panel.ts`)
 How the user runs ezapply: `hostPanel`, with no command. It and the tests are the only places the companion runs.
 
-1. Needs `config.json` (else "run `ezapply init`") and Claude Code: `EZAPPLY_CLAUDE` if set, else the first
-   `claude.exe`, `claude.cmd` or `claude.bat` on PATH (Windows) or `claude` (elsewhere) (`findClaude`, the
-   companion's). Without it, "Claude Code isn't on PATH" and exit 1.
+1. Needs `config.json` (else "run `ezapply init`") and an agent: Claude Code (`EZAPPLY_CLAUDE` if set, else the
+   first `claude.exe`, `claude.cmd` or `claude.bat` on PATH on Windows, or `claude` elsewhere: `findClaude`, the
+   companion's), the Antigravity CLI (`EZAPPLY_ANTIGRAVITY`, else `agy` the same way: `findAntigravity`), or both.
+   With neither, "Neither Claude Code nor the Antigravity CLI (agy) is on PATH" and exit 1.
 2. Install the crash guard (`guardProcess` in `quiet.ts`): `uncaughtException` and `unhandledRejection` are
    logged and the process carries on. Otherwise a bug in companion code would end ezapply and take Claude's
    tools and the extension's connection with it; every error the companion can expect is already caught per
    request.
-3. `startCompanion` in this process, with Claude Code passed as `CompanionOptions.claude` for the panel's agent
+3. `startCompanion` in this process, with the agents found passed as `CompanionOptions.claude` and `.antigravity` for the panel's agent
    ([agent](agent.md)) and `extensionDir` = `packages/extension` so `extension_pair` can give the build paths.
    If the port is taken (`EADDRINUSE`), look at what answers `/health` there:
    - `name: "ezapply"`: another `ezapply` → "ezapply is already running in another terminal". One companion
@@ -123,7 +129,8 @@ How the user runs ezapply: `hostPanel`, with no command. It and the tests are th
      extension setting as the fix.
 
    Either way the message goes to stderr, exit code 1.
-4. Prints `ezapply is running (port N).`; while `workspace_check` isn't ready, opens the setup page (`onboarding`'s
+4. Prints `ezapply is running (port N).`; while `workspace_check` isn't ready (checked `atLaunch`, so a paired extension that hasn't
+   reconnected yet doesn't count against it: [why](companion.md#readiness-checklist-workspace_check)), opens the setup page (`onboarding`'s
    link, through the `Opener`: there may be no extension yet, so no panel) and says so, or prints its link; then
    "Open the ezapply panel from your browser's toolbar. Press Ctrl+C here to stop ezapply." From then on
    `quietProcess`: libraries print (pdfjs through `console.log`, dependencies' warnings on stderr), so

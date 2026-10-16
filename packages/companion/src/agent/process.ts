@@ -1,7 +1,5 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { delimiter, join, win32 } from "node:path";
-import { createInterface } from "node:readline";
+import { win32 } from "node:path";
 import {
   type AgentModel,
   type AgentPermissionMode,
@@ -11,29 +9,16 @@ import {
 } from "@ezapply/protocol";
 import { SESSION_ENV } from "../endpoints.js";
 import { which } from "../util/proc.js";
-import { readStreamLine, type StreamItem } from "./stream.js";
+import type { AgentBackend, AgentSession, AgentSessionOptions } from "./backend.js";
+import { type AgentCommand, findCommand, LineProcess } from "./child.js";
+import { readStreamLine } from "./stream.js";
 
 /** How to run Claude Code: the native `claude.exe`, or the npm install's `claude.cmd` (only runs through cmd). */
-export interface ClaudeCommand {
-  file: string;
-  /** Arguments that always come first (tests run a stub script through node). */
-  args: string[];
-  /** A .cmd/.bat launcher on Windows. */
-  shell: boolean;
-}
+export type ClaudeCommand = AgentCommand;
 
 /** Claude Code on PATH (or EZAPPLY_CLAUDE): the native `claude.exe`, or the npm install's `claude.cmd` on Windows. */
 export function findClaude(env: NodeJS.ProcessEnv = process.env, platform = process.platform): ClaudeCommand | null {
-  const isScript = (p: string) => platform === "win32" && /.(cmd|bat)$/i.test(p);
-  if (env.EZAPPLY_CLAUDE) return { file: env.EZAPPLY_CLAUDE, args: [], shell: isScript(env.EZAPPLY_CLAUDE) };
-  const names = platform === "win32" ? ["claude.exe", "claude.cmd", "claude.bat"] : ["claude"];
-  for (const dir of (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean)) {
-    for (const name of names) {
-      const file = join(dir, name);
-      if (existsSync(file)) return { file, args: [], shell: isScript(file) };
-    }
-  }
-  return null;
+  return findCommand("claude", "EZAPPLY_CLAUDE", env, platform);
 }
 
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
@@ -47,19 +32,14 @@ export function sessionId(header: string | string[] | undefined): string | undef
 /** The permission prompt tool Claude Code asks instead of a terminal dialog (served by `mcp/tools/agent.ts`). */
 export const PERMISSION_TOOL = "mcp__ezapply__permission_ask";
 
-export interface AgentProcessOptions {
+/** A conversation's options (`part` picks its line of `PART_PROMPTS`), with the Claude Code to run. */
+export interface AgentProcessOptions extends AgentSessionOptions {
   claude: ClaudeCommand;
-  cwd: string;
-  sessionId: string;
-  /** Continue an existing session rather than start one with this id. */
-  resume: boolean;
-  /** The permission mode, model and effort it starts with (the panel's settings). */
-  settings?: AgentSettings;
-  /** A posting's conversation: which part, for its line of the system prompt (`PART_PROMPTS`). */
-  part?: ConversationPart;
-  env?: NodeJS.ProcessEnv;
-  onItem: (item: StreamItem) => void;
-  onExit: (code: number | null, stderrTail: string) => void;
+}
+
+/** Claude Code as the panel's agent: one `AgentProcess` per conversation. */
+export function claudeBackend(claude: ClaudeCommand): AgentBackend {
+  return { name: "Claude Code", start: (opts) => new AgentProcess({ ...opts, claude }) };
 }
 
 /**
@@ -174,45 +154,30 @@ export const PART_PROMPTS: Record<ConversationPart, string> = {
 };
 
 /** One conversation's Claude Code process: messages in, stream items out. */
-export class AgentProcess {
-  private readonly child: ChildProcess;
-  private stderrTail = "";
-  private exited = false;
+export class AgentProcess implements AgentSession {
+  private readonly child: LineProcess;
   private controlSeq = 0;
 
-  constructor(private readonly opts: AgentProcessOptions) {
-    const { file, shell } = opts.claude;
+  constructor(opts: AgentProcessOptions) {
     const base = opts.env ?? process.env;
-    const args = [
-      ...opts.claude.args,
-      ...agentArgs(opts.sessionId, opts.resume, opts.settings, opts.part, panelShell(base)),
-    ];
     const env: NodeJS.ProcessEnv = { ...base, [SESSION_ENV]: opts.sessionId, [DISABLE_BUNDLED_SKILLS]: "1" };
     // A long MCP call (ask_user, a review) must hold the turn, which is -p's default; the user's own setting
     // to background such calls would end the turn with the question open.
     delete env.CLAUDE_AUTO_BACKGROUND_TASKS;
-    this.child = spawn(shell ? quoteForCmd(file) : file, shell ? args.map(quoteForCmd) : args, {
+    this.child = new LineProcess({
+      command: opts.claude,
+      args: agentArgs(opts.sessionId, opts.resume, opts.settings, opts.part, panelShell(base)),
       cwd: opts.cwd,
       env,
-      shell,
-      windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
+      onLine: (line) => {
+        for (const item of readStreamLine(line)) opts.onItem(item);
+      },
+      onExit: opts.onExit,
     });
-    createInterface({ input: this.child.stdout as NodeJS.ReadableStream }).on("line", (line) => {
-      for (const item of readStreamLine(line)) opts.onItem(item);
-    });
-    this.child.stderr?.on("data", (d: Buffer) => {
-      this.stderrTail = (this.stderrTail + d.toString("utf8")).slice(-2000);
-    });
-    this.child.stdin?.on("error", () => {
-      // The process went away; its exit is reported below.
-    });
-    this.child.on("error", (err) => this.exit(null, `${this.stderrTail}\n${err.message}`));
-    this.child.on("exit", (code) => this.exit(code, this.stderrTail));
   }
 
   get alive(): boolean {
-    return !this.exited;
+    return this.child.alive;
   }
 
   /** A user message, as a JSON line. Claude takes it now, or at the next tool call's end while a turn runs. */
@@ -242,41 +207,16 @@ export class AgentProcess {
   }
 
   /** Close stdin, which ends the process once it's idle; kill it if it hasn't exited after `graceMs`. */
-  close(graceMs = 10_000): Promise<void> {
-    if (this.exited) return Promise.resolve();
-    const done = new Promise<void>((resolve) => this.child.once("exit", () => resolve()));
-    this.child.stdin?.end();
-    const timer = setTimeout(() => this.kill(), graceMs);
-    timer.unref();
-    return done.finally(() => clearTimeout(timer));
+  close(graceMs?: number): Promise<void> {
+    return this.child.close(graceMs);
   }
 
   /** The whole tree: Claude and what it started (its MCP relay, a running command). */
   kill(): void {
-    if (this.exited) return;
-    if (process.platform === "win32" && this.child.pid) {
-      spawnSync("taskkill", ["/pid", String(this.child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-    } else {
-      this.child.kill("SIGTERM");
-      setTimeout(() => {
-        if (!this.exited) this.child.kill("SIGKILL");
-      }, 5000).unref();
-    }
+    this.child.kill();
   }
 
   private write(o: unknown): void {
-    if (this.exited || !this.child.stdin?.writable) return;
-    this.child.stdin.write(`${JSON.stringify(o)}\n`);
+    this.child.write(o);
   }
-
-  private exit(code: number | null, tail: string): void {
-    if (this.exited) return;
-    this.exited = true;
-    this.opts.onExit(code, tail.trim());
-  }
-}
-
-/** cmd.exe quoting for the shell launch of a .cmd file. */
-function quoteForCmd(s: string): string {
-  return /^[\w\-./:\\=@]+$/.test(s) ? s : `"${s.replace(/"/g, '""')}"`;
 }

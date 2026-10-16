@@ -1,3 +1,5 @@
+export { findAntigravity } from "./agent/antigravity.js";
+export type { AgentCommand } from "./agent/child.js";
 export { type ClaudeCommand, findClaude } from "./agent/process.js";
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { ENGINES, type EngineId, resolveEngine } from "./documents/tex/engines.js";

@@ -20,6 +20,9 @@ ezapply-home/
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/,
                            reads of debug/ and running python
   .claude/skills/          ezapply-onboard, -repos, -index-repo, -resume, -cover-letter, -bundle, -apply, -answers
+  AGENTS.md                the user's own notes for Antigravity; includes EZAPPLY.md and the preferences
+  .agents/skills/          the same skills, where Antigravity reads them
+  .agents/mcp_config.json  Antigravity → `node <cli>/main.js mcp`
   profile/                 profile.yaml, answers.yaml, preferences.md, repos.yaml
   templates/resume/        the user's LaTeX resume + template.json
   templates/cover/         cover letter template + template.json (+ example/, format.md)
@@ -201,7 +204,26 @@ shapes too.
   those notes would duplicate what the workspace already holds (profile, answer bank, preferences,
   `EZAPPLY.md`), go stale against those files, and copy personal data to `~/.claude/projects/`.
 
+## Antigravity
+What the Antigravity CLI reads, written by `init` beside Claude Code's (`initAntigravity`):
+- `AGENTS.md`, the user's like `CLAUDE.md`, starts with `@[EZAPPLY.md](EZAPPLY.md)` and
+  `@[preferences](profile/preferences.md)`: Antigravity's inline include (its bare `@path`, which `EZAPPLY.md`'s
+  Claude Code import is, only names a file), so both are in its context as `CLAUDE.md`'s imports put them in
+  Claude's. A user's own `AGENTS.md` gets the lines on top. Claude Code reads an `AGENTS.md` by default only where
+  there's no `CLAUDE.md`, and its setting to read both is the user's, which the panel's process doesn't load
+  (`--setting-sources project,local`), so `EZAPPLY.md` isn't in Claude's context twice.
+- `.agents/skills/`: the same skills, since Antigravity reads skills there. They still name Claude Code's tools in
+  places (the Edit tool, subagents); "Refactor the skills" in `todo/` writes them for any agent.
+- `.agents/mcp_config.json`: the `ezapply` server, as in `.mcp.json`.
+- **Its permissions live only in the user's own settings** (`~/.gemini/antigravity-cli/settings.json`), and headless
+  `agy` denies every MCP tool they don't allow. So when that folder exists, `init` adds `mcp(ezapply/*)` to its
+  `permissions.allow`, keeping the rest; a file that isn't plain JSON is left alone with a line saying what to add.
+  The rule matches nothing outside this workspace, the only place the server is configured. None of the Claude Code
+  denies (`repo-cache/`, `debug/`, python) carry over: Antigravity allows reads and writes inside the workspace, so
+  for it `repo-cache/` is read-only by `EZAPPLY.md`'s rule alone, and commands are denied unless the user's rules
+  allow them.
+
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |
 |---|---|
-| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json`, ezapply's entries in `.claude/settings.json` | `CLAUDE.md` (beyond the import line), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |
+| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` and `.agents/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json` and `.agents/mcp_config.json`, ezapply's entries in `.claude/settings.json`, `mcp(ezapply/*)` in Antigravity's settings | `CLAUDE.md` and `AGENTS.md` (beyond the include lines), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |

@@ -24,7 +24,12 @@ const FILL = `${POSTING.id}/fill`;
 
 function state(over: Partial<PanelState> = {}): PanelState {
   return {
-    agent: { status: "idle", queued: 0, settings: { permissionMode: "auto", model: "sonnet", effort: "medium" } },
+    agent: {
+      status: "idle",
+      queued: 0,
+      settings: { agent: "claude", permissionMode: "auto", model: "sonnet", effort: "medium" },
+      agents: ["claude"],
+    },
     activePostingId: POSTING.id,
     postings: [POSTING],
     cards: [],
@@ -153,7 +158,15 @@ describe("the side panel", () => {
 
   it("switches between a posting's documents and application conversations, following the one Claude works in", async () => {
     const t = fakeTransport({
-      state: state({ agent: { status: "working", conversation: FILL, queued: 0, settings: state().agent.settings } }),
+      state: state({
+        agent: {
+          status: "working",
+          conversation: FILL,
+          queued: 0,
+          settings: state().agent.settings,
+          agents: ["claude"],
+        },
+      }),
     });
     render(<PanelApp transport={t.transport} />);
     const application = await screen.findByRole("tab", { name: /Application/ });
@@ -231,7 +244,10 @@ describe("the side panel", () => {
     expect([...mode.options].map((o) => o.value)).not.toContain("bypassPermissions");
     t.setState(
       state({
-        agent: { ...state().agent, settings: { permissionMode: "default", model: "sonnet", effort: "medium" } },
+        agent: {
+          ...state().agent,
+          settings: { agent: "claude", permissionMode: "default", model: "sonnet", effort: "medium" },
+        },
       }),
     );
     fireEvent.change(mode, { target: { value: "default" } });
@@ -241,6 +257,36 @@ describe("the side panel", () => {
     await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { model: "opus" }]));
     fireEvent.change(effort, { target: { value: "max" } });
     await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { effort: "max" }]));
+  });
+
+  it("offers the agent only when more than one is installed, and Antigravity's two modes and no model", async () => {
+    const t = fakeTransport({});
+    render(<PanelApp transport={t.transport} />);
+    await screen.findByRole("combobox", { name: "Effort" });
+    expect(screen.queryByRole("combobox", { name: "Agent" })).toBeNull();
+    t.setState(
+      state({
+        agent: {
+          ...state().agent,
+          settings: { agent: "antigravity", permissionMode: "auto", model: "sonnet", effort: "max" },
+          agents: ["claude", "antigravity"],
+        },
+      }),
+    );
+    t.push({ type: "update", update: { changed: true } });
+    const agent = (await screen.findByRole("combobox", { name: "Agent" })) as HTMLSelectElement;
+    expect(agent.value).toBe("antigravity");
+    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
+    const mode = screen.getByRole("combobox", { name: "Permission mode" }) as HTMLSelectElement;
+    expect([...mode.options].map((o) => o.value)).toEqual(["plan", "dontAsk"]);
+    expect(mode.value).toBe("dontAsk");
+    const effort = screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement;
+    expect(effort.options.length).toBe(5);
+    expect(effort.value).toBe("max");
+    fireEvent.change(mode, { target: { value: "plan" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { permissionMode: "plan" }]));
+    fireEvent.change(agent, { target: { value: "claude" } });
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { agent: "claude" }]));
   });
 
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {
@@ -303,7 +349,13 @@ describe("the side panel", () => {
 
     t.setState(
       state({
-        agent: { status: "working", conversation: TAILOR, queued: 0, settings: state().agent.settings },
+        agent: {
+          status: "working",
+          conversation: TAILOR,
+          queued: 0,
+          settings: state().agent.settings,
+          agents: ["claude"],
+        },
       }),
     );
     t.push({ type: "update", update: { changed: true } });

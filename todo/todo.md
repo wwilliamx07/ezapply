@@ -33,7 +33,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | 5 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | A page saved from a real one |
 | 6 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
 | 7 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
-| 8 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | Refactor the skills; a change to `philosophy.md` |
+| 8 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | Refactor the skills |
 | 9 | [Run multiple applications in parallel](parallel-applications/overview.md) | — | ~L | — |
 | 10 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
 | 11 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |

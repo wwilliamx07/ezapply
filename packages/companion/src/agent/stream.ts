@@ -16,7 +16,10 @@ import type { AgentEvent } from "@ezapply/protocol";
  */
 export type StreamItem =
   | { type: "event"; event: AgentEvent }
-  | { type: "init"; sessionId: string; mcpServers: { name: string; status: string }[] }
+  /** `mcpServers`: their state, when the agent reports it. */
+  | { type: "init"; sessionId: string; mcpServers?: { name: string; status: string }[] }
+  /** The agent's own id for the session (an agent that names its sessions itself). */
+  | { type: "agentSession"; id: string }
   | { type: "taken"; text: string }
   | { type: "turnEnd"; event: Extract<AgentEvent, { kind: "turnEnd" }>; queued: number }
   | { type: "controlResponse"; requestId: string; ok: boolean; error?: string };

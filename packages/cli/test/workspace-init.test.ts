@@ -24,6 +24,30 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+describe("Antigravity config", () => {
+  it("includes EZAPPLY.md from AGENTS.md, copies the skills, adds the MCP server, and allows ezapply's tools", async () => {
+    const home = join(root, "agy-home");
+    await mkdir(home, { recursive: true });
+    await writeFile(join(home, "settings.json"), JSON.stringify({ permissions: { allow: ["command(git)"] } }));
+    await initWorkspace(config, { antigravityHome: home });
+
+    const agents = await readFile(join(config.workspace, "AGENTS.md"), "utf8");
+    expect(agents.startsWith("@[EZAPPLY.md](EZAPPLY.md)\n@[preferences](profile/preferences.md)")).toBe(true);
+    const server = JSON.parse(await readFile(join(config.workspace, ".agents", "mcp_config.json"), "utf8")).mcpServers
+      .ezapply;
+    expect(server).toMatchObject({ command: process.execPath, args: [expect.stringMatching(/main\.js$/), "mcp"] });
+    expect(await readdir(join(config.workspace, ".agents", "skills"))).toContain("ezapply-apply");
+    const settings = JSON.parse(await readFile(join(home, "settings.json"), "utf8"));
+    expect(settings.permissions.allow).toEqual(["command(git)", "mcp(ezapply/*)"]);
+
+    // An AGENTS.md of the user's own gets the include on top.
+    await writeFile(join(config.workspace, "AGENTS.md"), "My rules\n");
+    await initWorkspace(config);
+    const mine = await readFile(join(config.workspace, "AGENTS.md"), "utf8");
+    expect(mine).toBe("@[EZAPPLY.md](EZAPPLY.md)\n@[preferences](profile/preferences.md)\n\nMy rules\n");
+  });
+});
+
 describe("Claude Code config", () => {
   it("runs ezapply over stdio, with no token in the workspace", async () => {
     await initWorkspace(config);

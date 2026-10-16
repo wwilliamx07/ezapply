@@ -177,17 +177,22 @@ removed on any write. Both keys are optional, so adding them needed no `schemaVe
 ### `agent/`
 The side panel's conversations ([agent](components/agent.md)), written by the companion only.
 - `conversations.json`: `{ schemaVersion: 1, conversations: { "<posting id>/tailor | <posting id>/fill | general": { sessionId, startedAt,
-  started, totalCostUsd?, earlier[] { sessionId, startedAt, endedAt? } } } }`. `sessionId` is the Claude Code
-  session the conversation's process starts (`--session-id`) or, once `started` (Claude Code answered once),
-  resumes. `totalCostUsd` is the session's spend so far, Claude Code's estimate. Reset moves the session to
+  agent?, started, agentSessionId?, totalCostUsd?, earlier[] { sessionId, startedAt, endedAt? } } } }`. `agent`
+  (`claude` or `antigravity`; absent, from before there was a choice, is `claude`) is the agent the session is
+  with. `sessionId` is ezapply's id for the session: the Claude Code session the conversation's process starts
+  (`--session-id`) or, once `started` (the agent answered once), resumes. `agentSessionId` is Antigravity's own id
+  for it, which a later process continues (`--conversation`). `totalCostUsd` is the session's spend so far, Claude
+  Code's estimate. `agent` and `agentSessionId` were added as optional fields an older file parses without, so
+  `schemaVersion` stayed 1. Reset moves the session to
   `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
   empty. A key that's a bare posting id is an older build's one conversation per posting: the companion moves it
   to `<posting id>/tailor`, with its logs, once per run
   ([agent](components/agent.md#conversations-servicets)); the keys changed, not the shape, so `schemaVersion`
   stayed 1.
-- `settings.json`: `{ schemaVersion: 1, permissionMode, model, effort }`, the agent's settings chosen in the panel
-  ([agent](components/agent.md#permission-mode-model-and-effort)). Each field missing or not offered any more takes
-  its default on its own (`auto`, `sonnet`, `medium`).
+- `settings.json`: `{ schemaVersion: 1, agent, permissionMode, model, effort }`, the agent's settings chosen in
+  the panel ([agent](components/agent.md#permission-mode-model-and-effort)). Each field missing or not offered any
+  more takes its default on its own (`claude`, `auto`, `sonnet`, `medium`); an agent not installed, the first that
+  is.
 - `<conversation>/<sessionId>.jsonl` (a posting's under `<posting id>/tailor/` or `<posting id>/fill/`): the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
   the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
   error, settled cards, each turn's end with its cost, notices. A line cut short by a crash is skipped.

@@ -77,7 +77,8 @@ async function initConfig(opts: { workspace?: string; port?: string }): Promise<
   };
   await saveAppConfig(config);
   const { initWorkspace } = await import("./workspace-init.js");
-  return { config, report: await initWorkspace(config) };
+  const antigravityHome = join(homedir(), ".gemini", "antigravity-cli");
+  return { config, report: await initWorkspace(config, { antigravityHome }) };
 }
 
 function parsePort(raw: string): number {
@@ -122,25 +123,32 @@ async function cmdInit(args: string[]): Promise<number> {
   return 0;
 }
 
-/** ezapply for the side panel: the companion in this process, Claude Code started headless by it when needed. */
+/** ezapply for the side panel: the companion in this process, the chosen agent started headless by it when needed. */
 async function cmdPanel(): Promise<number> {
   const config = await requireConfig();
-  const [{ createLogger, findClaude }, { hostPanel }, { guardProcess, quietProcess }] = await Promise.all([
-    import("@ezapply/companion"),
-    import("./panel.js"),
-    import("./quiet.js"),
-  ]);
+  const [{ createLogger, findAntigravity, findClaude }, { hostPanel }, { guardProcess, quietProcess }] =
+    await Promise.all([import("@ezapply/companion"), import("./panel.js"), import("./quiet.js")]);
   const claude = findClaude();
-  if (!claude) {
+  const antigravity = findAntigravity();
+  if (!claude && !antigravity) {
     process.stderr.write(
-      "Claude Code isn't on PATH. Install it (https://code.claude.com/docs), or point EZAPPLY_CLAUDE at it.\n",
+      "Neither Claude Code nor the Antigravity CLI (agy) is on PATH. Install one " +
+        "(https://code.claude.com/docs, https://antigravity.google/docs/cli), or point EZAPPLY_CLAUDE or " +
+        "EZAPPLY_ANTIGRAVITY at it.\n",
     );
     return 1;
   }
   const log = createLogger();
   guardProcess(log);
   // Libraries print (pdfjs through console.log); the terminal shows only ezapply's own lines (on stdout).
-  return hostPanel({ config, claude, extensionDir: EXTENSION_DIR, log, onStarted: () => quietProcess(log) });
+  return hostPanel({
+    config,
+    ...(claude ? { claude } : {}),
+    ...(antigravity ? { antigravity } : {}),
+    extensionDir: EXTENSION_DIR,
+    log,
+    onStarted: () => quietProcess(log),
+  });
 }
 
 /** Claude Code's MCP server: relay stdio to the companion inside `ezapply`. Nothing else may use stdout. */

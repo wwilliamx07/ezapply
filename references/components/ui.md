@@ -165,9 +165,11 @@ to bottom:
    this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
    what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
    waiting), or that Claude isn't available (Claude Code wasn't found when ezapply started).
-9. **Settings line:** the permission mode (Ask first, Accept edits, Auto, Plan only, Don't ask; what each does in
-   its title), the model (Fable, Opus, Sonnet, Haiku) and the effort (Low to Max), which ezapply keeps and applies
-   to the running conversation, the effort from its next message
+9. **Settings line:** the agent (Claude Code or Antigravity, only when both are installed), the permission mode
+   (for Claude Code Ask first, Accept edits, Auto, Plan only, Don't ask; for Antigravity Plan only and Don't ask;
+   what each does in its title), Claude Code's model (Fable, Opus, Sonnet, Haiku), and the effort (Low to Max),
+   which ezapply keeps and applies to the running conversation, Claude Code's mode and model at once, the rest from
+   its next message
    ([agent](agent.md#permission-mode-model-and-effort)); and the conversation's cost so far.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's

@@ -19,11 +19,19 @@ export interface InitReport {
   kept: string[];
 }
 
+export interface InitOptions {
+  /**
+   * The Antigravity CLI's settings folder (`~/.gemini/antigravity-cli`). When it exists, ezapply's tools are allowed
+   * there; tests leave it out so they never touch the real one.
+   */
+  antigravityHome?: string;
+}
+
 /**
  * Create or refresh a workspace. Idempotent: user-owned files are never overwritten; ezapply-managed
  * files (.mcp.json server entry, permission rules, skills) are updated in place.
  */
-export async function initWorkspace(config: AppConfig): Promise<InitReport> {
+export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): Promise<InitReport> {
   const root = config.workspace;
   const report: InitReport = { created: [], updated: [], kept: [] };
 
@@ -77,9 +85,44 @@ export async function initWorkspace(config: AppConfig): Promise<InitReport> {
     report.updated.push(".claude/skills/");
   }
   await removeLegacySkills(join(root, ".claude", "skills"), report);
+  await initAntigravity(root, skillsSrc, report, opts.antigravityHome);
   await writeLauncher(root, report);
   return report;
 }
+
+/**
+ * What the Antigravity CLI reads in the workspace, beside Claude Code's: `AGENTS.md` (the user's, including
+ * `EZAPPLY.md` and the preferences, as `CLAUDE.md` imports them), the skills in `.agents/skills/`, and ezapply's
+ * server in `.agents/mcp_config.json`. Its permissions live only in the user's own settings, where headless runs deny
+ * every MCP tool not allowed: so ezapply's are allowed there, when that CLI is installed.
+ */
+async function initAntigravity(root: string, skillsSrc: string, report: InitReport, home?: string): Promise<void> {
+  await ensureImport(join(root, "AGENTS.md"), AGENTS_IMPORT, report);
+  if (await exists(skillsSrc)) {
+    await cp(skillsSrc, join(root, ".agents", "skills"), { recursive: true, force: true });
+    report.updated.push(".agents/skills/");
+  }
+  await mergeJson(join(root, ".agents", "mcp_config.json"), report, (cur) => ({
+    ...cur,
+    mcpServers: {
+      ...(cur.mcpServers as object | undefined),
+      ezapply: { command: process.execPath, args: [CLI_MAIN, "mcp"] },
+    },
+  }));
+  if (!home || !(await exists(home))) return;
+  const settings = join(home, "settings.json");
+  try {
+    await mergeJson(settings, report, (cur) => {
+      const perms = (cur.permissions as { allow?: string[] } | undefined) ?? {};
+      return { ...cur, permissions: { ...perms, allow: union(perms.allow, [ANTIGRAVITY_ALLOW]) } };
+    });
+  } catch {
+    report.kept.push(`${settings} (not plain JSON: add "${ANTIGRAVITY_ALLOW}" to permissions.allow yourself)`);
+  }
+}
+
+/** ezapply's tools, in the Antigravity CLI's rule syntax. */
+const ANTIGRAVITY_ALLOW = "mcp(ezapply/*)";
 
 /**
  * `ezapply` in the workspace, so ezapply runs from there without putting the CLI
@@ -150,28 +193,43 @@ const SCRIPT_EDIT_DENY = ["Bash(python:*)", "Bash(python3:*)", "Bash(py:*)"].fla
 ]);
 
 const IMPORT_LINE = "@EZAPPLY.md";
+/** Antigravity's inline include (its bare `@path` only names a file); `EZAPPLY.md`'s own `@` import is Claude Code's. */
+const AGENTS_IMPORT = "@[EZAPPLY.md](EZAPPLY.md)\n@[preferences](profile/preferences.md)";
 
 async function ensureClaudeMd(path: string, report: InitReport): Promise<void> {
-  const stub = await readFile(join(TEMPLATES, "workspace", "CLAUDE.md"), "utf8");
-  if (!(await exists(path))) {
-    await writeFile(path, stub, "utf8");
-    report.created.push(path);
-    return;
-  }
+  if (await ensureImport(path, IMPORT_LINE, report)) return;
   const current = await readFile(path, "utf8");
-  if (current.includes(IMPORT_LINE)) {
-    report.kept.push(path);
-    return;
-  }
   if (current.startsWith("# ezapply workspace")) {
     // Written by ezapply 0.1 before the managed/user split: keep a backup, replace with the stub.
     await writeFile(`${path}.bak`, current, "utf8");
-    await writeFile(path, stub, "utf8");
+    await writeFile(path, await readFile(join(TEMPLATES, "workspace", "CLAUDE.md"), "utf8"), "utf8");
     report.updated.push(`${path} (previous version saved as CLAUDE.md.bak)`);
     return;
   }
   await writeFile(path, `${IMPORT_LINE}\n\n${current}`, "utf8");
   report.updated.push(`${path} (added ${IMPORT_LINE} import)`);
+}
+
+/**
+ * The user's agent file (`CLAUDE.md`, `AGENTS.md`) with ezapply's import: its stub when there's none (true), kept
+ * when it has the import (true), else false for the caller to add it. `AGENTS.md` gets its import added here.
+ */
+async function ensureImport(path: string, line: string, report: InitReport): Promise<boolean> {
+  const name = path.split(/[\\/]/).pop() as string;
+  if (!(await exists(path))) {
+    await writeFile(path, await readFile(join(TEMPLATES, "workspace", name), "utf8"), "utf8");
+    report.created.push(path);
+    return true;
+  }
+  const current = await readFile(path, "utf8");
+  if (current.includes(line.split("\n")[0] as string)) {
+    report.kept.push(path);
+    return true;
+  }
+  if (name !== "AGENTS.md") return false;
+  await writeFile(path, `${line}\n\n${current}`, "utf8");
+  report.updated.push(`${path} (added the EZAPPLY.md include)`);
+  return true;
 }
 
 /** A plain cover letter template so letters work out of the box. Never touches one the user already has. */

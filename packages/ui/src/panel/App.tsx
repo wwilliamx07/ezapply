@@ -1,6 +1,7 @@
 import {
   AgentEffort,
   type AgentEvent,
+  AgentKind,
   AgentModel,
   AgentPermissionMode,
   type AgentSettings,
@@ -43,6 +44,15 @@ export const MODES: Record<AgentPermissionMode, { label: string; what: string }>
   plan: { label: "Plan only", what: "Claude reads and plans, and changes nothing" },
   dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
 };
+/** Antigravity's modes: headless, nobody can approve a call, so it runs what its rules allow, or only plans. */
+export const ANTIGRAVITY_MODES: Partial<Record<AgentPermissionMode, { label: string; what: string }>> = {
+  dontAsk: {
+    label: "Don't ask",
+    what: "Only what your Antigravity rules allow runs; anything else is denied and ends the turn",
+  },
+  plan: { label: "Plan only", what: "Antigravity reads and plans, and changes nothing" },
+};
+export const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity" };
 export const MODELS: Record<AgentModel, string> = {
   fable: "Fable",
   opus: "Opus",
@@ -506,6 +516,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           {agent?.settings ? (
             <AgentSettingsBar
               settings={agent.settings}
+              agents={agent.agents}
               disabled={!connected || agent.status === "unavailable"}
               onChange={(change) =>
                 void transport
@@ -817,51 +828,79 @@ function AgentLine({
 }
 
 /**
- * The permission mode, model and effort, kept by ezapply and applied to the running conversation: the mode and model
- * at once, the effort from its next message.
+ * The agent, permission mode, model and effort, kept by ezapply and applied to the running conversation: Claude
+ * Code's mode and model at once, the rest from its next message. The agent is offered only when more than one is
+ * installed. Antigravity has two modes (headless, it runs what its rules allow, or plans) and no model to choose.
  */
 function AgentSettingsBar({
   settings,
+  agents,
   disabled,
   onChange,
 }: {
   settings: AgentSettings;
+  agents: AgentKind[];
   disabled: boolean;
   onChange: (change: Partial<AgentSettings>) => void;
 }) {
+  const claude = settings.agent === "claude";
+  const modes = claude ? MODES : ANTIGRAVITY_MODES;
+  // Antigravity runs anything but Plan only as Don't ask.
+  const mode = claude || settings.permissionMode === "plan" ? settings.permissionMode : "dontAsk";
   return (
     <>
+      {agents.length > 1 ? (
+        <select
+          className="ez-select ez-select-sm"
+          aria-label="Agent"
+          title="The coding agent. Changing it starts a new conversation from the next message."
+          value={settings.agent}
+          disabled={disabled}
+          onChange={(e) => onChange({ agent: AgentKind.parse(e.target.value) })}
+        >
+          {agents.map((a) => (
+            <option key={a} value={a}>
+              {AGENTS[a]}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <select
         className="ez-select ez-select-sm"
         aria-label="Permission mode"
-        title={MODES[settings.permissionMode].what}
-        value={settings.permissionMode}
+        title={modes[mode]?.what}
+        value={mode}
         disabled={disabled}
         onChange={(e) => onChange({ permissionMode: AgentPermissionMode.parse(e.target.value) })}
       >
-        {AgentPermissionMode.options.map((m) => (
-          <option key={m} value={m} title={MODES[m].what}>
-            {MODES[m].label}
-          </option>
-        ))}
+        {AgentPermissionMode.options.map((m) => {
+          const label = modes[m];
+          return label ? (
+            <option key={m} value={m} title={label.what}>
+              {label.label}
+            </option>
+          ) : null;
+        })}
       </select>
-      <select
-        className="ez-select ez-select-sm"
-        aria-label="Model"
-        value={settings.model}
-        disabled={disabled}
-        onChange={(e) => onChange({ model: AgentModel.parse(e.target.value) })}
-      >
-        {AgentModel.options.map((m) => (
-          <option key={m} value={m}>
-            {MODELS[m]}
-          </option>
-        ))}
-      </select>
+      {claude ? (
+        <select
+          className="ez-select ez-select-sm"
+          aria-label="Model"
+          value={settings.model}
+          disabled={disabled}
+          onChange={(e) => onChange({ model: AgentModel.parse(e.target.value) })}
+        >
+          {AgentModel.options.map((m) => (
+            <option key={m} value={m}>
+              {MODELS[m]}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <select
         className="ez-select ez-select-sm"
         aria-label="Effort"
-        title="How hard Claude thinks: more effort is slower and costs more. Applies from the next message."
+        title="How hard the agent thinks: more effort is slower and costs more. Applies from the next message."
         value={settings.effort}
         disabled={disabled}
         onChange={(e) => onChange({ effort: AgentEffort.parse(e.target.value) })}

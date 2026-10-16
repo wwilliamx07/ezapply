@@ -12,6 +12,7 @@ ezapply/
   package.json              npm workspaces, scripts
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
+  .claude/                  Claude Code for this repo: launch.json (dev servers), skills/garden/ (see "Conventions")
   test/                     checks on the reference itself (references.test.ts)
   packages/
     protocol/               shared schemas            → components/protocol.md
@@ -123,6 +124,12 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   straight there without reading here first, and the root file stays short in every session. Keep them short; a
   rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
   is different: it's the user's workspace file, shipped by `ezapply init`.)
+- **Garden now and then.** `/garden` (`.claude/skills/garden/`) audits the whole repo against these rules and the
+  `CLAUDE.md` files. It deletes stale comments, dead code and tracked files nothing uses, trims `references/` and
+  `todo/` back to what they're meant to hold, checks every page against the code, and sweeps for sensitive data.
+  It changes no behaviour and doesn't commit: what it can't prove dead, it reports. Its `candidates.mjs` lists
+  likely hits (unused exports, unnamed files, comments naming what no longer exists, history in comments) for
+  the audit to check one by one. It is a heuristic, not a lint, so nothing runs it in CI.
 - **Thin tools, fat services.** An MCP tool validates, calls a service, returns JSON. Logic lives in
   services, which are wired explicitly in `main.ts`.
 - **Errors carry a fix.** Throw `EzError(code, message, hint)`; the hint says what Claude should do (call a

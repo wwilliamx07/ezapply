@@ -1,18 +1,32 @@
 # The agent behind the panel (`companion/src/agent/`)
 
-The companion runs Claude Code headless and relays what it does, so the user can work with it from the
-extension's side panel instead of a terminal. Claude Code is still the
-only agent: the same `claude`, login, workspace, `EZAPPLY.md`, skills, `.mcp.json` and permission rules as
-running `claude` in the workspace by hand, without the user's own Claude Code setup ([below](#the-process-processts));
-the companion only starts it, writes the user's messages to it and reads what it does.
+The companion runs the user's coding agent headless and relays what it does, so the user can work with it from the
+extension's side panel instead of a terminal. The agent is Claude Code or the Antigravity CLI (`agy`), chosen in
+the panel ([below](#permission-mode-model-and-effort)); either is still the only agent: the same CLI, login,
+workspace, `EZAPPLY.md`, skills and MCP server as running it in the workspace by hand (for Claude Code without the
+user's own setup, [below](#the-process-processts)); the companion only starts it, writes the user's messages to it
+and reads what it does.
 
-It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes Claude Code to the companion
-(`CompanionOptions.claude`; `ezapply` won't start without it). A companion without it (tests) has an
-`unavailable` agent: `AgentService.state()` says so, and so does the panel.
+It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes the agents it finds to the companion
+(`CompanionOptions.claude`, `.antigravity`; `ezapply` won't start with neither). A companion with none (tests) has
+an `unavailable` agent: `AgentService.state()` says so, and so does the panel.
+
+**The agent behind an interface.** `AgentService` drives an `AgentBackend` (`backend.ts`), not an agent's CLI
+itself: a backend starts one conversation's `AgentSession` (send, interrupt, switch the mode or model, close,
+kill) and reports what it does as the `StreamItem`s of [the stream](#the-stream-streamts). Claude Code's is
+`claudeBackend` (`process.ts`), whose sessions are `AgentProcess`es; Antigravity's is `antigravityBackend`
+([below](#antigravity-antigravityts)). Both run their CLI through `LineProcess` (`child.ts`: JSON lines in, lines
+out, the stderr tail, closing and killing the tree). The backend's `name` is what the panel's notices call the
+agent ("Claude Code stopped unexpectedly"). *Why:* so each agent reads its own protocol into the same items, while
+the conversations, cards and history stay one service's. Codex and opencode are still to add ("Compatibility with
+various agents" in `todo/`).
 
 | Path | Role |
 |---|---|
-| `agent/process.ts` | `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `sessionId` ([sessions](companion.md#sessions); `SESSION_ENV` and `SESSION_HEADER` are in `endpoints.ts`) |
+| `agent/backend.ts` | `AgentBackend` and `AgentSession`: what the service needs of a coding agent (above) |
+| `agent/child.ts` | `AgentCommand` and `findCommand` (an agent's CLI on PATH or named by a variable); `LineProcess` |
+| `agent/antigravity.ts` | `antigravityBackend`, `AntigravityProcess`, `antigravityArgs`, `ANTIGRAVITY_PROMPT`, `AntigravityReader` (its stream-json into stream items), `findAntigravity` |
+| `agent/process.ts` | `claudeBackend`; `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `sessionId` ([sessions](companion.md#sessions); `SESSION_ENV` and `SESSION_HEADER` are in `endpoints.ts`) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
 | `agent/service.ts` | `AgentService`: the conversations, one live process, history, Stop, Reset, forgetting a posting's, the permission mode and model |
@@ -95,6 +109,44 @@ tool's arguments cut to 160 characters),
 `toolDone` (with the start of its error), `card`, `turnEnd` (cost, duration, `interrupted`, error) and `notice`.
 `agent.test.ts` pins the fields on lines shaped as recorded, with the values replaced.
 
+## Antigravity (`antigravity.ts`)
+`agy` (`EZAPPLY_ANTIGRAVITY` if set, else on PATH) in the workspace, with `antigravityArgs`:
+`--input-format stream-json --output-format stream-json` without `-p` (one process for the conversation, messages
+`{ event: "user", message: { content } }` on stdin, as Claude Code's; one sent during a turn runs as the next turn),
+`--effort` (the same five levels), `--mode plan` for Plan only, and `--conversation <id>` to continue. No
+`--print-timeout`: its default waits for a turn however long (a call held 150 seconds kept the turn). Verified with
+`agy` 1.4 on Windows and a stand-in MCP server; not yet with ezapply's own tools
+([status](../status.md#not-yet-verified-for-real)). Where it differs from Claude Code:
+- **It names its conversations.** Its id arrives on its lines (`conversation_id`); the reader reports it as an
+  `agentSession` item and the service keeps it as the conversation's `agentSessionId`, which a later process
+  continues. ezapply's own session id still goes to the relay as `EZAPPLY_SESSION`.
+- **No system prompt flag.** The first message of a new conversation carries `ANTIGRAVITY_PROMPT` and the part's
+  line in an `<ezapply-panel>` block before the user's words (`firstMessage`); the panel's history shows only the
+  user's words.
+- **Nobody approves.** Headless `agy` has no prompt and no permission tool: a call the user's Antigravity rules
+  don't allow (a command, or an MCP tool without a rule) is denied, and the turn ends there with an empty answer;
+  the process lives on for the next message. So `ezapply init` allows ezapply's tools in those rules
+  ([workspace](workspace.md#antigravity)), its prompt says to work through ezapply's tools and file edits, and a
+  turn that ends on a denial gets a notice naming the kind of call and where to allow it. Its modes don't help:
+  `accept-edits` still denies commands, and `auto` isn't offered to every account. So the panel offers Don't ask
+  (anything but Plan only runs this way) and Plan only. Not `--dangerously-skip-permissions`: postings are
+  untrusted, and that would run any command one injects.
+- **No control requests** (one ends its session), so the backend says `switches: false`. Stop kills the process,
+  the turn ends as interrupted, and the next message continues the conversation in a new process (verified:
+  killed mid-call, the next process remembered the turn before). A mode change ends the process like an effort
+  change. No model: the panel's are Claude's, so Antigravity's own default runs.
+- **Its stream** (`AntigravityReader`), each line `{ event, <event>: { … } }`: `init` (the model and its built-in
+  tools; MCP tools aren't listed, so nothing says whether ezapply's server connected and the check below is
+  skipped), `step_update` (`step_index`, counting on across turns; `state` `ACTIVE`, `DONE` or `ERROR`;
+  `step_type`: `user_input` is the message taken, `agent_response`'s `text_delta`s joined into one text when it's
+  done, `tool` with `tool_info { name, parameters, error }` a call and its end) and `result` (`status`, `error`,
+  `denied_actions`). An MCP call is `call_mcp_tool { ServerName, ToolName, Arguments }`: ezapply's are named as
+  Claude Code names them, so `toolSummary` folds them the same way; others are summarized by the command, file,
+  query or address their parameters name. Before its first call to a tool, the agent reads the tool's schema with
+  `view_file` (a step more than Claude Code). `result`'s `duration_seconds` counts the whole conversation, across
+  processes, so the reader times each turn from its `user_input`. No cost: the panel shows none.
+  `antigravity.test.ts` pins these against `agy-stream-stub.mjs`, whose lines are shaped as recorded.
+
 ## Conversations (`service.ts`)
 Two per posting, keyed `<posting id>/tailor` (its documents) and `<posting id>/fill` (its application), and one
 `general`. **Why two per posting:** tailoring and filling are separate work, whichever the user starts first, and
@@ -106,7 +158,7 @@ though it may show the ones there for review and attach them; each tells the use
 for the rest. An older build kept one conversation per posting under the bare id; the first time the service
 reads its file in a run, such a conversation becomes the posting's tailoring one, its logs moved to
 `<posting id>/tailor/`, so its history stays in the panel. One process runs at a time: sending to another conversation closes an
-idle process, and is refused while it works ("Claude is still working in another conversation"), since two agents
+idle process, and is refused while it works ("Claude Code is still working in another conversation"), since two agents
 filling forms or editing one posting's files would collide. Sending:
 - starts the conversation's process when none runs, with `--resume` once Claude Code has had its session (it
   answered once: `started`), else `--session-id`;
@@ -120,7 +172,7 @@ the old one goes to `earlier` (kept for `claude --resume`; the newest 50). What'
 `notes.md`, approvals, the form log); the conversation doesn't. **A session that can't be resumed** (Claude Code
 exits before answering, its transcript gone) is replaced by a new one once, with the waiting messages sent again
 and a notice. Claude Code stopping mid-turn is a notice with the first line it wrote to stderr. The first `init`
-of a process is checked for the `ezapply` MCP server: anything but `connected` is an error notice ("Run `ezapply
+of a Claude Code process is checked for the `ezapply` MCP server (Antigravity's doesn't list MCP servers): anything but `connected` is an error notice ("Run `ezapply
 init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
 
 **Forget** (`forgetPosting(id)`, when the panel deletes a posting) ends the process of either of the posting's
@@ -128,9 +180,15 @@ conversations, withdraws their open cards, removes them from `conversations.json
 of logs (`agent/<id>/`). Nothing is kept for `claude --resume`, since the posting they were about is gone.
 
 ## Permission mode, model and effort
-Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { permissionMode, model, effort }`,
-kept in the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply. The defaults
-(`DEFAULT_AGENT_SETTINGS`) are Auto, Sonnet and medium effort.
+Chosen in the panel, under the chat bar, for every conversation: `AgentSettings { agent, permissionMode, model,
+effort }`, kept in the workspace's `agent/settings.json`, so they hold across Reset and a restart of ezapply. The
+defaults (`DEFAULT_AGENT_SETTINGS`) are Claude Code, Auto, Sonnet and medium effort.
+
+**The agent** (`claude` or `antigravity`) is offered only when both are installed (`PanelState.agent.agents`); a
+kept agent no longer installed reads as the first that is, and choosing one that isn't is refused. A session is with
+one agent: each conversation records its `agent`, and a message to one whose session was with the other starts a
+new session (the old one to `earlier`) with a notice. A change ends the running process like effort (below).
+Antigravity's conversations show its two modes (Don't ask, Plan only) and the effort, and no model.
 
 | Mode | The panel says | Does |
 |---|---|---|
@@ -156,7 +214,8 @@ with `subtype: "error"`) is a notice in that conversation ("Claude Code didn't s
 kept and applies when the conversation next starts. **Effort from the next message:** Claude Code has no
 `set_effort`, and its `apply_flag_settings { effortLevel }` is accepted but wasn't seen to change how much a turn
 thinks, so the process ends (at once when idle, after its turn while it works) and the next message resumes the
-session with the new `--effort`. Processes start with the settings as flags.
+session with the new `--effort` (or, for a new agent, starts its new one). Processes start with the settings as
+flags.
 
 **On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json`, `settings.json`
 and each session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest

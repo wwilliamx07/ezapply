@@ -9,6 +9,7 @@ import { NeedsYou } from "../src/agent/needs.js";
 import {
   agentArgs,
   type ClaudeCommand,
+  claudeBackend,
   PANEL_PROMPT,
   PANEL_TOOLS,
   PART_PROMPTS,
@@ -210,7 +211,12 @@ describe("reading Claude Code's stream-json", () => {
     expect(tools(fresh)).not.toContain("AskUserQuestion");
     expect(fresh).not.toContain("--bare");
     expect(agentArgs("abc", true).slice(-2)).toEqual(["--resume", "abc"]);
-    const chosen = agentArgs("abc", false, { permissionMode: "default", model: "opus", effort: "max" }).join(" ");
+    const chosen = agentArgs("abc", false, {
+      agent: "claude",
+      permissionMode: "default",
+      model: "opus",
+      effort: "max",
+    }).join(" ");
     expect(chosen).toContain("--permission-mode default --model opus --effort max --permission-prompt-tool");
   });
 
@@ -276,7 +282,13 @@ describe("the agent service", () => {
   });
 
   function make(extraEnv: Record<string, string> = {}, withClaude = true) {
-    agent = new AgentService({ workspace, needs, log, ...(withClaude ? { claude } : {}), env: env(extraEnv) });
+    agent = new AgentService({
+      workspace,
+      needs,
+      log,
+      ...(withClaude ? { backends: { claude: claudeBackend(claude) } } : {}),
+      env: env(extraEnv),
+    });
     agent.onEvent((k, e) => events.push([k, e]));
     return agent;
   }
@@ -400,10 +412,16 @@ describe("the agent service", () => {
 
   it("keeps the permission mode and model, starts with them, and switches a running conversation at once", async () => {
     make();
-    expect(await agent.settings()).toEqual({ permissionMode: "auto", model: "sonnet", effort: "medium" });
+    expect(await agent.settings()).toEqual({
+      agent: "claude",
+      permissionMode: "auto",
+      model: "sonnet",
+      effort: "medium",
+    });
     await agent.send("p1/tailor", "one");
     await after("p1/tailor", 1);
     expect(await agent.setSettings({ permissionMode: "plan" })).toEqual({
+      agent: "claude",
       permissionMode: "plan",
       model: "sonnet",
       effort: "medium",
@@ -419,6 +437,7 @@ describe("the agent service", () => {
     await expect(agent.setSettings({ permissionMode: "bypassPermissions" as "plan" })).rejects.toThrow();
     expect(JSON.parse(await readFile(join(dir, "agent", "settings.json"), "utf8"))).toEqual({
       schemaVersion: 1,
+      agent: "claude",
       permissionMode: "plan",
       model: "haiku",
       effort: "medium",
@@ -428,7 +447,12 @@ describe("the agent service", () => {
     await agent.close();
     events = [];
     make();
-    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "haiku", effort: "medium" });
+    expect(await agent.settings()).toEqual({
+      agent: "claude",
+      permissionMode: "plan",
+      model: "haiku",
+      effort: "medium",
+    });
     await agent.send("p1/tailor", "two");
     await after("p1/tailor", 1);
     expect((await starts()).at(-1)?.join(" ")).toContain("--permission-mode plan --model haiku --effort medium");
@@ -469,7 +493,12 @@ describe("the agent service", () => {
       JSON.stringify({ schemaVersion: 1, permissionMode: "plan", model: "default" }),
     );
     make();
-    expect(await agent.settings()).toEqual({ permissionMode: "plan", model: "sonnet", effort: "medium" });
+    expect(await agent.settings()).toEqual({
+      agent: "claude",
+      permissionMode: "plan",
+      model: "sonnet",
+      effort: "medium",
+    });
   });
 
   it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {
@@ -520,7 +549,7 @@ describe("the agent service", () => {
   it("is unavailable without Claude Code, and refuses empty messages and odd conversation names", async () => {
     make({}, false);
     expect(agent.state().status).toBe("unavailable");
-    await expect(agent.send("p1/tailor", "hi")).rejects.toThrow(/isn't available/);
+    await expect(agent.send("p1/tailor", "hi")).rejects.toThrow(/No coding agent is available/);
     make();
     await expect(agent.send("p1/tailor", "  ")).rejects.toThrow(/empty/);
     await expect(agent.send("../x", "hi")).rejects.toThrow(/Not a conversation/);
