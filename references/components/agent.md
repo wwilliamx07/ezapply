@@ -114,7 +114,10 @@ tool's arguments cut to 160 characters),
 `--input-format stream-json --output-format stream-json` without `-p` (one process for the conversation, messages
 `{ event: "user", message: { content } }` on stdin, as Claude Code's; one sent during a turn runs as the next turn),
 `--effort` (the same five levels), `--mode plan` for Plan only, and `--conversation <id>` to continue. No
-`--print-timeout`: its default waits for a turn however long (a call held 150 seconds kept the turn). Verified with
+`--print-timeout`: its default waits for a turn however long (a call held 150 seconds kept the turn). Its environment
+has `AGY_CLI_DISABLE_AUTO_UPDATE=true`: otherwise each start (at most once every 15 minutes) launches `agy`'s
+auto-updater in a console of its own, which Windows shows as a window flashing by; only `true` turns it off, not
+`1`, so the user updates `agy` themselves. Verified with
 `agy` 1.4 on Windows and a stand-in MCP server; not yet with ezapply's own tools
 ([status](../status.md#not-yet-verified-for-real)). Where it differs from Claude Code:
 - **It names its conversations.** Its id arrives on its lines (`conversation_id`); the reader reports it as an
@@ -214,8 +217,9 @@ with `subtype: "error"`) is a notice in that conversation ("Claude Code didn't s
 kept and applies when the conversation next starts. **Effort from the next message:** Claude Code has no
 `set_effort`, and its `apply_flag_settings { effortLevel }` is accepted but wasn't seen to change how much a turn
 thinks, so the process ends (at once when idle, after its turn while it works) and the next message resumes the
-session with the new `--effort` (or, for a new agent, starts its new one). Processes start with the settings as
-flags.
+session with the new `--effort` (or, for a new agent, starts its new one). The change answers without waiting
+for that exit (Claude Code can take seconds to end): the next process starts once it has, so two never hold one
+session. Processes start with the settings as flags.
 
 **On disk**, in the workspace's `agent/` ([format](../data-formats.md#agent)): `conversations.json`, `settings.json`
 and each session's events, `<conversation>/<session>.jsonl`. `history(key)` reads the current session's, a message's latest

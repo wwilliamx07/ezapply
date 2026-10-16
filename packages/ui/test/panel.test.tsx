@@ -289,6 +289,36 @@ describe("the side panel", () => {
     await waitFor(() => expect(t.calls).toContainEqual(["panel.settings", { agent: "claude" }]));
   });
 
+  it("shows a settings change at once, before ezapply answers", async () => {
+    const t = fakeTransport({
+      state: state({ agent: { ...state().agent, agents: ["claude", "antigravity"] } }),
+    });
+    const call = t.transport.call as unknown as ReturnType<typeof vi.fn>;
+    const inner = call.getMockImplementation() as (m: string, p: unknown) => Promise<unknown>;
+    let answer = () => {};
+    call.mockImplementation((m: string, p: unknown) =>
+      m === "panel.settings" ? new Promise((r) => (answer = () => r(inner(m, p)))) : inner(m, p),
+    );
+    render(<PanelApp transport={t.transport} />);
+    const agent = (await screen.findByRole("combobox", { name: "Agent" })) as HTMLSelectElement;
+    fireEvent.change(agent, { target: { value: "antigravity" } });
+    expect(agent.value).toBe("antigravity");
+    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
+    // ezapply kept the change: the state read after it says so.
+    t.setState(
+      state({
+        agent: {
+          ...state().agent,
+          agents: ["claude", "antigravity"],
+          settings: { ...state().agent.settings, agent: "antigravity" },
+        },
+      }),
+    );
+    answer();
+    await waitFor(() => expect(t.calls.filter(([m]) => m === "panel.state").length).toBeGreaterThan(1));
+    expect(agent.value).toBe("antigravity");
+  });
+
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {
     const off = fakeTransport({ conn: { state: "disconnected", reason: "refused" } });
     const { unmount } = render(<PanelApp transport={off.transport} />);

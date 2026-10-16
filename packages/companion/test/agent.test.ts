@@ -5,6 +5,7 @@ import type { AgentEvent } from "@ezapply/protocol";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AgentBackend } from "../src/agent/backend.js";
 import { NeedsYou } from "../src/agent/needs.js";
 import {
   agentArgs,
@@ -484,6 +485,54 @@ describe("the agent service", () => {
     expect(await starts()).toHaveLength(3);
     expect((await starts()).at(-1)?.join(" ")).toContain(`--effort low`);
     expect(await switches()).toEqual([]);
+  });
+
+  it("answers a settings change without waiting for the process to exit, and starts the next one after it has", async () => {
+    // A backend whose processes exit only when the test says so, until it's done.
+    let hold = true;
+    let exit = () => {};
+    let started = 0;
+    const slow: AgentBackend = {
+      name: "Slow",
+      switches: false,
+      start: (opts) => {
+        started++;
+        let alive = true;
+        return {
+          get alive() {
+            return alive;
+          },
+          send: () => {
+            opts.onItem({ type: "taken", text: "" });
+            opts.onItem({ type: "turnEnd", event: { kind: "turnEnd", at: AT, ok: true }, queued: 0 });
+          },
+          interrupt: () => {},
+          setPermissionMode: () => "",
+          setModel: () => "",
+          close: () =>
+            new Promise<void>((resolve) => {
+              exit = () => {
+                alive = false;
+                resolve();
+              };
+              if (!hold) exit();
+            }),
+          kill: () => exit(),
+        };
+      },
+    };
+    agent = new AgentService({ workspace, needs, log, backends: { claude: slow }, env: env() });
+    await agent.send("general", "one");
+    expect(started).toBe(1);
+    await agent.setSettings({ effort: "high" });
+    expect(agent.state()).toEqual({ status: "idle", queued: 0 });
+    const sent = agent.send("general", "two");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(started).toBe(1);
+    hold = false;
+    exit();
+    await sent;
+    expect(started).toBe(2);
   });
 
   it("reads each setting on its own, so one an older build kept falls back alone", async () => {

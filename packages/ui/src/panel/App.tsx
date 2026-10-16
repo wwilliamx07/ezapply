@@ -97,6 +97,11 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   selectedRef.current = selected;
 
   const fail = useCallback((err: unknown) => setError((err as Error).message ?? String(err)), []);
+  /**
+   * Settings changed here and not yet read back from ezapply: the bar shows them at once, since a change that ends
+   * the agent's process can take a moment to answer.
+   */
+  const [pendingSettings, setPendingSettings] = useState<Partial<AgentSettings>>({});
   const refreshState = useCallback(async () => {
     setState(await transport.call("panel.state", {}));
   }, [transport]);
@@ -515,15 +520,22 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         <div className="ez-panel-settings">
           {agent?.settings ? (
             <AgentSettingsBar
-              settings={agent.settings}
+              settings={{ ...agent.settings, ...pendingSettings }}
               agents={agent.agents}
               disabled={!connected || agent.status === "unavailable"}
-              onChange={(change) =>
+              onChange={(change) => {
+                setPendingSettings((p) => ({ ...p, ...change }));
                 void transport
                   .call("panel.settings", change)
                   .then(() => refreshState())
                   .catch(fail)
-              }
+                  // Drop what this change set, unless a later change has set it since.
+                  .finally(() =>
+                    setPendingSettings((p) =>
+                      Object.fromEntries(Object.entries(p).filter(([k, v]) => change[k as keyof AgentSettings] !== v)),
+                    ),
+                  );
+              }}
             />
           ) : null}
           {conv?.totalCostUsd !== undefined ? (

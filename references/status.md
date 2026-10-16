@@ -103,7 +103,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through
   the panel. Check: a posting tailored and a form filled from the panel, an `ask_user` card held the full 15
   minutes, how many turns the skills lose to denied commands and to reading each tool's schema, and whether the
-  skills' Claude Code wording (the Edit tool, subagents) trips it.
+  skills' Claude Code wording (the Edit tool, subagents) trips it. Also that no console window flashes when it
+  starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
+  once with the next message starting the new one.
 
 - **The form-filling fixes,** from live Workday records: Back on the review page (refused as Submit
   before), a returning step's dropdowns read once their values' requests are back (read as empty and refilled

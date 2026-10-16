@@ -190,7 +190,9 @@ describe("the agent service with Antigravity", () => {
   const starts = async () => (await logged()).filter((l): l is string[] => Array.isArray(l));
   const messages = async () =>
     (await logged())
-      .filter((l): l is { message: { message: { content: string } } } => !Array.isArray(l))
+      .filter(
+        (l): l is { message: { message: { content: string } } } => !Array.isArray(l) && "message" in (l as object),
+      )
       .map((l) => l.message.message.content);
   const conversations = async () =>
     JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8")) as {
@@ -226,6 +228,11 @@ describe("the agent service with Antigravity", () => {
     await after("p1/fill", 3);
     expect((await starts()).at(-1)?.slice(-2)).toEqual(["--conversation", record?.agentSessionId]);
     expect((await messages()).at(-1)).toBe("later");
+    // Its auto-updater would open a console window on Windows.
+    expect((await logged()).filter((l) => !Array.isArray(l) && "autoUpdateOff" in (l as object))).toEqual([
+      { autoUpdateOff: true },
+      { autoUpdateOff: true },
+    ]);
   });
 
   it("stops a turn by ending the process, without a notice, and the next message continues the conversation", async () => {

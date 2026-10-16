@@ -1,6 +1,7 @@
 // Stands in for `agy --input-format stream-json --output-format stream-json` in the agent tests. Its output follows
 // agy 1.4's stream as recorded live (antigravity.ts reads it). Each start appends its arguments and every message it
-// gets to $STUB_LOG. Messages: anything → an ezapply call, then "echo: <text>"; "deny" → a command its rules deny,
+// gets to $STUB_LOG, and whether it was started with its auto-updater off. Messages: anything → an ezapply call,
+// then "echo: <text>"; "deny" → a command its rules deny,
 // which ends the turn; "slow" → a call that never ends (Stop kills the process). It names its conversation `agy-<n>`,
 // or continues --conversation's.
 import { appendFileSync } from "node:fs";
@@ -9,6 +10,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 const log = (o) => process.env.STUB_LOG && appendFileSync(process.env.STUB_LOG, `${JSON.stringify(o)}\n`);
 log(args);
+log({ autoUpdateOff: process.env.AGY_CLI_DISABLE_AUTO_UPDATE === "true" });
 const i = args.indexOf("--conversation");
 const conversation = i >= 0 ? args[i + 1] : `agy-${process.pid}`;
 const out = (event, o) => process.stdout.write(`${JSON.stringify({ event, [event]: o })}\n`);

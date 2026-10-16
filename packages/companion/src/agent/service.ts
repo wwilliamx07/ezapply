@@ -104,6 +104,8 @@ export class AgentService {
   private readonly logWrites = new Map<string, Promise<unknown>>();
   private current: AgentSettings | null = null;
   private upgraded: Promise<void> | null = null;
+  /** The last process asked to end, until it has: the next one starts after it, so two never share a session. */
+  private closing: Promise<void> = Promise.resolve();
 
   constructor(private readonly opts: AgentServiceOptions) {
     opts.needs.onSettled((record, outcome) => {
@@ -304,9 +306,9 @@ export class AgentService {
   /**
    * Change the settings: kept for every conversation from now on. The mode and model are switched in the running
    * process at once (Claude Code takes them mid-session, between tool calls); a refusal comes back as a notice.
-   * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, else after its turn) and
-   * the next message resumes the session with the new `--effort`; so does any change for an agent that takes no
-   * switches (`AgentBackend.switches`), and a change of agent.
+   * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, without waiting for its
+   * exit, else after its turn) and the next message resumes the session with the new `--effort`; so does any change
+   * for an agent that takes no switches (`AgentBackend.switches`), and a change of agent.
    */
   async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
     const before = await this.settings();
@@ -326,7 +328,8 @@ export class AgentService {
       const restart = !switches && (modeChanged || modelChanged);
       if (restart || next.effort !== before.effort || next.agent !== before.agent) {
         if (l.busy) l.restartAfterTurn = true;
-        else await this.closeLive();
+        // Not awaited: the panel shows the change at once, and the next message waits for the exit instead.
+        else void this.closeLive();
       }
     }
     this.opts.log.info({ ...next }, "agent: settings changed");
@@ -337,6 +340,7 @@ export class AgentService {
   /** End the running process (the companion is closing). */
   async close(): Promise<void> {
     await this.closeLive(3000);
+    await this.closing;
   }
 
   // ---- internals ----
@@ -368,6 +372,7 @@ export class AgentService {
   }
 
   private async start(key: string, fresh = false): Promise<Live> {
+    await this.closing;
     const settings = await this.settings();
     const backend = this.opts.backends?.[settings.agent];
     if (!backend) throw unavailable();
@@ -529,7 +534,8 @@ export class AgentService {
     const l = this.live;
     if (!l) return;
     this.live = null;
-    await l.process.close(graceMs);
+    this.closing = l.process.close(graceMs);
+    await this.closing;
     this.stateChanged();
   }
 

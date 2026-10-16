@@ -170,7 +170,8 @@ to bottom:
    what each does in its title), Claude Code's model (Fable, Opus, Sonnet, Haiku), and the effort (Low to Max),
    which ezapply keeps and applies to the running conversation, Claude Code's mode and model at once, the rest from
    its next message
-   ([agent](agent.md#permission-mode-model-and-effort)); and the conversation's cost so far.
+   ([agent](agent.md#permission-mode-model-and-effort)); a change shows at once, before ezapply answers; and the
+   conversation's cost so far.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

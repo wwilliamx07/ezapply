@@ -86,7 +86,9 @@ export class AntigravityProcess implements AgentSession {
       command: opts.command,
       args: antigravityArgs(opts.settings.effort, opts.settings.permissionMode, conversation),
       cwd: opts.cwd,
-      env: { ...(opts.env ?? process.env), [SESSION_ENV]: opts.sessionId },
+      // Its auto-updater starts in a console of its own, which Windows shows as a window flashing by; the user
+      // updates agy themselves. Only "true" turns it off ("1" doesn't).
+      env: { ...(opts.env ?? process.env), [SESSION_ENV]: opts.sessionId, AGY_CLI_DISABLE_AUTO_UPDATE: "true" },
       onLine: (line) => {
         for (const item of this.reader.read(line)) opts.onItem(item);
       },
