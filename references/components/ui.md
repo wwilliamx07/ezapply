@@ -126,12 +126,13 @@ to bottom:
    LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
    shown, documents or application; the files stay); and **Delete posting** (red when hovered; asks first; disabled
    while Claude works; refused while the posting has a review open), which deletes the posting's folder and both its conversations for good, after which the panel follows the active
-   posting again (none). For the general conversation, a line saying there's no posting. The panel
+   posting again (none). For the general conversation, a line saying there's no posting, and **Reset
+   Conversation** alone (asks first: a new general session). The panel
    shows only approved or not because approving is the one thing the user does with a document. The finer states
    (`DocumentState`) and the posting's status (`PostingStatus`: drafting, attached, …) are still kept and used by
    the tools and skills; they just aren't shown. No posting-level "documents approved" tag either: each
    document's own tag already says it.
-4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude" until taken); Claude's text
+4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude Code", or for whichever agent is chosen, until taken); Claude's text
    as Markdown built as elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics;
    links stay text); each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary),
    unfolding to its error or its summary, red when it failed, "…" while it runs; settled cards; each turn's end with
@@ -171,7 +172,9 @@ to bottom:
    which ezapply keeps and applies to the running conversation, Claude Code's mode and model at once, the rest from
    its next message
    ([agent](agent.md#permission-mode-model-and-effort)); a change shows at once, before ezapply answers; and the
-   conversation's cost so far.
+   conversation's cost so far (the amount, its title saying what it is). It stays one row at any panel width: each
+   select is as wide as its chosen option (`field-sizing: content`), and in Chrome's narrowest panel the agent
+   and the effort are cut short, never the mode or the model.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

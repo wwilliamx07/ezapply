@@ -234,6 +234,21 @@ describe("the side panel", () => {
     expect(t.transport.openSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("resets the general conversation after asking, and offers no posting's actions there", async () => {
+    const t = fakeTransport({
+      state: state({ activePostingId: null }),
+      conv: { key: "general", documents: [], events: [] },
+    });
+    render(<PanelApp transport={t.transport} />);
+    expect(await screen.findByText(/No posting. Capture one/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Delete posting/ })).toBeNull();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: "general" }]));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/new general conversation/));
+    confirm.mockRestore();
+  });
+
   it("shows the permission mode, model and effort, and changes them through ezapply", async () => {
     const t = fakeTransport({});
     render(<PanelApp transport={t.transport} />);
@@ -354,7 +369,7 @@ describe("the side panel", () => {
         },
       },
     });
-    expect(await screen.findByText("waiting for Claude")).toBeTruthy();
+    expect(await screen.findByText("waiting for Claude Code")).toBeTruthy();
     t.push({
       type: "update",
       update: {
@@ -368,7 +383,7 @@ describe("the side panel", () => {
       type: "update",
       update: { event: { conversation: TAILOR, event: { kind: "text", at: AT, text: "Cut **two** bullets." } } },
     });
-    expect(screen.queryByText("waiting for Claude")).toBeNull();
+    expect(screen.queryByText("waiting for Claude Code")).toBeNull();
     expect(screen.getByText("two").tagName).toBe("STRONG");
     // Another conversation's events don't show here.
     t.push({
@@ -565,6 +580,11 @@ describe("the conversation", () => {
     expect(screen.getByText("Done · $0.25")).toBeTruthy();
     expect(screen.getByText("Done · $0.15")).toBeTruthy();
     expect(screen.getByText(/stopped unexpectedly/)).toBeTruthy();
+  });
+
+  it("names the agent a message is waiting for", () => {
+    render(<Conversation events={[{ kind: "user", at: AT, id: "a", text: "hi", taken: false }]} agent="Antigravity" />);
+    expect(screen.getByText("waiting for Antigravity")).toBeTruthy();
   });
 
   it("renders the agent's Markdown as elements, never its text as HTML", () => {

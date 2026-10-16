@@ -189,10 +189,12 @@ The side panel's conversations ([agent](components/agent.md)), written by the co
   to `<posting id>/tailor`, with its logs, once per run
   ([agent](components/agent.md#conversations-servicets)); the keys changed, not the shape, so `schemaVersion`
   stayed 1.
-- `settings.json`: `{ schemaVersion: 1, agent, permissionMode, model, effort }`, the agent's settings chosen in
-  the panel ([agent](components/agent.md#permission-mode-model-and-effort)). Each field missing or not offered any
-  more takes its default on its own (`claude`, `auto`, `sonnet`, `medium`); an agent not installed, the first that
-  is.
+- `settings.json`: `{ schemaVersion: 1, agent, permissionMode, model, effort, efforts }`, the agent's settings
+  chosen in the panel ([agent](components/agent.md#permission-mode-model-and-effort)). `efforts` is each agent's
+  own effort (`{ claude?, antigravity? }`), and `effort` is the chosen agent's, written for an older build to read.
+  Each field missing or not offered any more takes its default on its own (`claude`, `auto`, `sonnet`, `medium`);
+  an agent not installed, the first that is. A file without `efforts` (an older build's) reads its `effort` as its
+  agent's; the field was added alongside, nothing else changed, so `schemaVersion` stayed 1.
 - `<conversation>/<sessionId>.jsonl` (a posting's under `<posting id>/tailor/` or `<posting id>/fill/`): the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
   the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
   error, settled cards, each turn's end with its cost, notices. A line cut short by a crash is skipped.

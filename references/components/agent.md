@@ -158,8 +158,9 @@ and the documents' drafting behind each step). What one needs of the other is on
 approvals, `notes.md`, the form log. Each part's line in the system prompt (`PART_PROMPTS`) keeps it to its work:
 the tailoring conversation doesn't touch application forms, and the filling one doesn't write or edit documents,
 though it may show the ones there for review and attach them; each tells the user to press the other's button
-for the rest. An older build kept one conversation per posting under the bare id; the first time the service
-reads its file in a run, such a conversation becomes the posting's tailoring one, its logs moved to
+for the rest. The first time the service reads its file in a run, `general` gets its record if it has none (a new,
+unstarted session), so it's always there for the panel to show and reset, even in a workspace that never used it.
+An older build kept one conversation per posting under the bare id; on that same first read, such a conversation becomes the posting's tailoring one, its logs moved to
 `<posting id>/tailor/`, so its history stays in the panel. One process runs at a time: sending to another conversation closes an
 idle process, and is refused while it works ("Claude Code is still working in another conversation"), since two agents
 filling forms or editing one posting's files would collide. Sending:
@@ -191,7 +192,9 @@ defaults (`DEFAULT_AGENT_SETTINGS`) are Claude Code, Auto, Sonnet and medium eff
 kept agent no longer installed reads as the first that is, and choosing one that isn't is refused. A session is with
 one agent: each conversation records its `agent`, and a message to one whose session was with the other starts a
 new session (the old one to `earlier`) with a notice. A change ends the running process like effort (below).
-Antigravity's conversations show its two modes (Don't ask, Plan only) and the effort, and no model.
+Antigravity's conversations show its two modes (Don't ask, Plan only) and the effort, and no model. **The effort
+is kept per agent:** choosing an agent brings back the effort last chosen with it (medium for one never chosen),
+since the two think differently at the same level and Antigravity's most is `high`; the mode and model are shared.
 
 | Mode | The panel says | Does |
 |---|---|---|

@@ -103,6 +103,8 @@ export class AgentService {
   private fileWrites: Promise<unknown> = Promise.resolve();
   private readonly logWrites = new Map<string, Promise<unknown>>();
   private current: AgentSettings | null = null;
+  /** Each agent's own effort (read with `current`), so switching back to an agent brings back its effort. */
+  private efforts: Partial<Record<AgentKind, AgentEffort>> = {};
   private upgraded: Promise<void> | null = null;
   /** The last process asked to end, until it has: the next one starts after it, so two never share a session. */
   private closing: Promise<void> = Promise.resolve();
@@ -284,7 +286,8 @@ export class AgentService {
 
   /**
    * The permission mode, model and effort conversations run with (`agent/settings.json`). Each is read on its own:
-   * one missing or no longer offered (an older build's `model: "default"`) falls back to its default alone.
+   * one missing or no longer offered (an older build's `model: "default"`) falls back to its default alone. The
+   * effort is the chosen agent's own (`efforts`); an older build's file has only `effort`, which is its agent's.
    */
   async settings(): Promise<AgentSettings> {
     if (this.current) return this.current;
@@ -292,13 +295,20 @@ export class AgentService {
     const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     const d = DEFAULT_AGENT_SETTINGS;
     const agents = this.agents();
-    const agent = AgentKind.catch(d.agent).parse(o.agent);
+    const kept = AgentKind.catch(d.agent).parse(o.agent);
+    const efforts = o.efforts && typeof o.efforts === "object" ? (o.efforts as Record<string, unknown>) : {};
+    this.efforts = {};
+    for (const k of AgentKind.options) {
+      const e = AgentEffort.safeParse(efforts[k] ?? (k === kept ? o.effort : undefined));
+      if (e.success) this.efforts[k] = e.data;
+    }
+    // An agent no longer installed: the first one that is.
+    const agent = agents.includes(kept) ? kept : (agents[0] ?? kept);
     this.current = {
-      // An agent no longer installed: the first one that is.
-      agent: agents.includes(agent) ? agent : (agents[0] ?? agent),
+      agent,
       permissionMode: AgentPermissionMode.catch(d.permissionMode).parse(o.permissionMode),
       model: AgentModel.catch(d.model).parse(o.model),
-      effort: AgentEffort.catch(d.effort).parse(o.effort),
+      effort: this.efforts[agent] ?? d.effort,
     };
     return this.current;
   }
@@ -308,14 +318,20 @@ export class AgentService {
    * process at once (Claude Code takes them mid-session, between tool calls); a refusal comes back as a notice.
    * Effort has no switch Claude Code was seen to honour, so the process ends (now if idle, without waiting for its
    * exit, else after its turn) and the next message resumes the session with the new `--effort`; so does any change
-   * for an agent that takes no switches (`AgentBackend.switches`), and a change of agent.
+   * for an agent that takes no switches (`AgentBackend.switches`), and a change of agent. The effort is kept per
+   * agent: a change of agent without an effort brings back that agent's own.
    */
   async setSettings(change: Partial<AgentSettings>): Promise<AgentSettings> {
     const before = await this.settings();
-    const next = AgentSettings.parse({ ...before, ...change });
+    const agent = change.agent ?? before.agent;
+    const effort =
+      change.effort ?? (agent === before.agent ? before.effort : this.efforts[agent]) ?? DEFAULT_AGENT_SETTINGS.effort;
+    const next = AgentSettings.parse({ ...before, ...change, effort });
     if (!this.agents().includes(next.agent))
       throw new EzError(ErrorCode.BadRequest, `${next.agent} isn't installed.`, "Install it and start ezapply again.");
-    await writeJsonAtomic(this.settingsPath(), { schemaVersion: 1, ...next });
+    const efforts = { ...this.efforts, [next.agent]: next.effort };
+    await writeJsonAtomic(this.settingsPath(), { schemaVersion: 1, ...next, efforts });
+    this.efforts = efforts;
     this.current = next;
     const l = this.live;
     if (l?.process.alive) {
@@ -346,11 +362,18 @@ export class AgentService {
   // ---- internals ----
 
   /**
-   * Once per run: an older build kept one conversation per posting, under the bare posting id. It becomes the
-   * posting's tailoring conversation, its logs moved to `<posting>/tailor/`, so its history stays in the panel.
+   * Once per run: the general conversation gets its record if it has none, so it's always there to show and reset.
+   * And an older build kept one conversation per posting, under the bare posting id. It becomes the posting's
+   * tailoring conversation, its logs moved to `<posting>/tailor/`, so its history stays in the panel.
    */
   private upgrade(): Promise<void> {
     this.upgraded ??= (async () => {
+      if (!(await this.readFile()).conversations[GENERAL_CONVERSATION]) {
+        const { agent } = await this.settings();
+        await this.updateFile((f) =>
+          f.conversations[GENERAL_CONVERSATION] ? f : renewed(f, GENERAL_CONVERSATION, agent),
+        );
+      }
       const bare = Object.keys((await this.readFile()).conversations).filter(
         (k) => k !== GENERAL_CONVERSATION && !k.includes("/") && postingConversation(`${k}/tailor`),
       );

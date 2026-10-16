@@ -387,7 +387,7 @@ describe("the agent service", () => {
 
     await agent.forgetPosting("p1");
     const after2 = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
-    expect(after2.conversations).toEqual({});
+    expect(Object.keys(after2.conversations)).toEqual(["general"]);
     await expect(
       readFile(join(dir, "agent", "p1", "fill", `${file.conversations["p1/fill"].sessionId}.jsonl`)),
     ).rejects.toThrow();
@@ -408,7 +408,19 @@ describe("the agent service", () => {
     make();
     expect(await agent.history("p1/tailor")).toEqual([said]);
     const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
-    expect(Object.keys(file.conversations)).toEqual(["p1/tailor"]);
+    expect(Object.keys(file.conversations).sort()).toEqual(["general", "p1/tailor"]);
+  });
+
+  it("always has the general conversation, which resets before its first message too", async () => {
+    make();
+    expect(await agent.history("general")).toEqual([]);
+    const before = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
+    expect(before.conversations.general).toMatchObject({ started: false, earlier: [] });
+    await agent.reset("general");
+    const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
+    expect(file.conversations.general.sessionId).not.toBe(before.conversations.general.sessionId);
+    // Never started, so there's nothing to keep as earlier.
+    expect(file.conversations.general.earlier).toEqual([]);
   });
 
   it("keeps the permission mode and model, starts with them, and switches a running conversation at once", async () => {
@@ -442,6 +454,7 @@ describe("the agent service", () => {
       permissionMode: "plan",
       model: "haiku",
       effort: "medium",
+      efforts: { claude: "medium" },
     });
 
     // ezapply started again: the settings are read back, and the next process starts with them.
@@ -548,6 +561,33 @@ describe("the agent service", () => {
       model: "sonnet",
       effort: "medium",
     });
+  });
+
+  it("keeps the effort per agent, and brings it back with its agent, also after a restart", async () => {
+    await mkdir(join(dir, "agent"), { recursive: true });
+    // An older build's file: its one effort is the kept agent's.
+    await writeFile(
+      join(dir, "agent", "settings.json"),
+      JSON.stringify({ schemaVersion: 1, agent: "claude", effort: "high" }),
+    );
+    const idle = { name: "Idle", start: () => ({}) } as unknown as AgentBackend;
+    const both = () =>
+      new AgentService({ workspace, needs, log, backends: { claude: idle, antigravity: idle }, env: env() });
+    agent = both();
+    expect(await agent.settings()).toMatchObject({ agent: "claude", effort: "high" });
+    // A new agent starts at the default, and keeps its own from then on.
+    expect(await agent.setSettings({ agent: "antigravity" })).toMatchObject({ effort: "medium" });
+    await agent.setSettings({ effort: "low" });
+    expect(await agent.setSettings({ agent: "claude" })).toMatchObject({ effort: "high" });
+    // Both at once: the effort given is the new agent's.
+    expect(await agent.setSettings({ agent: "antigravity", effort: "max" })).toMatchObject({ effort: "max" });
+    expect(JSON.parse(await readFile(join(dir, "agent", "settings.json"), "utf8")).efforts).toEqual({
+      claude: "high",
+      antigravity: "max",
+    });
+    agent = both();
+    expect(await agent.settings()).toMatchObject({ agent: "antigravity", effort: "max" });
+    expect(await agent.setSettings({ agent: "claude" })).toMatchObject({ effort: "high" });
   });
 
   it("says so when Claude Code refuses a switch, and keeps the setting for the next start", async () => {

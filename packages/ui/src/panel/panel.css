@@ -520,23 +520,34 @@ body {
   min-width: 0;
   resize: vertical;
 }
+/* One row at any panel width: each select is as wide as its chosen option, not its longest, and in Chrome's narrowest
+   panel the agent and the effort give way (cut short), never the mode or the model. */
 .ez-panel-settings {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 .ez-select-sm {
+  flex: none;
   width: auto;
+  field-sizing: content;
   min-height: 26px;
-  padding: 2px 6px;
+  padding: 2px 2px 2px 6px;
   font-size: 12px;
+}
+.ez-select-sm.ez-select-gives {
+  flex: 0 1 auto;
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 .ez-panel-danger:hover:not(:disabled) {
   background: var(--danger-soft);
   color: var(--danger);
 }
 .ez-panel-cost {
+  flex: none;
+  white-space: nowrap;
   margin: 0 0 0 auto;
   font-size: 12px;
   color: var(--text-3);

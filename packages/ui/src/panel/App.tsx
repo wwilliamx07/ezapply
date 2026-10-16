@@ -201,10 +201,12 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     setPart(null);
     if (key !== GENERAL_CONVERSATION) void transport.call("panel.activate", { postingId: key }).catch(fail);
   };
+  const general = selected === GENERAL_CONVERSATION;
+  const resetWhat = general
+    ? "a new general conversation"
+    : `a new ${PARTS[shownPart].label.toLowerCase()} conversation for this posting`;
   const reset = async () => {
-    const which = PARTS[shownPart].label.toLowerCase();
-    if (!window.confirm(`Start a new ${which} conversation for this posting? Claude forgets this one; the files stay.`))
-      return;
+    if (!window.confirm(`Start ${resetWhat}? Claude forgets this one; the files stay.`)) return;
     await transport.call("panel.reset", { key: selected }).catch(fail);
     await refreshConv().catch(fail);
   };
@@ -376,7 +378,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             ) : posting ? (
               <p className="ez-muted ez-panel-nodocs">No documents yet.</p>
             ) : null}
-            {posting ? (
+            {posting || general ? (
               <div className="ez-panel-pop-actions">
                 <Button
                   variant="ghost"
@@ -384,22 +386,26 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                   disabled={!connected}
                   className="ez-panel-danger"
                   onClick={reset}
-                  title={`A new ${PARTS[shownPart].label.toLowerCase()} conversation for this posting`}
+                  title={resetWhat.charAt(0).toUpperCase() + resetWhat.slice(1)}
                 >
                   Reset Conversation
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!connected || working}
-                  className="ez-panel-danger"
-                  onClick={() => void deletePosting()}
-                  title={
-                    working ? "Claude is working: wait, or Stop it" : "Delete this posting and everything in its folder"
-                  }
-                >
-                  Delete posting
-                </Button>
+                {posting ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!connected || working}
+                    className="ez-panel-danger"
+                    onClick={() => void deletePosting()}
+                    title={
+                      working
+                        ? "Claude is working: wait, or Stop it"
+                        : "Delete this posting and everything in its folder"
+                    }
+                  >
+                    Delete posting
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -464,7 +470,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
-        <Conversation events={conv?.events ?? []} />
+        <Conversation events={conv?.events ?? []} agent={AGENTS[agent?.settings.agent ?? "claude"]} />
         {cards.length > 0 ? (
           <section className="ez-panel-needs" aria-label="Needs you" ref={needsRef}>
             <p className="ez-label">Needs you · {cards.length}</p>
@@ -539,7 +545,9 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             />
           ) : null}
           {conv?.totalCostUsd !== undefined ? (
-            <p className="ez-panel-cost">This conversation: ${conv.totalCostUsd.toFixed(2)}</p>
+            <p className="ez-panel-cost" title="What this conversation has cost so far">
+              ${conv.totalCostUsd.toFixed(2)}
+            </p>
           ) : null}
         </div>
       </footer>
@@ -720,7 +728,7 @@ function CardView({
 }
 
 /** The conversation: messages, Claude's text, tool calls folded to a line, settled cards, each turn's end. */
-export function Conversation({ events }: { events: AgentEvent[] }) {
+export function Conversation({ events, agent = AGENTS.claude }: { events: AgentEvent[]; agent?: string }) {
   const end = useRef<HTMLDivElement>(null);
   const done = useMemo(() => {
     const m = new Map<string, Extract<AgentEvent, { kind: "toolDone" }>>();
@@ -746,7 +754,7 @@ export function Conversation({ events }: { events: AgentEvent[] }) {
     <section className="ez-convo" aria-label="Conversation" aria-live="polite">
       {events.map((e, n) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: the conversation only grows at its end and never reorders
-        <EventView key={n} event={e} done={done} cost={costs.get(n)} />
+        <EventView key={n} event={e} done={done} cost={costs.get(n)} agent={agent} />
       ))}
       <div ref={end} />
     </section>
@@ -757,17 +765,20 @@ function EventView({
   event: e,
   done,
   cost,
+  agent,
 }: {
   event: AgentEvent;
   done: Map<string, Extract<AgentEvent, { kind: "toolDone" }>>;
   cost?: number;
+  /** The agent's name, for a message it hasn't taken yet. */
+  agent: string;
 }) {
   switch (e.kind) {
     case "user":
       return (
         <div className="ez-msg-user">
           {e.text}
-          {e.taken === false ? <span className="ez-msg-queued">waiting for Claude</span> : null}
+          {e.taken === false ? <span className="ez-msg-queued">waiting for {agent}</span> : null}
         </div>
       );
     case "text":
@@ -863,7 +874,7 @@ function AgentSettingsBar({
     <>
       {agents.length > 1 ? (
         <select
-          className="ez-select ez-select-sm"
+          className="ez-select ez-select-sm ez-select-gives"
           aria-label="Agent"
           title="The coding agent. Changing it starts a new conversation from the next message."
           value={settings.agent}
@@ -910,7 +921,7 @@ function AgentSettingsBar({
         </select>
       ) : null}
       <select
-        className="ez-select ez-select-sm"
+        className="ez-select ez-select-sm ez-select-gives"
         aria-label="Effort"
         title="How hard the agent thinks: more effort is slower and costs more. Applies from the next message."
         value={settings.effort}
