@@ -205,7 +205,9 @@ afterwards leaves the document to decide again rather than approved. The answer 
 no comment and no request is the approved one.
 
 **The one button** decides the document and moves on: **Approve Document**, or **Request Changes** once it has a
-comment or a request. Either goes to the next document still to decide (after this one, then from the top). On the
+comment or a request. Either goes to the next document still to decide (after this one, then from the top) and
+scrolls the page back to its top, since below 900 px the button sits under the viewer and the next document would
+otherwise open with only its panel in view. On the
 last one left it reads **Send to Claude** and sends the answer, with a line under it saying what that does to this
 document (approves it as shown, or asks for its changes). An approved document shows **Undo approval** in its
 place, the same size and shape but in the accent's soft tint instead of its fill, so it reads as the way back

@@ -141,6 +141,8 @@ export function ReviewApp() {
     if (next === undefined) return void send();
     setSelected(next);
     setActive(null);
+    // Below 900 px the page scrolls and the button sits under the viewer: back up to the next document's start.
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const send = async () => {
