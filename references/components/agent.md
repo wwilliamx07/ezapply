@@ -87,7 +87,9 @@ the user pressed Stop to stop, and whatever the call did to the form stays on th
 page for them to see. Not SIGTERM, which leaves the turn unfinished with no
 result. **Closing** ends stdin (the process exits once idle) and kills it after a grace period (10 s; 3 s when
 the companion stops): the tree with `taskkill /T /F` on Windows, elsewhere SIGTERM then SIGKILL to `claude`
-itself. Reset and Forget kill at once. A message written while a tool call runs is taken when the call ends, in
+itself. Reset and Forget kill at once. When the companion stops, the service also waits for the events still
+being appended to the conversation logs and for its last `conversations.json` write (events are emitted without
+waiting for their write), so none is cut short. A message written while a tool call runs is taken when the call ends, in
 the same turn.
 
 Verified against Claude Code 2.1 with a throwaway MCP server: a message sent

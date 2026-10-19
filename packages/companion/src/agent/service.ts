@@ -101,6 +101,8 @@ export class AgentService {
   private readonly stateListeners = new Set<() => void>();
   private fileWrites: Promise<unknown> = Promise.resolve();
   private readonly logWrites = new Map<string, Promise<unknown>>();
+  /** Log appends not finished yet (`emit` doesn't wait for them): `close` does. */
+  private readonly appending = new Set<Promise<void>>();
   /** The extension's agent settings, the defaults until it gives them (on connecting). */
   private prefs: AgentPrefs = DEFAULT_AGENT_PREFS;
   /** Each agent's models, listed once (`AgentBackend.models`), when it has a list. */
@@ -343,10 +345,12 @@ export class AgentService {
     return next;
   }
 
-  /** End the running process (the companion is closing). */
+  /** End the running process (the companion is closing), and finish writing the logs and records. */
   async close(): Promise<void> {
     await this.closeLive(3000);
     await this.closing;
+    while (this.appending.size > 0) await Promise.all(this.appending);
+    await this.fileWrites;
   }
 
   // ---- internals ----
@@ -553,7 +557,9 @@ export class AgentService {
   }
 
   private emit(key: string, event: AgentEvent): void {
-    void this.appendLog(key, event);
+    const append = this.appendLog(key, event);
+    this.appending.add(append);
+    void append.finally(() => this.appending.delete(append));
     for (const fn of [...this.listeners]) fn(key, event);
   }
 
