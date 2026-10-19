@@ -24,7 +24,15 @@ import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
-import { type CallRecord, DebugRecorder, debugRequest, type MarkupSetting, stripBulk, type Trace } from "./debug.js";
+import {
+  type CallRecord,
+  DebugRecorder,
+  type DebugSettings,
+  debugRequest,
+  type MarkupSetting,
+  stripBulk,
+  type Trace,
+} from "./debug.js";
 import {
   type Binding,
   matchPosting,
@@ -168,6 +176,8 @@ const READS_PAGE = new Set(["get_form", "search_options", "screenshot"]);
 export class FormsService {
   /** One queue per tab id: the page can only do one thing at a time. */
   private readonly pages = new KeyedQueue();
+  /** Calls choosing their tab, one after another, so they join the tabs' queues in the order they came. */
+  private choosing: Promise<unknown> = Promise.resolve();
   private readonly debug: DebugRecorder;
   private warnedNoTabShow = false;
   /**
@@ -472,8 +482,24 @@ export class FormsService {
     fn: (t: Target) => Promise<T>,
   ): Promise<T> {
     const entered = Date.now();
-    const settings = await this.debug.settings();
-    const base = await this.target(tabId);
+    // Choosing the tab reads files and asks the extension, which can finish out of order: done one call at a time,
+    // a call can't overtake an earlier one on its tab. The result is wrapped so the queued run isn't awaited here.
+    const chosen = this.choosing.then(async () => {
+      const settings = await this.debug.settings();
+      const base = await this.target(tabId);
+      return { run: this.queue(call, fn, entered, settings, base) };
+    });
+    this.choosing = chosen.catch(() => undefined);
+    return (await chosen).run;
+  }
+
+  private queue<T>(
+    call: { tool: string; params: Record<string, unknown> },
+    fn: (t: Target) => Promise<T>,
+    entered: number,
+    settings: DebugSettings,
+    base: TargetBase,
+  ): Promise<T> {
     return this.pages.run(String(base.tab.tabId), async () => {
       const record = settings.on ? this.debug.start(call.tool, call.params, Date.now() - entered) : null;
       const { timing, fillTimeoutMs, issues } = await loadTiming(this.ws, base.tab.site);

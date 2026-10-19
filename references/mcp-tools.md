@@ -114,7 +114,9 @@ context was compacted may have lost them: the notes are short, and the generic s
   interfere (two dropdown reads each open a listbox and both can read whichever is on screen; a fill can land
   while `go_next` changes the step). After the tab is chosen, each form call waits for earlier ones on the
   same tab and runs in order (`onTab`, a `KeyedQueue` per tab id); calls on other tabs aren't held up, and a
-  failed call doesn't stop the next.
+  failed call doesn't stop the next. Choosing the tab (reading the debug setting, asking the extension for its
+  tabs, reading the active posting) is done one call at a time, in the order the calls came: those reads can
+  finish out of order, and a call that overtook an earlier one would act on the page first.
 
 - **Embedded applications:** an application in a frame of another site's page (a careers page showing its
   Greenhouse form, `TabInfo.frames`) counts as an application tab of its own, with the frame's URL and site

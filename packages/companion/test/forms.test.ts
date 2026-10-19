@@ -28,13 +28,20 @@ const tab = (tabId: number): TabInfo => ({
   site: "workday",
 });
 
-/** A bridge whose page calls take a while and record how many run on each tab at once. */
+/**
+ * A bridge whose page calls take a while and record how many run on each tab at once. Its status answers come
+ * back in reverse order (the first asked is answered last), so a call can only keep its place by not racing.
+ */
 function slowBridge() {
   const running = new Map<number, number>();
   const most = new Map<number, number>();
   const order: string[] = [];
+  let statuses = 0;
   const call = async (method: string, params: { tabId?: number; fieldId?: string }) => {
-    if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7), tab(8)] };
+    if (method === "browser.status") {
+      await new Promise((r) => setTimeout(r, Math.max(0, 20 - 5 * statuses++)));
+      return { extensionVersion: "1", tabs: [tab(7), tab(8)] };
+    }
     const id = params.tabId as number;
     running.set(id, (running.get(id) ?? 0) + 1);
     most.set(id, Math.max(most.get(id) ?? 0, running.get(id) ?? 0));
