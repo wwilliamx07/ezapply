@@ -132,19 +132,24 @@ describe("reading the Antigravity CLI's stream-json", () => {
       }),
     });
     expect(items.at(-1)).toMatchObject({ type: "turnEnd", event: { ok: true } });
+
+    const write = r.read(
+      line("result", { status: "SUCCESS", response: "", denied_actions: [{ action: "write_file" }] }),
+    );
+    expect(write).toContainEqual({
+      type: "event",
+      event: expect.objectContaining({ kind: "notice", text: expect.stringMatching(/Run ezapply init/) }),
+    });
   });
 
-  it("runs agy with stream-json both ways, the panel's effort and model, Plan only, and the conversation to continue", () => {
-    expect(antigravityArgs({ effort: "medium", permissionMode: "dontAsk" })).toEqual([
+  it("runs agy with stream-json both ways, the panel's model, Plan only, and the conversation to continue", () => {
+    expect(antigravityArgs({ permissionMode: "dontAsk" })).toEqual([
       "--input-format",
       "stream-json",
       "--output-format",
       "stream-json",
-      "--effort",
-      "medium",
     ]);
-    expect(antigravityArgs({ effort: "max", permissionMode: "plan", model: "m1" }, "c1").slice(5)).toEqual([
-      "max",
+    expect(antigravityArgs({ permissionMode: "plan", model: "m1" }, "c1").slice(4)).toEqual([
       "--model",
       "m1",
       "--mode",

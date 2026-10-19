@@ -216,14 +216,16 @@ What the Antigravity CLI reads, written by `init` beside Claude Code's (`initAnt
   places (the Edit tool, subagents); "Refactor the skills" in `todo/` writes them for any agent.
 - `.agents/mcp_config.json`: the `ezapply` server, as in `.mcp.json`.
 - **Its permissions live only in the user's own settings** (`~/.gemini/antigravity-cli/settings.json`), and headless
-  `agy` denies every MCP tool they don't allow. So when that folder exists, `init` adds `mcp(ezapply/*)` to its
-  `permissions.allow`, keeping the rest; a file that isn't plain JSON is left alone with a line saying what to add.
-  The rule matches nothing outside this workspace, the only place the server is configured. None of the Claude Code
-  denies (`repo-cache/`, `debug/`, python) carry over: Antigravity allows reads and writes inside the workspace, so
-  for it `repo-cache/` is read-only by `EZAPPLY.md`'s rule alone, and commands are denied unless the user's rules
+  `agy` denies every MCP tool and file write they don't allow (verified with `agy` 1.4: in this workspace even a new
+  file was denied without a rule, though a fresh folder elsewhere wasn't). So when that folder exists, `init` adds
+  `mcp(ezapply/*)` and `write_file(<workspace>)` to its `permissions.allow` (a folder's rule covers everything in
+  it), and `write_file(<workspace>/repo-cache)` to `permissions.deny` (a deny wins over the allow), keeping the rest;
+  a file that isn't plain JSON is left alone with a line saying what to add. The MCP rule matches nothing outside
+  this workspace, the only place the server is configured. Reads inside the workspace need no rule. The other
+  Claude Code denies (`debug/` reads, python) don't carry over, and commands are denied unless the user's rules
   allow them.
 
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |
 |---|---|
-| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` and `.agents/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json` and `.agents/mcp_config.json`, ezapply's entries in `.claude/settings.json`, `mcp(ezapply/*)` in Antigravity's settings | `CLAUDE.md` and `AGENTS.md` (beyond the include lines), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |
+| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` and `.agents/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json` and `.agents/mcp_config.json`, ezapply's entries in `.claude/settings.json`, `mcp(ezapply/*)` and the workspace's `write_file` rules in Antigravity's settings | `CLAUDE.md` and `AGENTS.md` (beyond the include lines), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |

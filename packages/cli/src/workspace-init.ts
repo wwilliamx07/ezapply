@@ -100,7 +100,8 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
  * What the Antigravity CLI reads in the workspace, beside Claude Code's: `AGENTS.md` (the user's, including
  * `EZAPPLY.md` and the preferences, as `CLAUDE.md` imports them), the skills in `.agents/skills/`, and ezapply's
  * server in `.agents/mcp_config.json`. Its permissions live only in the user's own settings, where headless runs deny
- * every MCP tool not allowed: so ezapply's are allowed there, when that CLI is installed.
+ * every MCP tool and file write not allowed: so, when that CLI is installed, ezapply's tools and writes inside the
+ * workspace are allowed there, and writes into `repo-cache/` denied.
  */
 async function initAntigravity(root: string, skillsSrc: string, report: InitReport, home?: string): Promise<void> {
   await ensureImport(join(root, "AGENTS.md"), AGENTS_IMPORT, report);
@@ -119,16 +120,36 @@ async function initAntigravity(root: string, skillsSrc: string, report: InitRepo
   const settings = join(home, "settings.json");
   try {
     await mergeJson(settings, report, (cur) => {
-      const perms = (cur.permissions as { allow?: string[] } | undefined) ?? {};
-      return { ...cur, permissions: { ...perms, allow: union(perms.allow, [ANTIGRAVITY_ALLOW]) } };
+      const perms = (cur.permissions as { allow?: string[]; deny?: string[] } | undefined) ?? {};
+      return {
+        ...cur,
+        permissions: {
+          ...perms,
+          allow: union(perms.allow, antigravityAllow(root)),
+          deny: union(perms.deny, antigravityDeny(root)),
+        },
+      };
     });
   } catch {
-    report.kept.push(`${settings} (not plain JSON: add "${ANTIGRAVITY_ALLOW}" to permissions.allow yourself)`);
+    report.kept.push(
+      `${settings} (not plain JSON: add ${antigravityAllow(root).join(", ")} to permissions.allow and ` +
+        `${antigravityDeny(root).join(", ")} to permissions.deny yourself)`,
+    );
   }
 }
 
-/** ezapply's tools, in the Antigravity CLI's rule syntax. */
-const ANTIGRAVITY_ALLOW = "mcp(ezapply/*)";
+/**
+ * In the Antigravity CLI's rule syntax: ezapply's tools, and file writes under the workspace (a folder's rule covers
+ * everything in it). Without the write rule headless `agy` denied the agent's first edit in the workspace.
+ */
+function antigravityAllow(root: string): string[] {
+  return ["mcp(ezapply/*)", `write_file(${resolve(root)})`];
+}
+
+/** Repo clones are strictly read-only; a deny wins over the workspace's allow. */
+function antigravityDeny(root: string): string[] {
+  return [`write_file(${join(resolve(root), "repo-cache")})`];
+}
 
 /**
  * `ezapply` in the workspace, so ezapply runs from there without putting the CLI

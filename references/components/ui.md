@@ -162,21 +162,24 @@ to bottom:
    disabled and the box is read-only (it keeps its focus); a ref holds it within the same frame, so a double click
    or a second Enter sends one message, not two. *Why not just "while Claude works":* the state says so only once
    the companion's answer arrives, and a second press in that gap would queue a second message.
-8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while Claude works in
-   this conversation and the box is empty (typing still sends: the message waits for Claude); a line above it with
-   what the agent is doing ("Starting Claude…", "Claude is working…", working on another posting, messages
-   waiting), or that Claude isn't available (Claude Code wasn't found when ezapply started).
+8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while the agent works
+   in this conversation and the box is empty (typing still sends: the message waits for the agent); a line above
+   it with what the agent is doing, named as the one in use ("Starting Antigravity…", "Claude Code is working…",
+   working on another posting, messages waiting), or that no agent is available (neither CLI was found when ezapply
+   started). The panel's other lines that name the agent (busy titles, Reset's and a document delete's
+   confirmations, a queued message's "waiting for …") name the one in use too.
 9. **Settings line:** the agent (Claude Code or Antigravity, only when both are installed), the permission mode
    (for Claude Code Ask first, Accept edits, Auto, Plan only, Don't ask; for Antigravity Plan only and Don't ask;
    what each does in its title), the model (Claude Code's Fable, Opus, Sonnet, Haiku; Antigravity's "Default
-   model" and the ones ezapply listed), and the effort (Low to Max), each agent's own. The extension keeps them
+   model" and the ones ezapply listed), and for Claude Code the effort (Low to Max; Antigravity's models name
+   their level), each agent's own. The extension keeps them
    (`transport.prefs`, `savePrefs`, a `prefs` push when another panel changes them), so they show as the panel
    opens, before ezapply answers, and a change shows at once; ezapply applies them to the running conversation
    ([agent](agent.md#permission-mode-model-and-effort)). What they come to is `effectiveSettings`, with the agents
    installed from the state (until it's read, the chosen one). Then the conversation's cost so far (the amount,
    its title saying what it is). It stays one row at any panel width: each select is as wide as its chosen option
-   (`field-sizing: content`), and in Chrome's narrowest panel the agent, Antigravity's model and the effort are
-   cut short, never the mode or Claude Code's model.
+   (`field-sizing: content`), and in Chrome's narrowest panel the agent, Antigravity's model and Claude Code's
+   effort are cut short, never the mode or Claude Code's model.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.

@@ -189,11 +189,23 @@ describe("the side panel", () => {
     render(<PanelApp transport={t.transport} />);
     const application = await screen.findByRole("tab", { name: /Application/ });
     expect(application.getAttribute("aria-selected")).toBe("true");
-    expect(within(application).getByLabelText("Claude is working here")).toBeTruthy();
+    expect(within(application).getByLabelText("Claude Code is working here")).toBeTruthy();
     await waitFor(() => expect(t.calls).toContainEqual(["panel.conversation", { key: FILL }]));
     fireEvent.click(screen.getByRole("tab", { name: "Documents" }));
     await waitFor(() => expect(t.calls).toContainEqual(["panel.conversation", { key: TAILOR }]));
-    expect(screen.getByText(/Claude is working on Acme: Software Developer · Application/)).toBeTruthy();
+    expect(screen.getByText(/Claude Code is working on Acme: Software Developer · Application/)).toBeTruthy();
+  });
+
+  it("names the agent in use as the one working", async () => {
+    const t = fakeTransport({
+      state: state({
+        agent: { status: "working", conversation: TAILOR, queued: 0, agents: ["antigravity"], models: {} },
+      }),
+      prefs: { agent: "antigravity", choices: {} },
+    });
+    render(<PanelApp transport={t.transport} />);
+    expect(await screen.findByText("Antigravity is working…")).toBeTruthy();
+    expect(screen.queryByText(/Claude/)).toBeNull();
   });
 
   it("shows each document as approved or waiting for review", async () => {
@@ -321,7 +333,8 @@ describe("the side panel", () => {
     expect([...model.options].map((o) => o.textContent)).toEqual(["Default model", "Model B"]);
     expect(model.value).toBe("");
     fireEvent.change(model, { target: { value: "model-b" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Effort" }), { target: { value: "low" } });
+    // Its models name their level, so it has no effort.
+    expect(screen.queryByRole("combobox", { name: "Effort" })).toBeNull();
     // Back to Claude Code: its own model and effort return.
     fireEvent.change(agent, { target: { value: "claude" } });
     expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("opus");
@@ -330,7 +343,7 @@ describe("the side panel", () => {
       agent: "claude",
       choices: {
         claude: { permissionMode: "auto", model: "opus", effort: "medium" },
-        antigravity: { permissionMode: "dontAsk", model: "model-b", effort: "low" },
+        antigravity: { permissionMode: "dontAsk", model: "model-b", effort: "medium" },
       },
     });
     // A change from another window's panel shows here too.

@@ -64,7 +64,8 @@ export function antigravityModels(
  * The arguments of a conversation's `agy` process. Why each:
  * - stream-json both ways, without `-p`: messages arrive on stdin as JSON lines, one process for the conversation
  *   (a message sent during a turn runs as the next turn).
- * - `--effort`: the panel's; `agy` takes the same five levels.
+ * - No `--effort`: `agy models` lists each model at its level ("Gemini 3.8 Flash (High)"), so the model chosen is
+ *   the effort, and the panel offers none.
  * - `--mode plan` for Plan only. No other mode: headless `agy` has no one to ask, so what the user's Antigravity
  *   rules don't allow is denied whatever the mode (`ezapply init` allows ezapply's tools there), and its `auto` isn't
  *   offered to every account. Not `--dangerously-skip-permissions`: postings are untrusted.
@@ -73,7 +74,7 @@ export function antigravityModels(
  * - No `--print-timeout`: its default waits for the turn however long a card takes.
  */
 export function antigravityArgs(
-  settings: Pick<AgentSettings, "effort" | "permissionMode" | "model">,
+  settings: Pick<AgentSettings, "permissionMode" | "model">,
   conversation?: string,
 ): string[] {
   return [
@@ -81,8 +82,6 @@ export function antigravityArgs(
     "stream-json",
     "--output-format",
     "stream-json",
-    "--effort",
-    settings.effort,
     ...(settings.model ? ["--model", settings.model] : []),
     ...(settings.permissionMode === "plan" ? ["--mode", "plan"] : []),
     ...(conversation ? ["--conversation", conversation] : []),
@@ -253,8 +252,13 @@ export class AntigravityReader {
           level: "warn",
           text:
             `Antigravity stopped: its settings don't allow this ${denied.join(" or ")} call, and nobody can approve ` +
-            "one here. To allow it, add a rule such as command(git) to permissions.allow in " +
-            "~/.gemini/antigravity-cli/settings.json.",
+            "one here. " +
+            // `ezapply init` allows writes in the workspace; one denied anyway is outside it, or init predates that.
+            (denied.includes("write_file")
+              ? "Run ezapply init to allow its edits in the workspace; a file outside it needs a rule such as " +
+                "write_file(C:\\path\\to\\folder) in permissions.allow in ~/.gemini/antigravity-cli/settings.json."
+              : "To allow it, add a rule such as command(git) to permissions.allow in " +
+                "~/.gemini/antigravity-cli/settings.json."),
         }),
       );
     }

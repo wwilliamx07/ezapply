@@ -38,7 +38,9 @@ describe("Antigravity config", () => {
     expect(server).toMatchObject({ command: process.execPath, args: [expect.stringMatching(/main\.js$/), "mcp"] });
     expect(await readdir(join(config.workspace, ".agents", "skills"))).toContain("ezapply-apply");
     const settings = JSON.parse(await readFile(join(home, "settings.json"), "utf8"));
-    expect(settings.permissions.allow).toEqual(["command(git)", "mcp(ezapply/*)"]);
+    // Headless agy denied every write in the workspace without a rule for it; repo clones stay read-only.
+    expect(settings.permissions.allow).toEqual(["command(git)", "mcp(ezapply/*)", `write_file(${config.workspace})`]);
+    expect(settings.permissions.deny).toEqual([`write_file(${join(config.workspace, "repo-cache")})`]);
 
     // An AGENTS.md of the user's own gets the include on top.
     await writeFile(join(config.workspace, "AGENTS.md"), "My rules\n");

@@ -113,7 +113,9 @@ tool's arguments cut to 160 characters),
 `agy` (`EZAPPLY_ANTIGRAVITY` if set, else on PATH) in the workspace, with `antigravityArgs`:
 `--input-format stream-json --output-format stream-json` without `-p` (one process for the conversation, messages
 `{ event: "user", message: { content } }` on stdin, as Claude Code's; one sent during a turn runs as the next turn),
-`--effort` (the same five levels), `--model` when one is chosen, `--mode plan` for Plan only, and `--conversation <id>` to continue. No
+`--model` when one is chosen, `--mode plan` for Plan only, and `--conversation <id>` to continue. No `--effort`, though
+`agy` takes the same five levels: `agy models` lists each model at its level ("… Flash (High)", "… (Low)"), so the
+model chosen is the effort ([below](#permission-mode-model-and-effort)). No
 `--print-timeout`: its default waits for a turn however long (a call held 150 seconds kept the turn). Its environment
 has `AGY_CLI_DISABLE_AUTO_UPDATE=true`: otherwise each start (at most once every 15 minutes) launches `agy`'s
 auto-updater in a console of its own, which Windows shows as a window flashing by; only `true` turns it off, not
@@ -201,7 +203,8 @@ Don't ask, its own default model and medium effort) for one never chosen.
 chosen agent not installed runs as the first that is, its choice kept for when it is. A session is with one agent:
 each conversation records its `agent`, and a message to one whose session was with the other starts a new session
 (the old one to `earlier`) with a notice. A change ends the running process like effort (below). Antigravity's
-conversations show its two modes (Don't ask, Plan only), its models and the effort.
+conversations show its two modes (Don't ask, Plan only) and its models, and no effort: its models name their level.
+Its stored choice keeps an effort all the same (`AgentChoice` is one shape for every agent), which nothing reads.
 
 | Mode | The panel says | Does |
 |---|---|---|
@@ -215,8 +218,8 @@ Claude Code's models: the aliases `fable`, `opus`, `sonnet` (default), `haiku`, 
 (`sonnet` is Sonnet 5.5 with Claude Code 2.1). Antigravity's depend on the account, so the companion lists them with
 `agy models` the first time the panel's state is read (it fetches them, so they come a moment later, as a state
 change) and offers them as `PanelState.agent.models.antigravity`, beside "Default model" (no `--model`); a chosen
-one shows by its id until the list is in. Effort: `low`, `medium` (default), `high`, `xhigh`, `max` (both CLIs'
-`--effort`). Stored settings are read field by field (`readAgentPrefs`), so one an older build kept that's no
+one shows by its id until the list is in. Effort, Claude Code's only: `low`, `medium` (default), `high`, `xhigh`,
+`max` (`--effort`). Stored settings are read field by field (`readAgentPrefs`), so one an older build kept that's no
 longer offered falls back to its default alone, and a choice an agent can't take (a Claude model that isn't an
 alias, an Antigravity mode it doesn't offer) runs as its default.
 *Not offered:* `bypassPermissions`. Postings are untrusted text, and the approval cards are what stands between

@@ -158,6 +158,8 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   // Before ezapply says which agents are installed, the chosen one is taken to be.
   const installed = agent?.agents ?? (prefs ? [prefs.agent] : []);
   const settings = prefs ? effectiveSettings(prefs, installed) : null;
+  /** The agent in use, as the panel's lines name it ("Antigravity is working…"). */
+  const agentName = AGENTS[settings?.agent ?? "claude"];
   const changeSettings = (change: Partial<AgentSettings>) => {
     if (!prefs) return;
     const next = changeAgentPrefs(prefs, installed, change);
@@ -218,7 +220,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     ? "a new general conversation"
     : `a new ${PARTS[shownPart].label.toLowerCase()} conversation for this posting`;
   const reset = async () => {
-    if (!window.confirm(`Start ${resetWhat}? Claude forgets this one; the files stay.`)) return;
+    if (!window.confirm(`Start ${resetWhat}? ${agentName} forgets this one; the files stay.`)) return;
     await transport.call("panel.reset", { key: selected }).catch(fail);
     await refreshConv().catch(fail);
   };
@@ -241,7 +243,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     }
   };
   const deleteDocument = async (file: string) => {
-    if (!window.confirm(`Delete ${file} for good? Its LaTeX source stays, so Claude can build it again.`)) return;
+    if (!window.confirm(`Delete ${file} for good? Its LaTeX source stays, so ${agentName} can build it again.`)) return;
     await transport.call("panel.deleteDocument", { postingId, file }).catch(fail);
     await refreshConv().catch(fail);
   };
@@ -268,9 +270,9 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   const busyWhy = sending
     ? "Sending…"
     : workingHere
-      ? "Claude is working: wait, or Stop it"
+      ? `${agentName} is working: wait, or Stop it`
       : workingElsewhere
-        ? "Claude is working in another conversation"
+        ? `${agentName} is working in another conversation`
         : undefined;
   const cards = state?.cards ?? [];
   const docCount = conv?.documents.length ?? 0;
@@ -411,7 +413,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                     onClick={() => void deletePosting()}
                     title={
                       working
-                        ? "Claude is working: wait, or Stop it"
+                        ? `${agentName} is working: wait, or Stop it`
                         : "Delete this posting and everything in its folder"
                     }
                   >
@@ -473,7 +475,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             >
               {PARTS[p].label}
               {working && agent?.conversation === conversationKey(postingId, p) ? (
-                <span className="ez-dot ez-dot-ok" role="img" aria-label="Claude is working here" />
+                <span className="ez-dot ez-dot-ok" role="img" aria-label={`${agentName} is working here`} />
               ) : null}
             </button>
           ))}
@@ -482,7 +484,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
-        <Conversation events={conv?.events ?? []} agent={AGENTS[settings?.agent ?? "claude"]} />
+        <Conversation events={conv?.events ?? []} agent={agentName} />
         {cards.length > 0 ? (
           <section className="ez-panel-needs" aria-label="Needs you" ref={needsRef}>
             <p className="ez-label">Needs you · {cards.length}</p>
@@ -527,7 +529,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             onOpen={(url) => void transport.openTab(url).catch(fail)}
           />
         </div>
-        <AgentLine state={state} selected={selected} labelOf={labelOf} />
+        <AgentLine state={state} name={agentName} selected={selected} labelOf={labelOf} />
         <ChatBar
           disabled={!connected || agent?.status === "unavailable"}
           working={workingHere}
@@ -823,25 +825,29 @@ function EventView({
   }
 }
 
+/** What the agent is doing, named as the one in use (`name`). */
 function AgentLine({
   state,
+  name,
   selected,
   labelOf,
 }: {
   state: PanelState | null;
+  name: string;
   selected: string;
   labelOf: (id: string) => string;
 }) {
   const agent = state?.agent;
   if (!agent) return null;
   let text = "";
-  if (agent.status === "unavailable") text = "Claude isn't available: Claude Code wasn't found when ezapply started.";
-  else if (agent.status === "starting") text = "Starting Claude…";
+  if (agent.status === "unavailable")
+    text = `No agent is available: neither ${AGENTS.claude} nor ${AGENTS.antigravity} was found when ezapply started.`;
+  else if (agent.status === "starting") text = `Starting ${name}…`;
   else if (agent.status === "working") {
     text =
       agent.conversation === selected
-        ? "Claude is working…"
-        : `Claude is working on ${labelOf(agent.conversation ?? "")}…`;
+        ? `${name} is working…`
+        : `${name} is working on ${labelOf(agent.conversation ?? "")}…`;
   }
   if (agent.queued > 0 && agent.conversation === selected) text += ` ${agent.queued} waiting.`;
   return text ? (
@@ -855,7 +861,7 @@ function AgentLine({
  * The agent, and its own permission mode, model and effort: kept by the extension, and applied by ezapply to the
  * running conversation (Claude Code's mode and model at once, the rest from its next message). The agent is offered
  * only when more than one is installed. Antigravity has two modes (headless, it runs what its rules allow, or plans)
- * and the models `agy models` lists, or its own default.
+ * and the models `agy models` lists, or its own default; no effort, since its models name their level.
  */
 function AgentSettingsBar({
   settings,
@@ -946,20 +952,23 @@ function AgentSettingsBar({
           ))}
         </select>
       )}
-      <select
-        className="ez-select ez-select-sm ez-select-gives"
-        aria-label="Effort"
-        title="How hard the agent thinks: more effort is slower and costs more. Applies from the next message."
-        value={settings.effort}
-        disabled={disabled}
-        onChange={(e) => onChange({ effort: AgentEffort.parse(e.target.value) })}
-      >
-        {AgentEffort.options.map((m) => (
-          <option key={m} value={m}>
-            {EFFORTS[m]}
-          </option>
-        ))}
-      </select>
+      {/* Antigravity's models carry their own level ("Gemini 3.8 Flash (High)"), so it has no effort to choose. */}
+      {claude ? (
+        <select
+          className="ez-select ez-select-sm ez-select-gives"
+          aria-label="Effort"
+          title="How hard the agent thinks: more effort is slower and costs more. Applies from the next message."
+          value={settings.effort}
+          disabled={disabled}
+          onChange={(e) => onChange({ effort: AgentEffort.parse(e.target.value) })}
+        >
+          {AgentEffort.options.map((m) => (
+            <option key={m} value={m}>
+              {EFFORTS[m]}
+            </option>
+          ))}
+        </select>
+      ) : null}
     </>
   );
 }
