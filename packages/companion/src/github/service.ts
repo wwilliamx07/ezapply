@@ -344,7 +344,7 @@ export class GitHubService {
         res,
         400,
         "GitHub setup failed",
-        `${escapeHtml(e.message)}<br><br>Return to Claude Code and try github_login again.`,
+        `${escapeHtml(e.message)}<br><br>Return to ezapply and ask to connect GitHub again.`,
       );
       return true;
     }
@@ -429,7 +429,7 @@ export class GitHubService {
     if (!app) throw new EzError(ErrorCode.BadRequest, "No app registered.");
     if (pending) this.states.delete(pending[0]);
     if (!pending && (await this.tokenBlob())) {
-      page(res, 200, "Repository access updated", "You can close this tab and return to Claude Code.");
+      page(res, 200, "Repository access updated", "You can close this tab and return to ezapply.");
       return;
     }
     redirect(res, this.authorizeUrl(app.clientId));
@@ -516,7 +516,7 @@ export class GitHubService {
       200,
       `Signed in as ${escapeHtml(user.login)}`,
       installed || !app
-        ? "You can close this tab and return to Claude Code."
+        ? "You can close this tab and return to ezapply."
         : `The app isn't installed on your account yet, so it can't read any repositories:
           <a href="${escapeHtml(`${this.webBase}/apps/${app.slug}/installations/new`)}">install it and choose repositories</a>.`,
     );
