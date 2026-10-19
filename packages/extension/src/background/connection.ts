@@ -67,15 +67,26 @@ export class CompanionConnection {
    */
   async ensureConnected(): Promise<void> {
     if (this.socket || this.connecting) return;
-    const stored = await store.settings();
-    const pairing = !stored;
-    const settings: Settings = stored ?? { port: DEFAULT_PORT, pairingToken: "" };
-    this.active = settings;
+    // Before the first await: callers at once (the panel's check, a panel call, the alarm) would each open a
+    // socket, and the companion keeps only the newest.
     this.connecting = true;
-    // Tells a freshly started companion to wait for this capture before answering posting_active.
-    const pendingCapture = (await store.pendingCapture()) !== null;
-    // So the companion opens pages and files in this browser rather than the system default.
-    const browser = await detectBrowser().catch(() => undefined);
+    let settings: Settings;
+    let pairing: boolean;
+    let pendingCapture: boolean;
+    let browser: Awaited<ReturnType<typeof detectBrowser>>;
+    try {
+      const stored = await store.settings();
+      pairing = !stored;
+      settings = stored ?? { port: DEFAULT_PORT, pairingToken: "" };
+      // Tells a freshly started companion to wait for this capture before answering posting_active.
+      pendingCapture = (await store.pendingCapture()) !== null;
+      // So the companion opens pages and files in this browser rather than the system default.
+      browser = await detectBrowser().catch(() => undefined);
+    } catch (err) {
+      this.connecting = false;
+      throw err;
+    }
+    this.active = settings;
     clearTimeout(this.retry);
     if (!pairing) await this.setState({ state: "connecting" });
 
@@ -88,6 +99,10 @@ export class CompanionConnection {
       return;
     }
     this.socket = ws;
+    /** Still the live socket: one dropped by `reconnect` or replaced leaves the connection's state alone. */
+    const current = () => this.socket === ws;
+    let peer: RpcPeer<typeof CompanionApi, typeof ExtensionApi> | null = null;
+    let keepalive: ReturnType<typeof setInterval> | undefined;
     let welcomed = false;
     let rejected: EzError | null = null;
     const send = (msg: BridgeMessage) => ws.send(JSON.stringify(msg));
@@ -109,17 +124,20 @@ export class CompanionConnection {
       if (!msg) return;
       switch (msg.kind) {
         case "welcome":
+          if (!current()) return;
           welcomed = true;
           this.connecting = false;
           this.backoff = 1_000;
-          this.peer = new RpcPeer({
+          peer = new RpcPeer({
             send,
             remote: CompanionApi,
             local: ExtensionApi,
             handlers: this.handlers,
             idPrefix: "e",
           });
-          this.keepalive = setInterval(() => send({ kind: "ping", t: Date.now() }), KEEPALIVE_MS);
+          this.peer = peer;
+          keepalive = setInterval(() => send({ kind: "ping", t: Date.now() }), KEEPALIVE_MS);
+          this.keepalive = keepalive;
           if (msg.pairingToken) {
             this.active = { port: settings.port, pairingToken: msg.pairingToken };
             await store.saveSettings(this.active);
@@ -131,7 +149,7 @@ export class CompanionConnection {
           return;
         case "request":
         case "response":
-          await this.peer?.handle(msg);
+          await peer?.handle(msg);
           return;
         default:
           return;
@@ -139,8 +157,10 @@ export class CompanionConnection {
     };
 
     ws.onclose = async (ev) => {
-      clearInterval(this.keepalive);
-      this.peer?.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Connection closed"));
+      clearInterval(keepalive);
+      // This socket's own calls fail now, rather than waiting out their timeout.
+      peer?.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Connection closed"));
+      if (!current()) return;
       this.peer = null;
       this.socket = null;
       this.connecting = false;

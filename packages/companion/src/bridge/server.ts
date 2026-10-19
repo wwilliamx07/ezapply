@@ -398,6 +398,8 @@ export class ExtensionBridge {
     this.conn = conn;
     this.opts.onConnectionChange?.(true);
     if (previous) {
+      // Its close isn't logged (it's no longer the connection): a run of these shows reconnects that replace each other.
+      this.opts.log.info({ extensionId: previous.extensionId }, "bridge: previous connection replaced");
       previous.peer.failAll(new EzError(ErrorCode.ExtensionDisconnected, "Replaced by a newer connection."));
       previous.socket.close(CloseCode.Replaced, "replaced");
     }

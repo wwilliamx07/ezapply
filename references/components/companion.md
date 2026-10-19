@@ -123,7 +123,8 @@ postings, browser, documents, profile, onboarding, templates, GitHub, forms, and
 
 ## Extension bridge (`ExtensionBridge`)
 - **One connection at a time.** A newly authenticated connection replaces the old one, which is closed
-  with `Replaced`.
+  with `Replaced`, and the log says so (`bridge: previous connection replaced`): the old socket's close isn't
+  logged, so a run of these is reconnects replacing each other.
 - **`call(method, params, timeoutMs?, onDebug?)`** sends RPC to the extension; without a connection it fails with
   `extension_disconnected` and a hint (call `extension_pair`, or open the browser). `onDebug` gets the debug trace
   the extension sends beside a result ([RPC](protocol.md#rpc)); only the debug recorder passes one ([debug mode](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)).

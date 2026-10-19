@@ -109,6 +109,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   skills' Claude Code wording (the Edit tool, subagents) trips it. Also that no console window flashes when it
   starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
   once with the next message starting the new one.
+- **The extension's one-socket connection** ([extension](components/extension.md#connection-companionconnection)),
+  tested with a stand-in socket. Check: with the panel open for a long session, the panel's dot stays green and
+  `companion.log` shows no run of `bridge: previous connection replaced`.
 
 - **The agent settings kept by the extension** ([agent](components/agent.md#permission-mode-model-and-effort)):
   that they show as the panel opens and come back with their agent, that a reconnection (ezapply restarted) gives

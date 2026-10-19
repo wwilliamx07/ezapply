@@ -99,6 +99,12 @@ application tab throttled or pulled to the front, so there is none rather than a
   keeps a wake-up from pushing the next firing back. `test/background.test.ts` loads the background with a
   stubbed API and checks this.
 - **Settings changes** (`port`, `pairingToken`) reconnect only when they differ from the live connection's.
+- **One socket at a time.** `ensureConnected()` marks itself connecting before its first await, so callers at once
+  (the panel's check, a panel call, the alarm) open one socket: the companion keeps only the newest, and two from
+  one extension would replace each other in a loop, the panel flickering between connected and not. A socket's
+  handlers change the connection's state only while it is the live socket, so a dropped or replaced socket's late
+  close leaves the new one connected; it fails its own pending calls at once ("Connection closed").
+  `test/connection.test.ts` checks both.
 - Connection states: `unconfigured`, `connecting`, `connected { companionVersion }`,
   `disconnected { reason }`, `error { message, hint? }`, stored for the badge and options page.
 
