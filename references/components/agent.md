@@ -187,7 +187,9 @@ and the documents' drafting behind each step). What one needs of the other is on
 approvals, `notes.md`, the form log. Each part's line in the system prompt (`PART_PROMPTS`) keeps it to its work:
 the tailoring conversation doesn't touch application forms, and the filling one doesn't write or edit documents,
 though it may show the ones there for review and attach them; each tells the user to press the other's button
-for the rest. The first time the service reads its file in a run, `general` gets its record if it has none (a new,
+for the rest. The filling line also says the form's own text (experience descriptions, free-text answers) is its
+to tailor: without that, Claude read "doesn't write documents" as covering them and pasted the profile's
+highlights unchanged. The first time the service reads its file in a run, `general` gets its record if it has none (a new,
 unstarted session), so it's always there for the panel to show and reset, even in a workspace that never used it.
 An older build kept one conversation per posting under the bare id; on that same first read, such a conversation becomes the posting's tailoring one, its logs moved to
 `<posting id>/tailor/`, so its history stays in the panel. Sending:

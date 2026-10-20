@@ -16,7 +16,7 @@ description: Tailor the user's one-page LaTeX resume to a job posting, or revise
    lists `contentFiles` (files the main file `\input`s, e.g. `sections/experience.tex`), copy each to the same
    path relative to `resume.tex`: the posting folder comes first on TeX's search path, so the copies are
    the ones used, and they're where the bullets live. The class and style files are found automatically;
-   don't copy them. Set status `drafting` via `posting_update_meta`.
+   don't copy them. Set status `drafting` via `posting_update_meta`; later statuses are set automatically.
 
 ## Analyze (write to `postings/<id>/notes.md`)
 - Must-have and nice-to-have requirements, and the posting's key terms.

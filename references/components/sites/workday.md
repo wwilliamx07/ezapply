@@ -78,6 +78,11 @@ dialog's confirm, then React's `onClick`, then Delete and Backspace on the focus
 count dropping. Those hooks haven't been pressed live; the fixture has chips with charms, one removable only by
 keyboard, and a file and rows whose delete asks for confirmation.
 
+**Its notes** ([`siteNotes`](../../mcp-tools.md#site-notes)): Add buttons tell their list by `section`; Resume/CV
+is often the only file field (`multiple: true`) and takes every document the posting asks for, cover letter and
+transcript included, one upload each (an agent that saw no transcript field left a required transcript out);
+Use My Last Application and a returning account pre-fill files, skills and rows to clear first.
+
 ## Workday's dropdown: finding its listbox
 A button opening a listbox rendered as a portal under `body` (`dropdown.ts`). Live Workday gives the button no
 usable `aria-controls`, and a closed listbox stays on screen while it animates away, so "the visible listbox" right

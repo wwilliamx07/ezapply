@@ -149,7 +149,7 @@ export const PART_PROMPTS: Record<ConversationPart, string> = {
     "conversation: don't write or edit a resume, cover letter or bundle here; you may show the ones already there " +
     "for review and attach them. When a document is missing, or the user asks for changes to one, tell them to " +
     "press Tailor documents in the panel (with their changes, if they asked for any), and fill the rest of the " +
-    "form meanwhile.",
+    "form meanwhile. The form's own text (experience descriptions, free-text answers) is yours to tailor here.",
 };
 
 /** One conversation's Claude Code process: messages in, stream items out. */

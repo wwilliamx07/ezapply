@@ -116,7 +116,9 @@ export function registerPostingTools(server: McpServer, s: Services, session?: s
         location: z.string().min(1).optional(),
         deadline: z.string().min(1).optional().describe("As written in the posting or ISO date."),
         bundleRequired: z.boolean().optional().describe("True when documents must be submitted as one PDF."),
-        status: PostingStatus.optional(),
+        status: PostingStatus.optional().describe(
+          "Set drafting when you start the documents. Later statuses are set automatically; approval changes none.",
+        ),
       },
     },
     tool(s.log, "posting_update_meta", async ({ id, ...patch }: { id?: string } & Record<string, unknown>) => {
