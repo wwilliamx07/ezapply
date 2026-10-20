@@ -8,7 +8,7 @@ import type { FillOutcome, WidgetDriver } from "../types.js";
  * suggestions, choose one. `input` finds the text input in the field container; `options` the suggestions on screen
  * for it (by default the `role=option`s of the listbox its `aria-controls` names, else of the nearest listbox).
  */
-export interface ComboboxSpec {
+interface ComboboxSpec {
   input?: (c: HTMLElement) => HTMLInputElement | null;
   options?: (c: HTMLElement, input: HTMLInputElement) => HTMLElement[];
   /** What the field shows once a suggestion is chosen, when not the input's value. */

@@ -24,7 +24,7 @@ import { ext } from "../ext.js";
 /** The DevTools protocol version asked for. */
 const PROTOCOL = "1.3";
 /** How long a tab stays attached after its last form call. */
-export const IDLE_MS = 5 * 60_000;
+const IDLE_MS = 5 * 60_000;
 
 /** Tabs attached by this extension, with their idle timers. */
 const attached = new Map<number, ReturnType<typeof setTimeout>>();

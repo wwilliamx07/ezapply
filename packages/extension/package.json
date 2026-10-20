@@ -20,6 +20,7 @@
     "@types/chrome": "^0.3.0",
     "esbuild": "^0.28.2",
     "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0"
+    "@types/react-dom": "^19.3.0",
+    "@napi-rs/canvas": "^1.0.9"
   }
 }

@@ -26,12 +26,12 @@ function careerUrl(url: string): URL | undefined {
   }
 }
 
-export function isSuccessFactorsUrl(url: string): boolean {
+function isSuccessFactorsUrl(url: string): boolean {
   return careerUrl(url) !== undefined;
 }
 
 /** The employer: `company`, lowercased. A signed-in page's URL (`portalcareer?_s.crb=…`) has none. */
-export function successFactorsTenant(url: string): string | undefined {
+function successFactorsTenant(url: string): string | undefined {
   try {
     return new URL(url).searchParams.get("company")?.trim().toLowerCase() || undefined;
   } catch {
@@ -40,7 +40,7 @@ export function successFactorsTenant(url: string): string | undefined {
 }
 
 /** The job: its requisition id (`career_job_req_id`, or `jobId` on the older pages). */
-export function successFactorsJob(url: string): string | undefined {
+function successFactorsJob(url: string): string | undefined {
   try {
     const params = new URL(url).searchParams;
     const job = (params.get("career_job_req_id") ?? params.get("jobId"))?.trim().toLowerCase();

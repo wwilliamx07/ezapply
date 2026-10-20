@@ -8,16 +8,16 @@ import type { CallRecord } from "./debug.js";
 /**
  * `ezapply debug export`: a test fixture candidate from a markup file debug mode saved (`NNNN-before.html`,
  * `NNNN-after.html` or `NNNN-fail-<fieldId>.html`), for an extraction test against the real page
- * (`workday-live.test.ts`, `oracle-live.test.ts`) or to correct a behavioural fixture to it.
+ * (the site's `test/live.test.ts`) or to correct a behavioural fixture to it.
  *
  * Scrubbed in two passes. First the values: every input's value, textareas, chosen options, ticked boxes and pressed
  * pills, the option a dropdown button shows, selected-value pills and attached file names. Then every string in
  * `profile/profile.yaml`, and the tenant and job title the page was read with, wherever they still appear in text or
  * attributes; each is counted. It's written next to the file it came from, never into the repo: it's third-party
  * markup and the scrub can miss something (a name in a label, a value the page formats differently), so the user
- * looks at it before it goes into `extension/test/fixtures/live/`.
+ * looks at it before it goes into the site's `fixtures/`.
  */
-export interface ExportResult {
+interface ExportResult {
   file: string;
   /** Values blanked in the first pass. */
   values: number;
@@ -135,7 +135,7 @@ const SHOWN_VALUES: [string, string][] = [
 const TEXT_INPUTS = /^(text|email|tel|url|number|search|date|month|hidden|)$/;
 
 /** The two passes on one markup file. */
-export function scrub(
+function scrub(
   html: string,
   strings: { profile: string[]; tenant?: string; job?: string },
 ): { html: string; values: number; replaced: ExportResult["replaced"] } {

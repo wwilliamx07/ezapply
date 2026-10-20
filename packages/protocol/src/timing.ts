@@ -1,7 +1,7 @@
 /**
  * The waits the form adapters use, in milliseconds. Each site owns its waits: its registry entry (`sites.ts`)
  * says how long each one is, and the adapter's engine only waits where the site's definition says. These are the
- * standard values a site starts from (measured on Workday, the first site). The companion reads the user's
+ * standard values a site starts from (measured on Workday). The companion reads the user's
  * overrides from `autofill-timing.yaml`, resolves them against the site's own waits, and sends the result with
  * every form call. A "quiet" wait ends once the page has stopped changing for that long; its "max" ends it
  * regardless. Other waits end as soon as what they wait for happens, so they only cost their full length when it

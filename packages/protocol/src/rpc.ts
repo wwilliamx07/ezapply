@@ -2,11 +2,11 @@ import type { z } from "zod";
 import type { RequestMessage, ResponseMessage } from "./bridge.js";
 import { ErrorCode, EzError } from "./errors.js";
 
-export interface MethodSpec {
+interface MethodSpec {
   params: z.ZodType;
   result: z.ZodType;
 }
-export type MethodMap = Record<string, MethodSpec>;
+type MethodMap = Record<string, MethodSpec>;
 
 export type ParamsOf<M extends MethodMap, K extends keyof M> = z.input<M[K]["params"]>;
 export type ResultOf<M extends MethodMap, K extends keyof M> = z.output<M[K]["result"]>;
@@ -38,7 +38,7 @@ interface Pending {
   onDebug?: (debug: unknown) => void;
 }
 
-export interface RpcPeerOptions<Out extends MethodMap, In extends MethodMap> {
+interface RpcPeerOptions<Out extends MethodMap, In extends MethodMap> {
   send: (msg: RequestMessage | ResponseMessage) => void;
   /** Methods the other side serves (what this peer can call). */
   remote: Out;

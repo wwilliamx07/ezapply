@@ -1,1 +1,0 @@
-Any significant changes to the size of skills, system prompt need to be reported.

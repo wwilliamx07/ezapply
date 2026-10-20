@@ -11,12 +11,12 @@ import {
 } from "@ezapply/protocol";
 
 /** How an ask ended: answered, or the user wrote in the chat instead. */
-export type AskOutcome = { answers: AskAnswers } | { replied: string };
+type AskOutcome = { answers: AskAnswers } | { replied: string };
 
 /** The permission prompt tool's answer, as Claude Code reads it. */
-export type PermissionDecision = { behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string };
+type PermissionDecision = { behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string };
 
-export interface CardRecord {
+interface CardRecord {
   card: Card;
   /** A line for the conversation's record once it's settled. */
   title: string;
@@ -34,7 +34,7 @@ interface OpenPermission {
 }
 
 /** No answer to a permission prompt in this long is a deny: the agent can't wait on a user who has gone. */
-export const PERMISSION_TIMEOUT_MS = 10 * 60_000;
+const PERMISSION_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * What waits on the user: the agent's questions (`ask_user`) and its requests for approval (`permission_ask`),

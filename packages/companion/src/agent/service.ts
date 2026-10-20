@@ -23,7 +23,7 @@ import type { NeedsYou } from "./needs.js";
 import type { StreamItem } from "./stream.js";
 
 /** The folder in the workspace that holds the conversations' records and logs. */
-export const AGENT_DIR = "agent";
+const AGENT_DIR = "agent";
 
 const Session = z.object({ sessionId: z.string(), startedAt: z.string(), endedAt: z.string().optional() });
 const Conversation = z.object({
@@ -47,7 +47,7 @@ type ConversationsFile = z.infer<typeof ConversationsFile>;
 type Conversation = z.infer<typeof Conversation>;
 
 /** One conversation's running process, as the panel shows it. */
-export interface ConversationState {
+interface ConversationState {
   conversation: string;
   status: AgentStatus;
   /** Messages sent that the agent hasn't taken yet. */
@@ -55,12 +55,12 @@ export interface ConversationState {
 }
 
 /** What the panel shows about the agent: working when any conversation is, and each running process. */
-export interface AgentState {
+interface AgentState {
   status: AgentStatus;
   conversations: ConversationState[];
 }
 
-export interface AgentServiceOptions {
+interface AgentServiceOptions {
   workspace: Workspace;
   needs: NeedsYou;
   log: Logger;

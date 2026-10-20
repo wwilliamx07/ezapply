@@ -5,7 +5,7 @@ import { Readability } from "@mozilla/readability";
 import { JSDOM, VirtualConsole } from "jsdom";
 import TurndownService from "turndown";
 
-export interface ExtractedPosting {
+interface ExtractedPosting {
   markdown: string;
   site: SiteId;
   tenant?: string;

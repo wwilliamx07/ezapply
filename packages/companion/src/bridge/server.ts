@@ -20,21 +20,20 @@ import { FORM_SITE_IDS } from "@ezapply/sites";
 import { type WebSocket, WebSocketServer } from "ws";
 import type { Logger } from "../logger.js";
 
-export const BRIDGE_PATH = "/bridge";
+const BRIDGE_PATH = "/bridge";
 const HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 /**
  * How long after `ezapply` starts a paired extension is waited for: it notices the companion within its
  * 30 s reconnect alarm. Only a posting or browser call made in that window waits, and the user typing their
- * first message usually uses most of it up. (A background daemon used to also check when the extension was
- * last seen, since it could start hours after the browser closed; `ezapply` is started by the user, who is
- * at the computer.)
+ * first message usually uses most of it up. When the extension was last seen doesn't matter: `ezapply` is
+ * started by the user, who is at the computer.
  */
 const RECONNECT_GRACE_MS = 40_000;
 /** How long to wait for a capture the extension announced in `hello` (made while ezapply wasn't running). */
 const PENDING_CAPTURE_WAIT_MS = 15_000;
 
-export interface BridgeOptions {
+interface BridgeOptions {
   companionVersion: string;
   pairingToken: string;
   /** Extension id pinned at first pairing; connections from any other id are refused. */
@@ -51,7 +50,7 @@ export interface BridgeOptions {
 }
 
 /** What `settled()` found. */
-export interface Settled {
+interface Settled {
   /** The paired extension hasn't connected since the companion started (the grace period ran out first). */
   extensionReconnecting: boolean;
 }
@@ -66,7 +65,7 @@ export interface BridgeStatus {
   browser?: BrowserInfo;
 }
 
-export interface PairingStatus {
+interface PairingStatus {
   /** Until when an unpaired extension may pair without the code (ISO time), if open. */
   openUntil?: string;
   pairedExtensionId?: string;

@@ -30,7 +30,7 @@ extension already builds with it; no dev server or framework build is needed.
 | `src/lib/text.ts` | `joinItems` (a page's text as the companion's `pdf_text` builds it), `itemsOf` (a stretch of that text → the parts of the text items it covers) |
 | `src/review/` | The review page: `App.tsx`, `Viewer.tsx` (the PDF viewer, shared with onboarding), `Panel.tsx`, `changes.ts`, `draft.ts`, `selection.ts`, `review.css`, `viewer.css`, `textlayer.css` |
 | `src/onboard/` | The onboarding page: `App.tsx`, `state.ts`, `parts.tsx`, `steps-setup.tsx`, `steps-documents.tsx`, `ProfileStep.tsx`, `onboard.css` |
-| `src/panel/` | The side panel: `App.tsx` (`PanelApp`, `Conversation`, `REQUESTS`, `withEvent`), `cards.tsx` (question and approval cards: `AskCardView`, `PermissionCardView`, `initialDraft`, `answerOf`, `permissionBody`), `markdown.tsx`, `transport.ts` (`PanelTransport`), `panel.css`, `index.ts`. Exported as `@ezapply/ui/panel` (with `@ezapply/ui/base.css` and `@ezapply/ui/panel.css`) for the extension to bundle |
+| `src/panel/` | The side panel: `App.tsx`, `cards.tsx` (question and approval cards), `markdown.tsx`, `transport.ts`, `panel.css`. `@ezapply/ui/panel` exports `PanelApp` and the transport's types (with `@ezapply/ui/base.css` and `@ezapply/ui/panel.css`) for the extension to bundle |
 | `test/review.test.tsx`, `test/panel.test.tsx`, `test/onboard.test.tsx`, `test/brand.test.ts` | Unit and component tests ([development](../development.md#tests)) |
 
 ## The build (`npm run build -w @ezapply/ui`)
@@ -351,7 +351,7 @@ window gets focus. The comparison stops when no page listens.
 
 Plus **Finish setup** (**Finish later** while required steps remain), which ends the agent's wait, and an
 **Ask Claude** box in Claude's panel (task `question`, the answer shown as the task's note). A finished page says
-what's next (capture a posting with the toolbar button or Alt+Shift+P); asking the agent to set up again reopens
+what's next (capture a posting with the panel's Capture or Alt+Shift+P); asking the agent to set up again reopens
 it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes it, not the page.
 
 **Actions** (`POST action`, validated with zod): `task { kind, params }`, `pair { replace? }`, `github { app? }`,

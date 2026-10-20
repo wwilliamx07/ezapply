@@ -14,7 +14,7 @@ bridge method or a stored format.
   `which()`, the `Opener`) instead of redefining them.
 - **Tool descriptions and results cost context in every session:** keep them short, never name a site (a site's
   knowledge goes into its notes, `packages/sites/src/<site>/notes.ts`), and name a new tool `<noun>_<verb>` (the form tools read
-  as commands). Every tool has its row in `references/mcp-tools.md`; `test/references.test.ts` fails otherwise.
+  as commands). Every tool has its row in `references/mcp-tools.md`; the root `test/references.test.ts` fails otherwise.
 - **The skills spell out tool and parameter names.** Renaming one means updating them;
   `cli/test/skill-calls.test.ts` fails until then. Rules that must hold even without `EZAPPLY.md` go in the
   server's instructions (`src/mcp/server.ts`).

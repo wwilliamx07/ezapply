@@ -16,7 +16,7 @@ const DROP = "script, style, link, noscript";
 const VALUES = "input, textarea, select";
 
 /** A cleaned copy of `root`'s markup, with the live values written in. */
-export function cleanMarkup(root: Element): string {
+function cleanMarkup(root: Element): string {
   return outside(() => {
     const copy = root.cloneNode(true) as Element;
     const live = root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(VALUES);

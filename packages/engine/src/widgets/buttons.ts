@@ -8,7 +8,7 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../types.js";
  * container; `label` and `pressed` read one (by default its text and `aria-pressed`). With `multiple`, several may be
  * pressed (a checkbox group, which `remove_items` can unpress); otherwise one is (a radio).
  */
-export interface ToggleSpec {
+interface ToggleSpec {
   buttons?: string;
   label?: (b: HTMLElement) => string;
   pressed?: (b: HTMLElement) => boolean;

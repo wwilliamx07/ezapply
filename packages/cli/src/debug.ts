@@ -1,6 +1,13 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { DEBUG_DIR, debugExport, debugReport, latestDebugSession, WorkspaceConfig } from "@ezapply/companion";
+import {
+  DEBUG_DIR,
+  debugExport,
+  debugReport,
+  latestDebugSession,
+  WorkspaceConfig,
+  writeJsonAtomic,
+} from "@ezapply/companion";
 import { ErrorCode, EzError } from "@ezapply/protocol";
 
 const USAGE = `Usage:
@@ -53,7 +60,7 @@ export async function runDebug(root: string, args: string[], write: (s: string) 
         `Wrote ${r.file}: ${r.values} values blanked; replaced ${r.replaced.profile} profile strings, ` +
           `${r.replaced.tenant} of the tenant, ${r.replaced.job} of the job title.\n` +
           "Look through it for anything else that identifies you or the employer before it goes into " +
-          "extension/test/fixtures/live/.\n",
+          "packages/sites/src/<site>/fixtures/.\n",
       );
       return 0;
     }
@@ -77,6 +84,5 @@ export async function setDebug(root: string, on: boolean): Promise<void> {
   const debug = { ...((raw.debug as Record<string, unknown> | undefined) ?? {}), enabled: on };
   const next = { ...raw, debug };
   WorkspaceConfig.parse(next);
-  await mkdir(root, { recursive: true });
-  await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await writeJsonAtomic(path, next);
 }

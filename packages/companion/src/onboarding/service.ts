@@ -121,7 +121,7 @@ const Action = z.discriminatedUnion("action", [
 type Action = z.infer<typeof Action>;
 
 /** What `onboarding` gives the agent. */
-export type OnboardingNext =
+type OnboardingNext =
   | { task: OnboardTask & { how: string } }
   | { done: true; ready: boolean; notDone: string[] }
   | { waiting: true };

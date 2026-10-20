@@ -43,7 +43,7 @@ describe("live Ashby application with radio and checkbox groups (jobs.ashbyhq.co
   const f = fieldsOf(s);
 
   // A radio or checkbox group is a plain div[data-field-path] around its fieldset, without the field-entry class
-  // the other questions have: going by that class missed all seven groups in a live run.
+  // the other questions have: going by that class misses every group.
   it("reads every question, groups included, with their options and required marks", () => {
     expect(Object.keys(f)).toHaveLength(22);
     expect(f["application.degree-type"]).toMatchObject({

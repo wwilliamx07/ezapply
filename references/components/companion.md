@@ -58,15 +58,15 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
    and `OnboardingService`; seed `profile/answers.yaml` if it doesn't exist.
 3. Build the bridge with the pairing code, the pinned id, `onPaired` / `onForgotten`, which persist the pairing,
    the handlers for `posting.capture` and the side panel's `panel.*` methods, and `onConnectionChange`. Build
-   `NeedsYou` and `AgentService` (with Claude Code when the `claude` option gives it), and `PanelService`, whose
+   `NeedsYou` and `AgentService` (with the agents the `claude` and `antigravity` options give), and `PanelService`, whose
    pushes go to the extension only while it's connected.
 4. Build `FormsService` over postings and the bridge, and the HTTP server; listen on
    `config.host:config.port` (port 0 picks a free one, for tests). A taken port rejects with `EADDRINUSE`,
    which `ezapply` turns into a message.
 5. Start the workspace check's repo check in the background (`FreshnessService.start`): it never delays
    `/health`, the extension's handshake or the first tool call ([below](#keeping-the-workspace-current-workspace_changes)).
-6. Start relaying to the side panel (`PanelService.start`): the agent's events and state, the cards, the active
-   posting and reviews.
+6. Start relaying to the side panel (`PanelService.start`): the agent's events and state, the cards, postings
+   and reviews.
 
 **Persisting pairing** changes only the pairing fields of `config.json` as it is on disk at that moment
 (`updateAppConfig`), not the copy read at start. Otherwise an `ezapply init --port` made while ezapply ran
@@ -74,13 +74,13 @@ would be undone the next time an extension paired.
 
 Options: `config`, `log`, `saveConfig` (tests: receives the whole new config instead of the file update),
 `appDataDir`, `secrets` (keychain by default), `opener` (by default `createDesktopOpener` with the browser
-the bridge reports; tests stub it), `claude` (Claude Code for the side panel's agent: `ezapply` passes it; tests mostly don't),
+the bridge reports; tests stub it), `claude` and `antigravity` (the agents the side panel can run: `ezapply` passes those it finds; tests mostly don't),
 `extensionDir` (so `extension_pair` can name the build folders), `reconnectGraceMs` (tests), and GitHub test
 hooks.
 
 The handle: `port`, `services`, `onServerError(fn)` (an error on the server after it
 listens; `ezapply` logs it), and `close()` (extension socket closed with 1001, server connections
-dropped, server closed); it ends the agent's Claude Code process first.
+dropped, server closed); it ends the agents' processes first.
 
 **Nothing reaches the terminal.** The companion runs in the `ezapply` process, whose terminal shows only its own
 few lines, so it never writes to stdout or stderr: the logger writes to the log file only, jsdom gets a silent

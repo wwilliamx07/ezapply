@@ -27,7 +27,7 @@ export type AppConfig = z.infer<typeof AppConfig>;
 export const DEFAULT_PORT = 17373;
 
 /** The config's name in earlier builds, which ran the companion as a background daemon. */
-export const LEGACY_CONFIG_FILE = "daemon.json";
+const LEGACY_CONFIG_FILE = "daemon.json";
 
 export function appDir(): string {
   return process.env.EZAPPLY_APP_DIR ?? join(homedir(), ".ezapply");

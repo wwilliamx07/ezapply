@@ -64,7 +64,7 @@ export function Markdown({ text }: { text: string }) {
 }
 
 /** `code`, **bold**, *italics* and _italics_, as elements. */
-export function inline(text: string): ReactNode {
+function inline(text: string): ReactNode {
   const out: ReactNode[] = [];
   const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
   let last = 0;

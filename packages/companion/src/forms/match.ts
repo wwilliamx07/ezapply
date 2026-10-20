@@ -17,7 +17,7 @@ import { sameJob, siteInfo, siteOfUrl } from "@ezapply/sites";
  * With none of it, the tab is `unconfirmed`: credited, and bound by the first call that changes it.
  */
 
-export type Evidence = "site" | "job" | "binding" | "page-reqid" | "tenant" | "title";
+type Evidence = "site" | "job" | "binding" | "page-reqid" | "tenant" | "title";
 
 export interface PostingMatch {
   verdict: "same" | "other" | "unconfirmed";

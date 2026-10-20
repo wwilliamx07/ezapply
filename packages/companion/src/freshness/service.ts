@@ -9,7 +9,7 @@ import { hashFiles, hashValue } from "../util/hash.js";
 import { unifiedDiff } from "../util/line-diff.js";
 import type { Workspace } from "../workspace/workspace.js";
 
-export type ChangeKind =
+type ChangeKind =
   | "repo-pushed"
   | "repo-deselected"
   | "template-source"
@@ -19,7 +19,7 @@ export type ChangeKind =
   | "profile-identity";
 
 /** Something derived in the workspace that its source has moved past. */
-export interface WorkspaceChange {
+interface WorkspaceChange {
   /** Names the exact state (`repo-pushed:owner/name@<sha>`): a change put off and then changed again is new. */
   id: string;
   kind: ChangeKind;
@@ -32,7 +32,7 @@ export interface WorkspaceChange {
   affects: ("claims" | "resume" | "cover" | "profile" | "forms")[];
 }
 
-export interface NotChecked {
+interface NotChecked {
   /** `owner/name`, or `templates/<kind>` for a template's source folder. */
   what: string;
   reason: string;
@@ -40,12 +40,12 @@ export interface NotChecked {
 }
 
 /** A repo whose new commits the user put off: not checked until `until`. */
-export interface DeferredRepo {
+interface DeferredRepo {
   repo: string;
   until: string;
 }
 
-export interface ChangesResult {
+interface ChangesResult {
   changes: WorkspaceChange[];
   notChecked?: NotChecked[];
   /** Repos put off with a timer still running. */
@@ -60,7 +60,7 @@ interface RepoCheck {
   notChecked: NotChecked[];
 }
 
-export interface Marked {
+interface Marked {
   id: string;
   as: "done" | "later";
   /** For `repo-deselected` marked done: what was deleted. */
@@ -72,7 +72,7 @@ export interface Marked {
 const DIFF_MAX_LINES = 200;
 const REPO_CONCURRENCY = 4;
 /** How long a repo is put off when the user doesn't say. */
-export const DEFER_DEFAULT_HOURS = 24;
+const DEFER_DEFAULT_HOURS = 24;
 /** The longest a repo is put off, so none is silenced for good (deselecting it is how to stop for good). */
 export const DEFER_MAX_HOURS = 90 * 24;
 

@@ -75,7 +75,7 @@ export interface PostingMismatch {
 }
 
 /** Said once, when a call that changes the page binds a tab nothing tied to the call's posting. */
-export interface PostingBound {
+interface PostingBound {
   id: string;
   company?: string;
   role?: string;
@@ -90,14 +90,14 @@ export interface PostingBound {
  * `frameId`. Everything that tells which posting a tab belongs to works on that URL, so an embedded form is matched
  * by its own site, tenant and job, never by the careers page around it.
  */
-export type FormTab = Omit<TabInfo, "frames"> & {
+type FormTab = Omit<TabInfo, "frames"> & {
   frameId?: number;
   /** For an embedded form: the URL of the page around it. */
   hostUrl?: string;
 };
 
 /** The places in a tab where an application form may be: its own page when on a form site, then each form frame. */
-export function formTabs(tab: TabInfo): FormTab[] {
+function formTabs(tab: TabInfo): FormTab[] {
   const { frames = [], ...own } = tab;
   const inside = frames.map((f) => ({ ...own, url: f.url, site: f.site, frameId: f.frameId, hostUrl: tab.url }));
   return [...(isFormSite(tab.site) ? [own] : []), ...inside];
@@ -150,12 +150,12 @@ interface Shown {
 }
 
 /** Said in a result when the application page is still hidden after `tab.show`. */
-export interface TabHidden {
+interface TabHidden {
   hint: string;
 }
 
 /** Said in a result when the page is on screen without focus: the browser window is behind another app. */
-export interface BrowserBehind {
+interface BrowserBehind {
   hint: string;
 }
 
@@ -559,8 +559,8 @@ export class FormsService {
    * Make the application tab run at full speed: the extension turns on focus emulation, and the page runs visible
    * and focused where it is (in the background, minimized, behind the terminal), with nothing switched or raised.
    * Browsers throttle a hidden tab's timers to about once a second, and every adapter wait (and much of Workday's
-   * own rendering) is a timer: in one live run, 16 fields took 6.7 s, then the review page opened in front of the
-   * form and 4 dates took 28 s. A slow fill runs past its timeout and keeps going in the page unlogged, which looks
+   * own rendering) is a timer: seen live, a hidden form's fields took several times as long, a few dates most of
+   * half a minute. A slow fill runs past its timeout and keeps going in the page unlogged, which looks
    * like a broken adapter. And a page whose window is behind another app gets no focus events, which Workday's
    * split dates seemed to need.
    *
@@ -689,9 +689,9 @@ export class FormsService {
    * (`postingBound`), so the agent tells the user which posting the application is being filled for; and the
    * posting keeps the tab's site, tenant and job as its application when it had none.
    *
-   * Why: a change used to be refused only when the posting had a tenant to compare, and most postings are captured
-   * off the form sites, without one. Two applications open at once could each take the other's fills, log and
-   * `submitted` status.
+   * Why: most postings are captured off the form sites, without a tenant to compare, so refusing a change only on
+   * a tenant mismatch would let two applications open at once each take the other's fills, log and `submitted`
+   * status.
    */
   private async claim(t: Target): Promise<void> {
     if (t.mismatch) {
@@ -838,9 +838,8 @@ export class FormsService {
    * this application has attached, with what to do about them; undefined when there are none. Said after an
    * upload and on reaching the review page.
    *
-   * Why: Workday usually has one file field, "Resume/CV", that takes several files. In two live runs the agent
-   * uploaded the approved resume there, never the approved cover letter, and handed over at the review page;
-   * both times the user had to point it out. `multiple: true` on the field wasn't enough of a cue.
+   * Why: Workday usually has one file field, "Resume/CV", that takes several files. Seen live, the agent
+   * uploaded the approved resume there, never the approved cover letter, and handed over at the review page. `multiple: true` on the field wasn't enough of a cue.
    *
    * Only approvals count (the after-approval attach mode), since they say which documents the user means to
    * send. A posting that wants one bundled PDF is left to the skill: its parts are approved but not uploaded.

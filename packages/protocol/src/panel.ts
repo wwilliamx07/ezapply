@@ -3,8 +3,8 @@ import { FrameInfo } from "./browser.js";
 import { PostingStatus, SiteId } from "./postings.js";
 
 /**
- * The extension's side panel and the agent behind it: the companion runs Claude Code headless and relays what it
- * does to the panel as events, and what it asks (questions, approvals) as cards the user answers there.
+ * The extension's side panel and the agent behind it: the companion runs the coding agent headless and relays what
+ * it does to the panel as events, and what it asks (questions, approvals) as cards the user answers there.
  */
 
 /** The conversation for work with no posting. */
@@ -32,7 +32,7 @@ export function postingConversation(key: string): { postingId: string; part: Con
 
 // ---- ask_user: the agent's questions ----
 
-export const AskOption = z.object({
+const AskOption = z.object({
   value: z.string().min(1).max(500),
   label: z.string().max(500).optional(),
   description: z.string().max(1000).optional(),
@@ -248,7 +248,7 @@ export type AgentStatus = z.infer<typeof AgentStatus>;
  */
 export const AgentPermissionMode = z.enum(["default", "acceptEdits", "auto", "plan", "dontAsk"]);
 export type AgentPermissionMode = z.infer<typeof AgentPermissionMode>;
-/** Claude Code's models: an alias for the latest of a family (`sonnet` is Sonnet 5.5 as of Claude Code 2.1). */
+/** Claude Code's models: an alias for the latest of a family. */
 export const AgentModel = z.enum(["fable", "opus", "sonnet", "haiku"]);
 export type AgentModel = z.infer<typeof AgentModel>;
 /** How hard the agent thinks (Claude Code's and `agy`'s `--effort`). */
@@ -261,12 +261,12 @@ export type AgentEffort = z.infer<typeof AgentEffort>;
 export const AgentKind = z.enum(["claude", "antigravity"]);
 export type AgentKind = z.infer<typeof AgentKind>;
 /** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
-export const ANTIGRAVITY_PERMISSION_MODES: AgentPermissionMode[] = ["dontAsk", "plan"];
+const ANTIGRAVITY_PERMISSION_MODES: AgentPermissionMode[] = ["dontAsk", "plan"];
 /**
  * What one agent runs with. `model` is one of `AgentModel` for Claude Code, and one `agy models` lists for
  * Antigravity; none is the agent's own default.
  */
-export const AgentChoice = z.object({
+const AgentChoice = z.object({
   permissionMode: AgentPermissionMode,
   model: z.string().min(1).max(200).optional(),
   effort: AgentEffort,
@@ -406,7 +406,7 @@ export const PanelConversation = z.object({
 });
 export type PanelConversation = z.infer<typeof PanelConversation>;
 
-export const PanelTabParams = z.object({
+const PanelTabParams = z.object({
   tabId: z.number().int(),
   url: z.string(),
   title: z.string(),

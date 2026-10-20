@@ -22,7 +22,7 @@ export const CloseCode = {
   HandshakeTimeout: 4004,
 } as const;
 
-export const HelloMessage = z.object({
+const HelloMessage = z.object({
   kind: z.literal("hello"),
   protocolVersion: z.number().int(),
   extensionVersion: z.string(),
@@ -40,7 +40,7 @@ export const HelloMessage = z.object({
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 
-export const WelcomeMessage = z.object({
+const WelcomeMessage = z.object({
   kind: z.literal("welcome"),
   protocolVersion: z.number().int(),
   companionVersion: z.string(),
@@ -49,14 +49,14 @@ export const WelcomeMessage = z.object({
 });
 export type WelcomeMessage = z.infer<typeof WelcomeMessage>;
 
-export const RejectMessage = z.object({
+const RejectMessage = z.object({
   kind: z.literal("reject"),
   error: ErrorPayload,
 });
 export type RejectMessage = z.infer<typeof RejectMessage>;
 
-export const PingMessage = z.object({ kind: z.literal("ping"), t: z.number() });
-export const PongMessage = z.object({ kind: z.literal("pong"), t: z.number() });
+const PingMessage = z.object({ kind: z.literal("ping"), t: z.number() });
+const PongMessage = z.object({ kind: z.literal("pong"), t: z.number() });
 
 export const RequestMessage = z.object({
   kind: z.literal("request"),

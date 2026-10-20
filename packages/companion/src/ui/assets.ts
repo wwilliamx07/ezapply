@@ -12,10 +12,10 @@ interface UiManifest {
   pages: Record<string, { js: string; css?: string }>;
 }
 
-export type UiPage = "review" | "onboard";
+type UiPage = "review" | "onboard";
 
 /** The tab icon every page links (written by the UI build). */
-export const FAVICON = "/ui/favicon.svg";
+const FAVICON = "/ui/favicon.svg";
 
 const TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
@@ -36,7 +36,7 @@ const TYPES: Record<string, string> = {
  * `wasm-unsafe-eval` for pdf.js's image decoders; inline styles because React and pdf.js position elements with
  * them; `blob:`/`data:` images for rendered pages; workers from /ui/ (pdf.js's).
  */
-export const UI_CSP = [
+const UI_CSP = [
   "default-src 'none'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",

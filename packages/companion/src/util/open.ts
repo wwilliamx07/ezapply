@@ -22,7 +22,7 @@ export interface Opener {
  */
 const BROWSER_FILES = new Set([".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt"]);
 
-export interface DesktopOpenerOptions {
+interface DesktopOpenerOptions {
   /** The browser the extension runs in, as last reported (`ExtensionBridge.browser()`). */
   browser?: () => BrowserInfo | undefined;
   /** Test hooks. */

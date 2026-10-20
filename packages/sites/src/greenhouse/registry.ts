@@ -8,7 +8,7 @@ import { STANDARD_WAITS } from "@ezapply/protocol/timing";
 
 const GREENHOUSE_HOST = /^(job-)?boards(\.eu)?\.greenhouse\.io$/i;
 
-export function isGreenhouseUrl(url: string): boolean {
+function isGreenhouseUrl(url: string): boolean {
   try {
     const u = new URL(url);
     return u.protocol === "https:" && GREENHOUSE_HOST.test(u.hostname);
@@ -18,7 +18,7 @@ export function isGreenhouseUrl(url: string): boolean {
 }
 
 /** The board (the employer's space), lowercased: the embed's `for`, else the path's first segment. */
-export function greenhouseTenant(url: string): string | undefined {
+function greenhouseTenant(url: string): string | undefined {
   if (!isGreenhouseUrl(url)) return undefined;
   const u = new URL(url);
   const first = u.pathname.split("/").filter(Boolean)[0];
@@ -27,7 +27,7 @@ export function greenhouseTenant(url: string): string | undefined {
 }
 
 /** The job id: `/jobs/<id>`, or the embed's `token`. */
-export function greenhouseJob(url: string): string | undefined {
+function greenhouseJob(url: string): string | undefined {
   if (!isGreenhouseUrl(url)) return undefined;
   const u = new URL(url);
   return (/\/jobs\/(\d+)/.exec(u.pathname)?.[1] ?? u.searchParams.get("token") ?? undefined)?.toLowerCase();
@@ -38,7 +38,7 @@ export function greenhouseJob(url: string): string | undefined {
  * Greenhouse's embed script reads `gh_jid` to load that job's application, so the page is that job's whatever its
  * host. Lowercased digits; undefined on Greenhouse's own pages, whose path names the job.
  */
-export function greenhouseHostPageJob(url: string): string | undefined {
+function greenhouseHostPageJob(url: string): string | undefined {
   let u: URL;
   try {
     u = new URL(url);

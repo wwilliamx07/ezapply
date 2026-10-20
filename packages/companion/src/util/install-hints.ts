@@ -1,4 +1,4 @@
-export type InstallableTool = "tex" | "git" | "ghostscript";
+type InstallableTool = "tex" | "git" | "ghostscript";
 
 /** The command (or instruction) that installs a tool on this OS, for people: `ezapply doctor` prints it. */
 export function installCommand(tool: InstallableTool): string {

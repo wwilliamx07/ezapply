@@ -1,21 +1,18 @@
 # The panel's agent stops when ezapply's tools aren't connected yet
 
-**What.** A conversation can end at its first tool call with "Claude Code stopped unexpectedly: MCP tool
-mcp__ezapply__permission_ask (passed via --permission-prompt-tool) not found", listing only the user's claude.ai
-connectors.
+**What.** A conversation can end at its first tool call with "Claude Code stopped unexpectedly": the permission
+prompt tool it was started with isn't found.
 
-**Why.** Claude Code connects MCP servers in the background and starts the turn before they're up. The claude.ai
-connectors come up at once; the ezapply server is `node … mcp` (the relay), which took a few seconds to start on
-Windows and now takes about 0.25 s ([cli](../../references/components/cli.md#commands)). A first tool call made in
-that window, a `ToolSearch` for the ezapply tools, has Claude Code check
-`--permission-prompt-tool`, find no such tool, and exit. The ezapply tools arrive a moment later.
+**Why.** Claude Code connects MCP servers in the background and starts the turn before they're up. A first tool
+call made before ezapply's server is connected has Claude Code look for its permission prompt tool, find none, and
+exit; ezapply's tools arrive a moment later. The server starts in about a quarter of a second
+([cli](../../references/components/cli.md#commands)), which may already close the window.
 
 **Plan.**
-1. Check in a live run whether the race still shows now that the relay starts fast; the rest only if it does.
-2. When a process exits before taking its first message and its stderr names the permission prompt tool, start it
-   again (resuming the session) and send the message again, once.
-3. Find out from the installed Claude Code whether `-p` can be made to wait for MCP servers before the first turn
-   (an environment variable or setting), and use it in `AgentProcess` if so.
-4. A test with the stub that exits that way.
+- Check in a live run whether the race still shows; the rest only if it does.
+- When a process exits before taking its first message, naming the permission prompt tool, start it again
+  (resuming the session) and send the message again, once.
+- Find out whether Claude Code can be made to wait for its MCP servers before the first turn, and use it if so.
+- A test with a stub that exits that way.
 
 [details](details.md)

@@ -20,10 +20,7 @@ export interface Extraction {
 }
 
 /** The driver a spot names, else the first of the site's that recognises its container. */
-export function driverFor(
-  site: SiteDefinition,
-  spot: Pick<FieldSpot, "container" | "driver">,
-): WidgetDriver | undefined {
+function driverFor(site: SiteDefinition, spot: Pick<FieldSpot, "container" | "driver">): WidgetDriver | undefined {
   return spot.driver ?? site.widgets.find((w) => w.is(spot.container));
 }
 

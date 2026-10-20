@@ -9,8 +9,8 @@ import type { Services } from "../../companion/src/services.js";
 
 /**
  * The skills and EZAPPLY.md show tool calls as `tool { parameter, optional? }`. Claude Code defers the ezapply
- * tools, so the agent sees their names without their parameters and guesses; in two live runs it guessed wrong
- * 11 times (`fill_fields` with `fields`, `add_repeatable` with `buttonId`, …), a turn each. These tests keep the
+ * tools, so the agent sees their names without their parameters and guesses, and a wrong guess
+ * (`fill_fields` with `fields`, `add_repeatable` with `buttonId`, …) costs a turn. These tests keep the
  * shapes true to the registered schemas, and make every file that mentions a tool with required parameters
  * show its shape at least once.
  */

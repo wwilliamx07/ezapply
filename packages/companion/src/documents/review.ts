@@ -94,7 +94,7 @@ export interface ShortDocument {
 }
 
 /** How a review ended, as the agent gets it. */
-export type ReviewEnd =
+type ReviewEnd =
   | ({ done: true } & ReviewAnswer)
   | { done: false; supersededBy: string; hint: string }
   | { done: false; expired: true; hint: string };

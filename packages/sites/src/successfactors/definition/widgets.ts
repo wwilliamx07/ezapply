@@ -302,7 +302,7 @@ const fieldMessage = (c: HTMLElement) =>
     .join(" ");
 
 /** Presses OK in a confirmation dialog, if one shows ("Are you sure you want to delete this file?"). */
-export async function confirmDialog(doc: Document, ms: number): Promise<boolean> {
+async function confirmDialog(doc: Document, ms: number): Promise<boolean> {
   const ok = await waitFor(
     () =>
       [...doc.querySelectorAll<HTMLElement>("[role='dialog'] button, [role='alertdialog'] button, .sfDialogBox button")]

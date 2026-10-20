@@ -7,7 +7,7 @@
  * with a Save button, saved tiles and timeline entries, and the pagination. It is not Oracle: live
  * verification is still required.
  */
-export interface OracleOptions {
+interface OracleOptions {
   /** The multi-page flow: one section at a time, Next and Previous; Submit on the last. Default: single page. */
   multiPage?: boolean;
   /** A returning candidate: "Welcome Back… Use My Profile" over the form. */
@@ -23,16 +23,20 @@ export interface OracleOptions {
 }
 
 /** With `liveSearch`: how long the postal code list waits after typing before it searches. */
-export const POSTAL_SEARCH_DELAY_MS = 300;
+const POSTAL_SEARCH_DELAY_MS = 300;
 
 const COUNTRIES = ["Canada", "United States", "United Kingdom", "Finland", "France"];
 /** As live: the list labels a city with its province, and the field shows the city alone once chosen. */
 const CITIES: Record<string, string[]> = {
-  Canada: ["Ottawa, Ontario", "Toronto, Ontario", "Montreal, Quebec", "Kanata, Ontario"],
+  Canada: ["Ottawa, Ontario", "Toronto, Ontario", "Montreal, Quebec", "Springfield, Ontario"],
   "United States": ["Boston, Massachusetts", "Dallas, Texas"],
 };
 /** The server returns the first page when the list opens, and finds a code only by the code itself. */
-const POSTAL_CODES = ["K2K 3E7, Kanata, Ontario", "K2K 3E8, Kanata, Ontario", "K2K 3E9, Kanata, Ontario"];
+const POSTAL_CODES = [
+  "A1A 1A7, Springfield, Ontario",
+  "A1A 1A8, Springfield, Ontario",
+  "A1A 1A9, Springfield, Ontario",
+];
 const MONTHS = [
   "January",
   "February",
@@ -52,7 +56,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")
 const LANGUAGES = ["English", "French", "Finnish", "German"];
 
 /** How long the city list takes to search (it asks the server). */
-export const CITY_SEARCH_MS = 150;
+const CITY_SEARCH_MS = 150;
 
 const row = (id: string, label: string, control: string, required = false) => `
   <div class="input-row input-row--text">

@@ -8,6 +8,8 @@ import {
   TIMING_FILE,
   timingFileTemplate,
   WORKSPACE_DIRS,
+  writeFileAtomic,
+  writeJsonAtomic,
 } from "@ezapply/companion";
 
 const TEMPLATES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "templates");
@@ -19,7 +21,7 @@ export interface InitReport {
   kept: string[];
 }
 
-export interface InitOptions {
+interface InitOptions {
   /**
    * The Antigravity CLI's settings folder (`~/.gemini/antigravity-cli`). When it exists, ezapply's tools are allowed
    * there; tests leave it out so they never touch the real one.
@@ -48,7 +50,7 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
 
   // EZAPPLY.md is ours and always refreshed; CLAUDE.md belongs to the user and only imports it.
   const agentDoc = await readFile(join(TEMPLATES, "workspace", "EZAPPLY.md"), "utf8");
-  await writeFile(join(root, "EZAPPLY.md"), agentDoc.replaceAll("{{EZAPPLY}}", `node "${CLI_MAIN}"`), "utf8");
+  await writeFileAtomic(join(root, "EZAPPLY.md"), agentDoc.replaceAll("{{EZAPPLY}}", `node "${CLI_MAIN}"`));
   report.updated.push(join(root, "EZAPPLY.md"));
   await ensureClaudeMd(join(root, "CLAUDE.md"), report);
   await installDefaultCoverTemplate(join(root, "templates", "cover"), report);
@@ -228,12 +230,12 @@ async function ensureClaudeMd(path: string, report: InitReport): Promise<void> {
   const current = await readFile(path, "utf8");
   if (current.startsWith("# ezapply workspace")) {
     // Written by ezapply 0.1 before the managed/user split: keep a backup, replace with the stub.
-    await writeFile(`${path}.bak`, current, "utf8");
-    await writeFile(path, await readFile(join(TEMPLATES, "workspace", "CLAUDE.md"), "utf8"), "utf8");
+    await writeFileAtomic(`${path}.bak`, current);
+    await writeFileAtomic(path, await readFile(join(TEMPLATES, "workspace", "CLAUDE.md"), "utf8"));
     report.updated.push(`${path} (previous version saved as CLAUDE.md.bak)`);
     return;
   }
-  await writeFile(path, `${IMPORT_LINE}\n\n${current}`, "utf8");
+  await writeFileAtomic(path, `${IMPORT_LINE}\n\n${current}`);
   report.updated.push(`${path} (added ${IMPORT_LINE} import)`);
 }
 
@@ -244,7 +246,7 @@ async function ensureClaudeMd(path: string, report: InitReport): Promise<void> {
 async function ensureImport(path: string, line: string, report: InitReport): Promise<boolean> {
   const name = path.split(/[\\/]/).pop() as string;
   if (!(await exists(path))) {
-    await writeFile(path, await readFile(join(TEMPLATES, "workspace", name), "utf8"), "utf8");
+    await writeFileAtomic(path, await readFile(join(TEMPLATES, "workspace", name), "utf8"));
     report.created.push(path);
     return true;
   }
@@ -254,7 +256,7 @@ async function ensureImport(path: string, line: string, report: InitReport): Pro
     return true;
   }
   if (name !== "AGENTS.md") return false;
-  await writeFile(path, `${line}\n\n${current}`, "utf8");
+  await writeFileAtomic(path, `${line}\n\n${current}`);
   report.updated.push(`${path} (added the EZAPPLY.md include)`);
   return true;
 }
@@ -304,7 +306,7 @@ async function migrateWorkspaceConfig(path: string, report: InitReport): Promise
     changes.push("context.restartOnCapture removed (`ezapply chat` is gone)");
   }
   if (changes.length === 0) return;
-  await writeFile(path, `${JSON.stringify(raw, null, 2)}\n`, "utf8");
+  await writeJsonAtomic(path, raw);
   report.updated.push(`${path} (${changes.join("; ")})`);
 }
 
@@ -317,8 +319,7 @@ async function writeIfMissing(path: string, content: string, report: InitReport)
     report.kept.push(path);
     return;
   }
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, content, "utf8");
+  await writeFileAtomic(path, content);
   report.created.push(path);
 }
 
@@ -329,7 +330,6 @@ async function mergeJson(
 ): Promise<void> {
   const existed = await exists(path);
   const cur = existed ? (JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>) : {};
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(fn(cur), null, 2)}\n`, "utf8");
+  await writeJsonAtomic(path, fn(cur));
   (existed ? report.updated : report.created).push(path);
 }

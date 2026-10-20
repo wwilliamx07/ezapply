@@ -146,8 +146,8 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
 ## Errors
 
 `EzError { code, message, hint? }`, serialized as `ErrorPayload`. Codes: `bad_request`, `unauthorized`,
-`protocol_mismatch`, `not_paired`, `extension_disconnected`, `timeout`, `not_found`, `no_posting` (no posting named outside a posting's conversation),
-`capture_failed`, `path_not_allowed`, `posting_mismatch` (the tab is another posting's: nothing that changes the page runs), `internal`. `EzError.from(anything)` wraps unknown errors as
+`protocol_mismatch`, `extension_disconnected`, `timeout`, `not_found`, `no_posting` (no posting named outside a posting's conversation),
+`path_not_allowed`, `posting_mismatch` (the tab is another posting's: nothing that changes the page runs), `internal`. `EzError.from(anything)` wraps unknown errors as
 `internal`.
 
 ## Changing the protocol

@@ -2,8 +2,7 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type PDFPagePr
 import { linkRect, type PdfLink, safeLinkUrl } from "./links.js";
 import { joinItems, type TextItem } from "./text.js";
 
-export type { PdfLink } from "./links.js";
-export { itemsOf, type TextItem } from "./text.js";
+export { itemsOf } from "./text.js";
 
 declare const __PDF_WORKER__: string;
 

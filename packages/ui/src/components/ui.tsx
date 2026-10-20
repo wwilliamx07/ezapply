@@ -168,7 +168,7 @@ const PATHS: Record<string, ReactNode> = {
   ),
 };
 
-export type IconName = keyof typeof PATHS;
+type IconName = keyof typeof PATHS;
 
 /** A decorative icon: the button or text beside it says what it means. */
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {

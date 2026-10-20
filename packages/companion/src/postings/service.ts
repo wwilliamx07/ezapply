@@ -17,13 +17,13 @@ import type { Workspace } from "../workspace/workspace.js";
 import { applicationFromUrl, checkReqId, findApplication } from "./application.js";
 import { extractPosting } from "./extract.js";
 
-export interface PostingFile {
+interface PostingFile {
   path: string;
   bytes: number;
   modifiedAt: string;
 }
 
-export interface PostingDetails extends PostingMeta {
+interface PostingDetails extends PostingMeta {
   folder: string;
   postingMd: string;
   visibleText: string;
@@ -168,7 +168,7 @@ export class PostingsService {
         throw new EzError(
           ErrorCode.BadRequest,
           req.reason,
-          "reqId is the job's requisition or id as the employer shows it (Req100010, R-0000100575, 1000454). " +
+          "reqId is the job's requisition or id as the employer shows it (Req100010, R-0000000001, 1000001). " +
             "Put the title in role.",
         );
       }

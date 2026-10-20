@@ -33,7 +33,7 @@ const result = await build({
   entryPoints: {
     review: "src/review/main.tsx",
     onboard: "src/onboard/main.tsx",
-    // The stylesheet alone, for the pages the companion still renders itself (GitHub setup, errors).
+    // The stylesheet alone, for the pages the companion renders itself (GitHub setup, errors).
     base: "src/styles/base.css",
   },
   outdir: dist,

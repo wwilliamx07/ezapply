@@ -11,7 +11,7 @@ import type { Workspace } from "../workspace/workspace.js";
 export type TemplateKind = "resume" | "cover";
 
 /** templates/<kind>/template.json: which file is the entry point. */
-export const TemplateMeta = z.object({
+const TemplateMeta = z.object({
   schemaVersion: z.literal(1),
   main: z.string().regex(/\.tex$/i),
   /** default: shipped by ezapply, replaceable without asking. imported: the user's LaTeX. custom: made or edited by Claude. */
@@ -363,7 +363,7 @@ export class TemplateService {
   }
 }
 
-export interface LibraryDocument {
+interface LibraryDocument {
   /** Workspace-relative, with forward slashes (`library/resume.tex`). */
   path: string;
   abs: string;

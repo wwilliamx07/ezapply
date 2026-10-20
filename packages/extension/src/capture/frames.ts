@@ -9,7 +9,7 @@ import type { PageCapture } from "./capture.js";
 const OTHER_BOARD_HOST =
   /(^|\.)(icims\.com|smartrecruiters\.com|jobvite\.com|bamboohr\.com|workable\.com|recruitee\.com|teamtailor\.com|personio\.(de|com))$/i;
 
-export const isEmbeddedBoardHost = (host: string) => Boolean(providerOf(host)) || OTHER_BOARD_HOST.test(host);
+const isEmbeddedBoardHost = (host: string) => Boolean(providerOf(host)) || OTHER_BOARD_HOST.test(host);
 
 export interface FrameCapture {
   frameId: number;

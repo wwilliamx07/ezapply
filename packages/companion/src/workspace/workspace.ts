@@ -39,7 +39,7 @@ const WorkspaceState = z.object({
     })
     .optional(),
 });
-export type WorkspaceState = z.infer<typeof WorkspaceState>;
+type WorkspaceState = z.infer<typeof WorkspaceState>;
 
 /** Filesystem access to the user's workspace, with path guards. */
 export class Workspace {

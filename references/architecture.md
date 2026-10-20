@@ -136,7 +136,7 @@ Formats of every file: [data-formats.md](data-formats.md).
   line plus its hint; only unexpected errors show a stack.
 - **Finding installed tools.** `which()` caches hits only, and on Windows first appends the folders where
   winget installs MiKTeX and Git, so a tool installed mid-session works without a restart.
-- **Versioning.** `PROTOCOL_VERSION` (currently 11) is checked at the bridge handshake; a mismatch is
+- **Versioning.** `PROTOCOL_VERSION` is checked at the bridge handshake; a mismatch is
   refused with which side to update. The extension also sends its registry's site ids, and a different list is
   refused, so adding a site needs no bump ([handshake](components/protocol.md#bridge-handshake)). Every stored format has a `schemaVersion`. `COMPANION_VERSION`
   matches the package version (tested).

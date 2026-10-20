@@ -6,7 +6,7 @@ import { SiteId } from "./postings.js";
  * ezapply opens for the user lands in the browser they apply in (their sign-ins, the extension), not the
  * system default.
  */
-export const BROWSER_NAMES = ["chrome", "edge", "brave", "opera", "vivaldi", "chromium"] as const;
+const BROWSER_NAMES = ["chrome", "edge", "brave", "opera", "vivaldi", "chromium"] as const;
 export type BrowserName = (typeof BROWSER_NAMES)[number];
 
 /** The browser the extension runs in. `name` is a BrowserName, or something newer the companion may not know. */

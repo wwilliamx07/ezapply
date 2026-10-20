@@ -186,8 +186,8 @@ The side panel's conversations ([agent](components/agent.md)), written by the co
   with. `sessionId` is ezapply's id for the session: the Claude Code session the conversation's process starts
   (`--session-id`) or, once `started` (the agent answered once), resumes. `agentSessionId` is Antigravity's own id
   for it, which a later process continues (`--conversation`). `totalCostUsd` is the session's spend so far, Claude
-  Code's estimate. `agent` and `agentSessionId` were added as optional fields an older file parses without, so
-  `schemaVersion` stayed 1. Reset moves the session to
+  Code's estimate. `agent` and `agentSessionId` are optional, so a file without them still parses at
+  `schemaVersion` 1. Reset moves the session to
   `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
   empty. A key that's a bare posting id is an older build's one conversation per posting: the companion moves it
   to `<posting id>/tailor`, with its logs, once per run

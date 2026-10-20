@@ -23,4 +23,3 @@ tools, data formats, flows, security, development practices and status. Start at
 - **Rules, not history.** A page states how things are now and why. Which commit did what, and when, is in git;
   a past incident stays only as the reason for a rule, in a sentence. `status.md` names the changes a live run
   still has to check, until it has.
-- **Found something wrong or missing?** Fix the reference, even when it isn't part of the current task.

@@ -1,7 +1,5 @@
 # Application tracker: progress and outcomes
 
-**Value** Medium · **Size** M · **Needs first** — · Part of the application manager
-
 **What.** "What's in flight?": each posting's progress, deadline, date submitted, what the employer did after, and
 the next action.
 
@@ -9,6 +7,6 @@ the next action.
 happened after submitting.
 
 **Plan.**
-1. An optional `outcome` in `meta.json`, beside `status`, set by the user through the agent.
-2. `postings_list` gains deadline, submitted date, outcome, filters and sorting.
-3. Views: an `ezapply-status` skill, `ezapply status --postings`, perhaps a read-only page.
+- An optional outcome in the posting's record, beside its progress, set by the user through the agent.
+- The postings list gains deadline, submitted date, outcome, filters and sorting.
+- Views: a status skill, a status command, perhaps a read-only page.

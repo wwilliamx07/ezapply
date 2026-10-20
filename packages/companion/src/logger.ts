@@ -6,8 +6,8 @@ import { appDir } from "./config/app.js";
 export type { Logger };
 
 /** companion.log is rotated once it passes this size: companion.log → .1 → .2, the oldest dropped. */
-export const LOG_MAX_BYTES = 5 * 1024 * 1024;
-export const LOG_KEEP = 3;
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+const LOG_KEEP = 3;
 const ROTATE_CHECK_MS = 10 * 60_000;
 
 /**

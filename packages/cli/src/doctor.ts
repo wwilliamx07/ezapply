@@ -31,8 +31,8 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 
-  const major = Number(process.versions.node.split(".")[0]);
-  add("node", major >= 22, `v${process.versions.node} (need >= 22)`);
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  add("node", major > 22 || (major === 22 && minor >= 12), `v${process.versions.node} (need >= 22.12)`);
 
   const config = await loadAppConfig().catch((e: Error) => {
     add("config", false, e.message);

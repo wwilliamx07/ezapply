@@ -80,7 +80,7 @@ export function isVisible(el: Element): boolean {
 }
 
 /** React stores props on the DOM node under a randomised key. Only visible from the MAIN world. */
-export function reactProps(el: Element): Record<string, unknown> | null {
+function reactProps(el: Element): Record<string, unknown> | null {
   for (const key of Object.keys(el)) {
     if (key.startsWith("__reactProps$")) return (el as unknown as Record<string, Record<string, unknown>>)[key] ?? null;
   }
@@ -88,7 +88,7 @@ export function reactProps(el: Element): Record<string, unknown> | null {
 }
 
 /** A React fiber, as far as the drivers read one: its props, its parent, and its other copy. */
-export interface Fiber {
+interface Fiber {
   memoizedProps?: unknown;
   return?: Fiber | null;
   alternate?: Fiber | null;
@@ -181,7 +181,7 @@ export function key(el: Element, k: string): void {
 }
 
 /** Resolve once the DOM has been quiet for `quietMs`, or after `maxMs`. */
-export function settle(doc: Document, quietMs = 250, maxMs = 4000): Promise<void> {
+export function settle(doc: Document, quietMs: number, maxMs: number): Promise<void> {
   const ev = waitStarted("settle", maxMs, quietMs);
   return new Promise((resolve) => {
     let timer = setTimeout(() => done("quiet"), quietMs);
@@ -255,7 +255,7 @@ export function watchRequests(doc: Document): { pending(): number; stop(): void 
 /** Poll for a condition (cheap and robust against portals re-rendering). */
 export async function waitFor<R>(
   fn: () => R | null | undefined | false,
-  maxMs = 3000,
+  maxMs: number,
   stepMs = T.pollMs,
 ): Promise<R | null> {
   const ev = waitStarted("waitFor", maxMs);

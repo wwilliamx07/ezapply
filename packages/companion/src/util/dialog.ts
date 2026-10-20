@@ -1,8 +1,8 @@
 import { run, which } from "./proc.js";
 
-export type PickKind = "folder" | "tex";
+type PickKind = "folder" | "tex";
 
-export type PickResult = { path: string } | { cancelled: true } | { unavailable: true };
+type PickResult = { path: string } | { cancelled: true } | { unavailable: true };
 
 /** What the dialog's program prints when the user picks nothing. */
 const CANCELLED = "\u0018";
@@ -27,7 +27,7 @@ export async function pickPath(kind: PickKind, title: string): Promise<PickResul
 }
 
 /** The program and arguments for the dialog, or null when the system has none (exported for tests). */
-export function dialogCommand(kind: PickKind, title: string): string[] | null {
+function dialogCommand(kind: PickKind, title: string): string[] | null {
   if (process.platform === "win32") {
     // WinForms dialogs need a single-threaded apartment (-STA); an owner form kept on top brings the dialog in
     // front of the browser that asked for it.

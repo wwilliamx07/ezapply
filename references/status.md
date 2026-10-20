@@ -22,11 +22,16 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **A light entry for the CLI.** `ezapply` imports each command's code when it runs, and the relay only the
   companion's config and endpoints, since the relay starts with every panel conversation and loading the whole
   companion took about 1.5 s of it ([cli](components/cli.md#commands)).
+- **The coding agent's own CLI, run headless,** not the Agent SDK, an agent loop of ezapply's own, or channels: the
+  CLI keeps the user's login, skills and permissions, and channels don't work under `-p`
+  ([agent](components/agent.md#the-process-processts)).
+- **Call shapes in the skills,** not a step that loads the tools' schemas: Claude Code defers MCP tools and the
+  agent guessed parameter names, a turn each ([workspace](components/workspace.md#call-shapes)).
 - **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation; there's
   no Claude Code in the terminal, so there's one way to run ezapply ([cli](components/cli.md#commands)).
 - **Applications side by side, with no cap.** Each panel conversation has its own agent process and works on its
-  own posting, resolved from its session (there's no workspace-wide active posting); a tab is bound to one application, and
-  shared files are written one at a time. The user decides how many to start
+  own posting, resolved from its session; a tab is bound to one application, and shared files are written one at a
+  time. The user decides how many to start
   ([agent](components/agent.md#conversations-servicets)).
 - **No active posting.** A call's posting is the one it names, else its conversation's; the general conversation and
   a terminal chat name it, and form calls without one credit nothing ([which posting](mcp-tools.md#postings)).

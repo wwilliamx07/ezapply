@@ -1,5 +1,5 @@
 /** How long a closed dropdown listbox stays on screen while it animates away. */
-export const LISTBOX_LINGER_MS = 150;
+const LISTBOX_LINGER_MS = 150;
 
 /**
  * A small behavioural imitation of a Workday application step, built from the structure real tenants
@@ -25,8 +25,8 @@ export interface StepOptions {
    */
   liveDropdowns?: boolean;
   /**
-   * A dropdown whose list was closed without a choice ignores the next press on its button, which is what two
-   * live runs showed: the first open after list_options or a miss failed, the next attempt worked.
+   * A dropdown whose list was closed without a choice ignores the next press on its button, as seen live: the
+   * first open after reading the options or a miss failed, the next attempt worked.
    */
   dismissedIgnoresNextPress?: boolean;
   /**
@@ -52,7 +52,7 @@ export interface StepOptions {
 const liveListeners = new WeakMap<Document, AbortController>();
 
 /** Search delay of the Skills prompt, which shows "No Items." until its results arrive. */
-export const SKILLS_SEARCH_MS = 400;
+const SKILLS_SEARCH_MS = 400;
 
 const SKILLS = [
   "Python (Programming Language)",

@@ -16,7 +16,7 @@ const ORACLE_PATH =
   /^\/(?:hcmUI\/CandidateExperience\/)?[a-z]{2}(?:-[A-Za-z]{2,4})?\/sites\/([^/]+)\/(?:job|jobs|requisitions|my-profile)(?:\/|$)/i;
 
 /** The language segment after the optional `hcmUI/CandidateExperience` prefix, which the same job's links vary. */
-export const ORACLE_LOCALE_SEGMENT = /^(\/hcmUI\/CandidateExperience)?\/[a-z]{2}(?:-[A-Za-z]{2,4})?(?=\/sites\/)/i;
+const ORACLE_LOCALE_SEGMENT = /^(\/hcmUI\/CandidateExperience)?\/[a-z]{2}(?:-[A-Za-z]{2,4})?(?=\/sites\/)/i;
 
 export function isOracleUrl(url: string): boolean {
   try {
@@ -52,7 +52,7 @@ export function oracleJobPath(pathname: string): string {
 }
 
 /** The job id an Oracle URL is for (`…/job/42/apply/section/1` → `42`), lowercased. */
-export function oracleJob(url: string): string | undefined {
+function oracleJob(url: string): string | undefined {
   if (!oracleTenant(url)) return undefined;
   return /\/job\/([^/]+)/i.exec(new URL(url).pathname)?.[1]?.toLowerCase();
 }

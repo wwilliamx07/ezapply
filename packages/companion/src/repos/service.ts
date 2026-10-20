@@ -12,7 +12,7 @@ import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
 
 /** knowledge/<key>/meta.json */
-export const KnowledgeMeta = z.object({
+const KnowledgeMeta = z.object({
   schemaVersion: z.literal(1),
   repo: z.string(),
   url: z.string(),
@@ -24,7 +24,7 @@ export const KnowledgeMeta = z.object({
 export type KnowledgeMeta = z.infer<typeof KnowledgeMeta>;
 
 /** knowledge/<key>/claims.yaml */
-export const Claim = z.preprocess(
+const Claim = z.preprocess(
   // Claims used to cite `evidence: [{ path, lines?, sha?, hash? }]`; read that as its paths.
   (raw) => {
     if (!raw || typeof raw !== "object" || "files" in raw || !("evidence" in raw)) return raw;
@@ -45,16 +45,16 @@ export const Claim = z.preprocess(
     user_edited: z.boolean().default(false),
   }),
 );
-export const ClaimsFile = z.object({ schemaVersion: z.literal(1), repo: z.string(), claims: z.array(Claim) });
+const ClaimsFile = z.object({ schemaVersion: z.literal(1), repo: z.string(), claims: z.array(Claim) });
 
 /** One file changed since the last index; `added`/`removed` are null for a binary file. */
-export interface ChangedFile {
+interface ChangedFile {
   path: string;
   added: number | null;
   removed: number | null;
 }
 
-export interface SyncResult {
+interface SyncResult {
   repo: string;
   path: string;
   headSha: string;
@@ -70,11 +70,11 @@ export interface SyncResult {
 }
 
 /** What `repo_diff` returns at most, so one call can't flood the context. */
-export const DIFF_MAX_CHARS = 60_000;
+const DIFF_MAX_CHARS = 60_000;
 
 type RepoSource = "app" | "public-url";
 
-export interface ClaimsCheck {
+interface ClaimsCheck {
   valid: boolean;
   claims: number;
   errors: { path: string; message: string }[];

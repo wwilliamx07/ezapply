@@ -10,7 +10,7 @@ import { successfactors } from "./successfactors/definition/site.js";
 import { workday } from "./workday/definition/site.js";
 
 /**
- * Every site's definition, by registry id. Each site's bundle imports only its own (`<site>/main.ts`); this list is
+ * Every site's definition, by registry id. Each site's bundle imports only its own (`<site>/definition/main.ts`); this list is
  * for tests, which check that every registry entry has a definition and that each passes the same conformance test.
  */
 export const SITE_DEFINITIONS: Record<FormSiteId, SiteDefinition> = {

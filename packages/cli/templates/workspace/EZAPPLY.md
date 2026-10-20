@@ -1,12 +1,12 @@
 # ezapply workspace
 
-<!-- Managed by ezapply: overwritten by `ezapply init`. Put your own notes in CLAUDE.md. -->
+<!-- Managed by ezapply: overwritten by `ezapply init`. Put your own notes in CLAUDE.md (AGENTS.md for Antigravity). -->
 
 This is the user's ezapply workspace: their profile, base documents, project knowledge, and one folder per
-job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills in
-`.claude/skills/`: use the matching skill for each task. Tool calls here and in the skills are written
-`tool { parameter, optional? }`: use exactly those parameter names. The tools work while `ezapply` runs; if a tool
-says it isn't running, tell the user to start it.
+job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills (in
+`.claude/skills/`, or `.agents/skills/` for Antigravity): use the matching skill for each task. Tool calls here
+and in the skills are written `tool { parameter, optional? }`: use exactly those parameter names. The tools work
+while `ezapply` runs; if a tool says it isn't running, tell the user to start it.
 
 ## Setup and errors
 - New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
@@ -55,7 +55,7 @@ human applicant submits. On the first request about a posting, read its applicat
 record them at the top of `postings/<id>/notes.md` under `## Application requirements`:
 - documents asked for (resume, cover letter, transcript, writing sample, references, portfolio) and ones
   it says not to send;
-- **"all files in one PDF"** or a single upload: set `bundleRequired: true` with `posting_update_meta`
+- **"all files in one PDF"** or a single upload: set it with `posting_update_meta { bundleRequired: true }`
   and use the **ezapply-bundle** skill;
 - file format, file naming, size limits, page or word limits, who to address, reference numbers to quote,
   questions to answer in the letter, deadline.

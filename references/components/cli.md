@@ -73,8 +73,8 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    extension keeps them now ([agent](agent.md#permission-mode-model-and-effort)).
 10. **Antigravity's files** (`initAntigravity`): `AGENTS.md` (the user's) created as a stub including `EZAPPLY.md`
    and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
-   `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, `mcp(ezapply/*)` in
-   its `settings.json`'s `permissions.allow` ([why](workspace.md#antigravity)). Tests pass no settings folder, so they
+   `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, ezapply's allow and deny
+   rules in its `settings.json` ([which, and why](workspace.md#antigravity)). Tests pass no settings folder, so they
    never touch the real one.
 11. **Launcher** (`writeLauncher`): `ezapply.cmd` on Windows (`@echo off` then `"<node>" "<main.js>" %*`), `ezapply`
    elsewhere (`#!/bin/sh` then `exec "<node>" "<main.js>" "$@"`, mode 755), rewritten every time. So
@@ -138,8 +138,7 @@ How the user runs ezapply: `hostPanel`, with no command. It and the tests are th
    `quietProcess`: libraries print (pdfjs through `console.log`, dependencies' warnings on stderr), so
    `console.*` and `process.stderr.write` go to the log and the terminal shows only these lines.
    `process.stdout` stays: ezapply's own lines go there. A server error after listening is logged.
-5. Waits for SIGINT, SIGTERM or SIGHUP (the terminal closing), then closes the companion (the agent's Claude
-   Code processes, the extension socket with 1001, the HTTP server and its connections) and exits 0.
+5. Waits for SIGINT, SIGTERM or SIGHUP (the terminal closing), then closes the companion (the agents' processes, the extension socket with 1001, the HTTP server and its connections) and exits 0.
 
 The terminal is ezapply's: Ctrl+C stops it. The panel keeps conversations per posting
 ([agent](agent.md#conversations-servicets)), so a finished application isn't re-sent with every turn of the next one.
@@ -179,6 +178,6 @@ the user looks at it before it's copied to the site's `fixtures/` in `packages/s
 
 ## Shipped templates (`packages/cli/templates/`)
 - `workspace/EZAPPLY.md`: the agent file → [workspace.md](workspace.md#the-agent-file-ezapplymd)
-- `workspace/CLAUDE.md`: the user's stub
-- `skills/*/SKILL.md` (and `ezapply-apply`'s supporting files): `ezapply-onboard`, `ezapply-repos`, `ezapply-index-repo`, `ezapply-resume`, `ezapply-cover-letter`, `ezapply-bundle`, `ezapply-apply`, `ezapply-answers`
+- `workspace/CLAUDE.md`, `workspace/AGENTS.md`: the user's stubs for Claude Code and Antigravity
+- `skills/*/SKILL.md` (and `ezapply-apply`'s supporting files): the [skills](workspace.md#skills-claudeskills)
 - `cover/`: the default cover letter → [profile-and-templates.md](profile-and-templates.md#the-default-cover-letter)

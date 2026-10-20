@@ -13,7 +13,7 @@ import { STANDARD_WAITS } from "@ezapply/protocol/timing";
 
 const APPLY_PATH = /^(?:\/[^/]+)*\/(?:hvh)?apply\/?$/i;
 
-export function isPhenomUrl(url: string): boolean {
+function isPhenomUrl(url: string): boolean {
   try {
     const u = new URL(url);
     return u.protocol === "https:" && APPLY_PATH.test(u.pathname) && Boolean(u.searchParams.get("jobSeqNo")?.trim());
@@ -26,7 +26,7 @@ export function isPhenomUrl(url: string): boolean {
  * The employer's space: the careers site's host, lowercased, for any https page of a Phenom site (the extension may
  * know a page is Phenom's by its body when its URL is no apply page's).
  */
-export function phenomTenant(url: string): string | undefined {
+function phenomTenant(url: string): string | undefined {
   try {
     const u = new URL(url);
     return u.protocol === "https:" ? u.hostname.toLowerCase() : undefined;
@@ -39,7 +39,7 @@ export function phenomTenant(url: string): string | undefined {
  * The job: `jobSeqNo`, lowercased (Phenom's id for the job on that site, which embeds the requisition). Only the apply
  * pages name it: the posting page's `…/job/<id>/` is another id (`R-0000000001` for `GLOBA0001R0000000001EXTERNALENCA`).
  */
-export function phenomJob(url: string): string | undefined {
+function phenomJob(url: string): string | undefined {
   try {
     return new URL(url).searchParams.get("jobSeqNo")?.trim().toLowerCase() || undefined;
   } catch {
@@ -48,7 +48,7 @@ export function phenomJob(url: string): string | undefined {
 }
 
 /** The application's identifying path: the apply page whatever its step (`hvhapply` is the same application). */
-export function phenomCanonicalPath(pathname: string): string {
+function phenomCanonicalPath(pathname: string): string {
   return pathname.replace(/\/hvhapply\/?$/i, "/apply");
 }
 

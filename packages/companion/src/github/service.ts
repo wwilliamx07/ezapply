@@ -74,7 +74,7 @@ export interface RepoInfo {
   defaultBranch: string;
 }
 
-export interface GitHubOptions {
+interface GitHubOptions {
   secrets: SecretStore;
   appFilePath: string;
   /** http://127.0.0.1:<port>: known only after the server listens. */
@@ -86,7 +86,7 @@ export interface GitHubOptions {
 }
 
 /** Which app github_login should use: create a new one, or connect one the user already has. */
-export type AppChoice = "new" | "existing";
+type AppChoice = "new" | "existing";
 
 /** An existing app's credentials the user entered, kept in memory until a login with them succeeds. */
 interface AppCredentials {

@@ -74,9 +74,9 @@ class hooks work in any language, and Submit is also known by its class.
 cx-select (`combo.ts`), also each part of a date. Opening focuses and presses the input (the widget loads every
 option), else its arrow button, else React's handler; a list that still hasn't shown is searched anyway (a school list
 didn't show within the open waits while a search found it). An option matching the value is pressed; else the value
-is typed, then its part before the first comma (a postal-code search finds "K2K 3E9" but not "K2K 3E9, Kanata,
+is typed, then its part before the first comma (a postal-code search finds "A1A 1A9" but not "A1A 1A9, Springfield,
 Ontario"). The read-back is what the input shows once focus leaves, which may be the start of the option's label
-("Kanata, Ontario" shows "Kanata"); leaving also puts back typed text the list didn't take, so what shows is the
+("Springfield, Ontario" shows "Springfield"); leaving also puts back typed text the list didn't take, so what shows is the
 choice. Nothing matches: the options go back and the widget restores its value. An auto-suggest field keeps typed text.
 - **Its traps,** from the widget's code: Escape on a **closed** list clears the value, so Escape goes only to an open
   one; it searches only while its input has focus; another open list is closed first. And from a live run: choosing a

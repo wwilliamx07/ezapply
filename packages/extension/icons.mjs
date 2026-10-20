@@ -1,12 +1,12 @@
 // The extension's icons: ezapply's mark (packages/ui/static/mark.svg) as the PNGs Chrome takes for an extension and
 // its toolbar button, which can't be SVG. Run after changing the mark: `npm run icons -w @ezapply/extension`. The PNGs
-// are committed, so the build needs no rasterizer; `@napi-rs/canvas` comes with pdf.js.
+// are committed, so the build needs no rasterizer; `@napi-rs/canvas` is a dev dependency.
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
-export const ICON_SIZES = [16, 32, 48, 128];
+const ICON_SIZES = [16, 32, 48, 128];
 
 const root = dirname(fileURLToPath(import.meta.url));
 const svg = await readFile(join(root, "../ui/static/mark.svg"));

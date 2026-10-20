@@ -86,11 +86,11 @@ describe("finding a posting's application from its capture", () => {
   });
 
   it("takes a posting captured on a form site as its own application", () => {
-    const url = "https://hooli.wd3.myworkdayjobs.com/en-US/campus/job/Toronto-ON/Software-Developer-Co-op_1000454";
+    const url = "https://hooli.wd3.myworkdayjobs.com/en-US/campus/job/Toronto-ON/Software-Developer-Co-op_1000001";
     expect(applicationFromUrl({ url, capturedAt: AT })).toMatchObject({
       site: "workday",
       tenant: "hooli",
-      job: "1000454",
+      job: "1000001",
       from: "posting-url",
     });
     expect(applicationFromUrl({ url: "https://careers.cyberdyne.example/job-view/x", capturedAt: AT })).toBeUndefined();
@@ -98,7 +98,7 @@ describe("finding a posting's application from its capture", () => {
 
   it("refuses a title given as a requisition", () => {
     expect(checkReqId(" Req100010 ")).toEqual({ ok: true, value: "Req100010" });
-    expect(checkReqId("R-0000100575")).toEqual({ ok: true, value: "R-0000100575" });
+    expect(checkReqId("R-0000000001")).toEqual({ ok: true, value: "R-0000000001" });
     expect(checkReqId("General - Software Engineer, Intern, 2027").ok).toBe(false);
   });
 });
@@ -213,7 +213,7 @@ describe("which posting a tab belongs to", () => {
       job: "req100012",
       role: "Intern",
     });
-    expect(postingFacts(meta({ reqId: "R-0000100575" }), undefined).job).toBe("r-0000100575");
+    expect(postingFacts(meta({ reqId: "R-0000000001" }), undefined).job).toBe("r-0000000001");
     expect(postingFacts(meta({ reqId: "General - Software Engineer" }), undefined).job).toBeUndefined();
   });
 });

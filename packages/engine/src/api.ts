@@ -38,7 +38,7 @@ declare const __ADAPTER_VERSION__: string | undefined;
  * Identifies this build of the adapter, so a tab holding an older injected copy gets the new one. build.mjs
  * stamps a hash of each site's bundle; unbundled (tests) it's "dev".
  */
-export const ADAPTER_VERSION: string = typeof __ADAPTER_VERSION__ === "string" ? __ADAPTER_VERSION__ : "dev";
+const ADAPTER_VERSION: string = typeof __ADAPTER_VERSION__ === "string" ? __ADAPTER_VERSION__ : "dev";
 
 /**
  * The adapter surface the service worker calls (via chrome.scripting in the page's MAIN world), the same for every
@@ -418,8 +418,6 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
     },
   };
 }
-
-export type Adapter = ReturnType<typeof createAdapter>;
 
 /** Kinds `remove` clears by filling them empty: an agent asked to clear a field reaches for remove_items. */
 const CLEARABLE: ReadonlySet<FieldKind> = new Set(["text", "textarea", "number"]);

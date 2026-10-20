@@ -5,6 +5,6 @@
 **Why.** The browser is where applications happen; a separate agent chat is an extra place to go.
 
 **Plan.**
-1. List what still needs the user to talk to the agent or use a terminal.
-2. Move each into the browser (the side panel, the setup and review pages).
-3. "The side panel's later parts" is one piece of this.
+- List what still needs the user to talk to the agent or use a terminal.
+- Move each into the browser (the side panel, the setup and review pages).
+- "The side panel's later parts" is one piece of this.

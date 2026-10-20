@@ -8,7 +8,7 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../types.js";
  * props hold the options and the `onChange` that chooses one. Seen live (Greenhouse): a synthetic
  * mousedown never opens its menu unless the page has focus, and the user's browser window usually hasn't while they
  * type in their terminal; a trusted click opened it. Choosing through `onChange` needs no menu and no focus, and
- * reading `options` needs no menu either, so `list_options` costs nothing.
+ * reading `options` needs no menu either.
  *
  * A list whose options come as you type is searched through `onInputChange`, then its options are read once
  * loaded. That's an async select (`loadOptions`), or a page that fetches on `onInputChange` itself and passes the
@@ -23,7 +23,7 @@ interface Option {
   options?: Option[];
 }
 
-export interface SelectProps {
+interface SelectProps {
   options?: Option[];
   value?: Option | Option[] | null;
   isMulti?: boolean;
@@ -40,7 +40,7 @@ export interface SelectProps {
 
 type Menu = (p: SelectProps, open: boolean) => void;
 
-export interface ReactSelectOptions {
+interface ReactSelectOptions {
   /** Open or close the menu. Default: react-select's own `onMenuOpen` and `onMenuClose`. */
   menu?: Menu;
 }

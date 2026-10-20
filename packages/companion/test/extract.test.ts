@@ -96,7 +96,6 @@ describe("helpers", () => {
   });
 
   it("companyFromUrl asks the sites: their boards' hosts name the employer only in the path", () => {
-    // What shared code read from these hosts before the sites' registry entries held them.
     expect(companyFromUrl("https://job-boards.greenhouse.io/vandelay/jobs/1000000001")).toBe("vandelay");
     expect(companyFromUrl("https://boards.greenhouse.io/vandelay/jobs/1")).toBe("vandelay");
     expect(companyFromUrl("https://jobs.eu.lever.co/wonka/5c1e7a2b")).toBe("wonka");
@@ -109,7 +108,7 @@ describe("helpers", () => {
     expect(companyFromUrl("https://career2.successfactors.eu/career?company=soylent")).toBeUndefined();
     // An employer's own domain (an Oracle or Phenom site on it) names the employer.
     expect(companyFromUrl("https://jobs.umbrella.example/en/sites/CX_1/job/10001")).toBe("umbrella");
-    // Dayforce's one host for every employer names none (it was "dayforcehcm" before the site said so).
+    // Dayforce's one host for every employer names none.
     expect(companyFromUrl("https://jobs.dayforcehcm.com/en-US/hooli/CANDIDATEPORTAL/jobs/1000")).toBeUndefined();
   });
 

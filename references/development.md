@@ -12,7 +12,7 @@ ezapply/
   package.json              npm workspaces, scripts
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
-  .claude/                  Claude Code for this repo: launch.json (dev servers), skills/garden/ (see "Conventions")
+  .claude/                  Claude Code for this repo: skills/garden/ (see "Conventions")
   test/                     checks on the reference itself (references.test.ts)
   packages/
     protocol/               shared schemas            → components/protocol.md
@@ -140,7 +140,7 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   folder names are checked too.
 - **Write atomically** (`writeFileAtomic` for text or bytes, `writeJsonAtomic`, in `companion/src/util/fs.ts`).
 - **Shared helpers live in `companion/src/util/`** (`fs.ts`, `keyed-queue.ts`, `wait.ts`, `open.ts`, `proc.ts`,
-  `install-hints.ts`) and are exported for the CLI; don't redefine `exists` or a polling loop locally. The
+  `install-hints.ts`), and the index exports what the CLI uses; don't redefine `exists` or a polling loop locally. The
   adapters' own `waitFor` in `engine/src/dom.ts` is different on purpose: it runs in the page and polls a synchronous
   DOM condition.
 - **External programs** through `run()` (no shell, timeouts, tree kill) and `which()`; programs that should

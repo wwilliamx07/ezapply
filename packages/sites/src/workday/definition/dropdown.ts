@@ -78,9 +78,8 @@ async function openListbox(c: HTMLElement): Promise<OpenListbox | null> {
  *
  * `chose`: an option was just picked, which closes the list by itself. When nothing was (after reading the
  * options, or a value that matched nothing) the list has to be closed here. Live buttons have no
- * `aria-expanded` and Escape doesn't close a live listbox, so this used to do nothing, the list stayed open,
- * and the next dropdown's press only closed it: "Could not open the dropdown" (9 fields in the fifth live
- * run). So when Escape hasn't closed it within `dropdownEscapeCloseMs`, the dropdown's own button is pressed,
+ * `aria-expanded` and Escape doesn't close a live listbox: left open, the list would take the next dropdown's
+ * press, which only closes it ("Could not open the dropdown"). So when Escape hasn't closed it within `dropdownEscapeCloseMs`, the dropdown's own button is pressed,
  * as a person would. After a choice the button isn't pressed without `aria-expanded` saying the list is
  * open: a list still animating away would open again.
  */
@@ -100,9 +99,9 @@ async function closeListbox({ button, list }: OpenListbox, chose: boolean): Prom
 }
 
 /**
- * Open the listbox, and when it doesn't open, wait for the page to go quiet and try once more. In two live runs
- * a dropdown whose list had been read without a choice (`list_options`, or a value that matched nothing) failed
- * its next open with "Could not open the dropdown": 12 of 12 such dropdowns, and no other dropdown. The same
+ * Open the listbox, and when it doesn't open, wait for the page to go quiet and try once more. Seen live, a
+ * dropdown whose list had been read without a choice (its options read, or a value that matched nothing) fails
+ * its next open with "Could not open the dropdown", and no other dropdown does. The same
  * fill in the agent's next call worked every time, at a turn each. Why the first open fails isn't known; the
  * second attempt here is what the agent's retry did.
  */

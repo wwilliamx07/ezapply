@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { basename, delimiter, dirname, join } from "node:path";
 import { run, which } from "../../util/proc.js";
 
-export const ENGINE_IDS = ["latexmk", "xelatex", "lualatex", "pdflatex", "tectonic"] as const;
+const ENGINE_IDS = ["latexmk", "xelatex", "lualatex", "pdflatex", "tectonic"] as const;
 export type EngineId = (typeof ENGINE_IDS)[number];
 
 /** Preference order for engine "auto". pdflatex is excluded: it cannot load system fonts. */
-export const AUTO_ORDER: readonly EngineId[] = ["latexmk", "xelatex", "lualatex", "tectonic"];
+const AUTO_ORDER: readonly EngineId[] = ["latexmk", "xelatex", "lualatex", "tectonic"];
 
 /**
  * Engines a `% !TEX program = …` comment may name. latexmk is left out: it is a build driver, and the
@@ -60,7 +60,7 @@ export function withTexProgram(source: string, engine: EngineId): string {
   return `${bom}% !TEX program = ${engine}${eol}${source.slice(bom.length)}`;
 }
 
-export interface CompileRequest {
+interface CompileRequest {
   texPath: string;
   outDir: string;
   /** Extra folders searched for .cls/.sty/images (templates). The .tex's own folder is always searched. */

@@ -9,7 +9,7 @@ import type { Logger } from "./logger.js";
 import { createMcpServer } from "./mcp/server.js";
 import type { Services } from "./services.js";
 
-export interface HttpOptions {
+interface HttpOptions {
   services: Services;
   bridge: ExtensionBridge;
   mcpToken: string;

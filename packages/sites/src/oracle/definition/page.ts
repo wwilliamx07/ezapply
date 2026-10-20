@@ -12,7 +12,7 @@ import type { OracleWidget } from "./widgets.js";
  */
 
 /** A saved repeatable item (a language tile, a work or education entry on the timeline). */
-export interface ItemRef {
+interface ItemRef {
   title: string;
   el: HTMLElement;
   kind: "tile" | "timeline";

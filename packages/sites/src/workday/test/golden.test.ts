@@ -8,8 +8,7 @@ import { buildWorkdayStep } from "./fixture.js";
 
 /**
  * Golden schemas: what the Workday adapter extracts from every fixture state and saved page, kept in test/golden/.
- * Written before the adapters moved onto the shared engine, so the move can show it changed nothing a page reads
- * as. `UPDATE_GOLDEN=1 npx vitest run packages/sites/src/workday/test/golden.test.ts` rewrites them after an intended
+ * A change that only moves code leaves them equal. `UPDATE_GOLDEN=1 npx vitest run packages/sites/src/workday/test/golden.test.ts` rewrites them after an intended
  * change; review the diff.
  */
 

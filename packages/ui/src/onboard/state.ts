@@ -14,7 +14,7 @@ export interface Onboard {
 }
 
 /** An action the companion refused: its message, and its hint when it gave one. */
-export class ActionError extends Error {
+class ActionError extends Error {
   constructor(
     message: string,
     readonly hint?: string,

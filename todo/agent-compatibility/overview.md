@@ -14,10 +14,10 @@ process per conversation, writes the user's messages to it and reads what it doe
   stdio) has sessions, cancelling, approvals sent to the client, and MCP servers given per session.
 
 **Plan.**
-1. Approvals from the agent itself become the panel's approval cards.
-2. Each agent says which modes, models and efforts it has, and the panel offers those.
-3. Write the workspace for each agent: its MCP config and permission rules.
-4. Add Codex, then opencode. Each starts with a live run of the open questions in its details.
-5. Show tokens where an agent gives no cost.
+- Approvals from the agent itself become the panel's approval cards.
+- Each agent says which modes, models and efforts it has, and the panel offers those.
+- Write the workspace for each agent: its MCP config and permission rules.
+- Add Codex, then opencode. Each starts with a live run of the open questions in its details.
+- Show tokens where an agent gives no cost.
 
 [details](details.md)

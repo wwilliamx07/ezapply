@@ -63,7 +63,7 @@ connection.onState((s) => {
 // ---- The panel and Capture ---------------------------------------------------------------
 
 /** The keyboard shortcut's command (the manifest's `commands`). */
-export const SET_POSTING_COMMAND = "set-posting";
+const SET_POSTING_COMMAND = "set-posting";
 
 // The toolbar button opens the side panel, where everything else happens.
 void ext.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
@@ -179,9 +179,8 @@ async function flushPendingCapture(): Promise<void> {
 
 /**
  * The reconnect alarm, created on every background start and not only at install: Chrome may clear alarms on
- * restart, and without it the extension stays disconnected once `ezapply` (started later) brings the
- * companion up. Created only when missing, so a
- * wake-up doesn't push the next firing back.
+ * restart, and without it the extension stays disconnected once `ezapply` (started later) brings the companion up.
+ * Created only when missing, so a wake-up doesn't push the next firing back.
  */
 export async function ensureReconnectAlarm(): Promise<void> {
   if (!(await ext.alarms.get(RECONNECT_ALARM))) await ext.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });

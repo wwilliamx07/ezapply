@@ -112,10 +112,10 @@ describe("filling", () => {
 
   it("chooses list options, in page order, so a city list loads for the country chosen before it", async () => {
     // Given city first: the adapter still fills the country first. The city list then re-renders its input when
-    // it opens (the adapter follows the new one), labels "Kanata, Ontario" but shows "Kanata" once chosen, and
+    // it opens (the adapter follows the new one), labels "Springfield, Ontario" but shows "Springfield" once chosen, and
     // leaves a "required" error for a moment after the choice; none of that is a failure (all seen live).
     const results = await api.fill([
-      { fieldId: "address.city", value: "Kanata" },
+      { fieldId: "address.city", value: "Springfield" },
       { fieldId: "address.country", value: "canada" },
       { fieldId: "contact-information.phoneCountryCode", value: "+1 Canada" },
     ]);
@@ -125,26 +125,26 @@ describe("filling", () => {
       "contact-information.phoneCountryCode",
     ]);
     expect(results).toEqual([
-      { fieldId: "address.city", ok: true, readBack: "Kanata" },
+      { fieldId: "address.city", ok: true, readBack: "Springfield" },
       { fieldId: "address.country", ok: true, readBack: "Canada" },
       { fieldId: "contact-information.phoneCountryCode", ok: true, readBack: "+1 Canada" },
     ]);
     expect(fixture.comboValue("country-30")).toBe("Canada");
-    expect(fixture.comboValue("city-33")).toBe("Kanata, Ontario");
-    expect(fields()["address.city"]).toMatchObject({ currentValue: "Kanata" });
+    expect(fixture.comboValue("city-33")).toBe("Springfield, Ontario");
+    expect(fields()["address.city"]).toMatchObject({ currentValue: "Springfield" });
     expect(fields()["address.city"]?.error).toBeUndefined();
     // No list is left open.
     expect(document.querySelector("[role=grid]")).toBeNull();
   });
 
   it("finds an option the list doesn't show at first by searching its first part", async () => {
-    // The server searches by the code: the full label finds nothing, "K2K 3E9" does (seen live).
-    const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9, Kanata, Ontario" }]);
-    expect(r).toEqual({ fieldId: "address.postalCode", ok: true, readBack: "K2K 3E9" });
-    expect(fixture.comboValue("postalCode-36")).toBe("K2K 3E9, Kanata, Ontario");
+    // The server searches by the code: the full label finds nothing, "A1A 1A9" does (seen live).
+    const [r] = await api.fill([{ fieldId: "address.postalCode", value: "A1A 1A9, Springfield, Ontario" }]);
+    expect(r).toEqual({ fieldId: "address.postalCode", ok: true, readBack: "A1A 1A9" });
+    expect(fixture.comboValue("postalCode-36")).toBe("A1A 1A9, Springfield, Ontario");
     // Already chosen: filling it again, by the label or what the field shows, changes nothing.
-    const again = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
-    expect(again[0]).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+    const again = await api.fill([{ fieldId: "address.postalCode", value: "A1A 1A9" }]);
+    expect(again[0]).toMatchObject({ ok: true, readBack: "A1A 1A9" });
   });
 
   describe("a list that searches late and only when its text changes, as live", () => {
@@ -152,29 +152,29 @@ describe("filling", () => {
     afterEach(() => api.setTiming(null));
 
     it("waits for the search, not the unfiltered list typing shows first", async () => {
-      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
-      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
-      expect(fixture.comboValue("postalCode-36")).toBe("K2K 3E9, Kanata, Ontario");
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "A1A 1A9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "A1A 1A9" });
+      expect(fixture.comboValue("postalCode-36")).toBe("A1A 1A9, Springfield, Ontario");
     });
 
     it("searches again for text the widget kept from a search the closed list dropped", async () => {
       const input = document.getElementById("postalCode-36") as HTMLInputElement;
       input.focus();
       input.click();
-      input.value = "K2K 3E9";
+      input.value = "A1A 1A9";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       input.blur();
       await new Promise((res) => setTimeout(res, 20));
       api.setTiming({ typeaheadResultsMs: 800 });
-      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
-      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "A1A 1A9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "A1A 1A9" });
     }, 10_000);
 
     it("searches a list that didn't show within the open waits", async () => {
       api.setTiming({ dropdownOpenMs: 10, dropdownOpenRetryMs: 10 });
-      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "K2K 3E9" }]);
-      expect(r).toMatchObject({ ok: true, readBack: "K2K 3E9" });
+      const [r] = await api.fill([{ fieldId: "address.postalCode", value: "A1A 1A9" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "A1A 1A9" });
     });
   });
 

@@ -9,19 +9,19 @@ depend on the model. The agent still sometimes skips the review, and a long appl
 step's form on every call. Fields that the site prefills from the resume are often left as they came.
 
 **Plan.**
-1. The companion opens the review when a tailoring turn leaves a changed PDF, and sends the answer back as a
-   message. The panel's buttons invoke their skill by name.
-2. Tailoring: one call sets a document up and returns its brief. `ezapply-bundle` becomes one tool.
-3. Applying: `get_form` marks prefilled fields and stale files. Code writes the answers the user confirmed, and
-   the panel shows the hand-off. Nothing is filled without the model.
-4. Each step runs in a fresh session. The companion writes its first message in a fixed order (skill, profile,
-   answers, posting, then the step), so everything before the step matches the cache. Check that it does before
-   building it.
-5. Rewrite each remaining skill to its judgement.
-6. Code checks what a program can under the agent's own checks: numbers and skills without evidence, missing
-   sources, words the user said never to use, sensitive answers not asked, separate files where one is required,
-   claims the user edited.
-7. Measure a tailoring and an application against the runs in `references/status.md` ("The token cuts"), then
-   update the references.
+- The companion opens the review when a tailoring turn leaves a changed PDF, and sends the answer back as a
+  message. The panel's buttons invoke their skill by name.
+- Tailoring: one call sets a document up and returns its brief. The bundle skill becomes one tool.
+- Applying: Reading a form marks prefilled fields and stale files. Code writes the answers the user confirmed, and
+  the panel shows the hand-off. Nothing is filled without the model.
+- Each step runs in a fresh session. The companion writes its first message in a fixed order (skill, profile,
+  answers, posting, then the step), so everything before the step matches the cache. Check that it does before
+  building it.
+- Rewrite each remaining skill to its judgement.
+- Code checks what a program can under the agent's own checks: numbers and skills without evidence, missing
+  sources, words the user said never to use, sensitive answers not asked, separate files where one is required,
+  claims the user edited.
+- Measure a tailoring and an application against the token cuts' runs, then
+  update the references.
 
 [details](details.md)

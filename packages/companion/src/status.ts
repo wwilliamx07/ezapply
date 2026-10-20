@@ -8,7 +8,7 @@ import { installCommand, installHint } from "./util/install-hints.js";
 import { browserLabel } from "./util/open.js";
 import { which } from "./util/proc.js";
 
-export interface ChecklistItem {
+interface ChecklistItem {
   step: string;
   done: boolean;
   detail: string;

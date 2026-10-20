@@ -32,7 +32,7 @@ export function findCommand(
   return null;
 }
 
-export interface LineProcessOptions {
+interface LineProcessOptions {
   command: AgentCommand;
   args: string[];
   cwd: string;

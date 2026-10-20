@@ -1,6 +1,6 @@
 import { type AppConfig, HEALTH_PATH } from "@ezapply/companion";
 
-export interface Health {
+interface Health {
   version: string;
   protocolVersion: number;
   extensionConnected: boolean;

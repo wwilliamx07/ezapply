@@ -7,6 +7,6 @@ they're used in application documents.
 from reading like the spec.
 
 **Plan.**
-1. Decide whether to adopt a spec, and which.
-2. Apply it in the indexing skill.
-3. Add the tailoring and humanizing step where resumes and cover letters draw on claims.
+- Decide whether to adopt a spec, and which.
+- Apply it in the indexing skill.
+- Add the tailoring and humanizing step where resumes and cover letters draw on claims.

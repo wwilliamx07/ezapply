@@ -46,7 +46,7 @@ export interface MergeOptions {
   author?: string;
 }
 
-export interface MergeResult {
+interface MergeResult {
   output: string;
   pages: number;
   bytes: number;
@@ -92,7 +92,7 @@ function pdfjs(): Promise<PdfJs> {
 }
 
 /** A PDF to read: its path, or its bytes (a review's snapshot). */
-export type PdfSource = string | Uint8Array;
+type PdfSource = string | Uint8Array;
 
 async function openPdfJs(source: PdfSource) {
   const lib = await pdfjs();

@@ -5,7 +5,6 @@ export {
   appConfigPath,
   appDir,
   DEFAULT_PORT,
-  LEGACY_CONFIG_FILE,
   loadAppConfig,
   newPairingToken,
   newToken,

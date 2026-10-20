@@ -44,7 +44,7 @@ const ROOTS = {
 const HISTORY_KEEP = 30;
 
 /** Where the engine choice came from: the file's `% !TEX program` comment, `tex.engine`, or "auto". */
-export type EngineSource = "magic-comment" | "config" | "auto";
+type EngineSource = "magic-comment" | "config" | "auto";
 
 export interface CompileResult {
   ok: boolean;

@@ -17,7 +17,7 @@ export interface DocDraft {
   approved?: boolean;
 }
 
-export type Drafts = Record<number, DocDraft>;
+type Drafts = Record<number, DocDraft>;
 
 const EMPTY: DocDraft = { request: "", comments: [] };
 
@@ -60,7 +60,7 @@ export function useDrafts(reviewId: string | null) {
 }
 
 /** Whether a document's draft asks for changes (a request or a comment). */
-export function asksChanges(d: DocDraft): boolean {
+function asksChanges(d: DocDraft): boolean {
   return !!d.request.trim() || d.comments.length > 0;
 }
 

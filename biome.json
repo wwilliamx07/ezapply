@@ -7,14 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": [
-      "**",
-      "!**/dist",
-      "!packages/sites/src/*/fixtures",
-      "!**/test/golden",
-      "!project.txt",
-      "!**/src/review/textlayer.css"
-    ]
+    "includes": ["**", "!**/dist", "!packages/sites/src/*/fixtures", "!**/test/golden", "!**/src/review/textlayer.css"]
   },
   "formatter": {
     "enabled": true,

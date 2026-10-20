@@ -71,8 +71,8 @@ export const workday: SiteDefinition = {
     afterRow: (doc) => settle(doc, T.rowQuietMs, T.rowMaxMs),
     /**
      * After a move, wait for the new step to show its fields: Workday moves the progress bar before the step
-     * renders, and in two live runs a get_form straight after go_next read an empty step four times (its
-     * questions were there a second or two later). The review page has no fields, so it isn't waited for.
+     * renders, and a get_form straight after go_next has read an empty step live (its questions were there
+     * a second or two later). The review page has no fields, so it isn't waited for.
      *
      * Then for the requests the step started: on a step filled before, Workday fetches each dropdown's values
      * after rendering it and shows the saved choice only once they're in. Seen live after going back and forward:

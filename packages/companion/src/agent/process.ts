@@ -29,10 +29,10 @@ export function sessionId(header: string | string[] | undefined): string | undef
 }
 
 /** The permission prompt tool Claude Code asks instead of a terminal dialog (served by `mcp/tools/agent.ts`). */
-export const PERMISSION_TOOL = "mcp__ezapply__permission_ask";
+const PERMISSION_TOOL = "mcp__ezapply__permission_ask";
 
 /** A conversation's options (`part` picks its line of `PART_PROMPTS`), with the Claude Code to run. */
-export interface AgentProcessOptions extends AgentSessionOptions {
+interface AgentProcessOptions extends AgentSessionOptions {
   claude: ClaudeCommand;
 }
 
@@ -96,7 +96,7 @@ export function agentArgs(
 const PANEL_SCOPE = ["--strict-mcp-config", "--mcp-config", ".mcp.json", "--setting-sources", "project,local"];
 
 /** Claude Code's switch for its bundled skills, set on the panel's process. */
-export const DISABLE_BUNDLED_SKILLS = "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS";
+const DISABLE_BUNDLED_SKILLS = "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS";
 
 /**
  * The built-in tools the panel's work uses, beside one shell (`panelShell`); the rest are schemas re-read on every
@@ -105,7 +105,7 @@ export const DISABLE_BUNDLED_SKILLS = "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS";
  */
 export const PANEL_TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "Skill", "ToolSearch", "Agent"];
 
-export type PanelShell = "Bash" | "PowerShell";
+type PanelShell = "Bash" | "PowerShell";
 
 /**
  * One shell, not both: each is a large schema. Bash where Claude Code can run it, since the workspace's rules are
@@ -153,7 +153,7 @@ export const PART_PROMPTS: Record<ConversationPart, string> = {
 };
 
 /** One conversation's Claude Code process: messages in, stream items out. */
-export class AgentProcess implements AgentSession {
+class AgentProcess implements AgentSession {
   private readonly child: LineProcess;
   private controlSeq = 0;
 

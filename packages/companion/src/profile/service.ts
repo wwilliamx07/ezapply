@@ -9,7 +9,7 @@ import type { Workspace } from "../workspace/workspace.js";
 import { type AnswerEntry, AnswersFile, missingProfileFields, Profile, ReposFile } from "./schema.js";
 import { seedAnswers } from "./seed-answers.js";
 
-export interface Issue {
+interface Issue {
   path: string;
   message: string;
 }
@@ -314,7 +314,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-export type PreferenceKey = "tone" | "emphasis" | "neverMention" | "targets" | "coverLetters";
+type PreferenceKey = "tone" | "emphasis" | "neverMention" | "targets" | "coverLetters";
 
 /** preferences.md's headings, in order. */
 const PREFERENCE_HEADINGS: [PreferenceKey, string][] = [
@@ -355,7 +355,7 @@ export function formatPreferences(prefs: Record<PreferenceKey, string>, extra = 
 }
 
 /** What the profile holds at a dotted path, as a short line for the page; undefined when it holds nothing. */
-export function profileValueText(profile: Record<string, unknown> | undefined, path: string): string | undefined {
+function profileValueText(profile: Record<string, unknown> | undefined, path: string): string | undefined {
   let v: unknown = profile;
   for (const key of path.split(".")) v = v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined;
   if (typeof v === "boolean") return v ? "Yes" : "No";
@@ -372,7 +372,7 @@ export function profileValueText(profile: Record<string, unknown> | undefined, p
   return v && typeof v === "object" && Object.keys(v).length ? "set" : undefined;
 }
 
-export function isAnswered(e: AnswerEntry): boolean {
+function isAnswered(e: AnswerEntry): boolean {
   if (e.answer === null) return false;
   if (typeof e.answer === "string") return e.answer.trim().length > 0;
   return e.answer.default !== null;

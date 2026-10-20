@@ -8,12 +8,10 @@ export const ErrorCode = {
   BadRequest: "bad_request",
   Unauthorized: "unauthorized",
   ProtocolMismatch: "protocol_mismatch",
-  NotPaired: "not_paired",
   ExtensionDisconnected: "extension_disconnected",
   Timeout: "timeout",
   NotFound: "not_found",
   NoPosting: "no_posting",
-  CaptureFailed: "capture_failed",
   PathNotAllowed: "path_not_allowed",
   /** The application tab belongs to another posting than the active one: nothing that changes the page runs. */
   PostingMismatch: "posting_mismatch",

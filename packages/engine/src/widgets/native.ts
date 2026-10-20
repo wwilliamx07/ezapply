@@ -136,7 +136,7 @@ export function selectDriver(opts: { settled?: boolean } = {}): WidgetDriver {
 
 const checked = (i: HTMLInputElement) => i.checked || i.getAttribute("aria-checked") === "true";
 
-export interface ChoiceOptions {
+interface ChoiceOptions {
   /** An option's label (default: its `<label for>`, the label around it, or its value). */
   label?: (input: HTMLInputElement) => string;
   /**

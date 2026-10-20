@@ -38,7 +38,7 @@ export const REQUESTS = {
 type TabInfo = (PanelTab & { tabId: number }) | null;
 
 /** The permission modes as the panel names them, and what each does (the select's title). */
-export const MODES: Record<AgentPermissionMode, { label: string; what: string }> = {
+const MODES: Record<AgentPermissionMode, { label: string; what: string }> = {
   default: {
     label: "Ask first",
     what: "Claude asks on the panel before commands and edits the workspace doesn't allow",
@@ -49,18 +49,18 @@ export const MODES: Record<AgentPermissionMode, { label: string; what: string }>
   dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
 };
 /** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
-export const ANTIGRAVITY_MODES: Partial<Record<AgentPermissionMode, { label: string; what: string }>> = {
+const ANTIGRAVITY_MODES: Partial<Record<AgentPermissionMode, { label: string; what: string }>> = {
   dontAsk: { label: "Don't ask", what: "Antigravity runs its commands and edits without asking" },
   plan: { label: "Plan only", what: "Antigravity reads and plans, and changes nothing" },
 };
-export const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity" };
-export const MODELS: Record<AgentModel, string> = {
+const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity" };
+const MODELS: Record<AgentModel, string> = {
   fable: "Fable",
   opus: "Opus",
   sonnet: "Sonnet",
   haiku: "Haiku",
 };
-export const EFFORTS: Record<AgentEffort, string> = {
+const EFFORTS: Record<AgentEffort, string> = {
   low: "Low effort",
   medium: "Medium effort",
   high: "High effort",
@@ -69,7 +69,7 @@ export const EFFORTS: Record<AgentEffort, string> = {
 };
 
 /** A posting's two conversations, as the panel's switch names them. */
-export const PARTS: Record<ConversationPart, { label: string; what: string }> = {
+const PARTS: Record<ConversationPart, { label: string; what: string }> = {
   tailor: { label: "Documents", what: "The conversation that tailors this posting's documents" },
   fill: { label: "Application", what: "The conversation that fills this posting's application" },
 };
@@ -622,10 +622,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 }
 
 /** The list's groups, in order: what waits on the user first, then what the agent is doing, then the rest. */
-export const GROUPS = { needs: "Needs you", working: "Working", open: "Open", done: "Done" } as const;
-export type Group = keyof typeof GROUPS;
+const GROUPS = { needs: "Needs you", working: "Working", open: "Open", done: "Done" } as const;
+type Group = keyof typeof GROUPS;
 /** One application on the list (or the general conversation): its line, and what it's doing or where it stands. */
-export interface ApplicationRow {
+interface ApplicationRow {
   /** The posting's id, or the general conversation's key. */
   key: string;
   title: string;
@@ -649,7 +649,7 @@ export function ownerOf(key: string | undefined): string | null {
 }
 
 /** The conversations an agent is working (or starting) in, side by side. */
-export function busyConversations(state: PanelState | null): PanelState["agent"]["conversations"] {
+function busyConversations(state: PanelState | null): PanelState["agent"]["conversations"] {
   return (state?.agent.conversations ?? []).filter((c) => c.status === "working" || c.status === "starting");
 }
 
@@ -895,7 +895,7 @@ function FillButton({
 }
 
 /** Approved (an attached document was approved first), or not yet: the one thing the user acts on. */
-export function isApproved(state: PanelConversation["documents"][number]["state"]): boolean {
+function isApproved(state: PanelConversation["documents"][number]["state"]): boolean {
   return state === "approved" || state === "attached";
 }
 

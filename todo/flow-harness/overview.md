@@ -8,8 +8,8 @@ agent's replies, repo indexing and the like are stand-in responses.
 lets the agent see its own change working before handing it over.
 
 **Plan.**
-1. Choose between live (real extension, real agent) and mocked (every UI with canned responses), or both.
-2. A script per flow (onboarding, tailoring, review, filling) that drives it and screenshots each step.
-3. A command the agent runs after a change, and a rule in `references/development.md` for when to run it.
+- Choose between live (real extension, real agent) and mocked (every UI with canned responses), or both.
+- A script per flow (onboarding, tailoring, review, filling) that drives it and screenshots each step.
+- A command the agent runs after a change, and a rule in the development reference for when to run it.
 
 [details](details.md)

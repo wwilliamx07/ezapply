@@ -11,7 +11,7 @@ description: Combine application documents (cover letter, resume, transcript, po
    - the form has only one file field but needs several documents
    - the user asks
 
-   Record it with `posting_update_meta bundleRequired: true`.
+   Record it with `posting_update_meta { bundleRequired: true }`.
 2. **Order:** follow the order the posting specifies. Otherwise use cover letter, then resume, then extras
    (transcript, portfolio, references from `library/`). Make sure `resume.pdf` and `cover.pdf` are current:
    recompile if their `.tex` is newer.

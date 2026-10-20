@@ -9,7 +9,7 @@
  */
 
 /** A word of a page's text: its normalised form, and where it sits in the text it came from. */
-export interface Token {
+interface Token {
   text: string;
   /** Offsets into the page text, end exclusive. A word broken by a hyphen at a line's end spans both parts. */
   start: number;
@@ -17,12 +17,12 @@ export interface Token {
 }
 
 /** A word of a document, with its page (0-based). */
-export interface DocToken extends Token {
+interface DocToken extends Token {
   page: number;
 }
 
 /** One place where the versions differ: words removed from the old one, words put in the new one, or both. */
-export interface Hunk {
+interface Hunk {
   /** Indexes into the old and new documents' tokens, end exclusive. */
   oldStart: number;
   oldEnd: number;

@@ -2,7 +2,7 @@ import { request } from "node:http";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 
-export interface RelayOptions {
+interface RelayOptions {
   input: Readable;
   output: Writable;
   /** The companion's MCP endpoint. */

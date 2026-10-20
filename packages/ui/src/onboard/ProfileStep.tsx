@@ -631,7 +631,7 @@ function setIn(o: Obj, path: (string | number)[], v: unknown): Obj {
  * in list items, which are written whole, empty fields are dropped, and blank lines go. A phone without a number
  * isn't a phone.
  */
-export function forSaving(value: Obj): Obj {
+function forSaving(value: Obj): Obj {
   const out = structuredClone(value);
   const contact = out.contact as Obj | undefined;
   const phone = contact?.phone as Obj | undefined;

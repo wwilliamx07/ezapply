@@ -4,7 +4,8 @@
  */
 import type { SiteInfo } from "@ezapply/protocol/sites";
 import { STANDARD_WAITS } from "@ezapply/protocol/timing";
-export function isAshbyUrl(url: string): boolean {
+
+function isAshbyUrl(url: string): boolean {
   try {
     const u = new URL(url);
     return u.protocol === "https:" && /^jobs\.ashbyhq\.com$/i.test(u.hostname);
@@ -16,17 +17,17 @@ export function isAshbyUrl(url: string): boolean {
 const segments = (url: string) => new URL(url).pathname.split("/").filter(Boolean).map(decodeURIComponent);
 
 /** The organization, lowercased: the path's first segment. */
-export function ashbyTenant(url: string): string | undefined {
+function ashbyTenant(url: string): string | undefined {
   return isAshbyUrl(url) ? segments(url)[0]?.toLowerCase() : undefined;
 }
 
 /** The job id: the path's second segment. */
-export function ashbyJob(url: string): string | undefined {
+function ashbyJob(url: string): string | undefined {
   return isAshbyUrl(url) ? segments(url)[1]?.toLowerCase() : undefined;
 }
 
 /** A posting's identifying path: without the `/application` tab, so the application is the posting's. */
-export function ashbyCanonicalPath(pathname: string): string {
+function ashbyCanonicalPath(pathname: string): string {
   return pathname.replace(/\/application\/?$/i, "");
 }
 

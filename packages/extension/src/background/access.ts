@@ -8,21 +8,17 @@ import { ext } from "../ext.js";
  */
 
 /** How long a form call waits for the user to allow access before saying so in its error. */
-export const GRANT_WAIT_MS = 15_000;
+const GRANT_WAIT_MS = 15_000;
 
 /** The access window open for a set of origins, so a retried call focuses it instead of opening another. */
 const windows = new Map<string, number>();
 
 /**
  * Open (or bring forward) the window asking for `origins`, and resolve true once they're granted, false after
- * `waitMs`. In memory: a background that restarts may open a second window for the same site.
+ * `GRANT_WAIT_MS`. In memory: a background that restarts may open a second window for the same site.
  */
-export async function askForAccess(
-  origins: string[],
-  label: { host: string },
-  waitMs = GRANT_WAIT_MS,
-): Promise<boolean> {
-  const granted = waitForGrant(origins, waitMs);
+export async function askForAccess(origins: string[], label: { host: string }): Promise<boolean> {
+  const granted = waitForGrant(origins, GRANT_WAIT_MS);
   await showWindow(origins, label).catch(() => undefined);
   return granted;
 }

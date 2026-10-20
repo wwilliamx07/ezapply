@@ -19,7 +19,6 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
-| — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
@@ -40,8 +39,8 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
 
 Why this order:
-- **Bugs first**, in the table's order: a missing Fill form and the agent stopping at its first tool call
-  break a session outright; the rest cost turns or quality on every run.
+- **Bugs first**, in the table's order: the agent stopping at its first tool call breaks a session outright; the
+  rest cost turns or quality on every run.
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
   later item. Removing the onboarding and repos skills comes before refactoring the rest, which moves every other
   mechanical step into code.
@@ -52,8 +51,7 @@ Why this order:
 
 ## Groups
 
-- **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, Form calls on a tab run out of order, CI
-  timeouts on Windows.
+- **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, CI timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
   touch, Remove the onboarding and repos skills, Refactor the skills, A writing spec for claims, Compatibility with
   various agents.

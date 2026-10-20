@@ -69,7 +69,7 @@ values.
 - **Prefilled fields are marked.** `get_form` marks `prefilled` on every field holding a value the form log
   doesn't credit to this application, whether it came from the site's resume parsing (`autofill_with_resume`) or
   from a previous application. The checklist names them. The skill says that a prefilled field is checked like an
-  empty one, and a prefilled work description is tailored like a new one. Today the agent sometimes leaves them
+  empty one (it already writes every work row's description for the posting). Today the agent sometimes leaves them
   as they came.
 - **Stale files on the field.** `get_form`'s step warnings already name files this application didn't upload
   (`stepWarnings`); mark each such field `stale` as well, and drop the skill's reading of `form-log.jsonl` for it.

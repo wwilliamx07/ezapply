@@ -7,7 +7,7 @@ import type { FillOutcome, RemoveOutcome, WidgetDriver } from "../types.js";
  * A file field: a file input (often hidden behind an "Attach" button), and the names of the files it holds, as
  * the page shows them. `names` reads those; `removeButton` finds the control that takes one off.
  */
-export interface FileSpec {
+interface FileSpec {
   input?: (c: HTMLElement) => HTMLInputElement | null;
   names: (c: HTMLElement) => string[];
   /**

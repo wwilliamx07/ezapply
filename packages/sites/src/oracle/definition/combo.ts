@@ -53,7 +53,7 @@ function live(input: HTMLInputElement): HTMLInputElement {
 
 /**
  * Whether the input shows the chosen option. A list may label options more fully than the chosen value shows:
- * live, the city option "Kanata, Ontario" reads "Kanata" once chosen, the postal code "K2K 3E9".
+ * live, the city option "Springfield, Ontario" reads "Springfield" once chosen, the postal code "A1A 1A9".
  */
 function shows(value: string, option: string): boolean {
   const v = norm(value).toLowerCase();
@@ -188,8 +188,8 @@ export async function fillCombo(field: HTMLInputElement, candidates: string[]): 
   let labels = comboOptions(input()).map(optionText);
   if (tracing()) note("list", { options: labels.slice(0, 80) });
   let idx = pick(candidates, labels);
-  // Search by the value, then by its first part: a server-side search finds "K2K 3E9" but not the full label
-  // "K2K 3E9, Kanata, Ontario" (seen live).
+  // Search by the value, then by its first part: a server-side search finds "A1A 1A9" but not the full label
+  // "A1A 1A9, Springfield, Ontario" (seen live).
   const queries = [...new Set([value, value.split(",")[0]?.trim() ?? ""])].filter(Boolean);
   for (const query of queries) {
     if (idx >= 0) break;

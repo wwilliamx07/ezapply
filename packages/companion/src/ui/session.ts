@@ -8,7 +8,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
  * A request that changes something must also come from the companion's own origin, so no other site can act,
  * even one that learned the token.
  */
-export const PAGE_COOKIE = "ezapply_page";
+const PAGE_COOKIE = "ezapply_page";
 
 /** The token the request presents: `?t=`, else the page's cookie. */
 export function presentedToken(req: IncomingMessage, url: URL): string | null {

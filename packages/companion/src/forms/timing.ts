@@ -10,7 +10,7 @@ export const TIMING_FILE = "autofill-timing.yaml";
 const DEFAULT_FILL_TIMEOUT_SECONDS = 120;
 const MAX_WAIT_MS = 120_000;
 
-export interface LoadedTiming {
+interface LoadedTiming {
   /** Every wait, resolved against the site's own waits and scaled: what the adapter gets. */
   timing: Timing;
   /** How long the companion waits for one `form.fill`. */

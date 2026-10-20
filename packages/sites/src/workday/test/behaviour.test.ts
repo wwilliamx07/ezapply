@@ -358,10 +358,10 @@ describe("matching option text", () => {
 
   it("tells a search's results from a list that only opened or re-rendered", () => {
     expect(answersQuery(["Partial List (First 500 Entries)", "All"], "Computer Science")).toBe(false);
-    expect(answersQuery(["A0A 0A1, Avondale, NL", "A0A 3E9, Holyrood, NL"], "K2K 3E9")).toBe(false);
+    expect(answersQuery(["A0A 0A1, Avondale, NL", "A0A 1A9, Holyrood, NL"], "A1A 1A9")).toBe(false);
     expect(answersQuery(["Applied Computer Science", "Computer Science"], "Computer Science")).toBe(true);
     expect(answersQuery(["C++ Programming Language"], "C++")).toBe(true);
-    expect(answersQuery(["K2K 3E9, Kanata, ON"], "k2k 3e9")).toBe(true);
+    expect(answersQuery(["A1A 1A9, Springfield, ON"], "a1a 1a9")).toBe(true);
   });
 });
 

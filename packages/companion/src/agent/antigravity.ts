@@ -116,7 +116,7 @@ interface AntigravityProcessOptions extends AgentSessionOptions {
  * One conversation's `agy` process. It takes no control requests (one would end the session), so Stop ends the
  * process and the next message continues the conversation in a new one.
  */
-export class AntigravityProcess implements AgentSession {
+class AntigravityProcess implements AgentSession {
   private readonly child: LineProcess;
   private readonly reader = new AntigravityReader();
   private introduced: boolean;

@@ -12,7 +12,7 @@ import { itemsOf, type LoadedPage, type LoadedPdf } from "../lib/pdf.js";
 import type { ChangeMark } from "./changes.js";
 import { expandToWords, mergeRects } from "./selection.js";
 
-export interface CommentMark {
+interface CommentMark {
   id: string;
   /** Its number in the panel's list. */
   n: number;

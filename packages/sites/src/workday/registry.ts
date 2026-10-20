@@ -11,10 +11,10 @@ import { STANDARD_WAITS } from "@ezapply/protocol/timing";
  * and `wd5.myworkdaysite.com/recruiting/<tenant>/…`. Not `www.workday.com` (marketing) and not
  * `*.myworkday.com` (employee tenants), which are no application sites.
  */
-export const WORKDAY_HOST = /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/i;
+const WORKDAY_HOST = /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/i;
 
 /** A leading locale segment such as `/en-US/`, which Workday adds or leaves out for the same page. */
-export const WORKDAY_LOCALE_SEGMENT = /^\/[a-z]{2}-[A-Z]{2}(?=\/|$)/;
+const WORKDAY_LOCALE_SEGMENT = /^\/[a-z]{2}-[A-Z]{2}(?=\/|$)/;
 
 export function isWorkdayUrl(url: string): boolean {
   try {
@@ -62,7 +62,7 @@ export const WORKDAY_POSTING = {
  * (`…/job/Toronto/Engineer_JR1000001-1/apply` or `…/details/Engineer_JR1000001-1` → `jr1000001-1`). Undefined when
  * the URL names none.
  */
-export function workdayJob(url: string): string | undefined {
+function workdayJob(url: string): string | undefined {
   let u: URL;
   try {
     u = new URL(url);
@@ -80,7 +80,7 @@ export function workdayJob(url: string): string | undefined {
 }
 
 /** A posting's identifying path: without the locale segment, which the same job's links have or lack. */
-export function workdayCanonicalPath(pathname: string): string {
+function workdayCanonicalPath(pathname: string): string {
   return pathname.replace(WORKDAY_LOCALE_SEGMENT, "");
 }
 

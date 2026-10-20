@@ -37,7 +37,7 @@ function jobPath(url: string): string[] | undefined {
   }
 }
 
-export function isDayforceUrl(url: string): boolean {
+function isDayforceUrl(url: string): boolean {
   return jobPath(url) !== undefined;
 }
 
@@ -45,7 +45,7 @@ export function isDayforceUrl(url: string): boolean {
  * The employer: its client namespace, lowercased. On a page the extension knows is Dayforce's by its body but whose
  * path isn't a job's (the search page), the first segment after the locale.
  */
-export function dayforceTenant(url: string): string | undefined {
+function dayforceTenant(url: string): string | undefined {
   try {
     const u = new URL(url);
     if (u.protocol !== "https:") return undefined;
@@ -59,7 +59,7 @@ export function dayforceTenant(url: string): string | undefined {
 }
 
 /** The job: its posting id (`1000`), the same on the posting and on every step of its application. */
-export function dayforceJob(url: string): string | undefined {
+function dayforceJob(url: string): string | undefined {
   return jobPath(url)?.[3];
 }
 
@@ -67,7 +67,7 @@ export function dayforceJob(url: string): string | undefined {
  * The posting's identifying path: without the locale and without what follows the job id, so the posting, its
  * application and every step of it are one posting.
  */
-export function dayforceCanonicalPath(pathname: string): string {
+function dayforceCanonicalPath(pathname: string): string {
   const parts = fromClient(pathname);
   return parts ? `/${parts.slice(0, 4).join("/")}` : pathname;
 }

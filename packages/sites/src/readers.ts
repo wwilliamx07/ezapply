@@ -12,7 +12,7 @@ export interface PostingRead {
   titleIsRole?: boolean;
 }
 
-export type PostingReader = (doc: Document, url: string) => PostingRead;
+type PostingReader = (doc: Document, url: string) => PostingRead;
 
 /**
  * Posting readers of the sites whose posting pages the generic capture reads badly (JSON-LD, then the title, then

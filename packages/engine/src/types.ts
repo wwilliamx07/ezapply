@@ -42,7 +42,7 @@ export interface SiteDefinition {
   messages: Messages;
 }
 
-export interface PageRules {
+interface PageRules {
   /** The page kind: posting, auth, start-choice, step, review, confirmation, unknown. */
   kind(doc: Document, url: string, fieldCount: number): PageKind;
   step(doc: Document): FormSchema["step"];
@@ -87,7 +87,7 @@ export interface RepeatRules {
   saveErrors?(button: HTMLElement): number;
 }
 
-export interface FillRules {
+interface FillRules {
   /** "page": fill in page order whatever order the fills came in (dependent lists). Default: as given. */
   order?: "given" | "page";
   /** Wait for "required" errors that linger a moment after a field is filled before reporting them. */

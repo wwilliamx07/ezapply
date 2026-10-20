@@ -10,7 +10,7 @@ import {
 } from "@ezapply/companion";
 import { fetchHealth } from "./health.js";
 
-export interface HostPanelOptions {
+interface HostPanelOptions {
   config: AppConfig;
   /** The extension package folder, so extension_pair can say what to load. */
   extensionDir?: string;
@@ -30,10 +30,10 @@ export interface HostPanelOptions {
 }
 
 /**
- * `ezapply`: the companion in this process, for the extension's side panel, with Claude Code run headless by the
- * companion when the panel needs it ([agent](../../../references/components/agent.md)). Nothing runs in the
- * terminal but this: it prints where to go and stops on Ctrl+C. It is the only process the companion runs in,
- * and the port closes when it stops.
+ * `ezapply`: the companion in this process, for the extension's side panel, with the panel's agent (Claude Code or
+ * the Antigravity CLI) run headless by the companion when the panel needs it
+ * ([agent](../../../references/components/agent.md)). Nothing runs in the terminal but this: it prints where to go
+ * and stops on Ctrl+C. It is the only process the companion runs in, and the port closes when it stops.
  */
 export async function hostPanel(opts: HostPanelOptions): Promise<number> {
   const say = opts.say ?? ((line: string) => process.stdout.write(`${line}\n`));

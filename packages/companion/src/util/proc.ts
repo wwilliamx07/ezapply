@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
-export interface RunResult {
+interface RunResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -101,8 +101,4 @@ function addInstalledToolDirsToPath(): void {
   const known = new Set(parts.map((p) => p.toLowerCase()));
   const add = dirs.filter((d) => !known.has(d.toLowerCase()) && existsSync(d));
   if (add.length > 0) process.env.PATH = [...parts, ...add].filter(Boolean).join(delimiter);
-}
-
-export function clearWhichCache(): void {
-  whichCache.clear();
 }

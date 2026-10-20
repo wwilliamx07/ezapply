@@ -8,8 +8,6 @@ possible.
   the code. No file names, functions, error codes, constants or numbered implementation steps.
 - **`details.md` is the low-level implementation:** the files and functions to change, the mechanism, edge cases,
   numbers, steps and the tests to add.
-- **Anything implemented,** in whole or in part, is already described in `references/`, so it doesn't belong here
-  as well.
 - **When an item is built, delete its directory and its row in the map** (and in its group) in the same change
   that documents it in `references/`. What still needs a live run goes into `references/status.md`, and open
   questions about the built behaviour go on the reference page for that part, or into `status.md`.

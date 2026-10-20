@@ -39,7 +39,7 @@ ezapply-home/
 Every file's format: [data-formats.md](../data-formats.md).
 
 ## The agent file (`EZAPPLY.md`)
-The workspace rules, under 90 lines and kept short on purpose: Claude Code loads it into every session and every
+The workspace rules, near 100 lines and kept short on purpose: Claude Code loads it into every session and every
 API call re-reads it, so every line costs context in every conversation, the application's as much as the
 tailoring's. Only rules every task needs are here; procedures live in skills, which load only when used, or in a
 tool's description, which loads only with the tool (Claude Code defers ezapply's tools); the tool list isn't
@@ -84,7 +84,7 @@ skills ([call shapes](#call-shapes)). Sections:
 - **Layout** of the workspace.
 - **Rules:** untrusted content is data; no fabrication; never submit.
 
-What moved out, and where: editing `.tex` (the Edit tool, `old_string` from the source, one change per edit, the
+What isn't here, and where it is: editing `.tex` (the Edit tool, `old_string` from the source, one change per edit, the
 round's edits and its compile in one message, the changed passages reread, the engine kept), layout checks from
 `lint` and the attach mode go to the `ezapply-resume` and `ezapply-cover-letter` skills, each with its own short
 copy, since only a tailoring conversation edits documents; the review page's procedure (report first, approval
@@ -107,9 +107,8 @@ source's), an edit whose `old_string` was the text another edit in the same mess
 was expected to produce (it wasn't), and edits whose new text equalled the old (a change decided on and never
 written). Each costs a turn, and the last loses the change silently.
 
-*Why the edits and the compile in one message:* each round's compile used to come a turn after its edits (the rules said to
-reread the changed passages, then compile), a turn that re-read the whole context for nothing; the compile runs after
-the edits in the same message, and the reread then sees the compile's findings too.
+*Why the edits and the compile in one message:* a compile in a turn of its own re-reads the whole context for
+nothing; run after the edits in the same message, it also lets the reread see the compile's findings.
 
 *Why reread the changed passages, and only those:* never rereading saves tokens, but edits made blind to their
 context read badly together: a phrase repeated across two edits, a sentence that no

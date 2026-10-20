@@ -7,7 +7,7 @@ import type { Profile } from "../profile/schema.js";
  * checklist to compare each list's rows on the page with the profile's entries.
  */
 
-export type ListKey = "work" | "education" | "languages" | "certifications" | "links";
+type ListKey = "work" | "education" | "languages" | "certifications" | "links";
 
 export const LISTS: { key: ListKey; title: RegExp; name: string }[] = [
   { key: "work", title: /work|employment|experience/i, name: "work entries" },
@@ -17,7 +17,7 @@ export const LISTS: { key: ListKey; title: RegExp; name: string }[] = [
   { key: "links", title: /website|link|social|url/i, name: "links besides LinkedIn" },
 ];
 
-export function listOf(title: string): ListKey | undefined {
+function listOf(title: string): ListKey | undefined {
   return LISTS.find((l) => l.title.test(title))?.key;
 }
 
@@ -44,7 +44,7 @@ export function rowOf(s: Section): ListKey | undefined {
  * Oracle's saved items, sections with no fields: `work-and-education-history.experience-1` (work) and
  * `….education-1` on the timeline, `languages.item-1` "Languages: French, Fluent" (the list of its block).
  */
-export function savedItemOf(s: Section): ListKey | undefined {
+function savedItemOf(s: Section): ListKey | undefined {
   const kind = /\.([a-z]+)-\d+$/.exec(s.id)?.[1];
   if (!kind || !s.saved) return undefined;
   if (kind === "experience") return "work";
@@ -56,7 +56,7 @@ export function savedItemOf(s: Section): ListKey | undefined {
  * A text field that holds one link, outside a row: Oracle's "Link 1", "Link 2" under Resume and URLs. Narrow on
  * purpose: a "Facebook" or "Twitter" field elsewhere isn't one.
  */
-export function isLinkSlot(f: Field): boolean {
+function isLinkSlot(f: Field): boolean {
   return f.kind === "text" && !f.hint && /^(link|url|website|web site|portfolio)\s*\d*$/i.test(f.label.trim());
 }
 
@@ -91,7 +91,7 @@ export function hasLinkedInField(form: FormSchema): boolean {
 }
 
 /** The profile's links in the order they go into link rows: LinkedIn (when asked for), GitHub, portfolio, others. */
-export function profileLinks(p: Profile, withLinkedIn: boolean): string[] {
+function profileLinks(p: Profile, withLinkedIn: boolean): string[] {
   return [
     ...(withLinkedIn && p.links.linkedin ? [p.links.linkedin] : []),
     ...(p.links.github ? [p.links.github] : []),

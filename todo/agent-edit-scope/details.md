@@ -1,5 +1,8 @@
 # Keep the agent's edits to the files its task may touch: details
 
+- The rules go in with `--settings`. Tailoring: Edit/Write only `postings/<id>/`, not its `capture/` or `meta.json`.
+  Always denied: `.claude/**`, `.mcp.json`, `EZAPPLY.md`, `CLAUDE.md`, `ezapply.config.json`. Bash writes
+  (`sed -i`, `>`): a `PreToolUse` hook or deny rules for the write forms. Tests on `agentArgs` for each part.
 - Deny rules hold in every permission mode, Auto included, and beat allow rules; that's why they're the tool
   here rather than the classifier or `permission_ask` (which only runs when something would prompt).
 - The conversation key names its posting, and a conversation never works on another, so the rules are per

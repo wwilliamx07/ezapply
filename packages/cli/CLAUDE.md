@@ -8,6 +8,8 @@ user's workspace, its agent file and the skills.
   repo; if it shows up in your context while you work in `templates/`, ignore it.
 - **`EZAPPLY.md` is in every user session's context.** Keep it near 100 lines, with only rules that apply to
   every task; procedures go in skills. Don't list the tools: the MCP server already gives them to the agent.
+- **Name every change to a skill's or `EZAPPLY.md`'s size** in the change's report: they cost context in every
+  session.
 - **Skills are named `ezapply-<name>`** (folder and `name:`), so they can't shadow a Claude Code command. Renaming
   one adds the old name to `LEGACY_SKILLS` in `src/workspace-init.ts`, so `init` removes the old copy.
 - **Skills and `EZAPPLY.md` never name a job site.** What a site needs reaches the agent as schema facts or the

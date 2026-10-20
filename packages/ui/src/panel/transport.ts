@@ -1,9 +1,9 @@
 import type { AgentPrefs, PanelMethods, PanelTab, PanelUpdate, ParamsOf, ResultOf } from "@ezapply/protocol";
 
 type Methods = typeof PanelMethods;
-export type PanelMethod = keyof Methods & string;
-export type PanelParams<K extends PanelMethod> = ParamsOf<Methods, K>;
-export type PanelResult<K extends PanelMethod> = ResultOf<Methods, K>;
+type PanelMethod = keyof Methods & string;
+type PanelParams<K extends PanelMethod> = ParamsOf<Methods, K>;
+type PanelResult<K extends PanelMethod> = ResultOf<Methods, K>;
 
 /** The extension's connection to ezapply, as its background last saw it. */
 export type ConnectionState =
