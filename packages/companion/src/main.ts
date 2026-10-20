@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { postingConversation } from "@ezapply/protocol";
+import { EzError, postingConversation } from "@ezapply/protocol";
 import { antigravityBackend } from "./agent/antigravity.js";
 import type { AgentCommand } from "./agent/child.js";
 import { NeedsYou } from "./agent/needs.js";
@@ -115,6 +115,13 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     onForgotten: (pairingToken) => persist(({ pairedExtensionId: _, ...rest }) => ({ ...rest, pairingToken })),
     handlers: {
       "posting.capture": (payload) => postings.capture(payload),
+      // Answered even for a posting deleted since: the extension keeps an unanswered report and sends it again.
+      "posting.submitted": async ({ postingId, url, at }) => {
+        await forms
+          .submitted(postingId, "confirmation", { url, at })
+          .catch((err) => log.warn({ postingId, err: EzError.from(err).message }, "submission not recorded"));
+        return {};
+      },
       // The side panel, relayed by the paired extension (agent/panel.ts).
       "panel.watch": async ({ open }) => {
         panel.watch(open);
@@ -144,6 +151,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       },
       "panel.deletePosting": async ({ postingId }) => {
         await panel.deletePosting(postingId);
+        return {};
+      },
+      "panel.markSubmitted": async ({ postingId }) => {
+        await forms.submitted(postingId, "user");
         return {};
       },
       "panel.deleteDocument": async ({ postingId, file }) => {

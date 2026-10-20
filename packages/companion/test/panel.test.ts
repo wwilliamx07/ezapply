@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -421,6 +421,16 @@ describe("the side panel over the bridge", () => {
     const state = await ext.peer.request("panel.state", {});
     expect(state.postings).toEqual([]);
     await expect(ext.peer.request("panel.deletePosting", { postingId: id })).rejects.toThrow(/No posting/);
+  });
+
+  it("marks a posting submitted for the user, and logs it", async () => {
+    const { peer } = await extension();
+    const id = await capture();
+    await peer.request("panel.markSubmitted", { postingId: id });
+    const state = await peer.request("panel.state", {});
+    expect(state.postings.find((p) => p.id === id)?.status).toBe("submitted");
+    const log = await readFile(join(dir, "ws", "postings", id, "form-log.jsonl"), "utf8");
+    expect(JSON.parse(log.trim())).toMatchObject({ event: "marked-submitted" });
   });
 
   it("opens the setup page and a posting's file for the user, and refuses a file outside the posting", async () => {

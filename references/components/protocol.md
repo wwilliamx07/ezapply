@@ -74,6 +74,7 @@ through anything that builds a tool result.
 | Method | Params → result |
 |---|---|
 | `posting.capture` | `CapturePayload` → `CaptureResult { postingId, isNew, company?, role? }` |
+| `posting.submitted` | `{ postingId, url, at }` → `{}`: a watched application reached its confirmation page (`tab.watchSubmit`); the companion moves the posting to `submitted` and logs it. Answered even for a posting deleted since, so the extension doesn't send it again |
 | `panel.*` | The side panel's methods (`PanelMethods` in `panel.ts`), relayed by the extension from its panels: [agent](agent.md#the-panels-side-panelts) |
 
 `ExtensionApi` (served by the extension). Every `form.*` and `tab.*` method also takes `timing?` (name → ms):
@@ -99,6 +100,7 @@ say, and the response brings it back in its `debug`. The `tab.*` methods ignore 
 | `form.back` | `{ tabId? }` → `BackResult { moved, pageKind, step?, errors[], refusedReason? }`. An older extension answers "Unknown method" |
 | `form.pageAction` | `{ tabId?, action: PageAction }` → `{ ok, pageKind, error? }` |
 | `tab.screenshot` | `{ tabId? }` → `{ tabId, pngBase64 }` (always the whole tab) |
+| `tab.watchSubmit` | `{ tabId, url, postingId }` → `{}`: watch the tab for the application's confirmation page on `url`'s host, and report it with `posting.submitted` ([the watch](extension.md#watching-for-the-users-submit-submit-watchts)). Sent at the hand-off; a failure is only logged |
 | `tab.show` | `{ tabId?, frameId? }` → `{ tabId, emulated, hidden, focused? }`: turn on focus emulation for the tab ([extension](extension.md#focus-emulation-emulationts)), then report whether the page says `document.visibilityState === "hidden"`, and `document.hasFocus()` as `focused` (absent when the page can't be read). `emulated` false: it couldn't, and nothing else was done. Sent before every form call, with a 5 s timeout ([the tab at full speed](../mcp-tools.md#forms)). An older extension that fails it (another form of it, or "Unknown method") doesn't fail the call: the companion goes ahead without it (`FormsService.show`) |
 
 ## Form schema

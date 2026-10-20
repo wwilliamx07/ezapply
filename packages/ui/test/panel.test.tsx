@@ -266,6 +266,22 @@ describe("the side panel", () => {
     confirm.mockRestore();
   });
 
+  it("marks a posting submitted from its popover, offered only until it's submitted", async () => {
+    const t = fakeTransport({ conv: conversation() });
+    render(<PanelApp transport={t.transport} />);
+    await openApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Mark submitted" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.markSubmitted", { postingId: POSTING.id }]));
+    cleanup();
+    const done = fakeTransport({
+      conv: conversation({ posting: { ...POSTING, status: "submitted", requirements: [] } }),
+    });
+    render(<PanelApp transport={done.transport} />);
+    await openApp();
+    expect(await screen.findByText("resume.pdf")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Mark submitted" })).toBeNull();
+  });
+
   it("captures from the list into the posting's conversation, opens its application, back to the list, and resets after asking", async () => {
     const t = fakeTransport({ tab: { kind: "page", text: "Not this posting's application", tabId: 3 } });
     render(<PanelApp transport={t.transport} />);

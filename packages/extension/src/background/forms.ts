@@ -5,6 +5,7 @@ import {
   EzError,
   type Handlers,
   HOST_PERMISSIONS,
+  type PageKind,
   type SiteId,
   WithDebug,
 } from "@ezapply/protocol";
@@ -12,9 +13,9 @@ import { isFormSite, SITES, siteInfo } from "@ezapply/sites";
 import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
 import { captureAttached, emulateFocus } from "./emulation.js";
-import { frameSite, frameUrl, tabSite } from "./frames.js";
+import { frameSite, frameUrl, tabSite, tabSites } from "./frames.js";
 
-type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status" | "panel.update">;
+type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status" | "panel.update" | "tab.watchSubmit">;
 
 /** The sites the form tools work on, as the user knows them. */
 const SUPPORTED = SITES.map((s) => s.name).join(", ");
@@ -269,6 +270,28 @@ export const formHandlers: FormHandlers = {
     return { tabId: tab.id, emulated: true, ...state };
   },
 };
+
+/**
+ * The URL of an application in the tab on its confirmation page, on `host`: the tab's own page, else a form
+ * frame (an embedded form gets new frame ids as it moves on, so every one is looked at). Undefined when there's
+ * none, or the tab can't be read. Never asks for access: it runs unattended (`SubmitWatch`).
+ */
+export async function confirmationIn(tabId: number, host: string): Promise<string | undefined> {
+  const tab = await ext.tabs.get(tabId).catch(() => null);
+  if (!tab?.id || !tab.url) return undefined;
+  const { site, frames } = await tabSites(tab);
+  const places: FormTarget[] = [
+    ...(isFormSite(site) ? [{ tabId, site, url: tab.url }] : []),
+    ...frames.map((f) => ({ tabId, frameId: f.frameId, site: f.site, url: f.url })),
+  ];
+  for (const place of places) {
+    const url = new URL(place.url);
+    if (url.host !== host || !(await ext.permissions.contains({ origins: [`${url.origin}/*`] }))) continue;
+    const kind = await callAdapter<PageKind>(place, "pageKind", [], {}).catch(() => undefined);
+    if (kind === "confirmation") return place.url;
+  }
+  return undefined;
+}
 
 /**
  * Whether the page reports itself hidden, and whether it has focus. The page learns of focus emulation

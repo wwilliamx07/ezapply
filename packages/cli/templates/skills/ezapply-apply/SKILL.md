@@ -119,8 +119,8 @@ every field is filled and the files are attached. If `notAttached` shows an appr
 - `handoff.answersToFlag`: every answer from the user or your judgment, flagged for a second look
 - anything you could not fill
 
-Then ask the user to review everything in their browser and press **Submit** themselves. If they tell you they
-submitted, run `get_form` once so the confirmation page is recorded.
+Then ask the user to review everything in their browser and press **Submit** themselves. The submission is
+recorded on its own when the confirmation page shows.
 
 ## Screenshots and resuming
 `screenshot` is a last resort, at most one per problem, only when `get_form`, its `errors` and `browser_status`

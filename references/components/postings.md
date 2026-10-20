@@ -116,8 +116,11 @@ compiler output, `.previews/` (rendered pages, left by older versions), and `for
 ## Status
 `captured`, `drafting`, `attached`, `filled`, `submitted`, `archived`. Skills set `drafting`; the form
 tools move it forward automatically (`attached` on upload, `filled` at review, `submitted` on the
-confirmation page), never backward, and only for the posting the application tab is credited to
-([which posting](../mcp-tools.md#forms)). `archived` is set by hand.
+confirmation page: read by `get_form`, or seen by the extension, which watches the tab from the hand-off on since
+the user's Submit has no form call after it ([the watch](extension.md#watching-for-the-users-submit-submit-watchts))),
+never backward, and only for the posting the application tab is credited to
+([which posting](../mcp-tools.md#forms)). The panel's **Mark submitted** sets `submitted` by hand, for a
+confirmation the watch missed. `archived` is set by hand.
 
 ## No database
 The posting folder is the application record: `meta.json` (status and details) and `form-log.jsonl`

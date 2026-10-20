@@ -16,7 +16,8 @@ on the companion's review page.
 | `src/background/panel.ts` | `servePanels`: the side panels' ports, their requests relayed to the companion, what only the background can do, the companion's updates passed on; `panelUpdate` ([the side panel](#the-side-panel)) |
 | `src/panel/main.tsx`, `src/panel/transport.ts`, `static/panel.html` | The side panel's page: the UI package's `PanelApp` ([ui](ui.md#the-side-panel-srcpanel)) with `portTransport`, a runtime port to the background |
 | `src/background/connection.ts` | `CompanionConnection`: the WebSocket, handshake, pairing, keepalive, reconnects, RPC |
-| `src/background/forms.ts` | Handlers for the form methods: choose the tab (and the frame, for an embedded application), check access to it, tell its site, pick the site's adapter, inject and call it; `tab.show` and `tab.screenshot` |
+| `src/background/forms.ts` | Handlers for the form methods: choose the tab (and the frame, for an embedded application), check access to it, tell its site, pick the site's adapter, inject and call it; `tab.show`, `tab.screenshot`, and `confirmationIn` for the Submit watch |
+| `src/background/submit-watch.ts` | `SubmitWatch`: [watching a handed-off application for the user's Submit](#watching-for-the-users-submit-submit-watchts) |
 | `src/background/emulation.ts` | [Focus emulation](#focus-emulation-emulationts): `emulateFocus` (attach the debugger to a tab and turn it on), `captureAttached` (a screenshot through the debugger), `releaseAll`, the idle detach and the user's Cancel |
 | `src/background/frames.ts` | [Telling a page's site](#telling-a-pages-site-framests): `pageSite` (runs in the page: the first site whose signature its document matches), `tabSite` (a tab's own page), `tabSites` (a tab and its frames on a form site), `frameSite`, and `frameUrl` |
 | `src/background/access.ts` | `askForAccess`: a form call that finds its page's origin withheld opens `grant.html` (or brings it forward) and waits for the grant ([access](#access-to-websites)) |
@@ -265,6 +266,28 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
    browser window (`windows.update`) pulls the browser in front of the terminal the user is typing in, takes
    keyboard focus, can be refused by Windows' focus-stealing rules, and a window kept minimized or covered stays
    hidden anyway. Focus emulation needs none of it.
+
+## Watching for the user's Submit (`submit-watch.ts`)
+The user presses Submit after the hand-off, and no form call follows to see the confirmation page, so the
+posting would stay `filled`. Instead, the companion sends `tab.watchSubmit { tabId, url, postingId }` whenever
+`get_form` or `go_next` reads the review page (or a one-page application's last page), and `SubmitWatch` looks at
+that tab until it shows a confirmation:
+
+- **How it looks:** `confirmationIn` (`forms.ts`) asks the site's adapter for the page kind alone (`pageKind`,
+  no schema sent back) on the tab's own page when it's a form site's, else on each form frame (an embedded form
+  gets new frame ids as it moves on). Only a page on the host of the application's `url` counts, so a tab reused
+  for something else doesn't mark the posting. It never asks for access to websites: it runs unattended.
+- **When:** every 3 s while the background runs and something is watched (a single-page site doesn't navigate),
+  when a watched tab finishes loading, and on the reconnect alarm (a background woken from sleep has no timer).
+- **Report:** `posting.submitted { postingId, url, at }` to the companion, once, and the watch ends. Seen while
+  the companion is unreachable, the report waits in `storage.local` and goes on the next connection.
+- **Ends** also when the tab closes, after a day without a confirmation, or when the tab is watched again (for
+  another posting, it's replaced).
+- **Kept** in `storage.session`: a background restart keeps the watches; a browser restart, which closes the
+  tabs, doesn't.
+
+A confirmation it misses (the tab closed first, a page the adapter doesn't recognise) is left to the panel's
+**Mark submitted** ([ui](ui.md#the-side-panel-srcpanel)).
 
 ## Focus emulation (`emulation.ts`)
 Chrome slows a hidden page's timers to about once a second (once a minute for chained timers after five hidden

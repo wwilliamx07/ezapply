@@ -10,7 +10,7 @@ applied to show up as such.
   at, note? }` with a short `outcomes[]` history (`interviewing`, `rejected`, `offer`, `withdrawn`, `no-response`),
   set through `posting_update_meta` when the user says "Acme turned me down" (the agent finds the posting with
   `postings_list { company }`). Optional, so no `schemaVersion` bump.
-- **The list:** `postings_list` gains `deadline`, `submittedAt` (from the log's confirmation step), `outcome`, and
+- **The list:** `postings_list` gains `deadline`, `submittedAt` (from the log's `confirmation-seen` or `marked-submitted` event), `outcome`, and
   filters beside its `status` and `company` ones (not yet submitted, awaiting a reply, by outcome), sorted by deadline, then by date submitted.
 - **Views:** an `ezapply-status` skill formats it in chat and suggests the next action per posting (tailor, review,
   fill, submit, follow up after N weeks with no reply). `ezapply status --postings` prints the same table without

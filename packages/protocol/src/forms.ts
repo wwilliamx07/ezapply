@@ -250,6 +250,16 @@ export const FormMethods = {
     params: TabParam.extend({ action: PageAction }),
     result: z.object({ ok: z.boolean(), pageKind: PageKind, error: z.string().optional() }),
   },
+  /**
+   * Watch the tab for the application's confirmation page until the tab closes: the user presses Submit after the
+   * hand-off, with no form call to see the result. `url` is the application's (its frame's, when embedded): only a
+   * confirmation on its host counts. The extension reports it with `posting.submitted`, credited to `postingId`.
+   * Asked again for the same tab, it replaces the watch.
+   */
+  "tab.watchSubmit": {
+    params: z.object({ tabId: z.number().int(), url: z.string(), postingId: z.string() }),
+    result: z.object({}),
+  },
   "tab.screenshot": {
     params: TabParam,
     result: z.object({ tabId: z.number().int(), pngBase64: z.string() }),

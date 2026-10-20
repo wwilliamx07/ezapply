@@ -57,7 +57,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 2. Build services, with `UiAssets` (the `ui` option overrides it) whose stylesheet the companion's own pages take,
    and `OnboardingService`; seed `profile/answers.yaml` if it doesn't exist.
 3. Build the bridge with the pairing code, the pinned id, `onPaired` / `onForgotten`, which persist the pairing,
-   the handlers for `posting.capture` and the side panel's `panel.*` methods, and `onConnectionChange`. Build
+   the handlers for `posting.capture`, `posting.submitted` (`FormsService.submitted`) and the side panel's `panel.*` methods, and `onConnectionChange`. Build
    `NeedsYou` and `AgentService` (with the agents the `claude` and `antigravity` options give), and `PanelService`, whose
    pushes go to the extension only while it's connected.
 4. Build `FormsService` over postings and the bridge, and the HTTP server; listen on

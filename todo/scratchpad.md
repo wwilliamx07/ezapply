@@ -1,3 +1,2 @@
 - multi agent review comittee
 - setting for page fullness
-- submitted state doesnt make sense bc theres no check for submitted

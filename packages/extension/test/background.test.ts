@@ -52,6 +52,7 @@ const chromeStub = {
   },
   storage: {
     local: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+    session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
     onChanged: event(),
   },
   tabs: {

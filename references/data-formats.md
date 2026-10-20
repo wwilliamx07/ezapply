@@ -264,7 +264,9 @@ saying otherwise):
 - `{ event: "next", advanced, pageKind, step?, stepIndex? }` (`step`: the title, `stepIndex` its place in the
   progress bar; live titles are often all "Application")
 - `{ event: "back", moved, pageKind, step? }`
-- `{ event: "confirmation-seen", url }`
+- `{ event: "confirmation-seen", url, by? }` (`by: "watch"`: seen by the extension's watch after the hand-off,
+  `ts` then when it was seen)
+- `{ event: "marked-submitted" }` (the user's **Mark submitted** in the panel)
 
 Any event can also carry `focusNotEmulated: true` (focus emulation wasn't on for the call, so the tab ran as the
 browser left it), `tabHidden: true` (the page was still hidden, so the browser throttled it) and `windowInBackground: true` (the

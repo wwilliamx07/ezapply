@@ -12,7 +12,7 @@ import { CapturePayload, CaptureResult, SiteId } from "./postings.js";
  * Both sides refuse to talk across versions and tell the user which side to update. A new site is no such change:
  * `hello` carries the extension's sites, and the companion refuses an extension that knows other sites than it does.
  */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 /** WebSocket close codes used by the companion. */
 export const CloseCode = {
@@ -113,6 +113,11 @@ export function parseBridgeMessage(raw: string): BridgeMessage | null {
 /** Methods served by the companion, called by the extension. */
 export const CompanionApi = {
   "posting.capture": { params: CapturePayload, result: CaptureResult },
+  /** A watched application (`tab.watchSubmit`) reached its confirmation page: the posting was submitted. */
+  "posting.submitted": {
+    params: z.object({ postingId: z.string(), url: z.string(), at: z.string() }),
+    result: z.object({}),
+  },
   ...PanelMethods,
 };
 

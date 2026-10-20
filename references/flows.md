@@ -196,6 +196,10 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    a successful upload, `filled` at the review page, `submitted` when the confirmation page is seen. Oracle has
    no review page, so there `filled` isn't set automatically.
    After an interruption, `get_form` shows where things stand and filling continues from there.
+6. **Submit.** From the hand-off on, the extension watches the tab and, once the user's Submit brings the
+   confirmation page, moves the posting to `submitted` with no agent involved
+   ([the watch](components/extension.md#watching-for-the-users-submit-submit-watchts)). One it misses, the user
+   marks in the panel (**Mark submitted**).
 
 ## 8. Review and attach
 Once a document is finished, the attach mode (`documents.attach`, set on the onboarding page) decides:

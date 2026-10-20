@@ -7,16 +7,24 @@ import { ext } from "../ext.js";
 import { flashBadge, renderBadge } from "./badge.js";
 import { CompanionConnection } from "./connection.js";
 import { releaseAll } from "./emulation.js";
-import { formHandlers } from "./forms.js";
+import { confirmationIn, formHandlers } from "./forms.js";
 import { frameSite, tabSites } from "./frames.js";
 import { serveNotifications } from "./notify.js";
 import { panelUpdate, servePanels } from "./panel.js";
 import { store } from "./settings.js";
+import { SubmitWatch } from "./submit-watch.js";
 
 // MV3 forbids eval; stop zod from probing for it.
 z.config({ jitless: true });
 
 export const RECONNECT_ALARM = "ezapply-reconnect";
+
+const submits = new SubmitWatch({
+  confirmationIn,
+  report: async (r) => {
+    await connection.request("posting.submitted", r);
+  },
+});
 
 const connection = new CompanionConnection(
   {
@@ -45,6 +53,10 @@ const connection = new CompanionConnection(
       };
     },
     ...formHandlers,
+    "tab.watchSubmit": async ({ tabId, url, postingId }) => {
+      await submits.watch(tabId, url, postingId);
+      return {};
+    },
     "panel.update": panelUpdate,
   },
   ext.runtime.getManifest().version,
@@ -55,7 +67,10 @@ serveNotifications();
 
 connection.onState((s) => {
   void renderBadge(s);
-  if (s.state === "connected") void flushPendingCapture();
+  if (s.state === "connected") {
+    void flushPendingCapture();
+    void submits.flush();
+  }
   // Nothing fills a tab without the companion: let Chrome's debugging bar go.
   else void releaseAll();
 });
@@ -197,8 +212,16 @@ ext.runtime.onStartup.addListener(() => {
 
 // Wakes the background periodically so it reconnects after the companion starts or the browser idles it.
 ext.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === RECONNECT_ALARM) void connection.ensureConnected();
+  if (alarm.name !== RECONNECT_ALARM) return;
+  void connection.ensureConnected();
+  void submits.check();
 });
+
+// The watch for the user's Submit: a watched tab that finished loading is looked at, a closed one forgotten.
+ext.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status === "complete") void submits.checkTab(tabId);
+});
+ext.tabs.onRemoved.addListener((tabId) => void submits.forget(tabId));
 
 ext.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && (changes.port || changes.pairingToken)) void connection.settingsChanged();
@@ -207,3 +230,4 @@ ext.storage.onChanged.addListener((changes, area) => {
 void ensureReconnectAlarm();
 void renderBadge();
 void connection.ensureConnected();
+void submits.resume();

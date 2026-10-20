@@ -184,6 +184,11 @@ export function createAdapter(site: SiteDefinition, doc: Document, getUrl: () =>
       return refresh().schema;
     },
 
+    /** The page's kind alone: the extension's watch for the confirmation page after the hand-off asks it often. */
+    pageKind(): PageKind {
+      return kindNow();
+    },
+
     async listOptions(fieldId: string): Promise<OptionInfo[]> {
       return fieldRead("list", fieldId, async () => {
         const r = ref(fieldId);

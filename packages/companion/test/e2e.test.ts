@@ -228,6 +228,7 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
     "form.back": async ({ tabId, frameId }) => api(tabId, frameId).back(),
     "form.pageAction": async ({ tabId, frameId, action }) => api(tabId, frameId).pageAction(action),
     "tab.screenshot": async ({ tabId }) => ({ tabId: page(tabId).tabId, pngBase64: "iVBORw0KGgo=" }),
+    "tab.watchSubmit": async () => ({}),
   };
   const recorded = Object.fromEntries(
     Object.entries(handlers)
@@ -1051,6 +1052,20 @@ describe("form tools over MCP", () => {
       reason: "left from a previous application",
     });
     expect(log[5]).toMatchObject({ sectionId: "work-experience-2", removed: "Work Experience 2", ok: true });
+
+    // At the hand-off the extension watches the tab for the user's Submit, and reports the confirmation page.
+    expect(ext.calls.filter((c) => c.method === "tab.watchSubmit").at(-1)?.params).toEqual({
+      tabId: 7,
+      url: APPLY_URL,
+      postingId: cap.postingId,
+    });
+    const at = "2026-01-01T00:00:00.000Z";
+    await ext.peer.request("posting.submitted", { postingId: cap.postingId, url: APPLY_URL, at });
+    expect((await callJson(client, "posting_get")).data.status).toBe("submitted");
+    const last = (await readFile(join(folder, "form-log.jsonl"), "utf8")).trim().split(/\r?\n/).at(-1) as string;
+    expect(JSON.parse(last)).toEqual({ ts: at, event: "confirmation-seen", url: APPLY_URL, by: "watch" });
+    // A posting deleted since is answered all the same, so the extension stops sending it.
+    await expect(ext.peer.request("posting.submitted", { postingId: "gone", url: APPLY_URL, at })).resolves.toEqual({});
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");

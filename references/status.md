@@ -6,6 +6,9 @@ open questions. What is built, and how, is on the component pages; history is in
 ## Decisions
 Each gives the choice and the reason in a line or two; the linked page has the detail.
 
+- **The extension watches for Submit; the user can mark it.** The user presses Submit, so no form call sees the
+  confirmation page; watching the tab from the hand-off records it without an agent, and **Mark submitted** in the
+  panel covers what the watch misses ([extension](components/extension.md#watching-for-the-users-submit-submit-watchts)).
 - **No daemon.** The companion lives inside `./ezapply` and ends with it. Nothing runs in the
   background, so there is nothing to start, stop or keep secure while the user isn't applying
   ([architecture](architecture.md#processes-and-lifecycle)).
@@ -119,6 +122,11 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 
 ## Not yet verified for real
 What's built but hasn't run live, and what to check first. Each site's page lists its own details.
+
+- **The watch for the user's Submit** ([extension](components/extension.md#watching-for-the-users-submit-submit-watchts)),
+  tested with stubs. Check on each site: the confirmation page is recognised by `pageKind` and lands on the
+  application's host (an embedded form's frame included); the background keeps polling while the tab sits on the
+  review page; a report made while `ezapply` was closed arrives on the next start.
 
 - **Antigravity behind the panel** with ezapply itself ([agent](components/agent.md#antigravity-antigravityts)).
   `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through

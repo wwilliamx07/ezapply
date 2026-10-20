@@ -345,6 +345,7 @@ own and no web page can reach it.
 | `panel.stop { key }`, `panel.reset { key }` | Stop the conversation's turn (the others go on); a new session for the conversation |
 | `panel.settings AgentPrefs` | The extension's agent settings, on every connection and change ([above](#permission-mode-model-and-effort)); returns what conversations now run with. `panel.state` carries the agents installed (`agent.agents`) and Antigravity's models (`agent.models`) |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
+| `panel.markSubmitted { postingId }` | The user submitted the application and the confirmation page went unseen: the posting moves to `submitted` (forward only) and `form-log.jsonl` gets `marked-submitted` (`FormsService.submitted`) |
 | `panel.deletePosting { postingId }` | Delete a posting for good: its conversations (`forgetPosting`), then its folder (`PostingsService.delete`). Refused while it has a review open |
 | `panel.deleteDocument { postingId, file }` | Delete one of the PDFs the panel lists for the posting, and nothing else (any other name is `not_found`). The `.tex` source stays, so Claude can build it again. Refused while the PDF is in an open review |
 | `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |

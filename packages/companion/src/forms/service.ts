@@ -218,6 +218,7 @@ export class FormsService {
       await this.logEvent(t, { event: "confirmation-seen", url: form.url });
     }
     if (form.pageKind === "review") await this.setStatus(t, "filled");
+    if (form.pageKind === "review" || form.lastPage) await this.watchSubmit(t);
     const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
     const checks = await this.checks(t, form);
     const siteNotes = this.siteNotes(opts.session, form.adapter);
@@ -878,12 +879,40 @@ export class FormsService {
 
   /** Move the posting's status forward, never back. */
   private async setStatus(t: Target, status: PostingStatus): Promise<void> {
-    if (!t.posting) return;
-    const meta = await this.postings.get(t.posting.id);
+    if (t.posting) await this.moveStatus(t.posting.id, status);
+  }
+
+  private async moveStatus(postingId: string, status: PostingStatus): Promise<void> {
+    const meta = await this.postings.get(postingId);
     if (STATUS_ORDER.indexOf(status) > STATUS_ORDER.indexOf(meta.status)) {
-      await this.postings.updateMeta(t.posting.id, { status });
-      this.log.info({ id: t.posting.id, status }, "posting status moved by form activity");
+      await this.postings.updateMeta(postingId, { status });
+      this.log.info({ id: postingId, status }, "posting status moved by form activity");
     }
+  }
+
+  /**
+   * At the hand-off the user presses Submit, and no form call follows to see the confirmation page: the extension
+   * watches the tab for it (`tab.watchSubmit`) and reports it (`submitted`). Asked at every hand-off read, since a
+   * repeat replaces the watch. Never fails the call: an older extension, or none, leaves Mark submitted in the panel.
+   */
+  private async watchSubmit(t: Target): Promise<void> {
+    if (!t.posting) return;
+    await this.bridge
+      .call("tab.watchSubmit", { tabId: t.tab.tabId, url: t.tab.url, postingId: t.posting.id }, 5_000)
+      .catch((err) => this.log.warn({ err: EzError.from(err).message }, "no watch for the user's Submit"));
+  }
+
+  /**
+   * The posting was submitted: its confirmation page was seen by the extension's watch (`confirmation`), or the
+   * user said so in the panel (`user`). Moves the status to `submitted` and logs it in form-log.jsonl.
+   */
+  async submitted(postingId: string, by: "confirmation" | "user", seen?: { url: string; at: string }): Promise<void> {
+    await this.moveStatus(postingId, "submitted");
+    const event =
+      by === "confirmation"
+        ? { ts: seen?.at ?? new Date().toISOString(), event: "confirmation-seen", url: seen?.url, by: "watch" }
+        : { ts: new Date().toISOString(), event: "marked-submitted" };
+    await appendFile(join(this.postings.folder(postingId), "form-log.jsonl"), `${JSON.stringify(event)}\n`, "utf8");
   }
 }
 

@@ -254,6 +254,17 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       fail(err);
     }
   };
+  /** When the extension missed the confirmation page (the tab closed first, a page it didn't recognise). */
+  const markSubmitted = async () => {
+    if (!posting) return;
+    try {
+      await transport.call("panel.markSubmitted", { postingId: posting.id });
+      await refreshState();
+      await refreshConv();
+    } catch (err) {
+      fail(err);
+    }
+  };
   const deleteDocument = async (file: string) => {
     if (!window.confirm(`Delete ${file} for good? Its LaTeX source stays, so ${agentName} can build it again.`)) return;
     await transport.call("panel.deleteDocument", { postingId, file }).catch(fail);
@@ -434,6 +445,17 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             ) : null}
             {posting ? (
               <div className="ez-panel-pop-actions">
+                {posting.status !== "submitted" && posting.status !== "archived" ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!connected}
+                    onClick={() => void markSubmitted()}
+                    title="You submitted this application: move it to Done"
+                  >
+                    Mark submitted
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="sm"
