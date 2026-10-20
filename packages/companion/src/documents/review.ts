@@ -87,8 +87,8 @@ const AnswerBody = z.object({
     .max(MAX_REVIEW_FILES),
 });
 
-/** A document meant to be shorter than its page, and why (review_documents' `short`). */
-export interface ShortDocument {
+/** A document and why it gets an exception (review_documents' `short` and `again`). */
+export interface DocumentReason {
   file: string;
   reason: string;
 }
@@ -160,12 +160,13 @@ export class ReviewService {
   }
 
   /**
-   * Start a review of PDFs from one posting folder; a newer review for that posting replaces an open one. A resume
-   * or cover letter left underfilled is refused unless `short` names it with a reason (`checkFilled`).
+   * Start a review of PDFs from one posting folder; a newer review for that posting replaces an open one. A document
+   * already approved as it is, or a resume or cover letter left underfilled, is refused unless `again` or `short`
+   * names it with a reason (`checkApproved`, `checkFilled`).
    */
   async open(
     inputs: string[],
-    short: ShortDocument[] = [],
+    { short = [], again = [] }: { short?: DocumentReason[]; again?: DocumentReason[] } = {},
     /** Who opened it, as the page names it. */
     agentName = "Claude Code",
   ): Promise<{ reviewId: string; url: string; postingId: string; files: string[] }> {
@@ -194,6 +195,7 @@ export class ReviewService {
       files.push({ name: where.name, sha256: sha256(bytes), bytes });
     }
     const pid = postingId as string;
+    await this.checkApproved(pid, files, again);
     const reviewed = await this.reviewed(pid);
     await Promise.all(files.map((f) => this.read(f, reviewed)));
     await this.checkFilled(pid, files, short);
@@ -534,6 +536,43 @@ export class ReviewService {
   // ---- internals ---------------------------------------------------------------------------------
 
   /**
+   * Refuse a document whose current bytes the user already approved, unless `again` names it with a reason. An agent
+   * that read the approvals before the user answered opened a second review of the same bytes instead of uploading.
+   * The reason (what the user asked to see or change) is the way past; it's logged, not shown on the page.
+   */
+  private async checkApproved(postingId: string, files: ReviewFile[], again: DocumentReason[]): Promise<void> {
+    const excused = this.reasons(postingId, again, "again");
+    const approvals = (await this.approvals(postingId)).approvals;
+    const approved: string[] = [];
+    for (const f of files) {
+      if (approvals[f.name]?.sha256 !== f.sha256) continue;
+      const reason = excused.get(f.name);
+      if (reason) this.log.info({ posting: postingId, file: f.name, reason }, "review of an approved document");
+      else approved.push(f.name);
+    }
+    if (approved.length === 0) return;
+    throw new EzError(
+      ErrorCode.BadRequest,
+      `Already approved as it is: ${approved.join(", ")}. upload_file attaches it without another review.`,
+      "Leave it out of the review. To show it again anyway, pass again: [{ file, reason }] with the reason: what " +
+        "the user asked to see or change.",
+    );
+  }
+
+  /** `short` or `again` by document name; each must name a file of this posting. */
+  private reasons(postingId: string, list: DocumentReason[], param: string): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const r of list) {
+      const where = this.locate(this.ws.resolveAllowed(r.file, ["postings"]));
+      if (!where || where.postingId !== postingId) {
+        throw new EzError(ErrorCode.BadRequest, `${param} names a file that isn't one being reviewed: ${r.file}`);
+      }
+      out.set(where.name, r.reason);
+    }
+    return out;
+  }
+
+  /**
    * Refuse a resume or cover letter at its page limit whose last page has `UNDERFILLED_LINES` or more free, unless
    * `short` names it with a reason. Agents stopped well short of the page despite the compile's `underfilled` lint
    * and sent the draft to review, where the user had to ask for more; a refusal is the step they can't skip. The
@@ -541,15 +580,8 @@ export class ReviewService {
    * preferences or their words set, or evidence that ran out): it's logged, not shown on the page. A PDF without
    * readable text is let through, as the lint lets it build.
    */
-  private async checkFilled(postingId: string, files: ReviewFile[], short: ShortDocument[]): Promise<void> {
-    const excused = new Map<string, string>();
-    for (const s of short) {
-      const where = this.locate(this.ws.resolveAllowed(s.file, ["postings"]));
-      if (!where || where.postingId !== postingId) {
-        throw new EzError(ErrorCode.BadRequest, `short names a file that isn't one being reviewed: ${s.file}`);
-      }
-      excused.set(where.name, s.reason);
-    }
+  private async checkFilled(postingId: string, files: ReviewFile[], short: DocumentReason[]): Promise<void> {
+    const excused = this.reasons(postingId, short, "short");
     const resumeLimit = (await this.ws.readConfig()).resume.pageLimit;
     const under: string[] = [];
     for (const f of files) {

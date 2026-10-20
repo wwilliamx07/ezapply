@@ -146,6 +146,14 @@ to review, and the user had to ask for more; review is the step they can't skip.
 stop:* a shorter letter is sometimes right, and padding one to fill the page breaks "no fabrication"; the reason
 makes the agent check it has one. *Why not on the page:* the user judges the letter itself.
 
+**An approved document isn't reviewed again without a reason** (`checkApproved`). A document whose current bytes
+match its approval is `bad_request`, naming each one and saying `upload_file` attaches it as it is, unless
+`again: [{ file, reason }]` names it with what the user asked: to see it again, or to change it before it's
+rebuilt. Like `short`'s, the reason is logged, not shown on the page or stored; a rebuilt document has new bytes
+and needs none. *Why:* a fill started while the tailoring's review was still open read the approvals before the
+user answered, then opened a second review of the same bytes instead of uploading; the user had to approve twice.
+*Why a reason and not a hard stop:* the user may ask to look again, or to revise an approved document.
+
 **What changed since the last review.** When a review is answered, each of its documents is recorded in
 `postings/<id>/reviewed.json` ([format](../data-formats.md#postingsidreviewedjson-companionsrcdocumentsreviewts)) with its hash, whether it was
 approved, and its text per page. The next review of a document by the same name gets that as `previous`: the

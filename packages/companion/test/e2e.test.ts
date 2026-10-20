@@ -1596,6 +1596,37 @@ describe("form tools over MCP", () => {
     await client.close();
   }, 30_000);
 
+  it("refuses to review a document approved as it is unless `again` says why", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const folder = join(dir, "ws", "postings", cap.postingId);
+    await writeFile(join(folder, "bundle.pdf"), await textPdf(["Jane Doe"]));
+    const bundle = `postings/${cap.postingId}/bundle.pdf`;
+    const client = await mcpClient();
+    const first = await startReview(client, [bundle]);
+    await answerReview(first.url);
+    await first.result;
+
+    const refused = await callJson(client, "review_documents", { files: [bundle] });
+    expect(refused.data.error).toMatchObject({
+      code: "bad_request",
+      message: expect.stringMatching(/^Already approved as it is: bundle\.pdf\. /),
+      hint: expect.stringMatching(/again: \[\{ file, reason \}\]/),
+    });
+    const allowed = await callJson(client, "review_documents", {
+      files: [bundle],
+      again: [{ file: bundle, reason: "The user asked to reword the summary." }],
+      timeoutSeconds: 5,
+    });
+    expect(allowed.data).toMatchObject({ done: false, files: ["bundle.pdf"] });
+    // Rebuilt: a new version needs approving, no reason asked.
+    await writeFile(join(folder, "bundle.pdf"), await textPdf(["Jane Doe, revised"]));
+    const rebuilt = await callJson(client, "review_documents", { files: [bundle], timeoutSeconds: 5 });
+    expect(rebuilt.data).toMatchObject({ done: false, files: ["bundle.pdf"] });
+    await client.close();
+  }, 30_000);
+
   it("shows what changed since the last review, to the page and to the agent", async () => {
     const ext = fakeExtension();
     await ext.outcome;

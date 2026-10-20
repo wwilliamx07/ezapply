@@ -79,6 +79,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   gives a reason: agents stopped well short even with the lint, and a shorter letter is sometimes right
   ([documents](components/documents.md#review-before-attaching)). A letter has one evidence paragraph per
   project or role, not a fixed two ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
+- **An approved document isn't reviewed again by accident.** `review_documents` refuses one whose current bytes are
+  approved unless `again` gives a reason: a fill that read the approvals before the user answered the tailoring's
+  review opened a second review of the same bundle ([documents](components/documents.md#review-before-attaching)).
 - **Edits are reread, narrowly.** After a round of edits the agent rereads only the changed passages and their
   neighbours: never rereading saved tokens but let edits clash; python is denied in the workspace so `.tex`
   edits go through the Edit tool ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
@@ -192,6 +195,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
   python deny sends `.tex` edits to the Edit tool, and that `freeLines` matches the page as rendered. Then that
   an underfilled first draft is refused at review and filled rather than excused, that `short` is used only
   with a real reason, and that the letter's paragraphs follow the evidence rather than the template's two.
+
+- **An approved document in a fill:** with Fill pressed while the tailoring's review is still open, check that
+  the fill uploads the document once it's approved rather than reviewing it again, and that `again` is used only
+  when the user asked to see or change an approved document.
 
 - **The side panel:** opened by the toolbar button, and a whole application from it with the real Claude Code (setup, a review, question and
   approval cards, Stop, Reset, long waits).

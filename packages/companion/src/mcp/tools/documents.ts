@@ -1,7 +1,7 @@
 import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { ShortDocument } from "../../documents/review.js";
+import type { DocumentReason } from "../../documents/review.js";
 import type { Services } from "../../services.js";
 import { PENDING_HINT, tool } from "../result.js";
 
@@ -203,7 +203,7 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
         "calling. done: false means no answer yet: ask whether they saw the page, then call with reviewId to wait " +
         "again. In the panel it returns { pending } at once: end your turn, and the answer comes as your next " +
         "message. A resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
-        "with the reason it's meant to be shorter.",
+        "with the reason it's meant to be shorter; a document already approved as it is, unless `again` does.",
       inputSchema: {
         files: z
           .array(z.string())
@@ -220,6 +220,11 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
             "Documents meant to be shorter than the page, each with why: a length the posting, format.md or the " +
               "user's preferences set, the user's words, or the evidence that ran out.",
           ),
+        again: z
+          .array(z.object({ file: z.string(), reason: z.string().trim().min(10).max(500) }))
+          .max(6)
+          .optional()
+          .describe("Documents already approved as they are, to show again, each with what the user asked."),
         timeoutSeconds: z.number().int().min(5).max(900).default(600),
       },
     },
@@ -230,11 +235,13 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
         files,
         reviewId,
         short,
+        again,
         timeoutSeconds,
       }: {
         files?: string[];
         reviewId?: string;
-        short?: ShortDocument[];
+        short?: DocumentReason[];
+        again?: DocumentReason[];
         timeoutSeconds: number;
       }) => {
         if ((files === undefined) === (reviewId === undefined)) {
@@ -252,7 +259,7 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
         }
         // The page names who gets the answer: the panel conversation's agent, or Claude Code in a terminal.
         const agentName = conversation ? s.agent.agentName(conversation) : "Claude Code";
-        const review = await s.reviews.open(files as string[], short, agentName);
+        const review = await s.reviews.open(files as string[], { short, again }, agentName);
         const openedIn = await s.opener.url(review.url).catch(() => null);
         // In a panel conversation the call doesn't wait: how the review ends starts the next turn.
         if (conversation) {
