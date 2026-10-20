@@ -16,6 +16,12 @@ of that directory. Create one if it doesn't exist.
   in the same change.
 - **Found something wrong or missing in either?** Fix it, even when it isn't part of the current task.
 
+## Commit after every feature build
+
+When a feature (or fix) is built, its tests pass and `references/` and `todo/` are updated, commit it before
+moving on, without waiting to be asked. One feature per commit, with a message that says what changed in
+behaviour. Scan the staged diff for sensitive information first (see below).
+
 ## Never expose sensitive information
 
 This applies everywhere that gets committed or shared: `references/`, `todo/`, code comments, tests,
