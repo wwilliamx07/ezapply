@@ -38,6 +38,15 @@ export const WorkspaceConfig = z.object({
       attach: z.enum(["after-approval", "immediately"]).default("after-approval"),
     })
     .default({ attach: "after-approval" }),
+  notifications: z
+    .object({
+      /**
+       * A system notification (the extension's) when a panel agent's turn ends or it asks the user something,
+       * while no panel is in view.
+       */
+      turnEnd: z.boolean().default(true).catch(true),
+    })
+    .default({ turnEnd: true }),
   debug: z
     .object({
       /** Debug mode: every form call is recorded under debug/ in the workspace (forms/debug.ts). */

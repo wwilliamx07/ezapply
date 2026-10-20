@@ -18,12 +18,10 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
-| — | [Fill form is missing where the posting and the form share a page](fill-form-on-posting-page/overview.md) | High | S | — |
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
 | — | [Form calls on a tab run out of order](form-call-order/overview.md) | Medium | S | — |
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
-| — | [Notify the user when the agent needs them](agent-notifications/overview.md) | — | ~S | — |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
 | 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | Medium | M | — |
 | 2 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | Remove the onboarding and repos skills |
@@ -33,11 +31,10 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | 6 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
 | 7 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
 | 8 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | Refactor the skills |
-| 9 | [Run multiple applications in parallel](parallel-applications/overview.md) | — | ~L | — |
-| 10 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
-| 11 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 12 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
-| 13 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| 9 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
+| 10 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
+| 11 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
+| 12 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
 | — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
 | — | [Lint for broken Markdown links and stale comments](repo-lint/overview.md) | Low | S | — |
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
@@ -51,21 +48,18 @@ Why this order:
 - **Application forms on an employer's own page** waits for a saved careers page whose application is its own form,
   with no frame.
 - **The application manager** (tracker, job search, alerts, auto mode) is built in that order, each on the one
-  before; auto mode last, and only once the rest has shown the quality holds without the user watching. Running
-  applications in parallel comes before it, since auto mode fills many at once.
+  before; auto mode last, and only once the rest has shown the quality holds without the user watching.
 
 ## Groups
 
-- **Bugs:** Fill form is missing where the posting and the form share a page,
-  The panel's agent stops when ezapply's tools aren't connected yet, Form calls on a tab run out of order, CI
+- **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, Form calls on a tab run out of order, CI
   timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
   touch, Remove the onboarding and repos skills, Refactor the skills, A writing spec for claims, Compatibility with
   various agents.
 - **Adapter building:** Agents that try to break a new adapter, Application forms on an
   employer's own page.
-- **The browser as the only interface:** Everything happens in the browser, The side panel's later parts, Run
-  multiple applications in parallel, Notify the user when the agent needs them.
+- **The browser as the only interface:** Everything happens in the browser, The side panel's later parts.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`), so the manager reads and extends those; it adds no database. Tracker, Job

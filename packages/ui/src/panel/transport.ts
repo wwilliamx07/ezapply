@@ -35,8 +35,8 @@ export interface PanelTransport {
    * for the extension's access to websites only during the user's gesture.
    */
   capture(): Promise<CaptureOutcome>;
-  /** What the window's current tab is to the active posting, with its id; null when there's no web page. */
-  tab(): Promise<(PanelTab & { tabId: number }) | null>;
+  /** What the window's current tab is to the posting the panel shows, with its id; null when there's no web page. */
+  tab(postingId?: string): Promise<(PanelTab & { tabId: number }) | null>;
   /** Open an address in a new tab beside the current one. */
   openTab(url: string): Promise<void>;
   /** The extension's own settings (its options page: the port, pairing). */

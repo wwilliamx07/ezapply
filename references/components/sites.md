@@ -74,6 +74,7 @@ Every job site whose application forms ezapply fills has one entry (`SiteInfo`, 
 | `canonicalPath?(pathname)` | The posting's identifying path, when the site varies it for the same job (a locale segment, an application page) |
 | `hostPageJob?(url)` | The site's job that a page on another host names in its URL: a company's careers page embedding the site's board (Greenhouse: `?gh_jid=`). Ties a posting captured there to its application |
 | `sameJob?(a, b)` | Whether two of the site's job ids name one job where its pages use different ids for it (Phenom: `jobSeqNo` embeds the requisition the posting shows, [Phenom](sites/phenom.md)). Consulted by `sameJob` only when the caller names the site, so no other site's ids are compared loosely |
+| `postingIsForm?` | The posting's own page is its application form (Greenhouse), so the side panel calls a tab on it the application ([This tab](agent.md#the-panels-side-panelts)); unset where the posting page only leads to the form (Workday's Apply). A posting's stored application address can't tell these apart: every posting on a form site gets its own URL as its application's |
 | `jobParams?` | Query parameters, lowercased, that name a job on the site's pages or on pages embedding it: a posting's canonical URL keeps them ([postings](postings.md)) |
 | `providerHosts?` | Hosts that serve the site for every employer, so they name the provider, not the employer (a board's host, a data centre's): a posting's company never comes from such a host's name, and a frame on one is an embedded job board ([capture](extension.md#capture)) |
 | `company?(url)` | The employer a URL on one of its `providerHosts` names (a Workday tenant, a board's first path segment); without it, the page's title says |
@@ -85,7 +86,7 @@ Asking it: `siteInfo(id)`, `siteOfUrl(url)`, `detectSite(url)` (a registry site 
 [which posting](../mcp-tools.md#forms)), `siteSignatures()`, `providerOf(host)` and `SITE_JOB_PARAMS`. Derived from it:
 the companion's canonical posting URLs (`canonicalPath`, `jobParams`), a posting's company (`providerHosts`,
 `company`), which application a posting is tied to and which posting a tab belongs to (`tenant`, `job`,
-`hostPageJob`, `sameJob`), the extension's bundles, the site of every tab, frame and capture in the extension
+`hostPageJob`, `sameJob`), whether the panel calls the posting's own page its application (`postingIsForm`), the extension's bundles, the site of every tab, frame and capture in the extension
 (`siteSignatures`, then `detectSite`), the embedded boards a capture looks for, the site list in the bridge's `hello`,
 and `loadTiming`'s per-site sections. `registry.test.ts` checks the registry's own rules and that every site has a
 signature; `conformance.test.ts` checks each signature on every saved page of every site.

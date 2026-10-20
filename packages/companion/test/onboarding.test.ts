@@ -302,6 +302,19 @@ hobbies: [chess]
     });
   });
 
+  it("turns the turn-end notifications off and on in the workspace config, keeping its other values", async () => {
+    const p = page(handle.services.onboarding.open().url);
+    expect((await p.state()).notifications).toEqual({ turnEnd: true });
+    await handle.services.reviews.setAttachMode("immediately");
+    await p.act({ action: "notifications", turnEnd: false });
+    expect((await p.state()).notifications).toEqual({ turnEnd: false });
+    const config = await handle.services.workspace.readConfig();
+    expect(config.notifications.turnEnd).toBe(false);
+    expect(config.documents.attach).toBe("immediately");
+    await p.act({ action: "notifications", turnEnd: true });
+    expect((await p.state()).notifications).toEqual({ turnEnd: true });
+  });
+
   it("saves dropped files into library/ under their own names, never over another, and refuses others", async () => {
     const p = page(handle.services.onboarding.open().url);
     expect(await (await p.upload("transcript.pdf", "%PDF-1.4 a")).json()).toEqual({ saved: "library/transcript.pdf" });

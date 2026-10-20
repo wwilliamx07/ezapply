@@ -13,7 +13,7 @@ import {
   type ReviewStatus,
 } from "@ezapply/protocol";
 import { z } from "zod";
-import { type AttachMode, WorkspaceConfig } from "../config/workspace.js";
+import type { AttachMode } from "../config/workspace.js";
 import type { Logger } from "../logger.js";
 import type { UiAssets } from "../ui/assets.js";
 import {
@@ -26,7 +26,7 @@ import {
   tokenOk,
 } from "../ui/session.js";
 import { readJson, writeJsonAtomic } from "../util/fs.js";
-import { htmlPage } from "../util/html.js";
+import { escapeHtml, htmlPage } from "../util/html.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { pageLimitOf, UNDERFILLED_LINES } from "./page-limit.js";
 import { freeLines } from "./pdf/lint.js";
@@ -93,6 +93,12 @@ export interface ShortDocument {
   reason: string;
 }
 
+/** How a review ended, as the agent gets it. */
+export type ReviewEnd =
+  | ({ done: true } & ReviewAnswer)
+  | { done: false; supersededBy: string; hint: string }
+  | { done: false; expired: true; hint: string };
+
 interface ReviewFile {
   /** Relative to the posting folder, with forward slashes. */
   name: string;
@@ -110,6 +116,7 @@ interface Session {
   token: string;
   postingId: string;
   posting: ReviewPageState["posting"];
+  agentName: string;
   files: ReviewFile[];
   pageLimit: number;
   expires: number;
@@ -148,12 +155,7 @@ export class ReviewService {
 
   /** Record the attach mode in ezapply.config.json, keeping every other value as written. */
   async setAttachMode(mode: AttachMode): Promise<AttachMode> {
-    const path = this.ws.path("ezapply.config.json");
-    const raw = ((await readJson(path)) as Record<string, unknown> | null) ?? { schemaVersion: 1 };
-    const documents = { ...((raw.documents as Record<string, unknown> | undefined) ?? {}), attach: mode };
-    const next = { ...raw, documents };
-    WorkspaceConfig.parse(next);
-    await writeJsonAtomic(path, next);
+    await this.ws.updateConfig("documents", { attach: mode });
     return mode;
   }
 
@@ -164,6 +166,8 @@ export class ReviewService {
   async open(
     inputs: string[],
     short: ShortDocument[] = [],
+    /** Who opened it, as the page names it. */
+    agentName = "Claude Code",
   ): Promise<{ reviewId: string; url: string; postingId: string; files: string[] }> {
     if (inputs.length === 0 || inputs.length > MAX_REVIEW_FILES) {
       throw new EzError(ErrorCode.BadRequest, `Review 1 to ${MAX_REVIEW_FILES} documents at a time.`);
@@ -199,6 +203,7 @@ export class ReviewService {
       token: randomBytes(24).toString("base64url"),
       postingId: pid,
       posting: await this.posting(pid),
+      agentName,
       files,
       pageLimit: (await this.ws.readConfig()).resume.pageLimit,
       expires: Date.now() + REVIEW_TTL_MS,
@@ -221,10 +226,7 @@ export class ReviewService {
   }
 
   /** The user's answer, waiting up to `timeoutMs` for it. */
-  async wait(
-    reviewId: string,
-    timeoutMs: number,
-  ): Promise<({ done: true } & ReviewAnswer) | { done: false; url?: string; supersededBy?: string; hint: string }> {
+  async wait(reviewId: string, timeoutMs: number): Promise<ReviewEnd | { done: false; url: string; hint: string }> {
     const s = this.sessions.get(reviewId);
     if (!s || s.expires < Date.now()) {
       throw new EzError(
@@ -244,15 +246,53 @@ export class ReviewService {
         s.waiters.add(done);
       });
     }
+    return (
+      this.ended(s) ?? {
+        done: false,
+        url: this.url(s),
+        hint: "The user hasn't answered yet. Ask whether they saw the page (give the URL again if not), then wait again with review_documents { reviewId }.",
+      }
+    );
+  }
+
+  /**
+   * How the review ended, whenever it does: answered, replaced by a newer one, or expired (a panel conversation's
+   * review, delivered as a message).
+   */
+  settled(reviewId: string): Promise<ReviewEnd> {
+    const s = this.sessions.get(reviewId);
+    if (!s) return Promise.reject(new EzError(ErrorCode.NotFound, "This review is unknown or expired."));
+    return new Promise((resolve) => {
+      const check = () => {
+        const end = this.ended(s);
+        if (!end) return;
+        s.waiters.delete(check);
+        resolve(end);
+      };
+      s.waiters.add(check);
+      check();
+    });
+  }
+
+  /** Whether a review still waits on the user. */
+  isOpen(reviewId: string): boolean {
+    const s = this.sessions.get(reviewId);
+    return s !== undefined && this.status(s) === "open";
+  }
+
+  private ended(s: Session): ReviewEnd | null {
     if (s.answer) return { done: true, ...forAgent(s.answer) };
     if (s.supersededBy) {
       return { done: false, supersededBy: s.supersededBy, hint: "A newer review of this posting replaced this one." };
     }
-    return {
-      done: false,
-      url: this.url(s),
-      hint: "The user hasn't answered yet. Ask whether they saw the page (give the URL again if not), then wait again with review_documents { reviewId }.",
-    };
+    if (s.expires < Date.now()) {
+      return {
+        done: false,
+        expired: true,
+        hint: "The review expired unanswered. Present the documents again with review_documents { files } if they still need approving.",
+      };
+    }
+    return null;
   }
 
   /** Called when a review opens, is answered, replaced or expires (the side panel shows it). */
@@ -317,7 +357,7 @@ export class ReviewService {
     return (await this.attachMode()) === "after-approval" && this.locate(abs) !== null;
   }
 
-  /** For posting_active: the attach mode, approvals (and whether each still matches), an open review. */
+  /** For posting_get: the attach mode, approvals (and whether each still matches), an open review. */
   async summary(postingId: string) {
     const file = await this.approvals(postingId);
     const approved = [];
@@ -364,14 +404,19 @@ export class ReviewService {
         res,
         404,
         "Review not found",
-        "<p>This link is wrong or has expired. Ask Claude to show the documents again.</p>",
+        "<p>This link is wrong or has expired. Ask the agent to show the documents again.</p>",
       );
     }
     const base = `/review/${s.id}`;
     if (!part) {
       if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
       if (s.expires < Date.now()) {
-        return htmlPage(res, 410, "Review expired", "<p>Ask Claude to show the documents again.</p>");
+        return htmlPage(
+          res,
+          410,
+          "Review expired",
+          `<p>Ask ${escapeHtml(s.agentName)} to show the documents again.</p>`,
+        );
       }
       if (url.searchParams.has("t")) res.setHeader("Set-Cookie", pageCookie(s.token, base));
       return this.ui.page(res, "review", "ezapply: Review", base);
@@ -415,6 +460,7 @@ export class ReviewService {
       id: s.id,
       status: this.status(s),
       posting: s.posting,
+      agentName: s.agentName,
       expiresAt: new Date(s.expires).toISOString(),
       files: s.files.map((f, index) => ({
         index,

@@ -25,7 +25,7 @@ const adapterOf = (site: SiteId) =>
 
 /**
  * Pick the tab to act on: explicit id, else the focused window's active application tab (of a registry site, by its
- * page), else the most recent one. The companion normally passes an explicit id (it prefers the active posting's
+ * page), else the most recent one. The companion normally passes an explicit id (it prefers the call's posting's
  * tenant); the fallback serves callers that don't.
  */
 async function resolveTab(tabId?: number): Promise<chrome.tabs.Tab> {

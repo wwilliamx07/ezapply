@@ -78,7 +78,7 @@ export class CompanionConnection {
       const stored = await store.settings();
       pairing = !stored;
       settings = stored ?? { port: DEFAULT_PORT, pairingToken: "" };
-      // Tells a freshly started companion to wait for this capture before answering posting_active.
+      // Tells a freshly started companion to wait for this capture before answering posting_get.
       pendingCapture = (await store.pendingCapture()) !== null;
       // So the companion opens pages and files in this browser rather than the system default.
       browser = await detectBrowser().catch(() => undefined);

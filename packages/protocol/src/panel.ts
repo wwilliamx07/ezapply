@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FrameInfo } from "./browser.js";
 import { PostingStatus, SiteId } from "./postings.js";
 
 /**
@@ -193,8 +194,18 @@ export type Card = z.infer<typeof Card>;
 
 const at = z.string();
 export const AgentEvent = z.discriminatedUnion("kind", [
-  /** A message the user sent; `taken` once Claude has it (it may wait for a running tool call). */
-  z.object({ kind: z.literal("user"), at, id: z.string(), text: z.string(), taken: z.boolean().optional() }),
+  /**
+   * A message the user sent; `taken` once Claude has it (it may wait for a running tool call). `delivery`: ezapply
+   * sent it, carrying a result the user gave elsewhere (an ask's answers, a review), and `text` says which.
+   */
+  z.object({
+    kind: z.literal("user"),
+    at,
+    id: z.string(),
+    text: z.string(),
+    taken: z.boolean().optional(),
+    delivery: z.boolean().optional(),
+  }),
   /** Claude's text. `parent`: the subagent call it came from. */
   z.object({ kind: z.literal("text"), at, text: z.string(), parent: z.string().optional() }),
   /** A tool call, folded to one line. */
@@ -245,11 +256,11 @@ export const AgentEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type AgentEffort = z.infer<typeof AgentEffort>;
 /**
  * The coding agent behind the panel. Antigravity (its CLI, `agy`) has no permission modes the panel can offer
- * besides Plan only and Don't ask (its conversations run with the user's allow rules), and its own models.
+ * besides Plan only and Don't ask (its calls run without approval), and its own models.
  */
 export const AgentKind = z.enum(["claude", "antigravity"]);
 export type AgentKind = z.infer<typeof AgentKind>;
-/** Antigravity's modes: headless, nobody can approve a call, so it runs what its rules allow, or only plans. */
+/** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
 export const ANTIGRAVITY_PERMISSION_MODES: AgentPermissionMode[] = ["dontAsk", "plan"];
 /**
  * What one agent runs with. `model` is one of `AgentModel` for Claude Code, and one `agy models` lists for
@@ -354,22 +365,21 @@ export const PanelPosting = z.object({
   status: PostingStatus,
   deadline: z.string().optional(),
   url: z.string(),
-  active: z.boolean(),
 });
 export type PanelPosting = z.infer<typeof PanelPosting>;
 
 export const PanelState = z.object({
   agent: z.object({
+    /** Working while any conversation is. */
     status: AgentStatus,
-    conversation: z.string().optional(),
-    queued: z.number(),
+    /** Each conversation with a process running, side by side; `queued`: messages it hasn't taken yet. */
+    conversations: z.array(z.object({ conversation: z.string(), status: AgentStatus, queued: z.number() })),
     /** The agents installed, which the panel offers. */
     agents: z.array(AgentKind),
     /** Antigravity's models (`agy models`), once listed; Claude Code's are `AgentModel`. */
     models: z.object({ antigravity: z.array(z.object({ id: z.string(), label: z.string() })).optional() }),
   }),
-  activePostingId: z.string().nullable(),
-  /** The newest postings, for the picker. */
+  /** The newest postings, and any older one a card waits on or an agent is in: the panel's list. */
   postings: z.array(PanelPosting),
   cards: z.array(Card),
   /** Setup: whether the required steps are done, and the ones left. */
@@ -396,7 +406,16 @@ export const PanelConversation = z.object({
 });
 export type PanelConversation = z.infer<typeof PanelConversation>;
 
-export const PanelTabParams = z.object({ tabId: z.number().int(), url: z.string(), title: z.string(), site: SiteId });
+export const PanelTabParams = z.object({
+  tabId: z.number().int(),
+  url: z.string(),
+  title: z.string(),
+  site: SiteId,
+  /** Its frames on a form site (a careers page embedding Greenhouse); absent from an older extension. */
+  frames: z.array(FrameInfo).optional(),
+  /** The posting the panel shows, which the tab is told against. */
+  postingId: z.string().optional(),
+});
 export const PanelTab = z.object({
   kind: z.enum(["application", "other-application", "unconfirmed-application", "posting", "page", "none"]),
   text: z.string(),
@@ -415,7 +434,8 @@ export const PanelMethods = {
     params: z.object({ key: z.string(), text: z.string().max(20_000) }),
     result: z.object({ id: z.string() }),
   },
-  "panel.stop": { params: Empty, result: z.object({ stopped: z.boolean() }) },
+  /** Stop a conversation's turn; the others go on. */
+  "panel.stop": { params: z.object({ key: z.string() }), result: z.object({ stopped: z.boolean() }) },
   "panel.reset": { params: z.object({ key: z.string() }), result: Empty },
   /**
    * The agent settings the extension keeps, sent on connecting and on every change: the companion holds them in
@@ -429,7 +449,6 @@ export const PanelMethods = {
     params: z.object({ cardId: z.string(), allow: z.boolean(), reason: z.string().max(2000).optional() }),
     result: Empty,
   },
-  "panel.activate": { params: z.object({ postingId: z.string() }), result: Empty },
   /** Delete a posting for good: its folder and its conversation. Refused while it has a review open. */
   "panel.deletePosting": { params: z.object({ postingId: z.string() }), result: Empty },
   /** Delete one of a posting's PDFs for good (its LaTeX source stays). Refused while it's in an open review. */
@@ -451,5 +470,13 @@ export const PanelUpdate = z.object({
   changed: z.boolean().optional(),
   /** How many cards wait on the user: sent even while no panel is open, for the toolbar badge. */
   cards: z.number().int().min(0).optional(),
+  /**
+   * A system notification: a turn ended (shown if no panel is in view), or a card waits on the user (`card`, shown
+   * even then: the user may be watching the form, not the panel). Sent even while no panel is open, and only with
+   * the workspace's `notifications.turnEnd` on. Says what's needed, never the posting's details.
+   */
+  notify: z
+    .object({ conversation: z.string(), title: z.string(), message: z.string(), card: z.boolean().optional() })
+    .optional(),
 });
 export type PanelUpdate = z.infer<typeof PanelUpdate>;

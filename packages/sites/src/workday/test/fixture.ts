@@ -12,9 +12,11 @@ export interface StepOptions {
   dateNeedsSecondPass?: boolean;
   /**
    * Start Date as Workday's split date widget: each part a spinbutton that takes digits in keydown and shows
-   * its value in a display element; "stuck" ignores synthetic keys, so only the input's value changes.
+   * its value in a display element; "stuck" ignores synthetic keys, so only the input's value changes;
+   * "reparse" has Month, Day and Year parts and, as seen live, re-parses the whole date as the first day digit
+   * lands: the month becomes that digit and the year its default (2008), then the digit goes into the day.
    */
-  dateWidget?: "keys" | "stuck";
+  dateWidget?: "keys" | "stuck" | "reparse";
   /** Every step in the progress bar is titled "Application", as on some live tenants. */
   sameStepTitles?: boolean;
   /**
@@ -249,20 +251,32 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
     const date = doc.querySelector('[data-automation-id="formField-startDate"]') as HTMLElement;
     date.innerHTML = `<label>Available Start Date</label>
       <div data-automation-id="dateSectionMonth"><div data-automation-id="dateSectionMonth-display">MM</div><input data-automation-id="dateSectionMonth-input" aria-label="Month" role="spinbutton" type="text"></div>
+      ${opts.dateWidget === "reparse" ? '<div data-automation-id="dateSectionDay"><div data-automation-id="dateSectionDay-display">DD</div><input data-automation-id="dateSectionDay-input" aria-label="Day" role="spinbutton" type="text"></div>' : ""}
       <div data-automation-id="dateSectionYear"><div data-automation-id="dateSectionYear-display">YYYY</div><input data-automation-id="dateSectionYear-input" aria-label="Year" role="spinbutton" type="text"></div>`;
+    const show = new Map<string, (v: string) => void>();
+    let reparsed = false;
     for (const input of date.querySelectorAll<HTMLInputElement>("input")) {
+      const label = input.getAttribute("aria-label") as string;
       const display = input.previousElementSibling as HTMLElement;
-      const max = input.getAttribute("aria-label") === "Year" ? 4 : 2;
+      const max = label === "Year" ? 4 : 2;
       let typed = "";
+      show.set(label, (v) => {
+        typed = v;
+        display.textContent = v;
+        input.value = v;
+      });
       input.addEventListener("focus", () => {
         typed = "";
       });
       input.addEventListener("keydown", (e) => {
         if (!/^\d$/.test(e.key) || opts.dateWidget === "stuck") return;
         e.preventDefault();
-        typed = (typed + e.key).slice(-max);
-        display.textContent = typed;
-        input.value = typed;
+        if (opts.dateWidget === "reparse" && label === "Day" && !reparsed) {
+          reparsed = true;
+          show.get("Month")?.(e.key);
+          show.get("Year")?.("2008");
+        }
+        show.get(label)?.((typed + e.key).slice(-max));
       });
     }
   }

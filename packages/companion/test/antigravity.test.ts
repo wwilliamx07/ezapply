@@ -142,12 +142,13 @@ describe("reading the Antigravity CLI's stream-json", () => {
     });
   });
 
-  it("runs agy with stream-json both ways, the panel's model, Plan only, and the conversation to continue", () => {
+  it("runs agy with stream-json both ways, the panel's model, its mode, and the conversation to continue", () => {
     expect(antigravityArgs({ permissionMode: "dontAsk" })).toEqual([
       "--input-format",
       "stream-json",
       "--output-format",
       "stream-json",
+      "--dangerously-skip-permissions",
     ]);
     expect(antigravityArgs({ permissionMode: "plan", model: "m1" }, "c1").slice(4)).toEqual([
       "--model",
@@ -263,7 +264,7 @@ describe("the agent service with Antigravity", () => {
     make();
     await agent.send("general", "slow");
     await waitFor(async () => (events.some(([, e]) => e.kind === "tool") ? true : null), 10_000);
-    expect(agent.stop()).toBe(true);
+    expect(agent.stop("general")).toBe(true);
     await after("general", 1);
     expect(events.at(-1)?.[1]).toMatchObject({ kind: "turnEnd", interrupted: true });
     expect(events.some(([, e]) => e.kind === "notice")).toBe(false);

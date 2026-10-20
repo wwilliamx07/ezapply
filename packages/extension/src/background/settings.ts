@@ -43,13 +43,6 @@ export const store = {
     const { pendingCapture } = await ext.storage.local.get("pendingCapture");
     return (pendingCapture as CapturePayload | undefined) ?? null;
   },
-  async setActiveLabel(label: string | null): Promise<void> {
-    await ext.storage.local.set({ activeLabel: label });
-  },
-  async activeLabel(): Promise<string | null> {
-    const { activeLabel } = await ext.storage.local.get("activeLabel");
-    return typeof activeLabel === "string" ? activeLabel : null;
-  },
   /** The panel's agent settings: the extension keeps them, and gives them to the companion (`servePanels`). */
   async agentPrefs(): Promise<AgentPrefs> {
     const { agentPrefs } = await ext.storage.local.get(AGENT_PREFS);

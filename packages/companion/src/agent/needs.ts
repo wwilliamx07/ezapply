@@ -137,6 +137,25 @@ export class NeedsYou {
     });
   }
 
+  /**
+   * The ask's outcome whenever it comes, read once (a panel conversation's ask, delivered as a message). Never
+   * settles for an ask withdrawn first.
+   */
+  settledAsk(id: string): Promise<AskOutcome> {
+    const a = this.asks.get(id);
+    if (!a) return Promise.reject(new EzError(ErrorCode.NotFound, `No question card ${id}`));
+    if (a.outcome) return Promise.resolve(this.take(id, a.outcome));
+    return new Promise((resolve) => {
+      a.waiters.add((o) => resolve(this.take(id, o)));
+    });
+  }
+
+  /** Whether an ask is open: shown and not answered yet. */
+  isOpen(id: string): boolean {
+    const a = this.asks.get(id);
+    return a !== undefined && !a.outcome;
+  }
+
   /** The user's answers. Checked against the spec; the problems come back as one `bad_request`. */
   answer(id: string, answers: AskAnswers): void {
     const a = this.openAsk(id);

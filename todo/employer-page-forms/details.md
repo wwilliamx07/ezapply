@@ -57,7 +57,7 @@ and no URL rule. It isn't in `SITES`, and `browser.status` never lists a tab as 
 - **Companion** (`forms/service.ts`): the agent's `tabId` already reaches the extension when the tab has no form
   site (`target()` falls back to `own`). `decide` returns early for a tab that isn't a form site, so nothing would
   be logged or credited: let it go on when the extension's answer says `adapter: "generic"`. Matching then works
-  on the binding or the page's title (the URL says nothing); `posting_activate { id, tabId }` binds such a tab
+  on the binding or the page's title (the URL says nothing); `tab_bind { tabId }` binds such a tab
   like any other.
 - **Skill** (`ezapply-apply`): when the application is on the employer's own page (Apply opens no known site),
   call `get_form` with that tab's `tabId`. Say to the user that this form isn't from a known site, and check every

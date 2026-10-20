@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { postingConversation } from "@ezapply/protocol";
 import { antigravityBackend } from "./agent/antigravity.js";
 import type { AgentCommand } from "./agent/child.js";
 import { NeedsYou } from "./agent/needs.js";
@@ -123,7 +124,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       "panel.conversation": ({ key }) => panel.conversation(key),
       "panel.tab": (t) => panel.tab(t),
       "panel.send": ({ key, text }) => panel.send(key, text),
-      "panel.stop": async () => ({ stopped: agent.stop() }),
+      "panel.stop": async ({ key }) => ({ stopped: agent.stop(key) }),
       "panel.reset": async ({ key }) => {
         await agent.reset(key);
         return {};
@@ -139,10 +140,6 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       },
       "panel.permission": async ({ cardId, allow, reason }) => {
         panel.permission(cardId, allow, reason);
-        return {};
-      },
-      "panel.activate": async ({ postingId }) => {
-        await postings.activate(postingId);
         return {};
       },
       "panel.deletePosting": async ({ postingId }) => {
@@ -178,6 +175,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
       ...(opts.antigravity ? { antigravity: antigravityBackend(opts.antigravity) } : {}),
     },
   });
+  // A posting's panel conversation works on its own posting, whichever is active.
+  postings.sessionPostings(
+    async (session) => postingConversation((await agent.conversationOf(session)) ?? "")?.postingId,
+  );
 
   const onboarding = new OnboardingService(
     () => services,

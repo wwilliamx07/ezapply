@@ -86,6 +86,12 @@ const chromeStub = {
     update: vi.fn(async (_id: number, _props: unknown) => ({})),
     create: vi.fn(async (_props: unknown): Promise<unknown> => ({ id: 42 })),
   },
+  notifications: {
+    create: vi.fn(async (_id: string, _options: unknown) => ""),
+    clear: vi.fn(async (_id: string) => true),
+    getAll: vi.fn(async (): Promise<Record<string, boolean>> => ({})),
+    onClicked: event(),
+  },
   scripting: { executeScript: vi.fn(async (_injection: unknown): Promise<unknown> => []) },
   permissions: {
     contains: vi.fn(async (_p?: unknown) => true),
@@ -556,6 +562,56 @@ describe("the side panel's port", () => {
       title: expect.not.stringContaining("waiting for you"),
     });
     chromeStub.storage.local.get.mockResolvedValue({} as never);
+  });
+
+  it("shows the companion's notification only while no panel is visible in the focused window", async () => {
+    const { panelUpdate } = await import("../src/background/panel.js");
+    const notify = { conversation: "general", title: "Claude Code finished", message: "General: Its reply…" };
+    const { ask } = panelPort();
+    chromeStub.notifications.create.mockClear();
+    // Visible in a focused window: the user sees it already.
+    expect(await ask({ type: "visibility", id: 1, windowId: 1, visible: true })).toMatchObject({ ok: true });
+    await panelUpdate({ notify });
+    expect(chromeStub.notifications.create).not.toHaveBeenCalled();
+    // The browser in the background.
+    chromeStub.windows.get.mockResolvedValueOnce({ id: 1, focused: false, state: "normal" });
+    await panelUpdate({ notify });
+    expect(chromeStub.notifications.create).toHaveBeenCalledWith("ezapply-general", {
+      type: "basic",
+      iconUrl: expect.stringContaining("icons/icon-128.png"),
+      title: notify.title,
+      message: notify.message,
+      priority: 1,
+    });
+    // The panel hidden.
+    chromeStub.notifications.create.mockClear();
+    await ask({ type: "visibility", id: 2, windowId: 1, visible: false });
+    await panelUpdate({ notify });
+    expect(chromeStub.notifications.create).toHaveBeenCalledTimes(1);
+    // Back in view: the notifications it pointed at go.
+    chromeStub.notifications.getAll.mockResolvedValueOnce({ "ezapply-general": true, other: true });
+    chromeStub.notifications.clear.mockClear();
+    await ask({ type: "visibility", id: 3, windowId: 1, visible: true });
+    await vi.waitFor(() => expect(chromeStub.notifications.clear).toHaveBeenCalledWith("ezapply-general"));
+    expect(chromeStub.notifications.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a card's notification even with a panel in view, and clears it once no card waits", async () => {
+    const { panelUpdate } = await import("../src/background/panel.js");
+    const { ask } = panelPort();
+    expect(await ask({ type: "visibility", id: 1, windowId: 1, visible: true })).toMatchObject({ ok: true });
+    chromeStub.notifications.create.mockClear();
+    chromeStub.notifications.clear.mockClear();
+    const notify = {
+      conversation: "p1/fill",
+      title: "Claude Code has a question",
+      message: "Application: …",
+      card: true,
+    };
+    await panelUpdate({ cards: 1, notify });
+    expect(chromeStub.notifications.create).toHaveBeenCalledWith("ezapply-p1/fill", expect.anything());
+    await panelUpdate({ cards: 0 });
+    expect(chromeStub.notifications.clear).toHaveBeenCalledWith("ezapply-p1/fill");
   });
 });
 

@@ -1,12 +1,12 @@
 ---
 name: ezapply-resume
-description: Tailor the user's one-page LaTeX resume to the active job posting, or revise the tailored version. Use when the user asks to tailor, adjust or update their resume for a job.
+description: Tailor the user's one-page LaTeX resume to a job posting, or revise the tailored version. Use when the user asks to tailor, adjust or update their resume for a job.
 ---
 
 # Tailor the resume
 
 ## Setup
-1. `posting_active`, then read `posting.md`. If the capture-time company or role is wrong, fix it with
+1. `posting_get`, then read `posting.md`. If the capture-time company or role is wrong, fix it with
    `posting_update_meta`; a requisition or job id the posting shows goes in `reqId` (never in the company or
    role). If `notes.md` has no `## Application requirements`, write it now (see EZAPPLY.md)
    and follow it: a required format, page limit or single PDF changes what you produce.
@@ -63,7 +63,7 @@ description: Tailor the user's one-page LaTeX resume to the active job posting, 
 
 ## Report
 Give 3–6 lines: what changed and why, plus any gaps you did not claim, and the PDF path. Then follow the
-attach mode (`posting_active` → `documents.attachMode`):
+attach mode (`posting_get` → `documents.attachMode`):
 - `after-approval` (the default): `review_documents { files }` it (with the cover letter if that's ready too)
   after your report. Each change the user asks for there is a tweak: make it, rebuild, report what changed from
   `pdf_text { path, sinceReviewed: true }`, and review again.

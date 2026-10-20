@@ -1,12 +1,12 @@
 ---
 name: ezapply-cover-letter
-description: Write or revise a cover letter for the active job posting using the user's cover letter template, profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one.
+description: Write or revise a cover letter for the job posting using the user's cover letter template, profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one.
 ---
 
 # Cover letter
 
 ## Inputs
-- `posting_active` → `posting.md`. Note the company, the role, and what the team or product actually does.
+- `posting_get` → `posting.md`. Note the company, the role, and what the team or product actually does.
 - `## Application requirements` in `postings/<id>/notes.md` (write it first if missing, see EZAPPLY.md):
   word or page limits, who to address, reference numbers, questions the letter must answer, whether a
   letter is wanted at all.
@@ -79,7 +79,7 @@ Tone comes from the user's preferences.
 
 ## Report and iterate
 Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode
-(`posting_active` → `documents.attachMode`): in `after-approval` (the default), `review_documents { files }` it
+(`posting_get` → `documents.attachMode`): in `after-approval` (the default), `review_documents { files }` it
 (with the resume if that's ready and not yet approved); in `immediately` it's ready to attach (`open_file` only
 when asked). Handle tweaks ("more concise", "mention X"), from chat or the review page, by editing, recompiling,
 reporting in one line (from `pdf_text { path, sinceReviewed: true }` after a review), and reviewing again in

@@ -5,7 +5,7 @@ import { SITES, sameJob, siteOfUrl } from "@ezapply/sites";
  * Which application a posting is tied to, found from what was captured. Everything a URL says comes from the
  * site registry (`isUrl`, `tenant`, `job`, `hostPageJob`), so a new site is covered by its registry entry alone.
  *
- * Why: the form tools credit a tab to the active posting by comparing tenants and jobs, and most postings are
+ * Why: the form tools credit a tab to the call's posting by comparing tenants and jobs, and most postings are
  * captured off the form sites (a school's job board, the employer's own careers page) with neither. Their
  * captured page usually links to the application (careers.cyberdyne.example links to
  * `cyberdyne.wd5.myworkdayjobs.com/…_Req100012/apply`), or names an embedded board's job in its URL

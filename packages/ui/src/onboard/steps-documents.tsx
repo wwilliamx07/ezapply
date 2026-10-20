@@ -76,7 +76,7 @@ function ImportTemplate({
 }
 
 function CompileResult({ result, kind }: { result: CompileOutcome; kind: "resume" | "cover" }) {
-  const { ask } = useOnboard();
+  const { state, ask } = useOnboard();
   const busy = useBusy(["fix-template-build"]);
   if (result.ok) {
     const over = result.pageLimit !== undefined && (result.pages ?? 0) > result.pageLimit;
@@ -97,10 +97,10 @@ function CompileResult({ result, kind }: { result: CompileOutcome; kind: "resume
           disabled={busy}
           onClick={() => ask("fix-template-build", { kind, main: result.main, errors: result.errors ?? [] })}
         >
-          Ask Claude to fix the build
+          Ask {state.agentName} to fix the build
         </Button>
         <span className="ez-help">
-          Claude fixes only what this computer needs (a font, an engine), never your text.
+          {state.agentName} fixes only what this computer needs (a font, an engine), never your text.
         </span>
       </div>
     </>
@@ -160,7 +160,7 @@ export function CoverStep() {
     <>
       <StepHead title="Cover letter template" done={done}>
         {state.cover.isDefault
-          ? "ezapply starts you with a plain one-page letter. Keep it, use your own LaTeX letter, or have Claude copy the layout of one you like."
+          ? `ezapply starts you with a plain one-page letter. Keep it, use your own LaTeX letter, or have ${state.agentName} copy the layout of one you like.`
           : "Your cover letters are built from this template."}
       </StepHead>
       <fieldset className="ob-choice">
@@ -243,7 +243,7 @@ export function CoverStep() {
                 setRequest("");
               }}
             >
-              Ask Claude to change it
+              Ask {state.agentName} to change it
             </Button>
           </div>
         </>
@@ -295,15 +295,17 @@ export function AnswersStep() {
   return (
     <>
       <StepHead title="Screening questions" done={done}>
-        Applications ask the same questions again and again. Answer them once here; Claude uses your answers and asks
-        you about anything new.
+        Applications ask the same questions again and again. Answer them once here; {state.agentName} uses your answers
+        and asks you about anything new.
       </StepHead>
       <p className="ez-muted">
         {answered} of {total - fromProfile.length} answered
         {fromProfile.length ? `; ${fromProfile.length} more come from your profile` : ""}.
       </p>
       {group.length === 0 ? (
-        <p>Every question has an answer. You can change them any time in profile/answers.yaml, or ask Claude.</p>
+        <p>
+          Every question has an answer. You can change them any time in profile/answers.yaml, or ask {state.agentName}.
+        </p>
       ) : (
         <>
           <ol className="ob-questions">
@@ -321,8 +323,8 @@ export function AnswersStep() {
                 />
                 {q.sensitive ? (
                   <span className="ez-help">
-                    Sensitive: Claude asks you each time, suggesting what you save here (leave it empty for no
-                    suggestion).
+                    Sensitive: {state.agentName} asks you each time, suggesting what you save here (leave it empty for
+                    no suggestion).
                   </span>
                 ) : q.suggested ? (
                   <span className="ez-help">Suggested; change it if it isn't right for you.</span>
@@ -365,8 +367,8 @@ export function AnswersStep() {
         <section className="ob-section">
           <h3>From your profile</h3>
           <p className="ez-help">
-            Claude answers these from your profile for each job, so you don't answer them twice. Change them under Your
-            profile.
+            {state.agentName} answers these from your profile for each job, so you don't answer them twice. Change them
+            under Your profile.
           </p>
           <ul className="ob-from-profile">
             {fromProfile.map((q) => (
@@ -375,7 +377,7 @@ export function AnswersStep() {
                 {q.value ? (
                   <span className="ob-from-value">{q.value}</span>
                 ) : (
-                  <span className="ez-help">Not in your profile yet: Claude asks when a form needs it.</span>
+                  <span className="ez-help">Not in your profile yet: {state.agentName} asks when a form needs it.</span>
                 )}
               </li>
             ))}
@@ -414,7 +416,7 @@ export function PreferencesStep() {
   return (
     <>
       <StepHead title="Preferences" done={state.steps.find((s) => s.id === "preferences")?.done ?? false}>
-        How Claude writes for you, and how documents reach your applications.
+        How {state.agentName} writes for you, and how documents reach your applications.
       </StepHead>
       <fieldset className="ob-choice">
         <legend className="ez-label">Before a document is attached to an application</legend>
@@ -462,7 +464,41 @@ export function PreferencesStep() {
         {saved ? <span className="ob-saved">Saved</span> : null}
       </div>
       <ErrorNote error={error} />
+      <NotificationsSetting />
     </>
+  );
+}
+
+/** Its own setting, saved as soon as it's changed: it's the extension's behaviour, not how Claude writes. */
+function NotificationsSetting() {
+  const { state, act } = useOnboard();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <fieldset className="ob-choice">
+      <legend className="ez-label">Notifications</legend>
+      <label className="ob-check">
+        <input
+          type="checkbox"
+          checked={state.notifications.turnEnd}
+          disabled={saving}
+          onChange={async (e) => {
+            setSaving(true);
+            setError(null);
+            try {
+              await act("notifications", { turnEnd: e.target.checked });
+            } catch (err) {
+              setError(messageOf(err));
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />{" "}
+        Notify me when {state.agentName} finishes a reply or asks me something{" "}
+        <span className="ez-muted">(only while the ezapply panel isn't in view)</span>
+      </label>
+      <ErrorNote error={error} />
+    </fieldset>
   );
 }
 

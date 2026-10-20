@@ -60,7 +60,7 @@ const workspaceAt = (dir = join(tmpdir(), "ezapply-no-such-workspace")) =>
 
 /** FormsService over `bridge`, with focus emulation always on (`tab.show` is answered here, not by the bridge). */
 function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
-  const postings = { activeId: async () => null } as unknown as PostingsService;
+  const postings = { ownPosting: async () => null } as unknown as PostingsService;
   const shown = {
     call: (method: string, params: { tabId: number }, timeoutMs?: number) =>
       method === "tab.show"

@@ -9,7 +9,7 @@ import { type DocLink, Panel } from "./Panel.js";
 import { type Jump, type Selected, Viewer } from "./Viewer.js";
 
 /**
- * The review page: the documents Claude prepared for one application, each to approve as shown or to send back
+ * The review page: the documents the agent prepared for one application, each to approve as shown or to send back
  * with comments on passages and a request for the whole. Each is approved on its own, by one button that also moves
  * on to the next document to decide, and on the last sends the answer. The companion keeps the bytes shown here, and
  * approving records exactly those.
@@ -79,10 +79,10 @@ export function ReviewApp() {
     setJump({ id, page, nonce: Date.now() });
   }, []);
 
-  if (sent) {
+  if (sent && state) {
     return (
-      <MessagePage title="Sent to Claude">
-        <p>You can close this tab. Claude has your answer and will show you any revised documents.</p>
+      <MessagePage title={`Sent to ${state.agentName}`}>
+        <p>You can close this tab. {state.agentName} has your answer and will show you any revised documents.</p>
       </MessagePage>
     );
   }
@@ -100,7 +100,7 @@ export function ReviewApp() {
   if (state.status === "answered" && state.answer) {
     return (
       <MessagePage title="Already answered">
-        <AnswerSummary answer={state.answer} />
+        <AnswerSummary answer={state.answer} agentName={state.agentName} />
         <p className="ez-muted">You can close this tab.</p>
       </MessagePage>
     );
@@ -108,14 +108,14 @@ export function ReviewApp() {
   if (state.status === "replaced") {
     return (
       <MessagePage title="A newer version is waiting">
-        <p>Claude opened a newer review of these documents in another tab. Use that one.</p>
+        <p>{state.agentName} opened a newer review of these documents in another tab. Use that one.</p>
       </MessagePage>
     );
   }
   if (state.status === "expired") {
     return (
       <MessagePage title="This review expired">
-        <p>Ask Claude to show the documents again.</p>
+        <p>Ask {state.agentName} to show the documents again.</p>
       </MessagePage>
     );
   }
@@ -179,7 +179,8 @@ export function ReviewApp() {
 
       <nav className="ez-docs" aria-label="Documents">
         <p className="ez-help ez-docs-intro">
-          Approve each document as shown, or say what should change. Claude revises it and shows you the new version.
+          Approve each document as shown, or say what should change. {state.agentName} revises it and shows you the new
+          version.
         </p>
         <ul>
           {state.files.map((f) => (
@@ -202,7 +203,7 @@ export function ReviewApp() {
         {!file ? null : !file.info ? (
           <div className="ez-center">
             <Banner tone="danger" icon={<Icon name="alert" />}>
-              ezapply couldn't read {file.name} as a PDF. Ask Claude to build it again.
+              ezapply couldn't read {file.name} as a PDF. Ask {state.agentName} to build it again.
             </Banner>
           </div>
         ) : !pdf ? (
@@ -250,6 +251,7 @@ export function ReviewApp() {
           request={draft.request}
           decision={decisions[file.index] ?? "open"}
           last={nextOpen(file.index) === undefined}
+          agentName={state.agentName}
           sending={sending}
           active={active}
           onAdvance={() => advance(file.index)}
@@ -271,7 +273,7 @@ export function ReviewApp() {
           {approved > 0 ? <Badge tone="ok">{approved} approved</Badge> : null}
           {changed > 0 ? <Badge tone="warn">{changed} with changes</Badge> : null}
           {open > 0 ? <Badge>{open} to decide</Badge> : null}
-          {sending ? <Spinner label="Sending to Claude" /> : null}
+          {sending ? <Spinner label={`Sending to ${state.agentName}`} /> : null}
           {sendError ? <span className="ez-footer-error">{sendError}</span> : null}
         </div>
       </footer>
@@ -318,7 +320,7 @@ function DocButton({
   );
 }
 
-function AnswerSummary({ answer }: { answer: ReviewAnswer }) {
+function AnswerSummary({ answer, agentName }: { answer: ReviewAnswer; agentName: string }) {
   return (
     <>
       {answer.approved.length ? (
@@ -333,7 +335,7 @@ function AnswerSummary({ answer }: { answer: ReviewAnswer }) {
       ) : null}
       {answer.changes.length ? (
         <>
-          <p>Changes asked for (Claude will show you the revised version):</p>
+          <p>Changes asked for ({agentName} will show you the revised version):</p>
           <ul>
             {answer.changes.map((c) => (
               <li key={c.file}>

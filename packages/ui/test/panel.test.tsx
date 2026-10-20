@@ -6,11 +6,12 @@ import {
   type Card,
   DEFAULT_AGENT_PREFS,
   type PanelConversation,
+  type PanelPosting,
   type PanelState,
 } from "@ezapply/protocol";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Conversation, PanelApp, REQUESTS, withEvent } from "../src/panel/App.js";
+import { applications, Conversation, ownerOf, PanelApp, REQUESTS, withEvent } from "../src/panel/App.js";
 import { answerOf, initialDraft, permissionBody } from "../src/panel/cards.js";
 import { Markdown } from "../src/panel/markdown.js";
 import type { ConnectionState, PanelPush, PanelTransport } from "../src/panel/transport.js";
@@ -25,7 +26,6 @@ const POSTING = {
   site: "workday" as const,
   status: "drafting" as const,
   url: "https://example-tenant.myworkdayjobs.com/en-US/careers/job/REQ-0000",
-  active: true,
 };
 const TAILOR = `${POSTING.id}/tailor`;
 const FILL = `${POSTING.id}/fill`;
@@ -34,11 +34,10 @@ function state(over: Partial<PanelState> = {}): PanelState {
   return {
     agent: {
       status: "idle",
-      queued: 0,
+      conversations: [],
       agents: ["claude"],
       models: {},
     },
-    activePostingId: POSTING.id,
     postings: [POSTING],
     cards: [],
     setup: { ready: true, left: [] },
@@ -117,17 +116,26 @@ function fakeTransport(opts: {
   };
 }
 
+/** Opens an application from the list the panel starts on. */
+async function openApp(name: RegExp = /^Software Developer/) {
+  fireEvent.click(await screen.findByRole("button", { name }));
+}
+
 describe("the side panel", () => {
-  it("shows the active posting with its requirements, documents and what this tab is, and the buttons send requests", async () => {
+  it("opens on the list, and an application shows its requirements, documents and this tab; the buttons send requests", async () => {
     const t = fakeTransport({
       tab: { kind: "application", text: "Acme: Software Developer: the application on Workday", tabId: 7 },
     });
     render(<PanelApp transport={t.transport} />);
-    expect(await screen.findByText("Software Developer")).toBeTruthy();
-    expect(screen.getByText("One PDF")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Applications" })).toBeTruthy();
+    expect(screen.queryByLabelText("Message")).toBeNull();
+    await openApp();
+    expect(await screen.findByText("One PDF")).toBeTruthy();
     expect(screen.getByText("resume.pdf")).toBeTruthy();
     expect(screen.getByText("approved")).toBeTruthy();
     expect(await screen.findByText(/the application on Workday/)).toBeTruthy();
+    // The tab is judged against the posting shown, never another one.
+    expect(t.transport.tab).toHaveBeenLastCalledWith(POSTING.id);
 
     fireEvent.click(screen.getByRole("button", { name: /Tailor documents/ }));
     await waitFor(() =>
@@ -154,6 +162,7 @@ describe("the side panel", () => {
       return call(method as never, params as never);
     }) as PanelTransport["call"];
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     const tailor = await screen.findByRole("button", { name: /Tailor documents/ });
     await screen.findByText(/the application on Workday/);
     await waitFor(() => expect((tailor as HTMLButtonElement).disabled).toBe(false));
@@ -179,14 +188,14 @@ describe("the side panel", () => {
       state: state({
         agent: {
           status: "working",
-          conversation: FILL,
-          queued: 0,
+          conversations: [{ conversation: FILL, status: "working", queued: 0 }],
           agents: ["claude"],
           models: {},
         },
       }),
     });
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     const application = await screen.findByRole("tab", { name: /Application/ });
     expect(application.getAttribute("aria-selected")).toBe("true");
     expect(within(application).getByLabelText("Claude Code is working here")).toBeTruthy();
@@ -199,11 +208,17 @@ describe("the side panel", () => {
   it("names the agent in use as the one working", async () => {
     const t = fakeTransport({
       state: state({
-        agent: { status: "working", conversation: TAILOR, queued: 0, agents: ["antigravity"], models: {} },
+        agent: {
+          status: "working",
+          conversations: [{ conversation: TAILOR, status: "working", queued: 0 }],
+          agents: ["antigravity"],
+          models: {},
+        },
       }),
       prefs: { agent: "antigravity", choices: {} },
     });
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     expect(await screen.findByText("Antigravity is working…")).toBeTruthy();
     expect(screen.queryByText(/Claude/)).toBeNull();
   });
@@ -219,6 +234,7 @@ describe("the side panel", () => {
       }),
     });
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     expect(await screen.findByText("resume.pdf")).toBeTruthy();
     expect(screen.getAllByText("approved")).toHaveLength(1);
     expect(screen.getAllByText("waiting for your review")).toHaveLength(2);
@@ -235,6 +251,7 @@ describe("the side panel", () => {
       }),
     });
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     expect(await screen.findByText("resume.pdf")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete cover-letter.pdf" })).toBeNull();
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
@@ -249,13 +266,16 @@ describe("the side panel", () => {
     confirm.mockRestore();
   });
 
-  it("opens the application when this tab isn't it, captures from the header, and resets after asking", async () => {
+  it("captures from the list into the posting's conversation, opens its application, back to the list, and resets after asking", async () => {
     const t = fakeTransport({ tab: { kind: "page", text: "Not this posting's application", tabId: 3 } });
     render(<PanelApp transport={t.transport} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Capture/ }));
+    expect(t.transport.capture).toHaveBeenCalledTimes(1);
     fireEvent.click(await screen.findByRole("button", { name: /Open the application/ }, { timeout: 5000 }));
     expect(t.transport.openTab).toHaveBeenCalledWith(POSTING.url);
-    fireEvent.click(screen.getByRole("button", { name: /Capture/ }));
-    expect(t.transport.capture).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "All applications" }));
+    expect(await screen.findByRole("heading", { name: "Applications" })).toBeTruthy();
+    await openApp();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
     await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: TAILOR }]), { timeout: 5000 });
@@ -264,16 +284,18 @@ describe("the side panel", () => {
     expect(t.transport.openSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("resets the general conversation after asking, and offers no posting's actions there", async () => {
+  it("resets the general conversation with its own button, after asking, and offers no posting's actions there", async () => {
     const t = fakeTransport({
-      state: state({ activePostingId: null }),
+      state: state(),
       conv: { key: "general", documents: [], events: [] },
     });
     render(<PanelApp transport={t.transport} />);
-    expect(await screen.findByText(/No posting. Capture one/)).toBeTruthy();
+    await openApp(/^General/);
+    const resetButton = await screen.findByRole("button", { name: "Reset conversation" });
     expect(screen.queryByRole("button", { name: /Delete posting/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset Conversation" })).toBeNull();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: "Reset Conversation" }));
+    fireEvent.click(resetButton);
     await waitFor(() => expect(t.calls).toContainEqual(["panel.reset", { key: "general" }]));
     expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/new general conversation/));
     confirm.mockRestore();
@@ -369,11 +391,23 @@ describe("the side panel", () => {
     expect(t.calls).toContainEqual(["panel.open", { what: "setup" }]);
   });
 
+  it("shows a result ezapply delivered as a note, not as the user's message", async () => {
+    const t = fakeTransport({});
+    render(<PanelApp transport={t.transport} />);
+    await openApp();
+    const delivered = { kind: "user", at: AT, id: "d1", text: "Your review", delivery: true } as const;
+    t.push({ type: "update", update: { event: { conversation: TAILOR, event: { ...delivered, taken: false } } } });
+    expect(await screen.findByText("Your review: waiting for Claude Code")).toBeTruthy();
+    t.push({ type: "update", update: { event: { conversation: TAILOR, event: { ...delivered, taken: true } } } });
+    const note = await screen.findByText("Your review: sent to Claude Code");
+    expect(note.className).toBe("ez-msg-note");
+  });
+
   it("adds pushed events to the conversation, and turns Send into Stop while Claude works", async () => {
     const t = fakeTransport({});
     render(<PanelApp transport={t.transport} />);
-    await screen.findByText("Software Developer");
-    const box = screen.getByLabelText("Message");
+    await openApp();
+    const box = await screen.findByLabelText("Message");
     fireEvent.change(box, { target: { value: "make it shorter" } });
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() => expect(t.calls).toContainEqual(["panel.send", { key: TAILOR, text: "make it shorter" }]));
@@ -414,8 +448,7 @@ describe("the side panel", () => {
       state({
         agent: {
           status: "working",
-          conversation: TAILOR,
-          queued: 0,
+          conversations: [{ conversation: TAILOR, status: "working", queued: 0 }],
           agents: ["claude"],
           models: {},
         },
@@ -423,8 +456,12 @@ describe("the side panel", () => {
     );
     t.push({ type: "update", update: { changed: true } });
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
-    await waitFor(() => expect(t.calls).toContainEqual(["panel.stop", {}]));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.stop", { key: TAILOR }]));
     expect((screen.getByRole("button", { name: /Tailor documents/ }) as HTMLButtonElement).disabled).toBe(true);
+    // The application's own conversation isn't the one working, so it can start at the same time.
+    expect((screen.getByRole("button", { name: /Fill form|Open the application/ }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   it("answers a question card and decides an approval, with another conversation's card labelled", async () => {
@@ -460,11 +497,16 @@ describe("the side panel", () => {
     };
     const t = fakeTransport({ state: state({ cards: [ask, perm] }) });
     render(<PanelApp transport={t.transport} />);
-    expect(await screen.findByText("Needs you · 2")).toBeTruthy();
+    // The list puts both first, each with what it waits on.
+    const needs = within(await screen.findByRole("region", { name: "Needs you" }));
+    expect(needs.getByText("Documents: Acme, step 3")).toBeTruthy();
+    expect(needs.getByText("approve Bash")).toBeTruthy();
+    await openApp();
+    // An application shows its own cards; another's is a line that opens it.
+    expect(await screen.findByText("Needs you · 1")).toBeTruthy();
     expect(screen.getByText("sensitive")).toBeTruthy();
     expect(screen.getByText("From your profile")).toBeTruthy();
-    expect(screen.getByText("winget install MiKTeX.MiKTeX")).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Needs you" })).getByText("General")).toBeTruthy();
+    expect(screen.queryByText("winget install MiKTeX.MiKTeX")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
     await waitFor(() =>
@@ -473,6 +515,8 @@ describe("the side panel", () => {
         { cardId: "ask-1", answers: { auth: { value: "Yes" }, why: { skipped: true } } },
       ]),
     );
+    fireEvent.click(screen.getByRole("button", { name: /General needs you/ }));
+    expect(await screen.findByText("winget install MiKTeX.MiKTeX")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Deny with a reason" }));
     fireEvent.change(screen.getByLabelText("Reason for denying"), { target: { value: "use the other installer" } });
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
@@ -497,6 +541,7 @@ describe("the side panel", () => {
     };
     const t = fakeTransport({ state: state({ cards: [ask] }) });
     render(<PanelApp transport={t.transport} />);
+    await openApp();
     fireEvent.click(await screen.findByRole("button", { name: "Send answers" }));
     expect(await screen.findByText("an answer is needed")).toBeTruthy();
     expect(t.calls.some(([m]) => m === "panel.answer")).toBe(false);
@@ -506,6 +551,63 @@ describe("the side panel", () => {
     await waitFor(() =>
       expect(t.calls).toContainEqual(["panel.reply", { cardId: "ask-2", message: "neither, ask me later" }]),
     );
+  });
+});
+
+describe("the list of applications", () => {
+  it("groups by what waits on the user, what the agent is in, then open and done, newest first in each", () => {
+    const p = (id: string, status: PanelPosting["status"]) => ({ ...POSTING, id, role: id, status });
+    const s = state({
+      agent: {
+        status: "working",
+        conversations: [{ conversation: "b/fill", status: "working", queued: 0 }],
+        agents: ["claude"],
+        models: {},
+      },
+      postings: [p("a", "drafting"), p("b", "attached"), p("c", "submitted"), p("d", "captured"), p("e", "filled")],
+      cards: [
+        {
+          id: "k",
+          kind: "permission",
+          conversation: "e/tailor",
+          createdAt: AT,
+          toolName: "Bash",
+          input: {},
+        },
+      ],
+    });
+    const { rows, general } = applications(s, "Claude Code");
+    expect(rows.map((r) => [r.key, r.group, r.what])).toEqual([
+      ["e", "needs", "Documents: approve Bash"],
+      ["b", "working", "Application: Claude Code is working"],
+      ["a", "open", "Documents in progress"],
+      ["d", "open", "Captured"],
+      ["c", "done", "Submitted"],
+    ]);
+    expect(general).toMatchObject({ key: "general", group: "open" });
+    expect(ownerOf("e/tailor")).toBe("e");
+    expect(ownerOf(undefined)).toBeNull();
+  });
+
+  it("shows every application an agent works in, side by side, both parts of one together", () => {
+    const p = (id: string) => ({ ...POSTING, id, role: id, status: "drafting" as const });
+    const working = (conversation: string) => ({ conversation, status: "working" as const, queued: 0 });
+    const s = state({
+      agent: {
+        status: "working",
+        conversations: [working("a/tailor"), working("b/tailor"), working("b/fill"), working("general")],
+        agents: ["claude"],
+        models: {},
+      },
+      postings: [p("a"), p("b"), p("c")],
+    });
+    const { rows, general } = applications(s, "Claude Code");
+    expect(rows.map((r) => [r.key, r.group, r.what])).toEqual([
+      ["a", "working", "Documents: Claude Code is working"],
+      ["b", "working", "Documents and Application: Claude Code is working"],
+      ["c", "open", "Documents in progress"],
+    ]);
+    expect(general).toMatchObject({ group: "working", what: "Claude Code is working" });
   });
 });
 

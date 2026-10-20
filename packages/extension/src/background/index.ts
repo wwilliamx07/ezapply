@@ -9,6 +9,7 @@ import { CompanionConnection } from "./connection.js";
 import { releaseAll } from "./emulation.js";
 import { formHandlers } from "./forms.js";
 import { frameSite, tabSites } from "./frames.js";
+import { serveNotifications } from "./notify.js";
 import { panelUpdate, servePanels } from "./panel.js";
 import { store } from "./settings.js";
 
@@ -50,6 +51,7 @@ const connection = new CompanionConnection(
 );
 
 servePanels(connection, (tab) => setPosting(tab));
+serveNotifications();
 
 connection.onState((s) => {
   void renderBadge(s);
@@ -159,8 +161,7 @@ async function sendCapture(payload: CapturePayload): Promise<CaptureOutcome> {
     const res = await connection.request("posting.capture", payload, 60_000);
     await store.setPendingCapture(null);
     const label = [res.company, res.role].filter(Boolean).join(": ") || res.postingId;
-    await store.setActiveLabel(label);
-    await flashBadge("ok", `Active posting: ${label}`);
+    await flashBadge("ok", `Captured: ${label}`);
     return { ok: true, postingId: res.postingId, label };
   } catch (err) {
     const e = EzError.from(err);

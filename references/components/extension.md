@@ -23,6 +23,7 @@ on the companion's review page.
 | `src/grant/grant.ts`, `static/grant.html` | The access window: names the host that needed it, and its **Allow access** click makes the `permissions.request` (`originsFrom`: `<all_urls>` or host patterns only, from its URL) |
 | `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label, the agent settings ([agent settings](#the-agent-settings)) |
 | `src/background/badge.ts` | Toolbar badge and tooltip, with the number of cards waiting in the panel (`setCardsWaiting`) |
+| `src/background/notify.ts` | [Notifications](#notifications-notifyts): each open panel's visibility, `showNotification`, and the click that brings the window forward |
 | `src/env.d.ts` | Stylesheet imports (the panel's) for TypeScript |
 | `src/background/browser-id.ts` | `detectBrowser`: which browser this is, sent in `hello` so the companion opens pages and files there. From `navigator.userAgentData.brands`, checking Edge, Brave, Opera (and Opera GX, which installs as `opera.exe` too) and Vivaldi before Google Chrome and Chromium (they list the brand they build on too). Vivaldi hides its own brand and is reported as what it builds on; nothing known means no `browser`, and the companion uses the system default |
 | `src/capture/capture.ts` | `capturePage`: runs in each frame of the posting's page (self-contained, serialized by `executeScript`) |
@@ -33,8 +34,8 @@ on the companion's review page.
 | `icons.mjs`, `static/icons/` | The extension's and toolbar button's icons: ezapply's mark (`ui/static/mark.svg`) as 16, 32, 48 and 128 px PNGs |
 
 ## Manifest
-- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, `sidePanel` and
-  `debugger`. `webNavigation` lists a tab's frames ([embedded applications](#embedded-applications)); it adds no
+- Permissions: `activeTab`, `scripting`, `storage`, `tabs`, `alarms`, `webNavigation`, `sidePanel`, `debugger`
+  and `notifications` ([notifications](#notifications-notifyts); no install warning). `webNavigation` lists a tab's frames ([embedded applications](#embedded-applications)); it adds no
   install warning beside `tabs` (both are "Read your browsing history"). `debugger` runs
   [focus emulation](#focus-emulation-emulationts); its install warning ("Access the page debugger backend") sits
   beside the one for every site, which already covers reading and changing pages.
@@ -83,7 +84,7 @@ application tab throttled or pulled to the front, so there is none rather than a
   refused or closed connection means no chat is running.
 - `hello` carries `browser` (`detectBrowser`), so the companion opens pages and PDFs in this browser, and
   `pendingCapture: true` when a capture is queued, so a freshly started companion waits
-  for it before answering `posting_active`.
+  for it before answering `posting_get`.
 - **Without a code (not paired):** connect to the default port (17373) with an empty code. It succeeds
   only while pairing is open; the `welcome` then carries the code, which is saved without reconnecting.
   Failures quietly leave the state "not paired" and the alarm tries again.
@@ -117,10 +118,12 @@ over a runtime port (`ezapply-panel`) to the background:
 - **`capture`**: Capture on the current tab of the panel's window. The panel calls
   `permissions.request({ origins: <all_urls> })` inside its own click first (a request is allowed only during the
   user's gesture), then the background captures as below and answers with the outcome (the posting, or why not).
-- **`tab`**: the window's current tab, its site told as for a form call, and what it is to the active posting
-  (`panel.tab`); none without a connection or a web page.
+- **`tab`**: the window's current tab, its site and its form frames told as for a form call, and what it is to the posting open in the panel
+  (`panel.tab` with its `postingId`; the general conversation sends none); none without a connection or a web page.
 - **`openTab`**: an `http(s)` address in a new tab of the panel's window (the posting's application).
 - **`connection`**: the connection's state, as the badge shows it.
+- **`visibility`**: whether the panel's page is visible, and its window; sent when its port opens and on every
+  `visibilitychange` ([notifications](#notifications-notifyts)).
 - **`openSettings`**: the options page, opened by the panel itself (`runtime.openOptionsPage`), with nothing relayed.
 - **`prefs`**, **`savePrefs`**: the agent settings, read and written by the panel page in `storage.local` itself
   ([below](#the-agent-settings)), with nothing relayed.
@@ -222,7 +225,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
 1. **Tab:** the explicit `tabId`; else the focused window's active tab if its page is an application site's (a
    registry site, [told by its page](#telling-a-pages-site-framests)); else the most recently used such tab. None →
    `not_found` ("ask the user to open the application"). The companion normally chooses the tab itself
-   (preferring the active posting's tenant) and always passes it; the fallback serves callers that don't. With
+   (preferring the conversation's posting's tenant) and always passes it; the fallback serves callers that don't. With
    `frameId`, that frame of the tab ([embedded applications](#embedded-applications)).
 2. **Access:** `permissions.contains` for the page's origin (the frame's, for an embedded application), before
    anything is read. Missing, the call asks for every site and waits up to 15 s ([access](#access-to-websites)).
@@ -284,7 +287,7 @@ their terminal. Launch flags (`--disable-background-timer-throttling`) need a br
 started specially. Other browser-automation tools settled on the same command for the same problem.
 
 - **When it's attached:** from the first form call on a tab (`tab.show`) until no call has come for 5 minutes
-  (`IDLE_MS`, a timer per tab, reset by every call), the companion disconnects (`releaseAll`, from the connection's
+  (`IDLE_MS`, a timer per tab, reset by every call; as many tabs at once as applications are filled side by side), the companion disconnects (`releaseAll`, from the connection's
   state listener), or the tab closes. Chrome shows "ezapply started debugging this browser" while any tab is
   attached, so it's kept to the fill. An attached debugger also keeps the service worker alive, so the idle timer
   isn't lost to an idle background.
@@ -307,11 +310,26 @@ started specially. Other browser-automation tools settled on the same command fo
 the user last focused), `lastAccessed` when the browser reports it, `site` (what its page shows, else its URL's),
 and `frames` (embedded applications, when there are any). The companion picks form tabs from it.
 
+## Notifications (`notify.ts`)
+When the panel's agent ends a turn or a card opens, the companion's `panel.update` carries a `notify` (a title and
+a line, [agent](agent.md#the-panels-side-panelts)), sent even while no panel is open. The background shows it as a
+system notification (`chrome.notifications`, one per conversation: a newer one replaces it). A turn's end isn't
+shown **while a panel is in view**: an open panel whose page is visible (`visibility`, above) in the browser's
+focused window. *Why:* the user watching the panel sees the turn end there, and a notification on top of it would be
+noise; the point is the user who looked away (another tab, another window, another app) during a turn that runs for
+minutes. A card's notification (`notify.card`: a question or a permission request) is shown even then, and cleared
+once no card waits (`cards: 0`). *Why:* the agent stops until it's answered, and during a fill the user watches the
+form beside the panel, not the panel, so a card that only appeared there went unnoticed. A panel coming into view
+clears ezapply's notifications. Clicking one focuses the last focused browser window and opens the side panel
+there (Chrome may refuse that outside a gesture on a page; the window comes forward either way). Whether to notify
+at all is the workspace's setting (`notifications.turnEnd`), set on the setup page
+([ui](ui.md#what-each-step-does)); the companion doesn't send `notify` with it off.
+
 ## Badge and options
 - Badge: green = connected, grey = connecting or disconnected, amber = not paired or a capture is pending
   (`…`), red = error; briefly ✓ or `!` after a capture; the number of cards waiting in the panel (amber), pushed by
-  the companion even while no panel is open (shown while connected; it takes the pending capture's place). The tooltip shows the status, the cards waiting, any pending capture,
-  and the active posting.
+  the companion even while no panel is open (shown while connected; it takes the pending capture's place). The tooltip shows the status, the cards waiting and any pending capture;
+  after a capture, briefly "Captured: company: role".
 - Options page: connection status (live), a **Grant access** row while access to websites is missing ("No access
   to websites, so ezapply can't read or fill application forms"), the extension id the companion pins (from the
   page's own origin), and manual port and code fields (only needed for a

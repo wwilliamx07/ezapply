@@ -1,4 +1,4 @@
-import type { OnboardTask, OnboardTaskKind } from "@ezapply/protocol";
+import type { OnboardState, OnboardTask, OnboardTaskKind } from "@ezapply/protocol";
 import { type ReactNode, useEffect, useState } from "react";
 import { Banner, Button, Icon, Spinner } from "../components/ui.js";
 import { type LoadedPdf, loadPdf } from "../lib/pdf.js";
@@ -88,32 +88,30 @@ export function PathPicker({
   );
 }
 
-/** The latest task of these kinds, as the page shows it: queued, running, done with Claude's note, or failed. */
+/** The latest task of these kinds, as the page shows it: queued, running, done with the agent's note, or failed. */
 export function TaskStatus({ kinds }: { kinds: OnboardTaskKind[] }) {
   const { state } = useOnboard();
   const task = [...state.tasks].reverse().find((t) => kinds.includes(t.kind));
   if (!task) return null;
-  return <TaskLine task={task} listening={state.agentListening} agentIn={state.agentIn} />;
+  return <TaskLine task={task} agent={state} />;
 }
 
-/** Where the user sees Claude: the ezapply panel, or a terminal (no panel agent). */
+/** Where the user sees the agent: the ezapply panel, or a terminal (no panel agent). */
 export function TaskLine({
   task,
-  listening,
-  agentIn,
+  agent: { agentListening: listening, agentIn, agentName: name },
 }: {
   task: OnboardTask;
-  listening: boolean;
-  agentIn: "panel" | "terminal";
+  agent: Pick<OnboardState, "agentListening" | "agentIn" | "agentName">;
 }) {
   if (task.status === "queued") {
     return (
       <Banner icon={<Spinner />}>
         {listening
-          ? "Claude is picking this up…"
+          ? `${name} is picking this up…`
           : agentIn === "panel"
-            ? "Waiting for Claude. Open the ezapply panel from your browser's toolbar to see what it's doing."
-            : "Waiting for Claude. If nothing happens, tell Claude in the terminal: “continue setting me up”."}
+            ? `Waiting for ${name}. Open the ezapply panel from your browser's toolbar to see what it's doing.`
+            : `Waiting for ${name}. If nothing happens, tell it in the terminal: “continue setting me up”.`}
       </Banner>
     );
   }
@@ -121,8 +119,8 @@ export function TaskLine({
     return (
       <Banner icon={<Spinner />}>
         {agentIn === "panel"
-          ? "Claude is working on it. It may ask you to approve something in the ezapply panel."
-          : "Claude is working on it. It may ask you to approve something in the terminal."}
+          ? `${name} is working on it. It may ask you to approve something in the ezapply panel.`
+          : `${name} is working on it. It may ask you to approve something in the terminal.`}
       </Banner>
     );
   }
@@ -131,7 +129,7 @@ export function TaskLine({
       tone={task.status === "done" ? "ok" : "danger"}
       icon={<Icon name={task.status === "done" ? "check" : "alert"} />}
     >
-      {task.note ?? (task.status === "done" ? "Claude finished." : "Claude couldn't finish this.")}
+      {task.note ?? (task.status === "done" ? `${name} finished.` : `${name} couldn't finish this.`)}
     </Banner>
   );
 }

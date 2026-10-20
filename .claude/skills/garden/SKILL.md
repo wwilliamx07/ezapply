@@ -15,6 +15,8 @@ The rules being enforced are already written down, so read them first and don't 
 `CLAUDE.md`, `references/CLAUDE.md`, `todo/CLAUDE.md`, each package's `CLAUDE.md`, and "Conventions" in
 `references/development.md`.
 
+If you find correctness issues, include them in your final report. Don't fix them on your own. Don't lose focus of your goal, write the what and where in your findings and move on.
+
 ## Ground rules
 
 - **No behaviour changes.** Gardening deletes, trims and corrects. If a fix would change what the code does, even

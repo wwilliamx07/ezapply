@@ -55,8 +55,8 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry). The page shows a
 failed action's message and hint under the button that ran it.
 
-**At the start of every session** (after onboarding too), Claude calls `workspace_changes` with
-`posting_active`. The companion has checked in the background since the chat started: repos pushed since
+**At the start of every session** (after onboarding too), Claude calls `workspace_changes` (with
+`posting_get` in a posting's conversation). The companion has checked in the background since the chat started: repos pushed since
 indexing, knowledge from repos no longer selected, a template's source folder edited since import (or a template imported from a scratchpad copy, which nothing can watch), a LaTeX document in `library/` no template came from, the resume
 template edited since the profile was updated from it, the profile's contact changed under the cover's fields.
 Nothing listed, Claude says nothing. Otherwise it lists them, and with the user's agreement re-imports,
@@ -91,14 +91,14 @@ non-default ports.
    capture there ([extension](components/extension.md#capture)). The chosen frame's site, as its body shows
    it ([telling a page's site](components/extension.md#telling-a-pages-site-framests)), goes with the capture.
 3. If ezapply isn't connected (it isn't running), the capture is stored as pending (badge `…`) and sent on the
-   next connection. Only the latest pending capture is kept. When the user next starts ezapply, `posting_active`
-   waits for the extension to reconnect and deliver it.
+   next connection. Only the latest pending capture is kept. When the user next starts ezapply, `posting_get` and
+   `postings_list` wait for the extension to reconnect and deliver it.
 4. The companion ([postings](components/postings.md)) canonicalizes the URL (for Workday, without the locale
    segment; for Oracle, without the language or the application pages after the job id); a posting already captured at that URL reuses its folder. Otherwise it makes `postings/<date>_<company>_<role>/`. It writes the raw
    and visible captures, runs extraction to `posting.md`, writes `meta.json` (keeping fields Claude
-   corrected earlier), and makes it the active posting.
-5. The badge flashes ✓ and the tooltip shows "Active: <company>: <role>". The side panel shows the posting and its
-   conversations (new ones, or the ones it had).
+   corrected earlier).
+5. The badge flashes ✓ and the tooltip shows "Captured: <company>: <role>". The side panel's list shows it; captured
+   from the panel's **+ Capture**, the panel opens the posting and its conversations (new ones, or the ones it had).
 6. **Nothing restarts:** each posting has its own conversations with the agent, one for its documents and one for
    its application ([agent](components/agent.md#conversations-servicets)), so the next application starts clean,
    the earlier one isn't re-sent with every turn of it, and the earlier one can be picked up again.
@@ -110,7 +110,7 @@ cards, and its reports in the panel's conversation ([ui](components/ui.md#the-si
 
 ## 4. Tailoring the resume ("tailor my resume")
 The `ezapply-resume` skill:
-1. `posting_active` → read `posting.md`; correct company or role with `posting_update_meta`. If
+1. `posting_get` → read `posting.md`; correct company or role with `posting_update_meta`. If
    `notes.md` has no `## Application requirements`, write it (documents wanted, single PDF → `bundleRequired`,
    format, naming, limits, addressee, deadline) and mention them to the user. Every later skill (cover
    letter, bundle, apply) follows it. Any request about a posting does this first, per `EZAPPLY.md`.
@@ -147,14 +147,14 @@ check with `pdf_info` (and that the resume section is still one page), `pdf_comp
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters
 ([Workday](components/sites/workday.md), [Oracle](components/sites/oracle.md),
 [Greenhouse, Lever, Ashby, Phenom, Dayforce, SAP SuccessFactors](components/sites.md)):
-1. `posting_active`; read the profile and answer bank. The form tools act on this posting's application tab
+1. `posting_get`; read the profile and answer bank. The form tools act on this posting's application tab
    (by its job, the tab it was bound to, its tenant, or its title: [which posting](mcp-tools.md#forms)) and
    credit everything to it. An application embedded in a frame of a careers page counts as a tab of its own,
    and the tools act inside that frame. A posting captured off the form sites is tied to its application by the captured
    page's link, or else the first fill binds the tab to it and Claude tells the user once (`postingBound`). A tab
    of another posting (another employer, another requisition, a tab bound to another posting) is read with
    `postingMismatch`, every call that would change it is refused with `posting_mismatch`, and Claude stops to
-   sort it out with the user (`posting_activate { id, tabId }` when the user says the tab is right). Before each form call the extension
+   sort it out with the user (`tab_bind { tabId }` when the user says the tab is right). Before each form call the extension
    turns on focus emulation for that tab, so it runs at full speed and focused wherever it is (Chrome shows its
    debugging bar meanwhile). Where that can't run and the tab is hidden, results carry `tabHidden` and Claude
    tells the user once to keep it visible, since the browser slows hidden tabs; where the window is behind
@@ -199,9 +199,10 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
 
 ## 8. Review and attach
 Once a document is finished, the attach mode (`documents.attach`, set on the onboarding page) decides:
-- **after-approval** (default): `review_documents` opens a page in the browser with the PDFs and waits. The user
-  approves each, or comments on passages and writes what should change, and sends it; the tab closes and the call
-  returns both. Claude revises the changed documents, rebuilds, reports what changed (`pdf_text { path,
+- **after-approval** (default): `review_documents` opens a page in the browser with the PDFs; in the panel the
+  agent's turn ends there ([results as messages](components/agent.md#results-as-messages)), and in a terminal chat
+  the call waits. The user approves each, or comments on passages and writes what should change, and sends it; the
+  tab closes and both reach the agent, as its next message in the panel or the call's result in a terminal. Claude revises the changed documents, rebuilds, reports what changed (`pdf_text { path,
   sinceReviewed: true }`), and reviews them again, the page marking what changed since, until everything is approved.
   Approvals are stored per exact version in `approvals.json`.
 - **immediately**: no review step.

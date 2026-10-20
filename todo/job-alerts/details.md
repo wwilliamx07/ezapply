@@ -13,4 +13,6 @@ days get one too. The next `ezapply` lists them first, as it does workspace chan
 **Challenges and open questions.**
 - Registering a scheduled job differs per OS and may need the user's approval; `ezapply doctor` should report it.
 - How often: daily is enough for most boards; more risks rate limits.
-- Email or phone alerts need a sender or a service, which ezapply avoids: start with OS notifications.
+- Email or phone alerts need a sender or a service, which ezapply avoids: start with OS notifications. While the
+  browser runs, the extension's `showNotification` (`extension/src/background/notify.ts`) already shows them; the
+  scheduled job runs without it, so it needs the OS's own.

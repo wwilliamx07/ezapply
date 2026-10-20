@@ -22,6 +22,8 @@ interface Props {
   decision: Decision;
   /** No other document is left to decide: the button sends the answer. */
   last: boolean;
+  /** Who the answer goes to ("Claude Code", "Antigravity"). */
+  agentName: string;
   sending: boolean;
   active: string | null;
   /** Approve it (unless it asks for changes) and move on to the next document to decide, or send on the last. */
@@ -116,7 +118,9 @@ export function Panel(props: Props) {
           placeholder="A change to the whole document: tone, length, what to stress."
           onChange={(e) => props.onRequest(e.target.value)}
         />
-        <p className="ez-help">A comment or anything written here sends the document back to Claude to revise.</p>
+        <p className="ez-help">
+          A comment or anything written here sends the document back to {props.agentName} to revise.
+        </p>
       </section>
 
       {/* Under the edits box, so the decision follows what was just written; it stays at the panel's foot. */}
@@ -130,7 +134,7 @@ export function Panel(props: Props) {
           <Button variant="primary" onClick={props.onAdvance} disabled={props.sending}>
             {props.last ? (
               <>
-                <Icon name="send" size={17} /> Send to Claude
+                <Icon name="send" size={17} /> Send to {props.agentName}
               </>
             ) : decision === "changes" ? (
               <>

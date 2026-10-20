@@ -4,6 +4,7 @@ import {
   type DocumentState,
   ErrorCode,
   EzError,
+  type FrameInfo,
   GENERAL_CONVERSATION,
   type PanelConversation,
   type PanelPosting,
@@ -43,14 +44,49 @@ export class PanelService {
   /** Start relaying: agent events as they come, and a "changed" for whatever changes the panel's state. */
   start(): void {
     const s = this.s();
-    s.agent.onEvent((conversation, event) => this.pushUpdate({ event: { conversation, event } }));
+    s.agent.onEvent((conversation, event) => {
+      this.pushUpdate({ event: { conversation, event } });
+      // A turn that ends with another message waiting runs straight on: nothing waits on the user yet. A Stop is
+      // the user's own.
+      if (event.kind !== "turnEnd" || event.interrupted) return;
+      if (s.agent.statusOf(conversation) === "working") return;
+      // A turn that ends on a card waits on it: the card's notification says so, and this one would replace it.
+      if (s.needs.list().some((c) => c.conversation === conversation)) return;
+      const name = s.agent.agentName(conversation);
+      const posting = postingConversation(conversation)?.postingId;
+      if (event.ok && posting && s.reviews.openFor(posting)) {
+        void this.notify(
+          conversation,
+          "Your documents are ready to review",
+          "Approve them or say what to change on the review page.",
+        );
+        return;
+      }
+      void this.notify(
+        conversation,
+        event.ok ? `${name} finished` : `${name} stopped`,
+        event.ok ? "Its reply is in the ezapply panel." : "The turn ended with an error: see the ezapply panel.",
+      );
+    });
     s.agent.onState(() => this.changed());
+    let shown = new Set<string>();
     s.needs.onChange(() => {
+      const cards = s.needs.list();
       // The badge counts cards even while no panel is open.
-      void this.push({ cards: s.needs.list().length }).catch(() => undefined);
+      void this.push({ cards: cards.length }).catch(() => undefined);
+      for (const card of cards.filter((c) => !shown.has(c.id))) {
+        const name = s.agent.agentName(card.conversation);
+        void this.notify(
+          card.conversation ?? GENERAL_CONVERSATION,
+          card.kind === "ask" ? `${name} has a question` : `${name} asks before running something`,
+          card.kind === "ask" ? "Answer it in the ezapply panel." : "Allow or deny it in the ezapply panel.",
+          true,
+        );
+      }
+      shown = new Set(cards.map((c) => c.id));
       this.changed();
     });
-    s.postings.onActiveChange(() => this.changed());
+    s.postings.onChange(() => this.changed());
     s.reviews.onChange(() => this.changed());
   }
 
@@ -69,12 +105,20 @@ export class PanelService {
 
   async state(): Promise<PanelState> {
     const s = this.s();
-    const [active, all, setup] = await Promise.all([s.postings.activeId(), s.postings.list(), this.setup()]);
+    const [all, setup] = await Promise.all([s.postings.list(), this.setup()]);
+    const agent = s.agent.state();
+    const cards = s.needs.list();
+    // The newest, and any older one an agent is in or a card waits on: the panel's list groups those first.
+    const busy = new Set(
+      [...agent.conversations.map((c) => c.conversation), ...cards.map((c) => c.conversation)].flatMap((k) => {
+        const c = postingConversation(k ?? "");
+        return c ? [c.postingId] : [];
+      }),
+    );
     return {
-      agent: { ...s.agent.state(), agents: s.agent.agents(), models: s.agent.models() },
-      activePostingId: active,
-      postings: all.slice(0, RECENT_POSTINGS).map((m) => panelPosting(m, active)),
-      cards: s.needs.list(),
+      agent: { ...agent, agents: s.agent.agents(), models: s.agent.models() },
+      postings: all.filter((m, i) => i < RECENT_POSTINGS || busy.has(m.id)).map(panelPosting),
+      cards,
       setup,
     };
   }
@@ -87,7 +131,6 @@ export class PanelService {
     }
     const id = postingOf(key);
     const meta = await s.postings.get(id);
-    const active = await s.postings.activeId();
     const [requirements, application, documents, review] = await Promise.all([
       this.requirements(id),
       s.postings.application(id).catch(() => undefined),
@@ -97,7 +140,7 @@ export class PanelService {
     return {
       key,
       posting: {
-        ...panelPosting(meta, active),
+        ...panelPosting(meta),
         requirements,
         ...(application?.url ? { application: application.url } : {}),
       },
@@ -108,33 +151,51 @@ export class PanelService {
     };
   }
 
-  /** What the tab is to the active posting: its application, another posting's, the posting's own page, or none. */
-  async tab(t: { tabId: number; url: string; title: string; site: SiteId }): Promise<PanelTab> {
+  /**
+   * What the tab is to the posting the panel shows (`postingId`; none on the list or in the general conversation):
+   * its application, another posting's, the posting's own page, or none. A form is the page's own on a form site, or
+   * a form site's frame in it (a careers page embedding Greenhouse), told by the frame's URL as the form tools do.
+   */
+  async tab(t: {
+    tabId: number;
+    url: string;
+    title: string;
+    site: SiteId;
+    frames?: FrameInfo[];
+    postingId?: string;
+  }): Promise<PanelTab> {
     const s = this.s();
     if (!/^https?:/i.test(t.url)) return { kind: "none", text: "Not a web page" };
-    const activeId = await s.postings.activeId();
-    const active = activeId ? await s.postings.get(activeId).catch(() => null) : null;
-    const label = active ? [active.company, active.role].filter(Boolean).join(": ") || active.id : "";
-    if (active && sameAddress(t.url, active.url)) return { kind: "posting", text: `${label}: the posting` };
-    if (!isFormSite(t.site))
-      return { kind: "page", text: active ? "Not this posting's application" : "No posting set" };
-    const site = siteName(t.site);
-    if (!active) return { kind: "unconfirmed-application", text: `An application on ${site}; no posting set` };
-    const application = await s.postings.application(active.id).catch(() => undefined);
-    const m = matchPosting(postingFacts(active, application), { url: t.url, site: t.site, title: t.title });
-    if (m.verdict === "same") return { kind: "application", text: `${label}: the application on ${site}` };
-    if (m.verdict === "other") return { kind: "other-application", text: `Another posting's application on ${site}` };
+    const posting = t.postingId ? await s.postings.get(t.postingId).catch(() => null) : null;
+    const label = posting ? [posting.company, posting.role].filter(Boolean).join(": ") || posting.id : "";
+    const forms = [...(isFormSite(t.site) ? [{ url: t.url, site: t.site }] : []), ...(t.frames ?? [])];
+    // The posting's own page is its application where a form is embedded in it (a careers page with `?gh_jid=`) or
+    // where the site's posting page is its form (`postingIsForm`); a Workday posting page only leads to the form.
+    const pageIsForm = Boolean(t.frames?.length || siteInfo(t.site)?.postingIsForm);
+    if (posting && sameAddress(t.url, posting.url) && !pageIsForm)
+      return { kind: "posting", text: `${label}: the posting` };
+    const [first] = forms;
+    if (!first) return { kind: "page", text: posting ? "Not this posting's application" : "No posting set" };
+    if (!posting)
+      return { kind: "unconfirmed-application", text: `An application on ${siteName(first.site)}; no posting set` };
+    // Of several forms, the posting's, else one that may be.
+    const application = await s.postings.application(posting.id).catch(() => undefined);
+    const facts = postingFacts(posting, application);
+    const rank = { same: 0, unconfirmed: 1, other: 2 };
+    const best = forms
+      .map((f) => ({ f, m: matchPosting(facts, { url: f.url, site: f.site, title: t.title }) }))
+      .reduce((a, b) => (rank[b.m.verdict] < rank[a.m.verdict] ? b : a));
+    const site = siteName(best.f.site);
+    if (best.m.verdict === "same") return { kind: "application", text: `${label}: the application on ${site}` };
+    if (best.m.verdict === "other")
+      return { kind: "other-application", text: `Another posting's application on ${site}` };
     return { kind: "unconfirmed-application", text: `An application on ${site}, maybe this posting's` };
   }
 
-  /** The user's message to a conversation; a posting's conversation makes its posting the active one first. */
+  /** The user's message to a conversation (a posting's must still exist). */
   async send(key: string, text: string): Promise<{ id: string }> {
     const s = this.s();
-    if (key !== GENERAL_CONVERSATION) {
-      const id = postingOf(key);
-      await s.postings.get(id);
-      if ((await s.postings.activeId()) !== id) await s.postings.activate(id);
-    }
+    if (key !== GENERAL_CONVERSATION) await s.postings.get(postingOf(key));
     return s.agent.send(key, text);
   }
 
@@ -197,6 +258,23 @@ export class PanelService {
   }
 
   // ---- internals ----
+
+  /**
+   * Ask the extension for a system notification, with the setting on (`notifications.turnEnd`). It shows a turn's
+   * end only while no panel is in view, and a card's (`card`) always, so this is sent whether or not a panel is open.
+   */
+  private async notify(conversation: string, title: string, message: string, card = false): Promise<void> {
+    const s = this.s();
+    const on = await s.workspace
+      .readConfig()
+      .then((c) => c.notifications.turnEnd)
+      .catch(() => true);
+    if (!on) return;
+    const part = postingConversation(conversation)?.part;
+    const where = part === "tailor" ? "Documents" : part === "fill" ? "Application" : "General";
+    const notify = { conversation, title, message: `${where}: ${message}`, ...(card ? { card } : {}) };
+    await this.push({ notify }).catch(() => undefined);
+  }
 
   private pushUpdate(update: PanelUpdate): void {
     if (!this.watched) return;
@@ -275,7 +353,7 @@ function postingOf(key: string): string {
   return c.postingId;
 }
 
-function panelPosting(m: PostingMeta, activeId: string | null): PanelPosting {
+function panelPosting(m: PostingMeta): PanelPosting {
   return {
     id: m.id,
     ...(m.company ? { company: m.company } : {}),
@@ -284,7 +362,6 @@ function panelPosting(m: PostingMeta, activeId: string | null): PanelPosting {
     status: m.status,
     ...(m.deadline ? { deadline: m.deadline } : {}),
     url: m.url,
-    active: m.id === activeId,
   };
 }
 

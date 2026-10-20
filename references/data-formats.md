@@ -56,6 +56,7 @@ dropped.
   },
   "pdf": { "defaultMaxBytes": 5242880 },   // upload limit when a form's is unknown
   "documents": { "attach": "after-approval" },   // or "immediately"; see components/documents.md
+  "notifications": { "turnEnd": true },   // a system notification when the panel's agent ends a turn or asks; see components/extension.md#notifications-notifyts
   "debug": { "enabled": false, "maxMB": 500, "markup": "failures" }   // debug mode: record every form call under debug/
 }
 ```
@@ -158,7 +159,10 @@ each session's first record and every 50 records.
 ([security](security.md)).
 
 ### `state.json`
-`{ schemaVersion: 1, activePostingId?, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } }, deferred?: { repos?: { "<owner>/<name>": { until, at } } } }`.
+`{ schemaVersion: 1, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } }, deferred?: { repos?: { "<owner>/<name>": { until, at } } } }`.
+
+An `activePostingId` written by an earlier version is ignored and dropped at the next write; nothing needed it
+migrated, since there's no active posting any more ([which posting](mcp-tools.md#postings)).
 
 `synced` is what the workspace check ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes))
 compares against: `resume`, the hash of the resume template's main file and content files when the profile was
@@ -240,9 +244,9 @@ Greenhouse board, a Lever company, an Ashby organization, a Phenom careers host,
 `application` (`PostingApplication`): the application the posting is tied to, `{ url, site, tenant?, job?, from,
 at }`. `from`: `apply-link` (the captured page links to it), `host-page-job` (the page's URL names an embedded
 board's job: Greenhouse's `gh_jid`; no tenant), `bound` (the first form call that changed a page bound the tab),
-`user` (`posting_activate { id, tabId }`). A posting on a form site's own page needs none: its URL is its
+`user` (`tab_bind { tabId }`). A posting on a form site's own page needs none: its URL is its
 application (`posting-url`, worked out, not stored). A posting without one is searched for it in
-`capture/raw.html` the first time it's active in a form call, once per run (again after its `reqId` changes). A re-capture keeps a `user` one, else takes what
+`capture/raw.html` the first time a form call is about it, once per run (again after its `reqId` changes). A re-capture keeps a `user` one, else takes what
 the page now shows, else keeps the old one. No `schemaVersion` bump: it's optional, older builds drop it when they
 rewrite the file, and it's found again from the capture ([which posting](mcp-tools.md#forms)).
 
@@ -368,6 +372,6 @@ The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),
-`activeLabel`, and `agentPrefs`: the panel's agent settings, `{ agent, choices: { claude?, antigravity? } }`, each
+and `agentPrefs`: the panel's agent settings, `{ agent, choices: { claude?, antigravity? } }`, each
 choice `{ permissionMode, model?, effort }` (`AgentPrefs`, [agent](components/agent.md#permission-mode-model-and-effort)).
 Read field by field (`readAgentPrefs`): one missing or not offered any more takes its default on its own.

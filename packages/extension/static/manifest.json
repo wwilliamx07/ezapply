@@ -34,7 +34,17 @@
     "page": "options.html",
     "open_in_tab": false
   },
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "alarms", "webNavigation", "sidePanel", "debugger"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "alarms",
+    "webNavigation",
+    "sidePanel",
+    "debugger",
+    "notifications"
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://127.0.0.1:*"
   },

@@ -1,6 +1,8 @@
 # Profile, answer bank and templates (`companion/src/profile/`)
 
-`ProfileService` reads, validates and writes the user's own data in `profile/` (and lists `library/`);
+`ProfileService` reads, validates and writes the user's own data in `profile/` (and lists `library/`), each file's
+read-modify-write after any other of the same file and written atomically, since conversations run side by side
+([agent](agent.md#conversations-servicets));
 `TemplateService` (`companion/src/templates/service.ts`) owns `templates/`, since templates (import, examples,
 the main file and its content files, the engine a template needs) are a separate concern from the profile and
 answers. YAML files are parsed with line-aware errors, so `profile_check` /

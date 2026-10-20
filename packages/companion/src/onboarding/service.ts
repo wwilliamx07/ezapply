@@ -114,6 +114,7 @@ const Action = z.discriminatedUnion("action", [
     targets: z.string().max(4000),
     coverLetters: z.string().max(4000),
   }),
+  z.object({ action: z.literal("notifications"), turnEnd: z.boolean() }),
   z.object({ action: z.literal("deleteLibrary"), name: z.string().min(1).max(500) }),
   z.object({ action: z.literal("finish") }),
 ]);
@@ -129,8 +130,8 @@ export type OnboardingNext =
  * Onboarding on a page (the UI package's onboard page): the workspace_check list as steps the user works through
  * in the browser, where most of them are form-filling. What needs judgment or a shell goes to the agent as a
  * task. Under `ezapply` (the side panel's agent, agent/service.ts) a task is a message to the general
- * conversation, and the agent reports it with `onboarding { taskId, result, wait: false }`. Without a panel
- * agent (tests), Claude sits in a blocking `onboarding` call, takes the next task and reports. Either way Claude Code is the only agent, and the user approves its commands.
+ * conversation, and the agent reports it with `onboarding { taskId, result, wait: false }`; a turn that ends unreported fails it (`followAgent`). Without a panel
+ * agent (tests), Claude sits in a blocking `onboarding` call, takes the next task and reports. Either way the user approves its commands.
  */
 export class OnboardingService {
   private token: string | null = null;
@@ -141,6 +142,13 @@ export class OnboardingService {
   private readonly events = new EventStreams();
   private watcher: NodeJS.Timeout | null = null;
   private fingerprint = "";
+  /** Tasks sent to the panel's agent, by the message that carried them, until it takes the message. */
+  private readonly carrying = new Map<string, OnboardTask>();
+  /** Tasks in the general conversation's running turn. */
+  private readonly inTurn = new Set<OnboardTask>();
+  /** Tasks sent to the panel's agent and not ended yet. */
+  private readonly sent = new Set<OnboardTask>();
+  private followingAgent = false;
 
   constructor(
     private readonly services: () => Services,
@@ -300,6 +308,10 @@ export class OnboardingService {
         await s.profile.savePreferences(prefs);
         return { ok: true };
       }
+      case "notifications": {
+        const config = await s.workspace.updateConfig("notifications", { turnEnd: a.turnEnd });
+        return { notifications: config.notifications };
+      }
       case "deleteLibrary":
         return this.deleteLibrary(a.name);
       case "finish":
@@ -310,21 +322,75 @@ export class OnboardingService {
   }
 
   /**
-   * Hand a task to the panel's agent, as a message to the general conversation. Claude busy in another
-   * conversation fails the task with why; the page offers it again.
+   * Hand a task to the panel's agent, as a message to the general conversation, which runs beside any other. A send
+   * that fails (no agent) fails the task with why; the page offers it again.
    */
   private dispatch(task: OnboardTask): void {
     const s = this.services();
+    this.followAgent();
     task.status = "running";
     const message =
       `Setup task ${task.id} from the setup page (${task.kind}). ${HOW[task.kind]}\n` +
       `Parameters: ${JSON.stringify(task.params)}\n` +
       `When it's done, report it: onboarding { taskId: "${task.id}", result: { ok, note? } }.`;
-    s.agent.send(GENERAL_CONVERSATION, message).catch((err: Error) => {
-      task.status = "failed";
-      task.note = err.message;
-      this.changed();
+    s.agent.send(GENERAL_CONVERSATION, message).then(
+      ({ id }) => {
+        this.carrying.set(id, task);
+        this.sent.add(task);
+        this.endIfIdle();
+      },
+      (err: Error) => {
+        task.status = "failed";
+        task.note = err.message;
+        this.changed();
+      },
+    );
+  }
+
+  /**
+   * A dispatched task whose turn ends unreported (the user pressed Stop, the turn failed, the agent ended it or exited)
+   * fails, saying why, so the page offers it again instead of spinning. A report that comes later still counts.
+   */
+  private followAgent(): void {
+    if (this.followingAgent) return;
+    this.followingAgent = true;
+    const s = this.services();
+    s.agent.onEvent((conversation, event) => {
+      if (conversation !== GENERAL_CONVERSATION) return;
+      if (event.kind === "user" && event.taken) {
+        const task = this.carrying.get(event.id);
+        if (task) {
+          this.carrying.delete(event.id);
+          this.inTurn.add(task);
+        }
+      } else if (event.kind === "turnEnd") {
+        for (const task of this.inTurn) this.end(task, event);
+        this.inTurn.clear();
+        this.endIfIdle(event);
+      }
     });
+    s.agent.onState(() => this.endIfIdle());
+  }
+
+  /** Once the general conversation does nothing, no task sent to it is still being worked on. */
+  private endIfIdle(event?: { ok: boolean; interrupted?: boolean }): void {
+    const status = this.services().agent.statusOf(GENERAL_CONVERSATION);
+    if (status === "working" || status === "starting") return;
+    for (const task of this.sent) this.end(task, event);
+  }
+
+  private end(task: OnboardTask, event?: { ok: boolean; interrupted?: boolean }): void {
+    this.sent.delete(task);
+    for (const [id, t] of this.carrying) if (t === task) this.carrying.delete(id);
+    if (task.status !== "running") return;
+    const name = this.services().agent.agentName(GENERAL_CONVERSATION);
+    task.status = "failed";
+    task.note = event?.interrupted
+      ? "Stopped before it finished. Ask again to retry."
+      : event?.ok === false
+        ? `${name} stopped with an error: see the ezapply panel. Ask again to retry.`
+        : `${name} ended without finishing this: see its reply in the ezapply panel.`;
+    this.changed();
   }
 
   /** Build a template's main file, for the page to show (and say what went wrong). */
@@ -465,6 +531,7 @@ export class OnboardingService {
       tasks: this.tasks,
       agentListening: s.agent.available ? s.agent.state().status !== "unavailable" : this.listening > 0,
       agentIn: s.agent.available ? "panel" : "terminal",
+      agentName: s.agent.available ? s.agent.agentName(GENERAL_CONVERSATION) : "Claude Code",
       tex: {
         done: item("tex")?.done ?? false,
         detail: item("tex")?.detail ?? "",
@@ -518,6 +585,7 @@ export class OnboardingService {
         targets: prefs.targets,
         coverLetters: prefs.coverLetters,
       } satisfies OnboardPreferences,
+      notifications: { turnEnd: (await s.workspace.readConfig()).notifications.turnEnd },
       library: await s.profile.libraryFiles(),
     };
   }

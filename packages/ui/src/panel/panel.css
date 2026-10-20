@@ -27,9 +27,112 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
-.ez-panel-picker {
+.ez-panel-title {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+/* An application's header: its role, and its company and site under it. */
+.ez-panel-heading {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+.ez-panel-heading > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ez-panel-heading .ez-muted {
+  font-size: 12px;
+}
+/* In an application: another one is waiting on the user. */
+.ez-panel-elsewhere {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.ez-panel-elsewhere > svg {
+  margin-left: auto;
+}
+/* The list of applications, grouped by what each needs. */
+.ez-apps section {
+  margin-bottom: 6px;
+}
+.ez-apps h2 {
+  margin: 4px 4px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.ez-apps ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ez-app {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-s);
+}
+.ez-app:hover {
+  background: var(--surface-2);
+}
+.ez-app-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ez-app-dot {
+  margin-top: 6px;
+}
+.ez-app-open > svg {
+  align-self: center;
+  color: var(--text-3);
+}
+.ez-app-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ez-app-title,
+.ez-app-sub,
+.ez-app-what {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ez-app-title {
+  font-weight: 600;
+}
+.ez-app-sub {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ez-app-what {
+  font-size: 13px;
 }
 /* The header's one tinted button; the picker gives way first when the panel is narrow. */
 .ez-panel-capture {
@@ -75,6 +178,13 @@ body {
 }
 .ez-dot-danger {
   background: var(--danger);
+}
+.ez-dot-busy {
+  background: var(--accent);
+}
+.ez-dot-idle {
+  background: none;
+  border: 1.5px solid var(--border-strong);
 }
 /* A posting's two conversations, under the header: its documents' and its application's. */
 .ez-panel-parts {

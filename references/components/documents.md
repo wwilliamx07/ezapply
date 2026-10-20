@@ -155,13 +155,16 @@ same changes from `pdf_text { path, sinceReviewed: true }`, to quote in its repo
 describing it from memory. Approvals stay per version (the hash): the diff is a reading aid. *Why not latexdiff:*
 it needs Perl and a LaTeX source, and the user approves the PDF; `tex_diff` stays for the agent.
 
-**One call opens and waits.** `review_documents` blocks until the answer (or its timeout, default 10 minutes).
-Claude Code moves an MCP call still running after 120 s to the background and delivers its result as a task
-notification, so a long wait doesn't hold the chat. On a timeout, `review_documents { reviewId }` waits again;
-an answer given while nothing waits is kept, and the next wait returns it at once. When no browser opened, the
-call returns right away with the URL for Claude to give the user, since nobody would see the page otherwise.
-*Why one tool:* with a separate call to wait, an agent opened three reviews without waiting, and the user's
-change requests sat in the companion until they asked why they'd been dropped. The skills also say the page is a
+**One call opens, and the answer always reaches the agent.** In a panel conversation `review_documents` returns
+at once with `pending`, the agent ends its turn, and the answer (or the review expiring) comes as the
+conversation's next message ([results as messages](agent.md#results-as-messages)). In a terminal chat it blocks
+until the answer (or its timeout, default 10 minutes); Claude Code moves an MCP call still running after 120 s to
+the background and delivers its result as a task notification, so a long wait doesn't hold the chat. On a
+timeout, `review_documents { reviewId }` waits again; an answer given while nothing waits is kept, and the next
+wait returns it at once. When no browser opened, the call returns right away with the URL for Claude to give the
+user, since nobody would see the page otherwise. *Why one tool:* with a separate call to wait, an agent opened
+three reviews without waiting, and the user's change requests sat in the companion until they asked why they'd
+been dropped. The skills also say the page is a
 snapshot: after any rebuild, review the changed files again.
 
 Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
@@ -185,7 +188,7 @@ page.
 SHA-256 of the approved bytes, when, and the review. `upload_file` in the `after-approval` mode refuses a file
 from `postings/` unless its current bytes hash to an approval, so an edited or rebuilt document needs approving
 again, and a bundle made from approved parts is reviewed as a document of its own. The user's own documents
-in `library/` never need approval. `posting_active` reports the mode, each approval with `current` (still the
+in `library/` never need approval. `posting_get` reports the mode, each approval with `current` (still the
 same bytes), and an open review.
 
 **Only the page approves.** No tool approves a document, and a chat message saying "approved" doesn't: the

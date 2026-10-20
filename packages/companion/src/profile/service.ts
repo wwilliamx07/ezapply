@@ -1,9 +1,10 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { type Document, isMap, parseDocument, stringify } from "yaml";
 import type { z } from "zod";
 import type { Logger } from "../logger.js";
-import { exists } from "../util/fs.js";
+import { exists, writeFileAtomic } from "../util/fs.js";
+import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
 import { type AnswerEntry, AnswersFile, missingProfileFields, Profile, ReposFile } from "./schema.js";
 import { seedAnswers } from "./seed-answers.js";
@@ -26,8 +27,14 @@ const ANSWERS_HEADER = `Screening-question answer bank. Used to fill application
   sensitive:  always ask, even when an answer exists.
   variants:   other wordings of the same question seen on forms (Claude adds these).`;
 
-/** The user's own data in profile/: profile, answer bank, repo selection, preferences; and library/. */
+/**
+ * The user's own data in profile/: profile, answer bank, repo selection, preferences; and library/. Each file's
+ * read-modify-writes run one at a time (`edit`), since conversations run side by side and two saves to one file at
+ * once would lose one; and writes are atomic, so a reader never sees half a file.
+ */
 export class ProfileService {
+  private readonly writes = new KeyedQueue();
+
   constructor(
     private readonly ws: Workspace,
     private readonly log: Logger,
@@ -47,7 +54,8 @@ export class ProfileService {
 
   async writeRepos(file: ReposFile): Promise<void> {
     const header = "GitHub repos that feed the knowledge base. Managed by ezapply; edit freely.";
-    await this.writeYaml(this.ws.path("profile", "repos.yaml"), ReposFile.parse(file), header);
+    const path = this.ws.path("profile", "repos.yaml");
+    await this.edit(path, () => this.writeYaml(path, ReposFile.parse(file), header));
     // A repo deselected loses its re-index timer: selected again, it's checked at the next chat.
     const chosen = new Set(file.repos.map((r) => r.fullName.toLowerCase()));
     await this.ws.dropDeferredRepos((r) => !chosen.has(r.toLowerCase()));
@@ -126,8 +134,15 @@ export class ProfileService {
    * the form left them empty), each in place, so the user's comments, their order and any keys of their own
    * survive. The result must validate, else nothing is written and the issues come back.
    */
-  async saveProfile(value: Record<string, unknown>): Promise<{ ok: true } | { ok: false; errors: Issue[] }> {
+  saveProfile(value: Record<string, unknown>): Promise<{ ok: true } | { ok: false; errors: Issue[] }> {
     const path = this.ws.path("profile", "profile.yaml");
+    return this.edit(path, () => this.setProfile(path, value));
+  }
+
+  private async setProfile(
+    path: string,
+    value: Record<string, unknown>,
+  ): Promise<{ ok: true } | { ok: false; errors: Issue[] }> {
     const text = await readFile(path, "utf8").catch(() => null);
     const doc = text === null ? parseDocument("schemaVersion: 1\n") : parseDocument(text);
     if (doc.errors.length)
@@ -145,9 +160,8 @@ export class ProfileService {
         errors: parsed.error.issues.map((i) => ({ path: i.path.join(".") || "(root)", message: i.message })),
       };
     }
-    await mkdir(join(path, ".."), { recursive: true });
     const header = text === null ? "# Facts about you, for applications. Edit freely; ezapply checks it.\n" : "";
-    await writeFile(path, header + doc.toString({ lineWidth: 110 }), "utf8");
+    await writeFileAtomic(path, header + doc.toString({ lineWidth: 110 }));
     return { ok: true };
   }
 
@@ -155,10 +169,17 @@ export class ProfileService {
    * Set answers in the answer bank by entry id (null: ask every time), in place, keeping the file's comments and
    * every other field. Unknown ids are skipped.
    */
-  async saveAnswers(
+  saveAnswers(
     answers: Record<string, string | null>,
   ): Promise<{ ok: true; set: string[] } | { ok: false; errors: Issue[] }> {
     const path = this.ws.path("profile", "answers.yaml");
+    return this.edit(path, () => this.setAnswers(path, answers));
+  }
+
+  private async setAnswers(
+    path: string,
+    answers: Record<string, string | null>,
+  ): Promise<{ ok: true; set: string[] } | { ok: false; errors: Issue[] }> {
     const text = await readFile(path, "utf8").catch(() => null);
     if (text === null)
       return { ok: false, errors: [{ path: "answers.yaml", message: "profile/answers.yaml is missing" }] };
@@ -182,7 +203,7 @@ export class ProfileService {
         errors: parsed.error.issues.map((i) => ({ path: i.path.join(".") || "(root)", message: i.message })),
       };
     }
-    await writeFile(path, doc.toString({ lineWidth: 110 }), "utf8");
+    await writeFileAtomic(path, doc.toString({ lineWidth: 110 }));
     return { ok: true, set };
   }
 
@@ -193,11 +214,12 @@ export class ProfileService {
   }
 
   /** Write preferences.md under its fixed headings, keeping anything else the file held after them. */
-  async savePreferences(prefs: Record<PreferenceKey, string>): Promise<void> {
-    const { extra } = await this.preferences();
+  savePreferences(prefs: Record<PreferenceKey, string>): Promise<void> {
     const path = this.ws.path("profile", "preferences.md");
-    await mkdir(join(path, ".."), { recursive: true });
-    await writeFile(path, formatPreferences(prefs, extra), "utf8");
+    return this.edit(path, async () => {
+      const { extra } = await this.preferences();
+      await writeFileAtomic(path, formatPreferences(prefs, extra));
+    });
   }
 
   async preferencesStatus(): Promise<{ exists: boolean; words: number }> {
@@ -242,8 +264,12 @@ export class ProfileService {
       .split("\n")
       .map((l) => `# ${l}`.trimEnd())
       .join("\n");
-    await mkdir(join(path, ".."), { recursive: true });
-    await writeFile(path, `${comment}\n${body}`, "utf8");
+    await writeFileAtomic(path, `${comment}\n${body}`);
+  }
+
+  /** A read-modify-write of one file, after any other of the same file. */
+  private edit<T>(path: string, fn: () => Promise<T>): Promise<T> {
+    return this.writes.run(path, fn);
   }
 }
 

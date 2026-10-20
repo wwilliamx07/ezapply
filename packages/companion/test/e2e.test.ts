@@ -323,6 +323,26 @@ function fakeExtension(
   return { ws, peer, outcome, calls: browser.calls, page: browser.page };
 }
 
+/**
+ * An MCP client as a posting's panel conversation (its Application one, recorded in conversations.json), so the
+ * tools work on that posting.
+ */
+async function postingClient(postingId: string, part = "fill"): Promise<Client> {
+  const session = `${part}-${postingId.replace(/[^A-Za-z0-9-]/g, "-")}`.slice(0, 64);
+  const path = join(dir, "ws", "agent", "conversations.json");
+  const file = JSON.parse(await readFile(path, "utf8").catch(() => '{"schemaVersion":1,"conversations":{}}'));
+  file.conversations[`${postingId}/${part}`] = {
+    sessionId: session,
+    startedAt: "2026-10-04T12:00:00.000Z",
+    agent: "claude",
+    started: true,
+    earlier: [],
+  };
+  await mkdir(join(dir, "ws", "agent"), { recursive: true });
+  await writeFile(path, JSON.stringify(file));
+  return mcpClient(session);
+}
+
 /** An MCP client; with `session`, its requests name that chat session, as the relay does for the panel's agent. */
 async function mcpClient(session?: string): Promise<Client> {
   const client = new Client({ name: "test", version: "0.0.0" });
@@ -558,10 +578,10 @@ describe("after ezapply starts", () => {
     });
   }
 
-  it("posting_active waits for the paired extension and the capture it queued", async () => {
+  it("the posting tools wait for the paired extension and the capture it queued", async () => {
     await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 5000 });
     const client = await mcpClient();
-    const active = callJson(client, "posting_active");
+    const listed = callJson(client, "postings_list");
 
     await sleep(300); // the extension's reconnect alarm fires a little later
     const ext = fakeExtension({ pendingCapture: true });
@@ -579,24 +599,24 @@ describe("after ezapply starts", () => {
       tabId: 7,
     });
 
-    const result = await active;
+    const result = await listed;
     expect(result.isError).toBe(false);
-    expect(result.data).toMatchObject({ id: capture.postingId, active: true });
+    expect(result.data).toMatchObject([{ id: capture.postingId }]);
   });
 
   it("waits only for the grace period, then says the extension may still come", async () => {
     await restartWith({ pairedExtensionId: EXT_A, reconnectGraceMs: 300 });
     const client = await mcpClient();
     const started = Date.now();
-    const res = await callJson(client, "posting_active");
+    const res = await callJson(client, "posting_get");
     expect(Date.now() - started).toBeLessThan(2000);
-    expect(res.data.error).toMatchObject({ code: "no_active_posting", hint: expect.stringMatching(/reconnected/) });
+    expect(res.data.error).toMatchObject({ code: "no_posting", hint: expect.stringMatching(/reconnected/) });
     await client.close();
   });
 
-  it("reports when a capture or posting_activate changes the active posting", async () => {
+  it("reports a capture or a delete, so the panel's list follows", async () => {
     let changes = 0;
-    const stop = handle.services.postings.onActiveChange(() => changes++);
+    const stop = handle.services.postings.onChange(() => changes++);
     const ext = fakeExtension();
     expect((await ext.outcome).welcomed).toBe(true);
     const html = `<div data-automation-id="jobPostingHeader">Data Engineer</div><p>${LONG}</p>`;
@@ -611,15 +631,10 @@ describe("after ezapply starts", () => {
       tabId: 7,
     });
     expect(changes).toBe(1);
-    expect(await handle.services.postings.activeId()).toBe(capture.postingId);
-
-    const client = await mcpClient();
-    await callJson(client, "posting_activate", { id: capture.postingId });
+    await handle.services.postings.delete(capture.postingId);
     expect(changes).toBe(2);
     stop();
-    await callJson(client, "posting_activate", { id: capture.postingId });
-    expect(changes).toBe(2);
-    await client.close();
+    expect(await handle.services.postings.list()).toEqual([]);
   });
 });
 
@@ -729,11 +744,11 @@ describe("github_login", () => {
 });
 
 describe("set posting → MCP", () => {
-  it("reports no active posting before a capture", async () => {
+  it("asks for a posting's id outside a posting's conversation", async () => {
     const client = await mcpClient();
-    const res = await callJson(client, "posting_active");
+    const res = await callJson(client, "posting_get");
     expect(res.isError).toBe(true);
-    expect(res.data.error.code).toBe("no_active_posting");
+    expect(res.data.error.code).toBe("no_posting");
     expect(res.data.error.hint).toMatch(/Capture/);
     await client.close();
   });
@@ -757,10 +772,16 @@ describe("set posting → MCP", () => {
     expect(capture).toMatchObject({ isNew: true, role: "Backend Engineer", company: "acme" });
     expect(capture.postingId).toBe("2026-09-24_acme_backend-engineer");
 
-    const client = await mcpClient();
-    const active = await callJson(client, "posting_active");
+    const client = await postingClient(capture.postingId);
+    const active = await callJson(client, "posting_get");
     expect(active.isError).toBe(false);
-    expect(active.data).toMatchObject({ id: capture.postingId, site: "workday", status: "captured", active: true });
+    expect(active.data).toMatchObject({ id: capture.postingId, site: "workday", status: "captured" });
+    // Outside a posting's conversation, the posting is named.
+    const terminal = await mcpClient();
+    expect((await callJson(terminal, "posting_get", { id: capture.postingId })).data).toMatchObject({
+      id: capture.postingId,
+    });
+    await terminal.close();
     const md = await readFile(active.data.postingMd, "utf8");
     expect(md).toContain("# Backend Engineer");
     expect(md).toContain("payment services");
@@ -841,7 +862,7 @@ describe("form tools over MCP", () => {
       join(dir, "ws", "ezapply.config.json"),
       JSON.stringify({ schemaVersion: 1, debug: { enabled: true } }),
     );
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
     const read = (await callJson(client, "get_form")).data;
     // One value the page takes, one no option matches, and one the fixture's degrees don't hold either.
     const filled = await callJson(client, "fill_fields", {
@@ -919,7 +940,7 @@ describe("form tools over MCP", () => {
     const folder = join(dir, "ws", "postings", cap.postingId);
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 fake");
 
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
     expect((await callJson(client, "attach_mode_set", { mode: "immediately" })).data).toEqual({
       attachMode: "immediately",
     });
@@ -997,7 +1018,7 @@ describe("form tools over MCP", () => {
     });
     expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, form: { pageKind: "review" } });
 
-    const active = await callJson(client, "posting_active");
+    const active = await callJson(client, "posting_get");
     expect(active.data.status).toBe("filled");
     const log = (await readFile(join(folder, "form-log.jsonl"), "utf8"))
       .trim()
@@ -1081,7 +1102,7 @@ describe("form tools over MCP", () => {
     await next.close();
   });
 
-  it("credits a tab only to the active posting on its tenant, and prefers that tenant's tab", async () => {
+  it("credits a tab only to the conversation's posting on its tenant, and prefers that tenant's tab", async () => {
     const ext = fakeExtension({
       tabs: [
         { tabId: 7, url: APPLY_URL, active: true },
@@ -1091,17 +1112,17 @@ describe("form tools over MCP", () => {
     await ext.outcome;
     const acme = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1", "Backend Engineer");
     const globex = await capture(ext, "https://globex.wd1.myworkdayjobs.com/en-US/Careers/job/y", "Data Engineer");
-    const client = await mcpClient();
+    const client = await postingClient(globex.postingId);
 
-    // Globex is active: its tab is chosen even though the Acme tab is the one in front.
+    // Globex's conversation: its tab is chosen even though the Acme tab is the one in front.
     const form = await callJson(client, "get_form");
     expect(form.data).toMatchObject({ tabId: 8, posting: globex.postingId });
 
     // Reading the Acme tab says whose it is; changing it is refused.
     expect((await callJson(client, "get_form", { tabId: 7 })).data.postingMismatch).toMatchObject({
-      activePosting: { id: globex.postingId, tenant: "globex" },
+      posting: { id: globex.postingId, tenant: "globex" },
       formTenant: "acme",
-      hint: expect.stringMatching(/posting_activate/),
+      hint: expect.stringMatching(/that posting's conversation/),
     });
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
@@ -1109,16 +1130,51 @@ describe("form tools over MCP", () => {
     });
     expect(fill.data.error).toMatchObject({
       code: "posting_mismatch",
-      hint: expect.stringMatching(/posting_activate/),
+      hint: expect.stringMatching(/tab_bind \{ tabId: 7 \}/),
     });
     expect(ext.calls.some((c) => c.method === "form.fill")).toBe(false);
     await expect(readFile(join(dir, "ws", "postings", globex.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
     await expect(readFile(join(dir, "ws", "postings", acme.postingId, "form-log.jsonl"), "utf8")).rejects.toThrow();
 
-    // After activating Acme, the same tab is credited to it.
-    await callJson(client, "posting_activate", { id: acme.postingId });
-    expect((await callJson(client, "get_form", { tabId: 7 })).data).toMatchObject({ posting: acme.postingId });
+    // In Acme's conversation, the same tab is credited to Acme.
+    const acmeChat = await postingClient(acme.postingId);
+    expect((await callJson(acmeChat, "get_form", { tabId: 7 })).data).toMatchObject({ posting: acme.postingId });
     await client.close();
+    await acmeChat.close();
+  });
+
+  it("works on each panel conversation's own posting, so applications run side by side", async () => {
+    const ext = fakeExtension({
+      tabs: [
+        { tabId: 7, url: APPLY_URL, active: true },
+        { tabId: 8, url: "https://globex.wd1.myworkdayjobs.com/en-US/Careers/job/y/apply", active: false },
+      ],
+    });
+    await ext.outcome;
+    const acme = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1", "Backend Engineer");
+    const globex = await capture(ext, "https://globex.wd1.myworkdayjobs.com/en-US/Careers/job/y", "Data Engineer");
+    const acmeChat = await postingClient(acme.postingId);
+    const globexChat = await postingClient(globex.postingId);
+    const terminal = await mcpClient();
+
+    expect((await callJson(acmeChat, "posting_get")).data).toMatchObject({ id: acme.postingId });
+    expect((await callJson(globexChat, "posting_get")).data).toMatchObject({ id: globex.postingId });
+    // Each conversation's default tab is its own posting's application, at the same time.
+    const [a, g] = await Promise.all([callJson(acmeChat, "get_form"), callJson(globexChat, "get_form")]);
+    expect(a.data).toMatchObject({ tabId: 7, posting: acme.postingId });
+    expect(g.data).toMatchObject({ tabId: 8, posting: globex.postingId });
+    // The other's tab is refused, and the conversation can't move to another posting.
+    const fill = await callJson(acmeChat, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
+      tabId: 8,
+    });
+    expect(fill.data.error.code).toBe("posting_mismatch");
+    const moved = await callJson(acmeChat, "tab_bind", { tabId: 8, id: globex.postingId });
+    expect(moved.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/panel's list/) });
+    // Outside a posting's conversation there's no posting to fall back on.
+    expect((await callJson(terminal, "posting_get")).data.error.code).toBe("no_posting");
+    expect((await callJson(terminal, "get_form", { tabId: 8 })).data).not.toHaveProperty("posting");
+    for (const c of [acmeChat, globexChat, terminal]) await c.close();
   });
 
   it("tells two postings at one company apart by requisition", async () => {
@@ -1141,12 +1197,12 @@ describe("form tools over MCP", () => {
       "https://acme.wd5.myworkdayjobs.com/en-US/External/job/Toronto/Data-Engineer_R200",
       "Data",
     );
-    const client = await mcpClient();
-    // Data Engineer is active: its own application tab is chosen, though Backend's is in front.
+    const client = await postingClient(data.postingId);
+    // Data Engineer's conversation: its own application tab is chosen, though Backend's is in front.
     expect((await callJson(client, "get_form")).data).toMatchObject({ tabId: 8, posting: data.postingId });
     // Backend's tab, same tenant, other requisition: read with a mismatch, changes refused.
     expect((await callJson(client, "get_form", { tabId: 7 })).data.postingMismatch).toMatchObject({
-      activePosting: { id: data.postingId, job: "r200" },
+      posting: { id: data.postingId, job: "r200" },
       formTenant: "acme",
       formJob: "r100",
       hint: expect.stringMatching(/job r100/),
@@ -1191,9 +1247,9 @@ describe("form tools over MCP", () => {
       "Software Developer Intern",
       `<a href="${apply("Req100012").replace("/applyManually", "")}?source=Other">Apply</a>`,
     );
-    const client = await mcpClient();
-    const active = (await callJson(client, "posting_active")).data;
-    expect(active.application).toMatchObject({
+    const client = await postingClient(posting.postingId);
+    const own = (await callJson(client, "posting_get")).data;
+    expect(own.application).toMatchObject({
       site: "workday",
       tenant: "cyberdyne",
       job: "req100012",
@@ -1211,7 +1267,7 @@ describe("form tools over MCP", () => {
     expect(other.data.postingMismatch).toMatchObject({
       by: "job",
       formJob: "req100010",
-      activePosting: { job: "req100012" },
+      posting: { job: "req100012" },
     });
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
@@ -1226,7 +1282,7 @@ describe("form tools over MCP", () => {
     await ext.outcome;
     const board = "https://example-csm.symplicity.com/students/app/jobs/detail";
     const first = await captureOffSite(ext, `${board}/aaa`, "Backend Engineer");
-    const client = await mcpClient();
+    const client = await postingClient(first.postingId);
     // The agent sets the role after reading the posting: the page's title is then read (this one shows none).
     await callJson(client, "posting_update_meta", { role: "Backend Engineer" });
     const name = { fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" };
@@ -1248,28 +1304,30 @@ describe("form tools over MCP", () => {
 
     // Another posting with nothing to compare can't take the bound tab…
     const second = await captureOffSite(ext, `${board}/bbb`, "Data Engineer");
-    const refused = (await callJson(client, "fill_fields", { fills: [name] })).data;
+    const secondChat = await postingClient(second.postingId);
+    const refused = (await callJson(secondChat, "fill_fields", { fills: [name] })).data;
     expect(refused.error).toMatchObject({
       code: "posting_mismatch",
-      hint: expect.stringMatching(/posting_activate \{ id/),
+      hint: expect.stringMatching(/tab_bind \{ tabId: 7 \}/),
     });
-    expect((await callJson(client, "get_form")).data.postingMismatch).toMatchObject({
+    expect((await callJson(secondChat, "get_form")).data.postingMismatch).toMatchObject({
       by: "binding",
       boundTo: first.postingId,
     });
 
     // …until the user says this tab is its application.
-    const activated = (await callJson(client, "posting_activate", { id: second.postingId, tabId: 7 })).data;
-    expect(activated).toMatchObject({ id: second.postingId, boundTab: { tabId: 7 }, application: { from: "user" } });
-    expect((await callJson(client, "fill_fields", { fills: [name] })).data.postingMismatch).toBeUndefined();
+    const bound = (await callJson(secondChat, "tab_bind", { tabId: 7 })).data;
+    expect(bound).toMatchObject({ posting: second.postingId, boundTab: { tabId: 7 }, application: { from: "user" } });
+    expect((await callJson(secondChat, "fill_fields", { fills: [name] })).data.postingMismatch).toBeUndefined();
     await client.close();
+    await secondChat.close();
   });
 
   it("refuses a title given as a requisition", async () => {
     const ext = fakeExtension();
     await ext.outcome;
-    await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    const client = await mcpClient();
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await postingClient(cap.postingId);
     const r = await callJson(client, "posting_update_meta", { reqId: "Evergreen - Software Engineer, Intern, 2027" });
     expect(r.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/role/) });
     expect((await callJson(client, "posting_update_meta", { reqId: " R-123 " })).data.reqId).toBe("R-123");
@@ -1286,8 +1344,8 @@ describe("form tools over MCP", () => {
     });
     await ext.outcome;
     const posting = await capture(ext, "https://jobs.acme.com/en/sites/CX_1/job/42", "Firmware Engineer");
-    const client = await mcpClient();
-    expect((await callJson(client, "posting_active")).data).toMatchObject({
+    const client = await postingClient(posting.postingId);
+    expect((await callJson(client, "posting_get")).data).toMatchObject({
       id: posting.postingId,
       site: "oracle",
       tenant: "jobs.acme.com/cx_1",
@@ -1319,7 +1377,7 @@ describe("form tools over MCP", () => {
     const other = await callJson(client, "get_form", { tabId: 7 });
     expect(other.data.postingMismatch).toMatchObject({
       formTenant: "acme",
-      activePosting: { tenant: "jobs.acme.com/cx_1" },
+      posting: { tenant: "jobs.acme.com/cx_1" },
     });
     await client.close();
   });
@@ -1331,7 +1389,9 @@ describe("form tools over MCP", () => {
     const folder = join(dir, "ws", "postings", cap.postingId);
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume v1");
     await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover v1");
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
+    // Waiting on a review blocks a hand-run session; a panel conversation gets the answer as its next turn.
+    const terminal = await mcpClient();
     const upload = (name: string, fieldId: string) =>
       callJson(client, "upload_file", { fieldId, path: `postings/${cap.postingId}/${name}` });
 
@@ -1344,7 +1404,7 @@ describe("form tools over MCP", () => {
     ).toMatchObject({ code: "bad_request" });
 
     // One call opens the page and waits for the answer.
-    const review = await startReview(client, [
+    const review = await startReview(terminal, [
       `postings/${cap.postingId}/resume.pdf`,
       `postings/${cap.postingId}/cover.pdf`,
     ]);
@@ -1402,12 +1462,12 @@ describe("form tools over MCP", () => {
     expect(bad.status).toBe(400);
 
     // Status, and a second wait that times out, before an answer.
-    expect((await callJson(client, "posting_active")).data.documents).toMatchObject({
+    expect((await callJson(client, "posting_get")).data.documents).toMatchObject({
       attachMode: "after-approval",
       approved: [],
       openReview: { reviewId },
     });
-    expect((await callJson(client, "review_documents", { reviewId, timeoutSeconds: 5 })).data).toMatchObject({
+    expect((await callJson(terminal, "review_documents", { reviewId, timeoutSeconds: 5 })).data).toMatchObject({
       reviewId,
       done: false,
       hint: expect.stringMatching(/review_documents { reviewId }/),
@@ -1457,7 +1517,7 @@ describe("form tools over MCP", () => {
       answer: { changes: [{ comments: [{ rects: comment.rects }] }] },
     });
     // An answered review answers a later wait at once, and a second answer is refused.
-    expect((await callJson(client, "review_documents", { reviewId })).data).toMatchObject({ done: true });
+    expect((await callJson(terminal, "review_documents", { reviewId })).data).toMatchObject({ done: true });
     const twice = await answerReview(review.url, []);
     expect(twice.status).toBe(409);
     expect(await twice.json()).toEqual({ status: "answered" });
@@ -1474,7 +1534,7 @@ describe("form tools over MCP", () => {
     // A rebuilt resume is a new version: it needs approving again.
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume v2");
     expect((await upload("resume.pdf", "application-questions.resume")).data.error.code).toBe("bad_request");
-    expect((await callJson(client, "posting_active")).data.documents.approved).toEqual([
+    expect((await callJson(client, "posting_get")).data.documents.approved).toEqual([
       expect.objectContaining({ file: "resume.pdf", current: false }),
     ]);
     // The user's own library documents never need approval.
@@ -1489,6 +1549,7 @@ describe("form tools over MCP", () => {
       ).data,
     ).toMatchObject({ ok: true });
     await client.close();
+    await terminal.close();
   });
 
   it("refuses to review an underfilled resume or cover letter unless `short` says why", async () => {
@@ -1545,7 +1606,7 @@ describe("form tools over MCP", () => {
     const short = [{ file: resume, reason: "A three-line sample resume." }];
     const lines = ["Jane Doe", "Led a team of four engineers.", "Wrote the on-call runbook used by twelve teams."];
     await writeFile(join(folder, "resume.pdf"), await textPdf(lines));
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
 
     // Never reviewed: nothing to compare with.
     expect((await callJson(client, "pdf_text", { path: resume, sinceReviewed: true })).data).toMatchObject({
@@ -1599,8 +1660,9 @@ describe("form tools over MCP", () => {
     const folder = join(dir, "ws", "postings", cap.postingId);
     await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume");
     await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover");
-    const client = await mcpClient();
-    const review = await startReview(client, [
+    const client = await postingClient(cap.postingId);
+    const terminal = await mcpClient();
+    const review = await startReview(terminal, [
       `postings/${cap.postingId}/resume.pdf`,
       `postings/${cap.postingId}/cover.pdf`,
     ]);
@@ -1634,6 +1696,7 @@ describe("form tools over MCP", () => {
     expect(again.data).toMatchObject({ form: { pageKind: "review" } });
     expect(again.data.form.notAttached).toBeUndefined();
     await client.close();
+    await terminal.close();
   });
 
   it("runs the application tab under focus emulation before each form call: nothing to say", async () => {
@@ -1645,7 +1708,7 @@ describe("form tools over MCP", () => {
     });
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
     });
@@ -1669,7 +1732,7 @@ describe("form tools over MCP", () => {
     });
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
     expect((await callJson(client, "get_form")).data.browserBehind).toBeUndefined();
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
@@ -1691,7 +1754,7 @@ describe("form tools over MCP", () => {
     });
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
     const fill = await callJson(client, "fill_fields", {
       fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
     });
@@ -1721,7 +1784,7 @@ describe("form tools over MCP", () => {
     await ext.outcome;
     // Captured on the careers page: its gh_jid ties the posting to the embedded job.
     const cap = await capture(ext, HOST, "Account Executive");
-    const client = await mcpClient();
+    const client = await postingClient(cap.postingId);
 
     const form = (await callJson(client, "get_form")).data;
     expect(form).toMatchObject({ adapter: "greenhouse", tabId: 7, frameId: 12, url: EMBED, posting: cap.postingId });
@@ -1751,16 +1814,16 @@ describe("form tools over MCP", () => {
     await client.close();
   });
 
-  it("binds an embedded application with posting_activate { tabId }", async () => {
+  it("binds an embedded application with tab_bind", async () => {
     const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=vandelay&token=1000001";
     const ext = fakeExtension({
       tabs: [{ tabId: 7, url: "https://careers.example.com/jobs/1", frames: [{ frameId: 12, url: EMBED }] }],
     });
     await ext.outcome;
     const cap = await capture(ext, "https://www.example.com/listing/1", "Account Executive");
-    const client = await mcpClient();
-    const activated = (await callJson(client, "posting_activate", { id: cap.postingId, tabId: 7 })).data;
-    expect(activated).toMatchObject({
+    const client = await postingClient(cap.postingId);
+    const bound = (await callJson(client, "tab_bind", { tabId: 7 })).data;
+    expect(bound).toMatchObject({
       boundTab: { tabId: 7, url: EMBED },
       application: { from: "user", site: "greenhouse" },
     });
@@ -1770,8 +1833,8 @@ describe("form tools over MCP", () => {
   it("still fills with an extension built before tab.show", async () => {
     const ext = fakeExtension({ tabShow: false });
     await ext.outcome;
-    await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
-    const client = await mcpClient();
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    const client = await postingClient(cap.postingId);
     for (let i = 0; i < 2; i++) {
       const fill = await callJson(client, "fill_fields", {
         fills: [{ fieldId: "my-information.legalName--firstName", value: "Jane", source: "profile" }],
@@ -1806,7 +1869,7 @@ describe("form tools over MCP", () => {
 
   it("refuses posting ids that aren't plain folder names", async () => {
     const client = await mcpClient();
-    const res = await callJson(client, "posting_activate", { id: "../profile" });
+    const res = await callJson(client, "posting_get", { id: "../profile" });
     expect(res.data.error.code).toBe("bad_request");
     await client.close();
   });

@@ -39,6 +39,19 @@ describe("answer bank", () => {
     expect(check.unanswered?.find((u) => u.id === "gov_official_relationship")).toMatchObject({ suggested: "No" });
   });
 
+  it("keeps both of two answer saves made at once (conversations run side by side)", async () => {
+    const saved = await Promise.all([
+      svc.saveAnswers({ age_18_plus: "Yes" }),
+      svc.saveAnswers({ gov_official_relationship: "No" }),
+    ]);
+    expect(saved.every((r) => r.ok)).toBe(true);
+    const check = await svc.checkAnswers();
+    const unanswered = check.unanswered?.map((u) => u.id) ?? [];
+    expect(unanswered).not.toContain("age_18_plus");
+    expect(unanswered).not.toContain("gov_official_relationship");
+    await svc.saveAnswers({ age_18_plus: null, gov_official_relationship: null });
+  });
+
   it("answers a question with a profile source from the profile, not as a screening question", async () => {
     await writeFile(
       join(root, "ws/profile/profile.yaml"),

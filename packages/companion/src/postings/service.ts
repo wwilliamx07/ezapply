@@ -29,7 +29,6 @@ export interface PostingDetails extends PostingMeta {
   visibleText: string;
   rawHtml: string;
   files: PostingFile[];
-  active: boolean;
 }
 
 /** Build output, snapshots and previews are noise when listing a posting folder. */
@@ -47,7 +46,7 @@ const POSTING_ID = /^[\w.-]+$/;
 
 export class PostingsService {
   private readonly queue = new KeyedQueue();
-  private readonly activeListeners = new Set<() => void>();
+  private readonly listeners = new Set<() => void>();
   /** Postings whose capture was searched for an application this run and held none (not searched again). */
   private readonly searched = new Set<string>();
 
@@ -56,7 +55,7 @@ export class PostingsService {
     private readonly log: Logger,
   ) {}
 
-  /** Store a capture from the extension and make it the active posting. */
+  /** Store a capture from the extension. */
   capture(payload: CapturePayload): Promise<CaptureResult> {
     return this.serialize(() => this.doCapture(payload));
   }
@@ -89,10 +88,10 @@ export class PostingsService {
     return parsed.data;
   }
 
+  /** A posting's metadata, folder and files. */
   async details(id: string): Promise<PostingDetails> {
     const meta = await this.get(id);
     const folder = this.folder(id);
-    const { activePostingId } = await this.ws.readState();
     return {
       ...meta,
       folder,
@@ -100,51 +99,66 @@ export class PostingsService {
       visibleText: join(folder, "capture", "visible.txt"),
       rawHtml: join(folder, "capture", "raw.html"),
       files: await listFiles(folder),
-      active: activePostingId === id,
     };
   }
 
-  async activeId(): Promise<string | null> {
-    const { activePostingId } = await this.ws.readState();
-    if (!activePostingId) return null;
-    try {
-      await this.get(activePostingId);
-      return activePostingId;
-    } catch {
-      return null;
-    }
+  /**
+   * The posting a chat session works on: a posting's panel conversation has its own (found by its session), so
+   * conversations about different postings run side by side. Any other session (the general conversation, Claude
+   * Code run by hand) has none, and names the posting it means. Null when there's none, or it was deleted.
+   */
+  async ownPosting(session?: string): Promise<string | null> {
+    const id = session ? await this.postingOfSession(session) : undefined;
+    if (!id) return null;
+    return (await this.get(id).then(
+      () => true,
+      () => false,
+    ))
+      ? id
+      : null;
   }
 
-  async requireActiveId(): Promise<string> {
-    const id = await this.activeId();
-    if (!id) {
-      throw new EzError(
-        ErrorCode.NoActivePosting,
-        "No active posting.",
-        "Ask the user to open the job posting in their browser and click Capture in the ezapply side panel, or activate a previous one with posting_activate.",
-      );
-    }
-    return id;
+  /** How a chat session's posting is found: the agent's conversations know (wired in `main.ts`). */
+  sessionPostings(fn: (session: string) => Promise<string | undefined>): void {
+    this.postingOfSession = fn;
   }
 
-  async activate(id: string): Promise<PostingMeta> {
-    const meta = await this.get(id);
-    await this.ws.updateState({ activePostingId: id });
-    this.activeChanged();
-    return meta;
-  }
+  private postingOfSession: (session: string) => Promise<string | undefined> = async () => undefined;
 
   /**
-   * Call `fn` after a capture or posting_activate sets the active posting (the panel follows it). Returns the
-   * function that stops it.
+   * The posting a call is about: the one it names (checked to exist), else its conversation's own. From a posting's
+   * conversation, another posting is refused: that posting's work runs in its own conversation.
    */
-  onActiveChange(fn: () => void): () => void {
-    this.activeListeners.add(fn);
-    return () => this.activeListeners.delete(fn);
+  async resolve(id: string | undefined, session?: string): Promise<string> {
+    const own = await this.ownPosting(session);
+    if (id !== undefined) {
+      if (own && own !== id) {
+        throw new EzError(
+          ErrorCode.BadRequest,
+          `This conversation works on posting ${own}, not ${id}.`,
+          "Tell the user to open that posting from the ezapply panel's list and ask there.",
+        );
+      }
+      await this.get(id);
+      return id;
+    }
+    if (own) return own;
+    throw new EzError(
+      ErrorCode.NoPosting,
+      "No posting given.",
+      "Pass the posting's id (postings_list). If the user hasn't captured it yet, ask them to open the job " +
+        "posting in their browser and press Capture in the ezapply side panel.",
+    );
   }
 
-  private activeChanged(): void {
-    for (const fn of [...this.activeListeners]) fn();
+  /** Call `fn` after a capture or a delete (the panel's list follows). Returns the function that stops it. */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private changed(): void {
+    for (const fn of [...this.listeners]) fn();
   }
 
   updateMeta(id: string, patch: PostingMetaPatch): Promise<PostingMeta> {
@@ -212,22 +226,17 @@ export class PostingsService {
     });
   }
 
-  /** The posting's folder. Ids come from Claude, so anything that isn't a plain folder name is refused. */
-  /**
-   * Delete a posting for good: its folder and everything in it (capture, notes, documents, form log). When it's the
-   * active posting, there's none after.
-   */
+  /** Delete a posting for good: its folder and everything in it (capture, notes, documents, form log). */
   delete(id: string): Promise<void> {
     return this.serialize(async () => {
       await this.get(id);
-      const wasActive = (await this.ws.readState()).activePostingId === id;
-      if (wasActive) await this.ws.updateState({ activePostingId: undefined });
       await rm(this.folder(id), { recursive: true, force: true });
       this.searched.delete(id);
-      if (wasActive) this.activeChanged();
+      this.changed();
     });
   }
 
+  /** The posting's folder. Ids come from Claude, so anything that isn't a plain folder name is refused. */
   folder(id: string): string {
     if (!isPostingId(id)) {
       throw new EzError(ErrorCode.BadRequest, `Invalid posting id: ${id}`, "Use an id from postings_list.");
@@ -304,9 +313,8 @@ export class PostingsService {
       updatedAt: now,
     });
     await writeJsonAtomic(this.metaPath(id), meta);
-    await this.ws.updateState({ activePostingId: id });
     this.log.info({ id, isNew: !existing, bytes: p.html.length, site: meta.site }, "posting captured");
-    this.activeChanged();
+    this.changed();
 
     return {
       postingId: id,

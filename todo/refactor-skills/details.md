@@ -8,7 +8,7 @@ submitted. Nothing on a form is filled without the model (§3).
 ## Which steps are mechanical
 | Skill | Mechanical, into code | Judgement, stays in the skill |
 |---|---|---|
-| resume, cover letter | `posting_active`; read the posting and requirements; copy the template's main and `contentFiles`; status `drafting`; compile after an edit; the `pdf_text` reading-order check; opening the review; quoting what changed since the last review | Correcting the capture's company and role; the evidence map and gaps; which bullets and projects, the wording, the angle; what to cut to fit; the self-check against evidence |
+| resume, cover letter | `posting_get`; read the posting and requirements; copy the template's main and `contentFiles`; status `drafting`; compile after an edit; the `pdf_text` reading-order check; opening the review; quoting what changed since the last review | Correcting the capture's company and role; the evidence map and gaps; which bullets and projects, the wording, the angle; what to cut to fit; the self-check against evidence |
 | bundle | The default order, labels, title, author and file name; merge; page and size checks; compress; `bundleRequired` | Whether a bundle is needed; the posting's own order; which `library/` extras and pages |
 | answers | Validation (already `answers_check`); adding a `toSave` entry; adding a form's wording to `variants` once the user picks the entry | Merging duplicates; which entry a new wording belongs to, when that isn't exact |
 | apply | Assembling each step's context (§4); pressing Apply on a posting page; marking prefilled fields and stale files; writing the answers the user confirmed into the bank; the hand-off card; moving from step to step | Every value, row, upload and question on the form; matching questions to the bank by meaning; polarity; free text; tailored experience descriptions; skills for the role; a field that won't take its value; what the user says mid-application |
@@ -33,7 +33,7 @@ shows `lint`, and holding it back is the failure this replaces.
 explicitly.
 
 ## 2. Tailoring
-**`document_start { kind }`** (`resume` | `cover`) for the active posting. It copies the template's main and
+**`document_start { kind }`** (`resume` | `cover`) for the conversation's posting. It copies the template's main and
 `contentFiles` into the posting folder (only if absent), sets status `drafting`, and returns the brief: the posting's
 text, the `## Application requirements` block (or `missing`, so the agent writes it), `preferences.md`, the
 profile's relevant parts, and `claims_list`. One call replaces five to seven reads and the skill's setup section.

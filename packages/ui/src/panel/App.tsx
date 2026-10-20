@@ -16,6 +16,7 @@ import {
   type PanelPosting,
   type PanelState,
   type PanelTab,
+  type PostingStatus,
   postingConversation,
 } from "@ezapply/protocol";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,12 +48,9 @@ export const MODES: Record<AgentPermissionMode, { label: string; what: string }>
   plan: { label: "Plan only", what: "Claude reads and plans, and changes nothing" },
   dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
 };
-/** Antigravity's modes: headless, nobody can approve a call, so it runs what its rules allow, or only plans. */
+/** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
 export const ANTIGRAVITY_MODES: Partial<Record<AgentPermissionMode, { label: string; what: string }>> = {
-  dontAsk: {
-    label: "Don't ask",
-    what: "Only what your Antigravity rules allow runs; anything else is denied and ends the turn",
-  },
+  dontAsk: { label: "Don't ask", what: "Antigravity runs its commands and edits without asking" },
   plan: { label: "Plan only", what: "Antigravity reads and plans, and changes nothing" },
 };
 export const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity" };
@@ -78,26 +76,31 @@ export const PARTS: Record<ConversationPart, { label: string; what: string }> = 
 
 /**
  * The extension's side panel: everything the user does with ezapply after setup ("Everything in the browser"). It
- * shows one of the active posting's conversations with the agent (its documents' or its application's), its
- * documents and what the current tab is, the cards waiting on the user, and a chat bar; the buttons send the same
- * requests typing would, each to its own conversation.
+ * opens on the list of applications, grouped by what each needs; opening one shows one of its conversations with the
+ * agent (its documents' or its application's), its documents and what the current tab is, the cards waiting on the
+ * user there, and a chat bar; the buttons send the same requests typing would, each to its own conversation.
  */
 export function PanelApp({ transport }: { transport: PanelTransport }) {
   const [conn, setConn] = useState<ConnectionState>({ state: "connecting" });
   const [state, setState] = useState<PanelState | null>(null);
-  /** The posting picked in the panel (or the general conversation); null follows the active posting. */
+  /** The posting opened in the panel; null is the general conversation. */
   const [picked, setPicked] = useState<string | null>(null);
   /** The posting's conversation picked in the panel; null shows the one Claude works in, else its documents'. */
   const [part, setPart] = useState<ConversationPart | null>(null);
   const [conv, setConv] = useState<PanelConversation | null>(null);
   const [tab, setTab] = useState<TabInfo>(null);
+  /** The list of applications is showing, rather than one application's conversation. */
+  const [home, setHome] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const postingId = picked ?? state?.activePostingId ?? GENERAL_CONVERSATION;
-  const running = postingConversation(state?.agent.conversation ?? "");
-  const shownPart = part ?? (running?.postingId === postingId ? running.part : "tailor");
+  const postingId = picked ?? GENERAL_CONVERSATION;
+  const busy = busyConversations(state);
+  const running = busy.map((c) => postingConversation(c.conversation)).find((c) => c?.postingId === postingId);
+  const shownPart = part ?? running?.part ?? "tailor";
   const selected = postingId === GENERAL_CONVERSATION ? postingId : conversationKey(postingId, shownPart);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const postingRef = useRef(postingId);
+  postingRef.current = postingId;
 
   const fail = useCallback((err: unknown) => setError((err as Error).message ?? String(err)), []);
   /** The agent settings, from the extension's storage: there at once, before ezapply answers. */
@@ -111,7 +114,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     if (selectedRef.current === key) setConv(next);
   }, [transport]);
   const refreshTab = useCallback(async () => {
-    setTab(await transport.tab().catch(() => null));
+    const shown = postingRef.current;
+    const next = await transport.tab(shown === GENERAL_CONVERSATION ? undefined : shown).catch(() => null);
+    // An answer for a posting no longer shown would say what the tab is to the wrong one.
+    if (postingRef.current === shown) setTab(next);
   }, [transport]);
   const refreshAll = useCallback(() => {
     void refreshState().catch(fail);
@@ -143,7 +149,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     return stop;
   }, [transport, refreshAll, refreshTab, refreshState, refreshConv, fail]);
 
-  // A different conversation picked, or the active posting changed under a followed one.
+  // A different conversation picked.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `selected` is what triggers the read
   useEffect(() => {
     if (conn.state === "connected") {
@@ -167,9 +173,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     // The background gives them to ezapply.
     void transport.savePrefs(next).catch(fail);
   };
-  const working = agent?.status === "working" || agent?.status === "starting";
-  const workingHere = working && agent?.conversation === selected;
-  const workingElsewhere = working && agent?.conversation !== selected;
+  /** An agent works (or is starting) in this conversation; the others run on their own. */
+  const isBusy = (key: string) => busy.some((c) => c.conversation === key);
+  const workingHere = isBusy(selected);
+  const postingBusy = busy.some((c) => ownerOf(c.conversation) === postingId);
   const posting = conv?.posting;
   const labelOf = useMemo(() => labeller(state?.postings ?? []), [state?.postings]);
 
@@ -202,7 +209,11 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     // Called inside the click: access to websites can be asked for only during the gesture.
     void transport.capture().then((r) => {
       if (!r.ok) setError(r.error);
-      else setPicked(null);
+      else {
+        setPicked(r.postingId);
+        setPart(null);
+        setHome(false);
+      }
     });
   };
   /** A request from a button: to the posting's conversation for it, which the panel then shows. */
@@ -213,7 +224,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   const pick = (key: string) => {
     setPicked(key);
     setPart(null);
-    if (key !== GENERAL_CONVERSATION) void transport.call("panel.activate", { postingId: key }).catch(fail);
+    setHome(false);
   };
   const general = selected === GENERAL_CONVERSATION;
   const resetWhat = general
@@ -237,6 +248,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       await transport.call("panel.deletePosting", { postingId: posting.id });
       setPicked(null);
       setPart(null);
+      setHome(true);
       await refreshState();
     } catch (err) {
       fail(err);
@@ -267,51 +279,84 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     if (cardIds) needsRef.current?.scrollIntoView?.({ block: "start" });
   }, [cardIds]);
 
-  const busyWhy = sending
-    ? "Sending…"
-    : workingHere
-      ? `${agentName} is working: wait, or Stop it`
-      : workingElsewhere
-        ? `${agentName} is working in another conversation`
-        : undefined;
-  const cards = state?.cards ?? [];
+  /** Why a request to a conversation can't start now: a message on its way, or the agent working in it. */
+  const busyWhy = (key: string) =>
+    sending ? "Sending…" : isBusy(key) ? `${agentName} is working on this: wait, or Stop it` : undefined;
+  /** Stop every conversation the agent works in for an application (or the general one). */
+  const stopApplication = (key: string) => {
+    for (const c of busy.filter((b) => ownerOf(b.conversation) === key))
+      void transport.call("panel.stop", { key: c.conversation }).catch(fail);
+  };
+  const list = state ? applications(state, agentName) : null;
+  // An application shows its own cards and a terminal chat's; another's wait for it on the list, and a line says so.
+  const cards = (state?.cards ?? []).filter((c) => !c.conversation || (!home && ownerOf(c.conversation) === postingId));
+  const elsewhere = list ? [...list.rows, list.general].filter((r) => r.group === "needs" && r.key !== postingId) : [];
   const docCount = conv?.documents.length ?? 0;
   const waiting = conv?.documents.filter((d) => !isApproved(d.state)).length ?? 0;
 
   return (
     <div className="ez-panel">
       <header className="ez-panel-head">
-        <Brand />
-        <StatusDot conn={conn} />
-        <select
-          className="ez-select ez-panel-picker"
-          aria-label="Posting"
-          value={postingId}
-          disabled={!connected}
-          onChange={(e) => pick(e.target.value)}
-        >
-          {(state?.postings ?? []).map((p) => (
-            <option key={p.id} value={p.id}>
-              {labelOf(p.id)}
-            </option>
-          ))}
-          <option value={GENERAL_CONVERSATION}>No posting (general)</option>
-        </select>
-        {/* Beside the picker: it adds a posting to choose from, where the footer acts on the chosen one. */}
-        <Button
-          size="sm"
-          className="ez-panel-capture"
-          disabled={!connected}
-          onClick={capture}
-          title={
-            tab?.kind === "posting"
-              ? "Capture this posting's page again"
-              : "Capture the page in this tab as a posting, and make it the active one"
-          }
-        >
-          <Icon name="plus" size={14} /> Capture
-        </Button>
-        <details className="ez-panel-menu ez-panel-details">
+        {home ? (
+          <>
+            <Brand />
+            <StatusDot conn={conn} />
+            <h1 className="ez-panel-title">Applications</h1>
+            {/* On the list: it adds an application to it, and opens it. */}
+            <Button
+              size="sm"
+              className="ez-panel-capture"
+              disabled={!connected}
+              onClick={capture}
+              title={
+                tab?.kind === "posting"
+                  ? "Capture this posting's page again"
+                  : "Capture the page in this tab as a posting, and open it"
+              }
+            >
+              <Icon name="plus" size={14} /> Capture
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ez-btn-icon"
+              aria-label="All applications"
+              title="All applications"
+              onClick={() => setHome(true)}
+            >
+              <Icon name="chevronLeft" />
+            </Button>
+            <StatusDot conn={conn} />
+            <div className="ez-panel-heading">
+              <div className="ez-panel-role">
+                {posting ? (posting.role ?? posting.company ?? posting.id) : "General"}
+              </div>
+              <div className="ez-muted">
+                {posting
+                  ? [posting.company, siteLabel(posting.site)].filter(Boolean).join(" · ")
+                  : "Not about a posting"}
+              </div>
+            </div>
+          </>
+        )}
+        {/* The general conversation has no posting or documents: its one action, Reset, is a button of its own. */}
+        {!home && general ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ez-btn-icon"
+            aria-label="Reset conversation"
+            title={resetWhat.charAt(0).toUpperCase() + resetWhat.slice(1)}
+            disabled={!connected}
+            onClick={reset}
+          >
+            <Icon name="reset" />
+          </Button>
+        ) : null}
+        <details className="ez-panel-menu ez-panel-details" hidden={home || general}>
           <summary
             aria-label={`Posting and documents${waiting ? `, ${waiting} waiting for your review` : ""}`}
             title="The posting and its documents"
@@ -339,12 +384,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                   </div>
                 ) : null}
               </section>
-            ) : (
-              <section className="ez-panel-posting" aria-label="Conversation">
-                <div className="ez-panel-role">General</div>
-                <div className="ez-muted">No posting. Capture one from its page, or ask anything.</div>
-              </section>
-            )}
+            ) : null}
             {conv && conv.documents.length > 0 ? (
               <section className="ez-panel-docs" aria-label="Documents">
                 <p className="ez-label">Documents</p>
@@ -392,7 +432,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             ) : posting ? (
               <p className="ez-muted ez-panel-nodocs">No documents yet.</p>
             ) : null}
-            {posting || general ? (
+            {posting ? (
               <div className="ez-panel-pop-actions">
                 <Button
                   variant="ghost"
@@ -404,22 +444,20 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                 >
                   Reset Conversation
                 </Button>
-                {posting ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!connected || working}
-                    className="ez-panel-danger"
-                    onClick={() => void deletePosting()}
-                    title={
-                      working
-                        ? `${agentName} is working: wait, or Stop it`
-                        : "Delete this posting and everything in its folder"
-                    }
-                  >
-                    Delete posting
-                  </Button>
-                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!connected || postingBusy}
+                  className="ez-panel-danger"
+                  onClick={() => void deletePosting()}
+                  title={
+                    postingBusy
+                      ? `${agentName} is working on this posting: wait, or Stop it`
+                      : "Delete this posting and everything in its folder"
+                  }
+                >
+                  Delete posting
+                </Button>
               </div>
             ) : null}
           </div>
@@ -461,7 +499,21 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         </Banner>
       ) : null}
 
-      {posting ? (
+      {!home && elsewhere[0] ? (
+        <button
+          type="button"
+          className="ez-panel-elsewhere"
+          onClick={() => (elsewhere.length === 1 && elsewhere[0] ? pick(elsewhere[0].key) : setHome(true))}
+        >
+          <span className="ez-dot ez-dot-warn" aria-hidden="true" />
+          {elsewhere.length === 1
+            ? `${elsewhere[0].title} needs you`
+            : `${elsewhere.length} other applications need you`}
+          <Icon name="chevronRight" size={15} />
+        </button>
+      ) : null}
+
+      {posting && !home ? (
         <div className="ez-panel-parts" role="tablist" aria-label="Conversation">
           {(Object.keys(PARTS) as ConversationPart[]).map((p) => (
             <button
@@ -474,7 +526,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
               onClick={() => setPart(p)}
             >
               {PARTS[p].label}
-              {working && agent?.conversation === conversationKey(postingId, p) ? (
+              {isBusy(conversationKey(postingId, p)) ? (
                 <span className="ez-dot ez-dot-ok" role="img" aria-label={`${agentName} is working here`} />
               ) : null}
             </button>
@@ -484,7 +536,13 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
 
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
-        <Conversation events={conv?.events ?? []} agent={agentName} />
+        {home ? (
+          list ? (
+            <Applications list={list} onOpen={pick} onStop={stopApplication} />
+          ) : null
+        ) : (
+          <Conversation events={conv?.events ?? []} agent={agentName} />
+        )}
         {cards.length > 0 ? (
           <section className="ez-panel-needs" aria-label="Needs you" ref={needsRef}>
             <p className="ez-label">Needs you · {cards.length}</p>
@@ -508,35 +566,40 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       </div>
 
       <footer className="ez-panel-foot">
-        {tab ? (
+        {/* On the list, only what applies to every conversation: the agent's line and its settings. */}
+        {tab && !home ? (
           <p className={`ez-panel-tab ez-panel-tab-${tab.kind}`}>
             <Icon name={tab.kind === "application" || tab.kind === "posting" ? "check" : "info"} size={15} /> This tab:{" "}
             {tab.text}
           </p>
         ) : null}
-        <div className={connected ? "ez-panel-actions" : "ez-panel-actions ez-panel-off"}>
-          <TailorButton
-            disabled={!connected || !posting || working || sending}
-            why={!posting ? "Capture a posting first" : busyWhy}
-            onPick={(text) => request("tailor", text)}
-          />
-          <FillButton
-            disabled={!connected || !posting || working || sending}
-            why={!posting ? "Capture a posting first" : busyWhy}
-            tab={tab}
-            application={posting?.application}
-            onFill={(tabId) => request("fill", REQUESTS.fill(tabId))}
-            onOpen={(url) => void transport.openTab(url).catch(fail)}
-          />
-        </div>
+        {home ? null : (
+          <div className={connected ? "ez-panel-actions" : "ez-panel-actions ez-panel-off"}>
+            <TailorButton
+              disabled={!connected || !posting || sending || isBusy(conversationKey(postingId, "tailor"))}
+              why={!posting ? "Capture a posting first" : busyWhy(conversationKey(postingId, "tailor"))}
+              onPick={(text) => request("tailor", text)}
+            />
+            <FillButton
+              disabled={!connected || !posting || sending || isBusy(conversationKey(postingId, "fill"))}
+              why={!posting ? "Capture a posting first" : busyWhy(conversationKey(postingId, "fill"))}
+              tab={tab}
+              application={posting?.application}
+              onFill={(tabId) => request("fill", REQUESTS.fill(tabId))}
+              onOpen={(url) => void transport.openTab(url).catch(fail)}
+            />
+          </div>
+        )}
         <AgentLine state={state} name={agentName} selected={selected} labelOf={labelOf} />
-        <ChatBar
-          disabled={!connected || agent?.status === "unavailable"}
-          working={workingHere}
-          sending={sending}
-          onSend={send}
-          onStop={() => void transport.call("panel.stop", {}).catch(fail)}
-        />
+        {home ? null : (
+          <ChatBar
+            disabled={!connected || agent?.status === "unavailable"}
+            working={workingHere}
+            sending={sending}
+            onSend={send}
+            onStop={() => void transport.call("panel.stop", { key: selected }).catch(fail)}
+          />
+        )}
         <div className="ez-panel-settings">
           {settings ? (
             <AgentSettingsBar
@@ -547,7 +610,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
               onChange={changeSettings}
             />
           ) : null}
-          {conv?.totalCostUsd !== undefined ? (
+          {!home && conv?.totalCostUsd !== undefined ? (
             <p className="ez-panel-cost" title="What this conversation has cost so far">
               ${conv.totalCostUsd.toFixed(2)}
             </p>
@@ -555,6 +618,157 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+/** The list's groups, in order: what waits on the user first, then what the agent is doing, then the rest. */
+export const GROUPS = { needs: "Needs you", working: "Working", open: "Open", done: "Done" } as const;
+export type Group = keyof typeof GROUPS;
+/** One application on the list (or the general conversation): its line, and what it's doing or where it stands. */
+export interface ApplicationRow {
+  /** The posting's id, or the general conversation's key. */
+  key: string;
+  title: string;
+  sub: string;
+  what: string;
+  group: Group;
+}
+const STANDING: Record<PostingStatus, string> = {
+  captured: "Captured",
+  drafting: "Documents in progress",
+  attached: "Documents attached",
+  filled: "Filled, not submitted",
+  submitted: "Submitted",
+  archived: "Archived",
+};
+
+/** The list entry a conversation belongs to: its posting's id, or the general conversation; none for a terminal chat. */
+export function ownerOf(key: string | undefined): string | null {
+  if (!key) return null;
+  return key === GENERAL_CONVERSATION ? key : (postingConversation(key)?.postingId ?? null);
+}
+
+/** The conversations an agent is working (or starting) in, side by side. */
+export function busyConversations(state: PanelState | null): PanelState["agent"]["conversations"] {
+  return (state?.agent.conversations ?? []).filter((c) => c.status === "working" || c.status === "starting");
+}
+
+/**
+ * The applications for the list, newest first within each group, and the general conversation apart: one waiting on
+ * a card needs the user, one an agent runs in is working, the rest are open until submitted or archived.
+ */
+export function applications(
+  state: PanelState,
+  agentName: string,
+): { rows: ApplicationRow[]; general: ApplicationRow } {
+  const busy = busyConversations(state);
+  const partOf = (key?: string) => {
+    const c = postingConversation(key ?? "");
+    return c ? `${PARTS[c.part].label}: ` : "";
+  };
+  const doing = (key: string): Pick<ApplicationRow, "group" | "what"> | null => {
+    const card = state.cards.find((c) => ownerOf(c.conversation) === key);
+    if (card)
+      return {
+        group: "needs",
+        what: partOf(card.conversation) + (card.kind === "ask" ? card.spec.title : `approve ${card.toolName}`),
+      };
+    const parts = busy.filter((c) => ownerOf(c.conversation) === key).map((c) => postingConversation(c.conversation));
+    if (parts.length > 0) {
+      const named = parts.flatMap((c) => (c ? [PARTS[c.part].label] : []));
+      return { group: "working", what: `${named.length ? `${named.join(" and ")}: ` : ""}${agentName} is working` };
+    }
+    return null;
+  };
+  const rows = state.postings.map((p): ApplicationRow => {
+    const now = doing(p.id);
+    return {
+      key: p.id,
+      title: p.role ?? p.company ?? p.id,
+      sub: [p.company, siteLabel(p.site)].filter(Boolean).join(" · "),
+      what: now?.what ?? STANDING[p.status],
+      group: now?.group ?? (p.status === "submitted" || p.status === "archived" ? "done" : "open"),
+    };
+  });
+  const order = Object.keys(GROUPS) as Group[];
+  rows.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+  const now = doing(GENERAL_CONVERSATION);
+  return {
+    rows,
+    general: {
+      key: GENERAL_CONVERSATION,
+      title: "General",
+      sub: "Not about a posting",
+      what: now?.what ?? "Ask anything",
+      group: now?.group ?? "open",
+    },
+  };
+}
+
+const DOTS: Record<Group, string> = {
+  needs: "ez-dot-warn",
+  working: "ez-dot-busy",
+  open: "ez-dot-idle",
+  done: "ez-dot-ok",
+};
+
+/** The list of applications, grouped; opening one shows its conversation, and a working one can be stopped here. */
+function Applications({
+  list,
+  onOpen,
+  onStop,
+}: {
+  list: { rows: ApplicationRow[]; general: ApplicationRow };
+  onOpen: (key: string) => void;
+  onStop: (key: string) => void;
+}) {
+  const row = (r: ApplicationRow) => (
+    <li key={r.key} className="ez-app">
+      <button type="button" className="ez-app-open" onClick={() => onOpen(r.key)}>
+        <span className={`ez-dot ez-app-dot ${DOTS[r.group]}`} aria-hidden="true" />
+        <span className="ez-app-text">
+          <span className="ez-app-title">{r.title}</span>
+          {r.sub ? <span className="ez-app-sub">{r.sub}</span> : null}
+          <span className="ez-app-what">{r.what}</span>
+        </span>
+        <Icon name="chevronRight" size={15} />
+      </button>
+      {r.group === "working" ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ez-btn-icon"
+          aria-label={`Stop ${r.title}`}
+          title="Stop"
+          onClick={() => onStop(r.key)}
+        >
+          <Icon name="stop" size={14} />
+        </Button>
+      ) : null}
+    </li>
+  );
+  // The general conversation joins the groups while it waits on the user or the agent is in it, else it's last.
+  const busy = list.general.group === "needs" || list.general.group === "working";
+  const rows = busy ? [...list.rows, list.general] : list.rows;
+  const groups = (Object.keys(GROUPS) as Group[]).filter((g) => rows.some((r) => r.group === g));
+  return (
+    <nav className="ez-apps" aria-label="Applications">
+      {list.rows.length === 0 ? (
+        <p className="ez-muted">No applications yet. Open a job posting and press Capture.</p>
+      ) : null}
+      {groups.map((g) => (
+        <section key={g} aria-label={GROUPS[g]}>
+          <h2 className="ez-label">{GROUPS[g]}</h2>
+          <ul>{rows.filter((r) => r.group === g).map(row)}</ul>
+        </section>
+      ))}
+      {busy ? null : (
+        <section aria-label="Other">
+          <h2 className="ez-label">Other</h2>
+          <ul>{row(list.general)}</ul>
+        </section>
+      )}
+    </nav>
   );
 }
 
@@ -778,6 +992,14 @@ function EventView({
 }) {
   switch (e.kind) {
     case "user":
+      // A result ezapply sent for the user (a card's answers, a review): a note, not their own words.
+      if (e.delivery) {
+        return (
+          <p className="ez-msg-note">
+            {e.taken === false ? `${e.text}: waiting for ${agent}` : `${e.text}: sent to ${agent}`}
+          </p>
+        );
+      }
       return (
         <div className="ez-msg-user">
           {e.text}
@@ -840,16 +1062,17 @@ function AgentLine({
   const agent = state?.agent;
   if (!agent) return null;
   let text = "";
+  const here = agent.conversations.find((c) => c.conversation === selected);
+  const others = busyConversations(state).filter((c) => c.conversation !== selected);
   if (agent.status === "unavailable")
     text = `No agent is available: neither ${AGENTS.claude} nor ${AGENTS.antigravity} was found when ezapply started.`;
-  else if (agent.status === "starting") text = `Starting ${name}…`;
-  else if (agent.status === "working") {
-    text =
-      agent.conversation === selected
-        ? `${name} is working…`
-        : `${name} is working on ${labelOf(agent.conversation ?? "")}…`;
-  }
-  if (agent.queued > 0 && agent.conversation === selected) text += ` ${agent.queued} waiting.`;
+  else if (here?.status === "starting") text = `Starting ${name}…`;
+  else if (here?.status === "working") text = `${name} is working…`;
+  if (here && here.queued > 0) text += ` ${here.queued} waiting.`;
+  // The others go on at the same time; one is named, more are counted.
+  const also = text ? "Also" : `${name} is`;
+  if (others.length === 1) text += ` ${also} working on ${labelOf(others[0]?.conversation ?? "")}…`;
+  else if (others.length > 1) text += ` ${also} working on ${others.length} others…`;
   return text ? (
     <p className="ez-panel-agent" role="status">
       {text.trim()}

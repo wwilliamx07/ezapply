@@ -28,7 +28,7 @@ WebSocket, JSON text frames, one message per frame.
 1. Extension → `hello { protocolVersion, extensionVersion, pairingToken, pendingCapture?, browser?, sites? }`. An empty
    `pairingToken` asks to pair; it's accepted only while a pairing window is open. `pendingCapture: true`
    says a capture made while the companion was down follows right after `welcome` (the companion holds
-   `posting_active` until it's saved). `browser { name, version? }` is the browser the extension runs in
+   `posting_get` until it's saved). `browser { name, version? }` is the browser the extension runs in
    (`BrowserInfo`; `name` one of `BROWSER_NAMES`: chrome, edge, brave, opera, vivaldi, chromium, or
    something newer the companion ignores); the companion opens pages and files there. `sites` are the ids of the
    registry the extension was built with: the companion refuses a list other than its own (in any order), or none, as
@@ -146,7 +146,7 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
 ## Errors
 
 `EzError { code, message, hint? }`, serialized as `ErrorPayload`. Codes: `bad_request`, `unauthorized`,
-`protocol_mismatch`, `not_paired`, `extension_disconnected`, `timeout`, `not_found`, `no_active_posting`,
+`protocol_mismatch`, `not_paired`, `extension_disconnected`, `timeout`, `not_found`, `no_posting` (no posting named outside a posting's conversation),
 `capture_failed`, `path_not_allowed`, `posting_mismatch` (the tab is another posting's: nothing that changes the page runs), `internal`. `EzError.from(anything)` wraps unknown errors as
 `internal`.
 

@@ -45,6 +45,11 @@ export interface SiteInfo<Id extends string = string> {
    * (Phenom's `jobSeqNo` embeds the requisition the posting shows). Used through `sameJob` with the site.
    */
   sameJob?(a: string, b: string): boolean;
+  /**
+   * The posting's own page is its application form (Greenhouse's board), so the side panel calls a tab on it the
+   * application. Unset where the posting page only leads to the form (Workday's Apply).
+   */
+  postingIsForm?: boolean;
   /** A posting's identifying path, when the site varies it for the same job (a locale segment). */
   canonicalPath?(pathname: string): string;
   /**

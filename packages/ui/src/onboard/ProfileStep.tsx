@@ -46,7 +46,7 @@ export function ProfileStep() {
       <>
         <StepHead title="Your profile" done={false}>
           Everything applications ask that isn't a screening question: your name, contact, work history, education.
-          Claude drafts it from your resume, then you check it and fill in what a resume doesn't say.
+          {state.agentName} drafts it from your resume, then you check it and fill in what a resume doesn't say.
         </StepHead>
         {!state.resume.main ? <p>Import your resume first (the step before this one).</p> : null}
         <div className="ob-actions">
@@ -55,7 +55,7 @@ export function ProfileStep() {
             disabled={busy || !state.resume.main}
             onClick={() => ask("draft-profile", { main: state.resume.main })}
           >
-            Have Claude draft it from my resume
+            Have {state.agentName} draft it from my resume
           </Button>
         </div>
         <TaskStatus kinds={["draft-profile"]} />
@@ -66,7 +66,8 @@ export function ProfileStep() {
   return (
     <>
       <StepHead title="Your profile" done={done}>
-        Check what Claude took from your resume and fill in the rest. Applications are filled from this, word for word.
+        Check what {state.agentName} took from your resume and fill in the rest. Applications are filled from this, word
+        for word.
       </StepHead>
       <TaskStatus kinds={["draft-profile"]} />
       {state.profile.missing?.length ? (

@@ -8,8 +8,9 @@ import { ext } from "../ext.js";
 export type PanelRequest =
   | { type: "call"; id: number; method: string; params: unknown }
   | { type: "capture"; id: number; windowId: number }
-  | { type: "tab"; id: number; windowId: number }
+  | { type: "tab"; id: number; windowId: number; postingId?: string }
   | { type: "openTab"; id: number; windowId: number; url: string }
+  | { type: "visibility"; id: number; windowId: number; visible: boolean }
   | { type: "connection"; id: number };
 export type PanelMessage =
   | { type: "response"; id: number; ok: true; result: unknown }
@@ -62,8 +63,15 @@ export function portTransport(): PanelTransport {
       }, 500);
     });
     port = p;
+    // The background shows a notification only while no panel is in view, so each new port says where it stands.
+    void tellVisibility();
     return p;
   };
+  const tellVisibility = async () => {
+    const visible = document.visibilityState === "visible";
+    await ask({ type: "visibility", windowId: await windowId, visible }).catch(() => undefined);
+  };
+  document.addEventListener("visibilitychange", () => void tellVisibility());
   const ask = <T>(req: Unsent): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       const id = ++seq;
@@ -106,7 +114,7 @@ export function portTransport(): PanelTransport {
       const access = ext.permissions.request({ origins: [...HOST_PERMISSIONS] }).catch(() => false);
       return access.then(async () => ask<CaptureOutcome>({ type: "capture", windowId: await windowId }));
     },
-    tab: async () => ask({ type: "tab", windowId: await windowId }),
+    tab: async (postingId) => ask({ type: "tab", windowId: await windowId, ...(postingId ? { postingId } : {}) }),
     openTab: async (url) => {
       await ask({ type: "openTab", windowId: await windowId, url });
     },

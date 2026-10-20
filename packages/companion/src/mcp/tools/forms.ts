@@ -15,7 +15,7 @@ const tabId = z
   .number()
   .int()
   .optional()
-  .describe("Defaults to the application tab (on any supported site) of the active posting.");
+  .describe("Defaults to the application tab (on any supported site) of this conversation's posting.");
 
 /**
  * Application form tools, for every site in the registry. Logging, status moves, tab choice and the posting check
@@ -69,7 +69,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       annotations: { readOnlyHint: true },
     },
     tool(s.log, "search_options", ({ fieldId, query, tabId }: { fieldId: string; query: string; tabId?: number }) =>
-      s.forms.searchOptions(fieldId, query, tabId),
+      s.forms.searchOptions(fieldId, query, tabId, session),
     ),
   );
 
@@ -111,7 +111,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       }: {
         fills: { fieldId: string; value: z.infer<typeof FillValue>; source: FillSource; answerId?: string }[];
         tabId?: number;
-      }) => s.forms.fill(fills, tabId),
+      }) => s.forms.fill(fills, tabId, session),
     ),
   );
 
@@ -128,7 +128,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       inputSchema: { fieldId: z.string(), path: z.string().describe("Workspace-relative or absolute path."), tabId },
     },
     tool(s.log, "upload_file", ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) =>
-      s.forms.upload(fieldId, path, tabId),
+      s.forms.upload(fieldId, path, tabId, session),
     ),
   );
 
@@ -152,7 +152,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       s.log,
       "remove_items",
       ({ fieldId, values, reason, tabId }: { fieldId: string; values?: string[]; reason?: string; tabId?: number }) =>
-        s.forms.remove(fieldId, values, reason, tabId),
+        s.forms.remove(fieldId, values, reason, tabId, session),
     ),
   );
 
@@ -234,7 +234,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "be lost: check them when coming forward again.",
       inputSchema: { tabId },
     },
-    tool(s.log, "go_back", ({ tabId }: { tabId?: number }) => s.forms.back(tabId)),
+    tool(s.log, "go_back", ({ tabId }: { tabId?: number }) => s.forms.back(tabId, session)),
   );
 
   server.registerTool(
@@ -247,7 +247,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       inputSchema: { action: PageAction, tabId },
     },
     tool(s.log, "page_action", ({ action, tabId }: { action: z.infer<typeof PageAction>; tabId?: number }) =>
-      s.forms.pageAction(action, tabId),
+      s.forms.pageAction(action, tabId, session),
     ),
   );
 
@@ -264,7 +264,7 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
       annotations: { readOnlyHint: true },
     },
     rawTool(s.log, "screenshot", async ({ tabId }: { tabId?: number }) => {
-      const r = await s.forms.screenshot(tabId);
+      const r = await s.forms.screenshot(tabId, session);
       return {
         content: [
           { type: "image", data: r.pngBase64, mimeType: "image/png" },

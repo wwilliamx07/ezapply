@@ -2,7 +2,7 @@ import { AskQuestion, type AskSpec, askSpecProblems, ErrorCode, EzError } from "
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
-import { ok, rawTool, tool } from "../result.js";
+import { ok, PENDING_HINT, rawTool, tool } from "../result.js";
 
 /**
  * The panel's side of the agent: its questions (`ask_user`) and the permission prompt Claude Code asks instead of a
@@ -22,7 +22,8 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
         "skipped; remember { answerId } offers saving the answer to the answer bank. Returns { done: true, answers: " +
         "{ <id>: { value, other?, remember? } | { skipped } } }, { replied, message } when the user wrote in the " +
         "chat instead, { done: false, askId } when nothing came yet (call ask_user { askId } to keep waiting), or " +
-        "{ noPanel } when no panel is open (ask in chat instead).",
+        "{ noPanel } when no panel is open (ask in chat instead). In the panel it returns { pending } at once: end " +
+        "your turn, and the result above comes as your next message.",
       inputSchema: {
         title: z
           .string()
@@ -47,7 +48,10 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
         timeoutSeconds: number;
       }) => {
         const timeoutMs = args.timeoutSeconds * 1000;
+        const conversation = session ? await s.agent.conversationOf(session) : undefined;
         if (args.askId) {
+          // A panel conversation's answer is on its way as a message.
+          if (conversation && s.needs.isOpen(args.askId)) return pending(args.askId);
           const spec = s.needs.spec(args.askId);
           return outcome(s, args.askId, await s.needs.waitAsk(args.askId, timeoutMs), spec);
         }
@@ -65,13 +69,24 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
         const problems = askSpecProblems(spec);
         if (problems.length > 0)
           throw new EzError(ErrorCode.BadRequest, problems.join("; "), "Fix those questions and ask again.");
-        const conversation = session ? await s.agent.conversationOf(session) : undefined;
         // A panel conversation's question always gets a card (the panel shows it when opened, with a badge until
         // then); a terminal chat's only when a panel is open to show it.
         if (!conversation && !s.needs.watched) {
           return { noPanel: true, hint: "No ezapply panel is open. Ask the user these questions in chat instead." };
         }
         const card = s.needs.ask(spec, conversation);
+        // In a panel conversation the call doesn't wait: the answers start the next turn. A terminal chat's waits.
+        if (conversation) {
+          s.agent.deliverLater(
+            conversation,
+            { tool: "ask_user", id: card.id },
+            s.needs.settledAsk(card.id).then(async (o) => ({
+              value: await outcome(s, card.id, o, spec),
+              label: "replied" in o ? `Your reply to ${spec.title}` : `Answers to ${spec.title}`,
+            })),
+          );
+          return pending(card.id);
+        }
         return outcome(s, card.id, await s.needs.waitAsk(card.id, timeoutMs), spec);
       },
     ),
@@ -114,6 +129,10 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
       }
     }),
   );
+}
+
+function pending(askId: string): object {
+  return { pending: askId, hint: PENDING_HINT };
 }
 
 async function outcome(

@@ -119,6 +119,20 @@ async function fillDate(c: HTMLElement, value: string): Promise<FillOutcome> {
     branch("date entered again", { error });
     await enter();
   }
+  // Seen live: the page re-parsed the whole date as the first day digit landed (month "08" became "2", the year
+  // its default), and a part checks only itself as it's entered. The parts that drifted are entered once more.
+  const drifted = parts.filter(([input, v]) => Number(datePartValue(input)) !== Number(v));
+  if (drifted.length) {
+    branch("date parts drifted", {
+      parts: drifted.map(([input, v]) => ({
+        part: input.getAttribute("aria-label"),
+        shows: datePartValue(input),
+        wanted: v,
+      })),
+    });
+    for (const [input, v] of drifted) await enterDatePart(input, v);
+    await settle(c.ownerDocument, T.dateQuietMs, T.dateMaxMs);
+  }
   const readBack = dateValue(c) ?? "";
   const has = (p: "Month" | "Day" | "Year") => Boolean(datePartInput(c, p));
   const want = [has("Year") && date.year, has("Month") && month, has("Day") && day].filter(Boolean).join("-");

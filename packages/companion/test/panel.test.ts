@@ -7,6 +7,7 @@ import {
   type BridgeMessage,
   CompanionApi,
   ExtensionApi,
+  type OnboardState,
   type PanelUpdate,
   PROTOCOL_VERSION,
   parseBridgeMessage,
@@ -112,10 +113,10 @@ async function extension() {
   return { ws, peer, updates };
 }
 
-async function capture(): Promise<string> {
+async function capture(url = POSTING_URL, pageTitle = "Software Developer - Example Co"): Promise<string> {
   const r = await handle.services.postings.capture({
-    url: POSTING_URL,
-    pageTitle: "Software Developer - Example Co",
+    url,
+    pageTitle,
     html: "<h1>Software Developer</h1>",
     visibleHtml: "<h1>Software Developer</h1>",
     visibleText: "Software Developer\nExample Co\nWe build things.",
@@ -157,8 +158,9 @@ describe("the side panel over the bridge", () => {
     );
 
     const state = await peer.request("panel.state", {});
-    expect(state).toMatchObject({ agent: { status: "idle" }, activePostingId: id, cards: [] });
-    expect(state.postings[0]).toMatchObject({ id, site: "workday", active: true });
+    expect(state).toMatchObject({ agent: { status: "idle" }, cards: [] });
+    expect(state).not.toHaveProperty("activePostingId");
+    expect(state.postings[0]).toMatchObject({ id, site: "workday" });
     expect(state.agent.agents).toEqual(["claude"]);
     expect(state.agent.models).toEqual({});
     // The extension's settings: what conversations run with comes back.
@@ -193,11 +195,17 @@ describe("the side panel over the bridge", () => {
     await expect(peer.request("panel.conversation", { key: id })).rejects.toThrow(/Not a conversation/);
   });
 
-  it("tells what a tab is to the active posting", async () => {
+  it("tells what a tab is to the posting open in the panel", async () => {
     const { peer } = await extension();
-    await capture();
+    const postingId = await capture();
     const tab = (url: string, site: "workday" | "generic") =>
-      peer.request("panel.tab", { tabId: 1, url, title: "", site });
+      peer.request("panel.tab", { tabId: 1, url, title: "", site, postingId });
+    // In the general conversation there's no posting to compare with.
+    expect(await peer.request("panel.tab", { tabId: 1, url: APPLY_URL, title: "", site: "workday" })).not.toMatchObject(
+      {
+        kind: "application",
+      },
+    );
     expect(await tab(POSTING_URL, "workday")).toMatchObject({ kind: "posting" });
     expect(await tab(APPLY_URL, "workday")).toMatchObject({
       kind: "application",
@@ -215,10 +223,51 @@ describe("the side panel over the bridge", () => {
     expect(await tab("chrome://extensions", "generic")).toMatchObject({ kind: "none" });
   });
 
-  it("sends a message to a posting's conversation, making it active, and pushes the agent's events while a panel watches", async () => {
+  it("tells an application embedded in a careers page by its frame", async () => {
+    const { peer } = await extension();
+    const POSTING = "https://careers.example.com/jobs/software-developer";
+    const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=example&token=1000001";
+    const postingId = await capture(POSTING, "Software Developer - Example Co");
+    const frames = [{ frameId: 12, url: EMBED, site: "greenhouse" as const }];
+    const tab = (url: string, f = frames) =>
+      peer.request("panel.tab", { tabId: 1, url, title: "", site: "generic", frames: f, postingId });
+    // The careers page's apply page, its form in a Greenhouse frame: an application, not "some page".
+    expect(await tab(`${POSTING}/apply`)).toMatchObject({
+      kind: "unconfirmed-application",
+      text: expect.stringContaining("Greenhouse"),
+    });
+    // Once bound, it's this posting's.
+    await handle.services.postings.setApplication(postingId, {
+      url: EMBED,
+      site: "greenhouse",
+      tenant: "example",
+      job: "1000001",
+      from: "bound",
+      at: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await tab(`${POSTING}/apply`)).toMatchObject({ kind: "application" });
+    // The form embedded in the posting's own page makes that page the application too.
+    expect(await tab(POSTING)).toMatchObject({ kind: "application" });
+    // Without a frame the posting's page is the posting, and another page is none of its.
+    expect(await tab(POSTING, [])).toMatchObject({ kind: "posting" });
+    expect(await tab(`${POSTING}/apply`, [])).toMatchObject({ kind: "page" });
+  });
+
+  it("tells a posting whose page is its application form as the application (Greenhouse's board)", async () => {
+    const { peer } = await extension();
+    const BOARD = "https://job-boards.greenhouse.io/example/jobs/1000001";
+    const postingId = await capture(BOARD, "Software Developer - Example Co");
+    const tab = (url: string) => peer.request("panel.tab", { tabId: 1, url, title: "", site: "greenhouse", postingId });
+    expect(await tab(BOARD)).toMatchObject({ kind: "application", text: expect.stringContaining("Greenhouse") });
+    expect(await tab("https://job-boards.greenhouse.io/example/jobs/1000002")).toMatchObject({
+      kind: "other-application",
+    });
+    // Workday's posting page still only leads to its form (the test above).
+  });
+
+  it("sends a message to a posting's conversation and pushes the agent's events while a panel watches", async () => {
     const ext = await extension();
     const id = await capture();
-    await handle.services.postings.activate(id);
     const other = await capture(); // same URL: the same posting, still one
     expect(other).toBe(id);
     await ext.peer.request("panel.watch", { open: 1 });
@@ -234,6 +283,87 @@ describe("the side panel over the bridge", () => {
     const conv = await ext.peer.request("panel.conversation", { key: `${id}/tailor` });
     expect(conv.events.map((e) => e.kind)).toEqual(["user", "text", "turnEnd"]);
     expect(conv.totalCostUsd).toBe(0.01);
+  });
+
+  it("asks for a notification when a turn ends or a card opens, even with no panel open, unless turned off", async () => {
+    const ext = await extension();
+    const id = await capture();
+    await ext.peer.request("panel.send", { key: `${id}/fill`, text: "fill it" });
+    await waitFor(async () => (ext.updates.some((u) => u.notify) ? true : null), 10_000);
+    expect(ext.updates.find((u) => u.notify)?.notify).toEqual({
+      conversation: `${id}/fill`,
+      title: "Claude Code finished",
+      message: "Application: Its reply is in the ezapply panel.",
+    });
+    handle.services.needs.ask({ title: "Step 1", questions: [{ id: "q", prompt: "?", type: "text" }] }, "general");
+    await waitFor(async () => (ext.updates.filter((u) => u.notify).length === 2 ? true : null), 5000);
+    expect(ext.updates.filter((u) => u.notify).at(-1)?.notify).toMatchObject({
+      conversation: "general",
+      title: "Claude Code has a question",
+      card: true,
+    });
+
+    await handle.services.workspace.updateConfig("notifications", { turnEnd: false });
+    await ext.peer.request("panel.send", { key: "general", text: "hello" });
+    await waitFor(async () => (ext.updates.some((u) => u.cards === 0) ? true : null), 10_000); // the reply settles the card
+    handle.services.needs.ask({ title: "Step 2", questions: [{ id: "q", prompt: "?", type: "text" }] }, "general");
+    await waitFor(async () => (ext.updates.at(-1)?.cards === 1 ? true : null), 5000);
+    expect(ext.updates.filter((u) => u.notify)).toHaveLength(2);
+  });
+
+  it("says a turn that ends on an open review waits on it, and leaves a card's notification in place", async () => {
+    const ext = await extension();
+    const id = await capture();
+    await writeFile(join(dir, "ws", "postings", id, "resume.pdf"), "%PDF-1.4 resume v1");
+    await handle.services.reviews.open([`postings/${id}/resume.pdf`]);
+    await ext.peer.request("panel.send", { key: `${id}/tailor`, text: "tailor it" });
+    await waitFor(async () => (ext.updates.some((u) => u.notify) ? true : null), 10_000);
+    expect(ext.updates.find((u) => u.notify)?.notify).toEqual({
+      conversation: `${id}/tailor`,
+      title: "Your documents are ready to review",
+      message: "Documents: Approve them or say what to change on the review page.",
+    });
+
+    handle.services.needs.ask({ title: "Step 1", questions: [{ id: "q", prompt: "?", type: "text" }] }, "general");
+    await ext.peer.request("panel.send", { key: "general", text: "hello" });
+    await waitFor(
+      async () =>
+        ext.updates.some((u) => u.event?.conversation === "general" && u.event.event.kind === "turnEnd") ? true : null,
+      10_000,
+    );
+    expect(ext.updates.filter((u) => u.notify).map((u) => u.notify?.title)).toEqual([
+      "Your documents are ready to review",
+      "Claude Code has a question",
+    ]);
+  });
+
+  it("lists the newest postings, and an older one a card waits on", async () => {
+    const { peer } = await extension();
+    const ids: string[] = [];
+    for (let day = 1; day <= 21; day++) {
+      const r = await handle.services.postings.capture({
+        url: `https://example.com/jobs/${day}`,
+        pageTitle: `Job ${day}`,
+        html: "<h1>Job</h1>",
+        visibleHtml: "<h1>Job</h1>",
+        visibleText: "Job",
+        jsonLd: [],
+        capturedAt: `2026-01-${String(day).padStart(2, "0")}T00:00:00.000Z`,
+        tabId: day,
+      });
+      ids.push(r.postingId);
+    }
+    const oldest = ids[0] as string;
+    let state = await peer.request("panel.state", {});
+    expect(state.postings).toHaveLength(20);
+    expect(state.postings.some((p) => p.id === oldest)).toBe(false);
+    handle.services.needs.ask(
+      { title: "Step 1", questions: [{ id: "q", prompt: "?", type: "text" }] },
+      `${oldest}/fill`,
+    );
+    state = await peer.request("panel.state", {});
+    expect(state.postings).toHaveLength(21);
+    expect(state.postings.some((p) => p.id === oldest)).toBe(true);
   });
 
   it("answers cards from the panel, checks the answers, and counts the cards for the badge even with no panel open", async () => {
@@ -279,10 +409,9 @@ describe("the side panel over the bridge", () => {
     ).rejects.toThrow(/No document/);
   });
 
-  it("deletes a posting: its folder and conversations go, and it's no longer the active posting", async () => {
+  it("deletes a posting: its folder and conversations go, and it leaves the panel's list", async () => {
     const ext = await extension();
     const id = await capture();
-    await handle.services.postings.activate(id);
     await ext.peer.request("panel.send", { key: `${id}/fill`, text: "hello" });
     await waitFor(async () => ((await handle.services.agent.history(`${id}/fill`)).length >= 3 ? true : null), 10_000);
     await ext.peer.request("panel.deletePosting", { postingId: id });
@@ -290,7 +419,6 @@ describe("the side panel over the bridge", () => {
     expect(existsSync(join(dir, "ws", "agent", id))).toBe(false);
     expect(await handle.services.agent.history(`${id}/fill`)).toEqual([]);
     const state = await ext.peer.request("panel.state", {});
-    expect(state.activePostingId).toBeNull();
     expect(state.postings).toEqual([]);
     await expect(ext.peer.request("panel.deletePosting", { postingId: id })).rejects.toThrow(/No posting/);
   });
@@ -354,5 +482,26 @@ describe("setup tasks for the panel's agent", () => {
       tasks: [{ id: "t1", status: "done", note: "Answered." }],
     });
     await client.close();
+  });
+
+  it("fails a setup task whose turn the user stops, so the page stops waiting on it", async () => {
+    const { url } = handle.services.onboarding.open();
+    const u = new URL(url);
+    const t = u.searchParams.get("t");
+    await fetch(`${u.origin}/onboard/action?t=${t}`, {
+      method: "POST",
+      headers: { Origin: u.origin, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "task", kind: "question", params: { text: "[slow]" } }),
+    });
+    const stateOf = async () => (await (await fetch(`${u.origin}/onboard/state?t=${t}`)).json()) as OnboardState;
+    expect((await stateOf()).agentName).toBe("Claude Code");
+    await waitFor(async () => (handle.services.agent.statusOf("general") === "working" ? true : null), 10_000);
+    expect((await stateOf()).tasks).toMatchObject([{ id: "t1", status: "running" }]);
+    expect(handle.services.agent.stop("general")).toBe(true);
+    const task = await waitFor(async () => {
+      const [t1] = (await stateOf()).tasks;
+      return t1?.status === "failed" ? t1 : null;
+    }, 10_000);
+    expect(task?.note).toMatch(/^Stopped before it finished/);
   });
 });

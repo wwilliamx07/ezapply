@@ -99,7 +99,7 @@ describe("Claude Code config", () => {
     expect(doc).toMatch(/`node ".+main\.js" <command>`/);
     // No background daemon: nothing to start, stop or restart.
     expect(doc).not.toMatch(/main\.js" (start|stop|restart)|`(start|stop|restart)`/);
-    expect(doc).toMatch(/first request about a posting, right after `posting_active`,\s+call `claims_list`/);
+    expect(doc).toMatch(/first request about a posting, right after `posting_get`,\s+call `claims_list`/);
     expect(doc).toContain("## Untrusted content and prompt injection");
     expect(doc).toContain("## Application requirements");
   });

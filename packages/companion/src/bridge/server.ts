@@ -110,7 +110,7 @@ export class ExtensionBridge {
    * Wait until the extension's view of things has reached the companion: right after a start, give the paired
    * extension time to reconnect, then let a capture it queued while ezapply wasn't running be saved. Returns
    * at once in the steady state. When the grace period ran out first, `extensionReconnecting` says it may
-   * still turn up (with a capture it queued). Posting tools call this so the active posting isn't stale.
+   * still turn up (with a capture it queued). Posting tools call this so a fresh capture is never missed.
    */
   async settled(): Promise<Settled> {
     await this.awaitReconnect();

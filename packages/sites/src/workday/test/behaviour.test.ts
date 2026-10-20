@@ -156,7 +156,7 @@ describe("filling", () => {
   });
 
   describe("dates in Workday's split widget", () => {
-    const build = (dateWidget: "keys" | "stuck") => {
+    const build = (dateWidget: "keys" | "stuck" | "reparse") => {
       fixture = buildWorkdayStep(document, { dateWidget });
       api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
     };
@@ -170,6 +170,13 @@ describe("filling", () => {
       const [again] = await api.fill([{ fieldId: id("formField-startDate"), value: "06/2023" }]);
       expect(again).toMatchObject({ ok: true, readBack: "2023-06" });
       expect(displays()).toEqual(["06", "2023"]);
+    });
+
+    it("enters again a part the page rewrote while a later one was typed", async () => {
+      build("reparse");
+      const [r] = await api.fill([{ fieldId: id("formField-startDate"), value: "2029-08-20" }]);
+      expect(r).toMatchObject({ ok: true, readBack: "2029-08-20" });
+      expect(displays()).toEqual(["08", "20", "2029"]);
     });
 
     it("reports a date the widget didn't take, and get_form shows it empty", async () => {

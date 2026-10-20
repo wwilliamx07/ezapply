@@ -97,25 +97,44 @@ posting's details and its documents are in a popover from the header. Rejected: 
 documents above the conversation in one scroll (a long conversation pushes the buttons out of reach); two
 scrolling boxes, the controls capped at half the height (two cramped areas); a sticky posting strip under the
 header; tabs for the chat and the posting; icon buttons in the header. The buttons belong where the user's
-attention already is. Capture sits beside the picker rather than with
-the footer's buttons: it adds a posting to choose from, while those act on the chosen one, and among them it read
-as one of the posting's own actions. The menus and the popover close on a click elsewhere. Top
-to bottom:
+attention already is. The menus and the popover close on a click elsewhere.
 
-1. **Header:** ezapply's mark; a status dot (connected, not paired, an error, not running); the posting picker (the
-   20 newest postings and "No posting (general)"; choosing a posting makes it active); **+ Capture**, the header's one
-   tinted button, which captures the current tab as a posting and follows the new active posting (its title says
-   it captures again on the posting's own page; the label stays, so the header doesn't change width), and keeps its
-   full width while the picker's label is cut short in a narrow panel. To leave the picker room to read, the
-   wordmark gives way to the mark alone below 420 px, and the mark goes too below 360 px (Chrome's side panel is
-   320 px at its narrowest); the **posting popover**
-   (item 3), its button showing how many documents the posting has (amber while any isn't approved); a menu with
-   Setup (opens the setup page) and Extension settings (the extension's options page: its port and pairing, opened
-   by the panel itself). No log view: the conversation shows every tool call, and the form log is in the posting's
-   folder. Under the header, for a posting, a switch between its two conversations, **Documents** and
-   **Application** ([agent](agent.md#conversations-servicets)), a dot on the one Claude works in. The panel shows
-   the one picked there, else the one Claude works in for this posting, else Documents; choosing another posting
-   starts over from that rule.
+**The list of applications first.** The panel opens on a list of every application, and opening one shows its
+conversation, with a back arrow to the list. It is laid out for applications in parallel, an agent working in each at
+once ([agent](agent.md#conversations-servicets)): each row says what that application waits on or what the agent is
+doing in it, with no limit on how many there are. Rejected: a posting `<select>` in the header (it hid
+every other application's state); a grouped popover from the header (the others are seen only once it's open); a
+strip of tabs (it holds about eight, with company names only); an icon rail (it takes width from an already narrow
+panel). The cost is one more click to switch, which the **needs-you line** makes up for. Capture is on the list
+and not in an application, since it adds an application to the list.
+
+**The list** (`Applications`, grouped by `applications()`): **Needs you** (a card waits in one of its conversations;
+the row says which, and the card's title or the tool to approve), **Working** (an agent is in one or both of its
+conversations, named: "Documents and Application: Claude Code is working"; a **Stop** button beside it stops those,
+`panel.stop { key }` for each, and no other application's), **Open** (where it stands, from its `PostingStatus`), **Done** (submitted or archived), newest
+first within each. The general conversation joins the groups while it needs the user or the agent is in it, and is
+otherwise last, under Other. The companion lists the 20 newest postings and any older one a card waits on or the
+agent is in, so an application that needs the user is never left off. Opening a row opens that posting's conversations; the companion keeps no "active" posting. On
+the list the footer has only the agent line and the agent settings, and the Needs you cards are only a terminal
+chat's.
+
+Top to bottom, in an application:
+
+1. **Header:** a back arrow to the list; a status dot (connected, not paired, an error, not running); the
+   posting's role, with its company and site under it ("General" for the general conversation); for a posting, the **posting
+   popover** (item 3), its button showing how many documents the posting has (amber while any isn't approved), and for the general conversation, which has no posting or documents, a
+   **Reset** button (a circular-arrow icon; asks first: a new general session) in its place; a
+   menu with Setup (opens the setup page) and Extension settings (the extension's options page: its port and
+   pairing, opened by the panel itself). On the list, the header has ezapply's mark, the status dot,
+   "Applications", **+ Capture** (the header's one tinted button: it captures the current tab as a posting and opens
+   it; its title says it captures again on the posting's own page) and the menu. The wordmark gives way to the mark
+   alone below 420 px, and the mark goes too below 360 px (Chrome's side panel is 320 px at its narrowest). No log
+   view: the conversation shows every tool call, and the form log is in the posting's folder. Under the header, a
+   **needs-you line** while another application (or the general conversation) waits on the user: it names that one
+   and opens it, or says how many wait and goes back to the list. Then, for a posting, a switch between its two
+   conversations, **Documents** and **Application** ([agent](agent.md#conversations-servicets)), a dot on each one
+   an agent works in. The panel shows the one picked there, else one an agent works in for this posting, else
+   Documents; opening another application starts over from that rule.
 2. **When it can't work:** not running ("Start it in your workspace: `./ezapply`"), not paired, or the
    connection's error, as a banner; the rest is shown but disabled. Setup not finished is a banner of its own with
    **Continue setup** (the steps left are named); the rest stays usable, since setup's own tasks go to the agent.
@@ -125,21 +144,22 @@ to bottom:
    yet." before there are any), an approved document with a **trash** button that deletes the PDF (asks first; its
    LaTeX source stays); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
    shown, documents or application; the files stay); and **Delete posting** (red when hovered; asks first; disabled
-   while Claude works; refused while the posting has a review open), which deletes the posting's folder and both its conversations for good, after which the panel follows the active
-   posting again (none). For the general conversation, a line saying there's no posting, and **Reset
-   Conversation** alone (asks first: a new general session). The panel
+   while an agent works in either of the posting's conversations; refused while the posting has a review open), which deletes the posting's folder and both its conversations for good, after which the panel goes back to
+   the list. The panel
    shows only approved or not because approving is the one thing the user does with a document. The finer states
    (`DocumentState`) and the posting's status (`PostingStatus`: drafting, attached, …) are still kept and used by
    the tools and skills; they just aren't shown. No posting-level "documents approved" tag either: each
    document's own tag already says it.
-4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude Code", or for whichever agent is chosen, until taken); Claude's text
+4. **Conversation** (the part that scrolls): the user's messages ("waiting for Claude Code", or for whichever agent is chosen, until taken), and a result ezapply delivered for them as a note by its label ("Your review: sent to Claude Code", [agent](agent.md#results-as-messages)) rather than the block the agent reads; Claude's text
    as Markdown built as elements, never as HTML (`Markdown`: paragraphs, lists, headings, code, bold and italics;
    links stay text); each tool call folded to one line (the tool's name without `mcp__ezapply__`, its summary),
    unfolding to its error or its summary, red when it failed, "…" while it runs; settled cards; each turn's end with
    its cost (the session's total less the turn before's), "Stopped" or "Failed: …"; notices. It follows the newest
    event.
-5. **Needs you** (while anything waits), at the conversation's end, just above the buttons: every open card, oldest
-   first, a card from another conversation labelled with it (or "From a terminal chat", for a Claude Code run by hand in the workspace). The panel scrolls them
+5. **Needs you** (while anything waits), at the conversation's end, just above the buttons: the open cards of this
+   application's two conversations and of a terminal chat, oldest first, one from the other conversation labelled
+   with it (or "From a terminal chat", for a Claude Code run by hand in the workspace). Another application's
+   cards wait for it on the list, and the needs-you line points to them. The panel scrolls them
    into view when one arrives. A **question card**: title, intro, each question by its type (radios,
    checkboxes with Other, a text field or box), the suggestion filled in and marked ("suggested"; a sensitive
    question is flagged and may have one too), `why` under it, "(optional)" ones skippable, **Save for next time**
@@ -147,8 +167,10 @@ to bottom:
    question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
    wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
    the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
-6. **This tab** (first in the footer): what the window's current tab is to the active posting (its page, its
-   application on a site, another posting's application, another page), read again when the tab changes.
+6. **This tab** (first in the footer): what the window's current tab is to the posting shown (its page, its
+   application on a site, including one embedded in a careers page's frame, another posting's application, another
+   page; in the general conversation, only
+   whether it's an application), read again when the tab changes.
 7. **Action buttons**, acting on the chosen posting: **Tailor documents** (the resume, and the cover letter when the posting or the
    preferences call for one), with a menu (opening upwards) for the resume only, the cover letter only, or one PDF;
    **Fill form** on the application's tab, or **Open the application** when the tab isn't it and the posting knows
@@ -156,16 +178,18 @@ to bottom:
    up either way; Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
-   or while Claude works.
+   or while an agent works in the conversation the button goes to: the other one, and every other application,
+   can start at the same time.
    **Sending blocks at once:** from the press of anything that starts a turn (these buttons, Send, Enter) until the
-   companion has answered the send and the state read after it says Claude works, the buttons and Send are
+   companion has answered the send and the state read after it says the agent works, the buttons and Send are
    disabled and the box is read-only (it keeps its focus); a ref holds it within the same frame, so a double click
    or a second Enter sends one message, not two. *Why not just "while Claude works":* the state says so only once
    the companion's answer arrives, and a second press in that gap would queue a second message.
 8. **Chat bar:** a text box, Enter sends and Shift+Enter is a new line; Send, which is Stop while the agent works
    in this conversation and the box is empty (typing still sends: the message waits for the agent); a line above
-   it with what the agent is doing, named as the one in use ("Starting Antigravity…", "Claude Code is working…",
-   working on another posting, messages waiting), or that no agent is available (neither CLI was found when ezapply
+   it with what the agent is doing in this conversation, named as the one in use ("Starting Antigravity…", "Claude
+   Code is working…", messages waiting), then what it's doing elsewhere at the same time (one conversation named,
+   "Also working on Acme: Developer · Application…", more counted), or that no agent is available (neither CLI was found when ezapply
    started). The panel's other lines that name the agent (busy titles, Reset's and a document delete's
    confirmations, a queued message's "waiting for …") name the one in use too.
 9. **Settings line:** the agent (Claude Code or Antigravity, only when both are installed), the permission mode
@@ -191,7 +215,7 @@ What it's for and how approvals work: [documents](documents.md#review-before-att
 | Route | Does |
 |---|---|
 | `GET` (with `?t=`) | The page; sets the cookie. 410 once the review expired |
-| `GET state` | `ReviewPageState`: status (`open`, `answered`, `replaced`, `expired`), the posting's company and role, and per file its name, size, `info` (pages, page size, text layer, encrypted: absent when it isn't a readable PDF), `pageLimit` for a file named like a resume, and `previous` (the version last reviewed); once answered, what was sent |
+| `GET state` | `ReviewPageState`: status (`open`, `answered`, `replaced`, `expired`), the posting's company and role, `agentName` (who gets the answer: the panel conversation's agent, or "Claude Code" for a terminal's review; the page names it wherever it says who revises or receives), and per file its name, size, `info` (pages, page size, text layer, encrypted: absent when it isn't a readable PDF), `pageLimit` for a file named like a resume, and `previous` (the version last reviewed); once answered, what was sent |
 | `GET file/<n>` | The PDF's bytes as they were when the review opened; `?download=1` as an attachment |
 | `GET events` | Server-Sent Events: `state` when the review is answered, replaced or expires |
 | `POST answer` | `{ documents: [{ index, request?, comments?: [{ page, quote, note, rects? }] }] }` → 204; 409 `{ status }` when it isn't open any more; 400 for a body that isn't one |
@@ -219,11 +243,11 @@ no comment and no request is the approved one.
 comment or a request. Either goes to the next document still to decide (after this one, then from the top) and
 scrolls the page back to its top, since below 900 px the button sits under the viewer and the next document would
 otherwise open with only its panel in view. On the
-last one left it reads **Send to Claude** and sends the answer, with a line under it saying what that does to this
+last one left it reads **Send to <agent>** (`agentName`, above) and sends the answer, with a line under it saying what that does to this
 document (approves it as shown, or asks for its changes). An approved document shows **Undo approval** in its
 place, the same size and shape but in the accent's soft tint instead of its fill, so it reads as the way back
 rather than the next step; once every document is decided (a send that failed, or the user went back to one),
-**Send to Claude** under it. *Why one button:* approving and sending were two presses in two places, and the last
+**Send to <agent>** under it. *Why one button:* approving and sending were two presses in two places, and the last
 approval was always followed by the send. *Why under the edits box:* the decision follows what the user just wrote
 (a comment or a request turns it into Request Changes). It stays stuck to the panel's bottom edge while the rest
 scrolls, so it's in reach however long the panel gets; below 900 px, where the page scrolls rather than the panel,
@@ -322,7 +346,7 @@ window gets focus. The comparison stops when no page listens.
 | Your profile | None yet: **Have Claude draft it from my resume**. Then a form of every field the schema has, the often-asked ones marked when empty, the schema's errors under their fields; a draft that arrives replaces the form unless the user has started editing | task `draft-profile`, `profile` |
 | Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview and "Anything to change in how it looks?" | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`; `compile`, `import` |
 | Screening questions | The unanswered ones, eight at a time, the suggestion filled in (a sensitive one's too: Claude still asks about it every time, suggesting what's saved; left empty, there's no suggestion); **Save these**. Then, read-only, the questions [answered from the profile](profile-and-templates.md#answer-bank-profileanswersyaml), each with what the profile holds or that it holds nothing yet | `answers` |
-| Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters | `preferences` (`attach_mode`'s setting and `profile/preferences.md`) |
+| Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters. Below them, a setting of its own, saved the moment it's changed (it's the extension's behaviour, not how Claude writes): **Notify me when Claude finishes a reply or asks me something** ([notifications](extension.md#notifications-notifyts)) | `preferences` (`attach_mode`'s setting and `profile/preferences.md`); `notifications { turnEnd }` (`notifications.turnEnd` in `ezapply.config.json`) |
 | Library | A drop zone (or the browser's picker: here only contents are needed), the files there, each with a trash button that deletes it for good after asking | `library` |
 
 Plus **Finish setup** (**Finish later** while required steps remain), which ends the agent's wait, and an
@@ -344,9 +368,13 @@ gets one (`agentIn` in the page's state):
 - **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
   ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:
   `onboarding { taskId, result: { ok, note? } }`, which marks it done or failed with the note and
-  returns. The task is running from then; Claude busy in another conversation fails it with why, and the page
-  offers it again. The page shows Claude as listening while the agent is available, and says to follow it in the
-  ezapply panel, where its commands are approved.
+  returns. The task is running from then, whatever other conversations the agent works in; a send that fails
+  (no agent) fails the task with why, and the page offers it again. A turn that carried the task and ends without
+  its report fails it too, saying why: the user pressed Stop ("Stopped before it finished"), the turn ended with an
+  error, or the agent ended it without reporting (its reply is in the panel). Without this, a stopped task would
+  spin on the page forever, since nothing else ends it. A report that comes later (the user answers in the panel
+  and the agent reports then) still marks it done. The page shows the agent as listening while it is available,
+  and says to follow it in the ezapply panel, where its commands are approved.
 - **Without a panel agent (`terminal`; a companion started without Claude Code, which only tests do):** the agent sits in a blocking [`onboarding { wait: true }`](../mcp-tools.md#setup-and-status)
   call; a task the page queues wakes it, and it gets `{ id, kind, params, how }`. Its report
   (`onboarding { taskId, result, wait: true }`) marks the task done or failed and waits for the next in the same call. Tasks
@@ -354,7 +382,10 @@ gets one (`agentIn` in the page's state):
   lost track of it. The page shows whether the agent is listening; a queued task while it isn't says to tell
   Claude in the terminal to continue.
 
-The page shows each task (queued, running, done with Claude's note, failed).
+The page shows each task (queued, running, done with the agent's note, failed). Wherever it speaks of the agent
+(the task lines, its pane, the buttons that ask it), it uses `agentName` from the page's state: the agent the panel
+uses (Claude Code or Antigravity, `AgentService.agentName`), or Claude Code in a terminal. The step texts in the
+table above say "Claude" for short.
 
 **Why the agent installs TeX, not the page:** Claude Code's permission prompt (in the terminal, or an approval card
 in the panel) is where the user approves a command, and a loopback page able to start installers would widen what a

@@ -19,19 +19,17 @@ export function registerBrowserTools(server: McpServer, s: Services): void {
     },
     tool(s.log, "browser_status", async () => {
       const bridge = s.bridge.status();
-      const activePostingId = await s.postings.activeId();
       if (!bridge.connected) {
         return {
           companionVersion: s.version,
           extension: bridge,
-          activePostingId,
           hint: bridge.paired
             ? "Extension not connected. Ask the user to open their browser; it reconnects automatically. If the badge stays grey, reload the extension."
             : "Extension not paired. Call extension_pair.",
         };
       }
       const browser = await s.bridge.call("browser.status", {}, 5_000);
-      return { companionVersion: s.version, extension: bridge, activePostingId, ...browser };
+      return { companionVersion: s.version, extension: bridge, ...browser };
     }),
   );
 

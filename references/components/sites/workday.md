@@ -137,14 +137,19 @@ digits typed with `typeChar`, then a browser-style `change`; only if it still do
 directly. **What a part holds** is read from its display element (`…-display`, showing "06" while the input holds
 "6"), else `aria-valuenow`, else the input, so a value the widget didn't take reads as empty in the fill result and
 in `get_form`. When the field still shows an error after the parts are entered, they're entered once more (a date
-was seen taken on the second entry). Parts that don't read back the value fail with the date for the user to type;
-parts that do while the field shows an error stay `ok` with "Filled, but the page reports: …". The fixture's
-`dateWidget: "keys"` (digits only in keydown) and `"stuck"` (synthetic keys ignored) model both cases.
+was seen taken on the second entry). A part checks only itself as it's entered, and a busy page was seen re-parsing
+the whole date as the first day digit landed (the month "08" became "2", the year its default), so after the parts
+are entered every part is compared with what's wanted and those that drifted are entered once more, before the
+read-back (the trace's `date parts drifted` branch). Parts that don't read back the value fail with the date for
+the user to type; parts that do while the field shows an error stay `ok` with "Filled, but the page reports: …".
+The fixture's `dateWidget: "keys"` (digits only in keydown), `"stuck"` (synthetic keys ignored) and `"reparse"`
+(Month, Day and Year, rewritten on the first day digit) model these cases.
 
 Typing works on live tenants while the page has focus; with the browser window behind another, every multi-part
 date read back right while Workday called it required. So the application tab runs under focus emulation, which
 gives the page focus wherever its window is ([the tab at full speed](../../mcp-tools.md#forms)), and debug mode
-records `focused` and the date's `date part set directly` and `date entered again` branches, to confirm it.
+records `focused` and the date's `date part set directly`, `date entered again` and `date parts drifted` branches,
+to confirm it.
 
 **Tests.** The behavioural fixture (`test/fixture.ts`) is the one model of a Workday step: the adapter tests
 use it in jsdom, and the companion's e2e tests run the real adapter on it behind a fake extension, so a new

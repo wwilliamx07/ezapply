@@ -17,6 +17,10 @@ describe("the built manifest", () => {
     expect(manifest.permissions).toContain("debugger");
   });
 
+  it("holds notifications, for the agent's turn ends and questions", () => {
+    expect(manifest.permissions).toContain("notifications");
+  });
+
   it("covers every site, at install, and nothing is left to grant one origin at a time", () => {
     expect(manifest.host_permissions).toEqual([...HOST_PERMISSIONS]);
     expect(manifest.host_permissions).toEqual(["<all_urls>"]);

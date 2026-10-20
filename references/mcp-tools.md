@@ -11,9 +11,9 @@ Results and descriptions are kept short because they cost context: results are s
 indentation (indentation added a fifth to a third to large results), `get_form` leaves out default values,
 and descriptions say what Claude needs and no more (all of them sit in context for the whole session).
 
-**Naming.** The names grew up in two styles: most groups are `<noun>_<verb>` (`posting_activate`,
+**Naming.** The names grew up in two styles: most groups are `<noun>_<verb>` (`posting_get`,
 `template_import`, `repo_sync`), the form tools read as commands (`fill_fields`, `go_next`). New tools follow
-their group's style, `<noun>_<verb>` everywhere except the form group. The odd ones out (`posting_active`
+their group's style, `<noun>_<verb>` everywhere except the form group. The odd ones out (`tab_bind`
 vs `postings_list`, `repos_selection_get` vs `github_list_repos`, `claims_check` vs `knowledge_mark_indexed`)
 stay as they are: renaming would break every workspace's skills and habits for no gain. If a major version
 ever happens, rename with the old names kept as aliases for a while. The skills spell out parameter names
@@ -30,16 +30,26 @@ too ([call shapes](components/workspace.md#call-shapes)), so renaming a paramete
 | `workspace_change_mark` | `ids[]`, `as` (`done` \| `later`), `hours?` | `{ marked[] { id, as, removed?, until? } }`; every id is checked before any is marked. `later` on a `repo-pushed` change puts that repo off for `hours` (24 by default, capped at 2160, i.e. 90 days): it isn't checked or asked about in any chat until `until`, and re-indexing or deselecting it ends that early. `later` on any other change hides it until the chat ends, and `hours` with one is refused. `done` records the derived part as current: a template's source hash, a scratchpad import no longer watched (drops `importedFrom`), a library document that isn't a template (until it changes), the resume template the profile now matches, the profile the cover fields now match; for `repo-deselected` it deletes the repo's knowledge folder and cache (`removed`). Refused for `repo-pushed` (re-indexing ends it) and for an id that isn't current (`not_found`) |
 | `extension_pair` | `replace?` | Opens pairing for 15 min and returns `chrome: { page, steps, folder }`, what to load in Chrome or another Chromium browser (plus a hint if not built). Already connected → `{ connected: true }`. `replace` first forgets the paired extension and rotates the code |
 | `extension_pair_wait` | `timeoutSeconds` (5–900, default 180) | Waits for the extension to connect; `{ connected, extension? , hint? }` |
-| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), active posting id, and when connected the extension version and every tab with its site (a registry site, as its page shows it, else its URL: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce`; else `generic`; [telling a page's site](components/extension.md#telling-a-pages-site-framests)) and `frames` (applications embedded in the page: `{ frameId, url, site }`); when not, a hint |
+| `browser_status` | — | Companion version, bridge status (with `browser { name, version? }`: the browser the extension runs in, where ezapply opens pages and PDFs; kept after a disconnect), and when connected the extension version and every tab with its site (a registry site, as its page shows it, else its URL: `workday`, `oracle`, `greenhouse`, `lever`, `ashby`, `phenom`, `dayforce`; else `generic`; [telling a page's site](components/extension.md#telling-a-pages-site-framests)) and `frames` (applications embedded in the page: `{ frameId, url, site }`); when not, a hint |
 
 ## Postings
 
+There's no workspace-wide "active posting". A call is about the posting it names (`id`), else its conversation's
+own: a posting's panel conversation works on that posting (`PostingsService.resolve`, from the call's session), so
+conversations about different postings run side by side
+([agent](components/agent.md#conversations-servicets)). From a posting's conversation, naming another posting is
+`bad_request` (the user opens that one from the panel's list). Elsewhere (the general conversation, a terminal
+chat) there's no default: leaving out `id` is `no_posting`, and the form tools work without a posting (nothing is
+credited or logged, no tab is bound). The form tools' default tab and crediting use the conversation's posting.
+*Why:* one global choice meant two conversations working at once could act on each other's posting, and a
+terminal chat silently worked on whatever was captured last.
+
 | Tool | Input | Does |
 |---|---|---|
-| `posting_active` | — | Also `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). Within 40 s of `ezapply` starting, first waits for the paired extension to reconnect, and for any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The active posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, `active`. When the paired extension hasn't connected since the start (the wait ran out), adds `extensionReconnecting` (a note: a capture made while ezapply wasn't running may still arrive). None → `no_active_posting` (with the same note in the hint, if it applies) |
-| `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt, active. Settles like `posting_active`; with the extension still reconnecting the result is `{ postings, extensionReconnecting }` |
-| `posting_activate` | `id` (a plain folder name; anything with separators or `..` is `bad_request`), `tabId?` | Make it active (an unknown id is `not_found`); returns its details. With `tabId` (only when the user says that tab is this posting's application, usually from a `postingMismatch` hint), also binds that tab to it and stores the tab's site, tenant and job as the posting's `application` (`from: "user"`); the result adds `boundTab { tabId, url }`. A tab that isn't on a form site is `bad_request`, a closed one `not_found` ([which posting](#forms)) |
-| `posting_update_meta` | `id?` (default active), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status. `reqId` is trimmed, and one of more than three words is refused as a title (`bad_request`, hint: put it in `role`), since it would be compared with application URLs' job ids. Setting it lets the posting's capture be searched again for its application |
+| `posting_get` | `id?` (a plain folder name; anything with separators or `..` is `bad_request`; default: the conversation's posting) | Within 40 s of `ezapply` starting, first waits for the paired extension to reconnect, and for any capture it queued ([details](components/companion.md#extension-bridge-extensionbridge)). The posting's metadata, folder, paths of `posting.md`, `visible.txt`, `raw.html`, its files, and `documents { attachMode, approved[] { file, approvedAt, current }, openReview? }` ([review](components/documents.md#review-before-attaching)). When the paired extension hasn't connected since the start (the wait ran out), adds `extensionReconnecting` (a note: a capture made while ezapply wasn't running may still arrive). An unknown id is `not_found`; no id outside a posting's conversation is `no_posting` (with the same note in the hint, if it applies) |
+| `postings_list` | `status?`, `company?` (substring over company and tenant), `limit?` (default 25, max 200) | Postings newest first with id, company, role, status, site, url, updatedAt. Settles like `posting_get`; with the extension still reconnecting the result is `{ postings, extensionReconnecting }` |
+| `tab_bind` | `tabId`, `id?` (default: the conversation's posting) | Only when the user says that tab is this posting's application, usually from a `postingMismatch` or `postingBound` hint: binds the tab to the posting, replacing any earlier binding, and stores the tab's site, tenant and job as the posting's `application` (`from: "user"`). Returns `{ posting, boundTab { tabId, url }, application }`. A tab that isn't on a form site is `bad_request`, a closed one `not_found` ([which posting](#forms)) |
+| `posting_update_meta` | `id?` (default: the conversation's posting), `company?`, `role?`, `reqId?`, `location?`, `deadline?`, `bundleRequired?`, `status?` | Correct or add metadata; move status. `reqId` is trimmed, and one of more than three words is refused as a title (`bad_request`, hint: put it in `role`), since it would be compared with application URLs' job ids. Setting it lets the posting's capture be searched again for its application |
 
 ## Documents
 TeX source under `postings/` or `templates/`; PDFs read from `postings/`, `templates/`, `library/`; output
@@ -54,7 +64,7 @@ under `postings/` or `library/`. Details: [documents.md](components/documents.md
 | `pdf_merge` | `inputs[] { path, pages?, label? }`, `output`, `bookmarks` (true), `normalize` (`auto`/`none`/`letter`/`a4`), `title?`, `author?` | One PDF with bookmarks and consistent page sizes; returns sections with page ranges, and snapshots the output to `.history/` |
 | `pdf_from_images` | `images[]`, `output`, `pageSize` (`letter`/`a4`) | Images → PDF, one per page |
 | `pdf_compress` | `path`, `output?` (default overwrite), `targetBytes?` (default config, 5 MB) | Lossless, then Ghostscript if installed; before/after, method, target met |
-| `review_documents` | `files[]` (1–6 PDFs under one `postings/<id>/`) or `reviewId`; `short?[] { file, reason }`; `timeoutSeconds` (5–900, default 600) | With `files`: opens a review page in the user's browser showing those PDFs, where the user approves each or comments on passages and writes what should change, and waits for the answer: `{ reviewId, url, postingId, files, openedIn, done: true, approved[], changes[] { file, request?, comments?[] { page, quote, note } } }` (`openedIn`: the browser it opened in, or `default`), or on timeout `{ …, done: false, url, hint }`. When no browser opened it returns at once with `openedBrowser: false`, `tell` (the URL to give the user) and a hint to wait with `reviewId`. With `reviewId`: waits again for that review (`{ reviewId, done, … }`; a replaced one gives `supersededBy`; an unknown or expired one is `not_found`). Both or neither of `files` and `reviewId` is `bad_request`. A resume or cover letter with 3 or more free lines on its last page is `bad_request` unless `short` names it with the reason it's meant to be shorter ([underfilled](components/documents.md#review-before-attaching)). A newer review of the same posting replaces an open one. Why opening and waiting are one tool: [details](components/documents.md#review-before-attaching) |
+| `review_documents` | `files[]` (1–6 PDFs under one `postings/<id>/`) or `reviewId`; `short?[] { file, reason }`; `timeoutSeconds` (5–900, default 600) | With `files`: opens a review page in the user's browser showing those PDFs, where the user approves each or comments on passages and writes what should change, and waits for the answer: `{ reviewId, url, postingId, files, openedIn, done: true, approved[], changes[] { file, request?, comments?[] { page, quote, note } } }` (`openedIn`: the browser it opened in, or `default`), or on timeout `{ …, done: false, url, hint }`. When no browser opened it returns at once with `openedBrowser: false`, `tell` (the URL to give the user) and a hint to wait with `reviewId`. With `reviewId`: waits again for that review (`{ reviewId, done, … }`; a replaced one gives `supersededBy`; an unknown or expired one is `not_found`). **From a panel conversation** it doesn't wait: it returns at once with `pending: <reviewId>` and a hint to end the turn, beside `openedIn` (or `openedBrowser: false` and `tell`), and the answer, or `{ done: false, expired }`, comes as the conversation's next message ([results as messages](components/agent.md#results-as-messages)); `reviewId` on an open review returns `pending` again. Both or neither of `files` and `reviewId` is `bad_request`. A resume or cover letter with 3 or more free lines on its last page is `bad_request` unless `short` names it with the reason it's meant to be shorter ([underfilled](components/documents.md#review-before-attaching)). A newer review of the same posting replaces an open one. Why opening and waiting are one tool: [details](components/documents.md#review-before-attaching) |
 | `attach_mode_set` | `mode` (`after-approval` / `immediately`) | Saves `documents.attach` in `ezapply.config.json`, keeping everything else as written |
 | `open_file` | `path` (under `postings/`, `templates/`, `library/`) | Opens a PDF, image or `.txt` in the user's browser (the extension's), anything else in its default app, without waiting. `{ opened, openedIn }` (a browser name, or `default`) |
 
@@ -115,7 +125,7 @@ context was compacted may have lost them: the notes are short, and the generic s
   while `go_next` changes the step). After the tab is chosen, each form call waits for earlier ones on the
   same tab and runs in order (`onTab`, a `KeyedQueue` per tab id); calls on other tabs aren't held up, and a
   failed call doesn't stop the next. Choosing the tab (reading the debug setting, asking the extension for its
-  tabs, reading the active posting) is done one call at a time, in the order the calls came: those reads can
+  tabs, reading the conversation's posting) is done one call at a time, in the order the calls came: those reads can
   finish out of order, and a call that overtook an earlier one would act on the page first.
 
 - **Embedded applications:** an application in a frame of another site's page (a careers page showing its
@@ -123,14 +133,14 @@ context was compacted may have lost them: the notes are short, and the generic s
   (`formTabs`). Everything below (tab choice, which posting, binding) works on that URL, never the careers page
   around it, so the form is matched by its own board and job; a posting captured from the frame (`frameUrl`) or
   on a page naming the job (`?gh_jid=`) has them too. Asked for by `tabId`, a tab's own page wins when it's an
-  application, else its frame that best matches the active posting, else its first. Every call on it sends the
+  application, else its frame that best matches the conversation's posting, else its first. Every call on it sends the
   frame's `frameId` (`framed`); results carry `frameId` and the frame's `url`, and the agent keeps passing just the
   `tabId`. The frame is resolved again on every call, never cached, since a frame that reloads gets a new id.
-  `tab.show`, `screenshot` and the one-call-at-a-time queue stay per tab. `posting_activate { id, tabId }` binds the
+  `tab.show`, `screenshot` and the one-call-at-a-time queue stay per tab. `tab_bind { tabId }` binds the
   tab's own application, else the one embedded in it.
 - **Which posting** (`forms/match.ts`): fills, removals, uploads, steps and the confirmation page are appended
-  to the active posting's `form-log.jsonl`, and its status moves forward automatically, but only when the tab may
-  be that posting's. What a URL says (site, tenant, job) comes only from the site registry, and what a page says
+  to the conversation's posting's `form-log.jsonl`, and its status moves forward automatically, but only when the
+  tab may be that posting's. A call with no posting (outside a posting's conversation) credits and logs nothing. What a URL says (site, tenant, job) comes only from the site registry, and what a page says
   from its site's definition (`FormSchema.job`), so every registry site is matched the same way.
   - **The posting's side:** its `application` (`meta.json`): its own URL when that's a form site's page, else
     found in its capture (`postings/application.ts`: the page's link to the application, or an embedded board's
@@ -153,20 +163,20 @@ context was compacted may have lost them: the notes are short, and the generic s
     recently used. The tenant is the registry's `siteTenant` (a Workday tenant, an Oracle career site as
     `host/site`, a Greenhouse board…). The companion picks from `browser.status` and always passes the tab
     explicitly.
-  - **Binding:** the first call that changes a page binds the tab to the active posting (in memory; a restart
+  - **Binding:** the first call that changes a page binds the tab to the conversation's posting (in memory; a restart
     loses it) and, when the posting had no `application`, stores the tab's site, tenant and job as one
     (`from: "bound"`). A tab bound to one posting is `other` for the next even with nothing else to compare: two
     applications at one employer captured from a job board can't take each other's fills. When the bound tab was
     `unconfirmed`, that result carries `postingBound { id, company?, role?, formTitle?, hint }` once, and the agent
-    tells the user which posting this application is credited to. `posting_activate { id, tabId }` rebinds.
+    tells the user which posting this application is credited to. `tab_bind { tabId }` rebinds.
   - **Results:** `get_form` carries `postingMatch { by, from? }` (`by`: the evidence, or
     `["unconfirmed"]`; `from`: how the application was found), and other results carry it when it changed since
     the tab's last call. Every `form-log.jsonl` event gets `matchedBy`. A tab that's another posting's is read
-    with `postingMismatch { activePosting { id, company?, role?, tenant?, job? }, formTenant?, formJob?,
+    with `postingMismatch { posting { id, company?, role?, tenant?, job? }, formTenant?, formJob?,
     formTitle?, boundTo?, by, hint }`; every call that changes the page (`fill_fields`, `upload_file`,
     `remove_items`, `add_repeatable`, `remove_repeatable`, `go_next`, `go_back`, `page_action`) is refused with
-    `posting_mismatch` and the same hint (activate the right posting, or switch tabs, or, if the user says this
-    tab is the posting's, `posting_activate { id, tabId }`).
+    `posting_mismatch` and the same hint (fill it from that posting's conversation in the panel, or switch tabs,
+    or, if the user says this tab is the posting's, `tab_bind { tabId }`).
   - *Why:* without the check, two open applications or an old confirmation page on screen would credit the wrong
     posting, up to marking it `submitted`. Comparing only tenants and URL jobs isn't enough: postings captured off
     the form sites (a school's job board, employers' careers pages) have neither, so two open applications at one
@@ -243,5 +253,5 @@ a terminal chat's only while a panel is open.
 
 | Tool | Input | Does |
 |---|---|---|
-| `ask_user` | `title`, `intro?`, `questions[]` (1–25: `id`, `prompt`, `type` `single` \| `multi` \| `text`, `options[] { value, label?, description? }`, `allowOther?`, `min?`, `max?`, `multiline?`, `placeholder?`, `maxLength?`, `proposed?`, `why?`, `sensitive?`, `required?`, `remember? { answerId }`), or `askId`; `timeoutSeconds` (5–900, default 600) | Shows the questions on a card and waits: `{ done: true, answers: { <id>: { value, other?, remember? } \| { skipped: true } }, savedToAnswerBank?, toSave?, hint? }` (answers marked to save go into the answer bank when it has the entry, else come back in `toSave` for the agent to add), `{ replied, message }` when the user wrote in the chat instead, `{ done: false, askId, hint }` on timeout (`ask_user { askId }` waits again; a late answer is kept), `{ noPanel, hint }` for a terminal chat's question with no panel open. A suggestion may go on any question, sensitive ones too. A suggestion that isn't an option (without `allowOther`), a choice question without options, an id twice or min over max are `bad_request` |
+| `ask_user` | `title`, `intro?`, `questions[]` (1–25: `id`, `prompt`, `type` `single` \| `multi` \| `text`, `options[] { value, label?, description? }`, `allowOther?`, `min?`, `max?`, `multiline?`, `placeholder?`, `maxLength?`, `proposed?`, `why?`, `sensitive?`, `required?`, `remember? { answerId }`), or `askId`; `timeoutSeconds` (5–900, default 600) | Shows the questions on a card and waits: `{ done: true, answers: { <id>: { value, other?, remember? } \| { skipped: true } }, savedToAnswerBank?, toSave?, hint? }` (answers marked to save go into the answer bank when it has the entry, else come back in `toSave` for the agent to add), `{ replied, message }` when the user wrote in the chat instead, `{ done: false, askId, hint }` on timeout (`ask_user { askId }` waits again; a late answer is kept), `{ noPanel, hint }` for a terminal chat's question with no panel open. **From a panel conversation** it returns `{ pending: <askId>, hint }` at once (the hint says to end the turn), and the answers or reply come as the conversation's next message ([results as messages](components/agent.md#results-as-messages)); `askId` on an open card returns `pending` again. A suggestion may go on any question, sensitive ones too. A suggestion that isn't an option (without `allowOther`), a choice question without options, an id twice or min over max are `bad_request` |
 | `permission_ask` | `tool_name`, `input`, `tool_use_id?` | Claude Code's permission prompt for the panel's agent (`--permission-prompt-tool`), not for the agent to call: a card with the tool and its input. Returns Claude Code's result as JSON text: `{ behavior: "allow", updatedInput }`, or `{ behavior: "deny", message }` (the user's reason; no answer in 10 minutes; the conversation reset; no panel for a terminal chat) |

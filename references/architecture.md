@@ -47,8 +47,8 @@ otherwise.
   in its own process, listening on `127.0.0.1:<port>` (default 17373), with no Claude in the terminal, which only
   says where to go and stops on Ctrl+C ([cli](components/cli.md#ezapply-panelts)). It opens the setup page while
   setup isn't finished. If the port is taken, it says by what and exits. The user works in the extension's side
-  panel; the companion starts Claude Code headless when a conversation needs it, one process at a time, and ends
-  it when the companion stops ([agent](components/agent.md)). No conversation carries one posting into the next:
+  panel; the companion starts Claude Code headless when a conversation needs it, a process per conversation, side by
+  side, and ends them when the companion stops ([agent](components/agent.md)). No conversation carries one posting into the next:
   each posting has its own two, one tailoring its documents and one filling its application, so neither a finished
   application nor the other part's work is re-sent with every turn.
 - **Claude Code** runs in the workspace, started by the companion for a panel conversation, with that
@@ -68,8 +68,8 @@ otherwise.
   only, and `ezapply` sends `console.*` and stderr to the log too (libraries such as pdfjs print).
   An uncaught error in companion code is logged and the process carries on, so a bug doesn't take Claude's
   tools away mid-session. After `ezapply` starts, tools that need the extension wait up to 40 s from
-  the start for it to reconnect (its 30 s alarm), and `posting_active`/`postings_list` also wait for a
-  capture it queued while ezapply wasn't running, so the active posting is never stale. The user typing
+  the start for it to reconnect (its 30 s alarm), and `posting_get`/`postings_list` also wait for a
+  capture it queued while ezapply wasn't running, so a posting just captured is never missing. The user typing
   their first message usually uses up most of that window; if it runs out, the posting tools say the
   extension may still reconnect.
 - **The extension background** is a service worker. It connects to the companion, sends a ping every 20 s,
@@ -120,7 +120,7 @@ Every HTTP request must be addressed to the bound loopback host (`Host` check ag
 | `~/.ezapply/logs/companion.log` (+ `.1`, `.2`) | structured logs, personal data redacted, rotated at 5 MB | companion |
 | OS keychain, service `ezapply` | GitHub App client secret, GitHub user token | companion |
 | `~/ezapply-home/` | everything the user owns: profile, templates, knowledge, postings, library, repo cache | user, Claude, companion |
-| extension `storage.local` | port, pairing code, connection state, pending capture, active posting label, the panel's agent settings | extension |
+| extension `storage.local` | port, pairing code, connection state, pending capture, the panel's agent settings | extension |
 
 Formats of every file: [data-formats.md](data-formats.md).
 
@@ -154,8 +154,9 @@ Formats of every file: [data-formats.md](data-formats.md).
   companion's own reads through the writes' queue wouldn't be enough, since other programs open files too.
 - **One at a time where it matters.** Operations that would collide run through a per-key queue
   (`util/keyed-queue.ts`): captures and posting metadata updates, builds of the same `.tex` file (they share
-  its `.build/` folder), syncs of the same repo (git's `index.lock`), and form calls on the same browser tab
-  (Claude Code calls tools in parallel, and two calls acting on one page interfere).
+  its `.build/` folder), syncs of the same repo (git's `index.lock`), form calls on the same browser tab
+  (Claude Code calls tools in parallel, and two calls acting on one page interfere), and saves to the same profile
+  file (conversations run side by side).
 - **Opening things for the user.** `Opener` (`util/open.ts`) opens one of the companion's own
   `http://127.0.0.1:<port>/` pages, or a PDF or image, in the browser the extension reported it runs in
   (the one with the user's sign-ins, which may not be the system default), by starting that browser's

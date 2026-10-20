@@ -46,13 +46,18 @@ const ConversationsFile = z.object({
 type ConversationsFile = z.infer<typeof ConversationsFile>;
 type Conversation = z.infer<typeof Conversation>;
 
-/** What the panel shows about the agent. */
+/** One conversation's running process, as the panel shows it. */
+export interface ConversationState {
+  conversation: string;
+  status: AgentStatus;
+  /** Messages sent that the agent hasn't taken yet. */
+  queued: number;
+}
+
+/** What the panel shows about the agent: working when any conversation is, and each running process. */
 export interface AgentState {
   status: AgentStatus;
-  /** The conversation whose process is running, if one is. */
-  conversation?: string;
-  /** Messages sent that Claude hasn't taken yet. */
-  queued: number;
+  conversations: ConversationState[];
 }
 
 export interface AgentServiceOptions {
@@ -67,6 +72,14 @@ export interface AgentServiceOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+/** A message written to the agent; `delivery`: what the panel shows for a delivered result instead of its text. */
+interface Untaken {
+  id: string;
+  text: string;
+  at: string;
+  delivery?: string;
+}
+
 interface Live {
   key: string;
   sessionId: string;
@@ -77,7 +90,7 @@ interface Live {
   resumed: boolean;
   busy: boolean;
   /** User messages not taken yet, oldest first. */
-  untaken: { id: string; text: string; at: string }[];
+  untaken: Untaken[];
   mcpChecked: boolean;
   stopping: boolean;
   /** Settings switches sent and not yet answered: what each was, for a notice if Claude Code refuses it. */
@@ -88,15 +101,18 @@ interface Live {
 
 /**
  * The agent behind the panel: the coding agent chosen in the panel (Claude Code or Antigravity), headless, one process per conversation (a posting's two, tailoring its
- * documents and filling its application, or the general one), relaying what it does as events. One process runs at a time: switching conversations closes an idle one,
- * and refuses while it works, since two agents filling forms or editing one posting's files would collide.
+ * documents and filling its application, or the general one), relaying what it does as events. Conversations run side by side, as many as the user starts: each
+ * works on its own posting (the tools resolve it from the session, `PostingsService.ownPosting`), and a form tab is bound to one posting.
  *
  * On disk, in the workspace's `agent/`: `conversations.json` (each conversation's session, earlier sessions ended
  * by Reset) and `<conversation>/<session>.jsonl` (a posting's under `<posting>/<part>/`) (the session's events, for the panel's history).
  * The agent settings are the extension's, held here in memory (`setPrefs`).
  */
 export class AgentService {
-  private live: Live | null = null;
+  /** Each conversation's running process. */
+  private readonly live = new Map<string, Live>();
+  /** Processes being started, so two sends at once to one conversation start one. */
+  private readonly starting = new Map<string, Promise<Live>>();
   private readonly listeners = new Set<(conversation: string, event: AgentEvent) => void>();
   private readonly stateListeners = new Set<() => void>();
   private fileWrites: Promise<unknown> = Promise.resolve();
@@ -109,8 +125,8 @@ export class AgentService {
   private readonly modelLists = new Map<AgentKind, Promise<AgentModelOption[]>>();
   private readonly listedModels: Partial<Record<AgentKind, AgentModelOption[]>> = {};
   private upgraded: Promise<void> | null = null;
-  /** The last process asked to end, until it has: the next one starts after it, so two never share a session. */
-  private closing: Promise<void> = Promise.resolve();
+  /** Each conversation's last process asked to end, until it has: the next one starts after it, so two never share a session. */
+  private readonly closing = new Map<string, Promise<void>>();
 
   constructor(private readonly opts: AgentServiceOptions) {
     opts.needs.onSettled((record, outcome) => {
@@ -136,11 +152,27 @@ export class AgentService {
   }
 
   state(): AgentState {
-    if (!this.available) return { status: "unavailable", queued: 0 };
-    const l = this.live;
-    if (!l) return { status: "idle", queued: 0 };
-    const status: AgentStatus = !l.initialized && l.untaken.length > 0 ? "starting" : l.busy ? "working" : "idle";
-    return { status, conversation: l.key, queued: l.untaken.length };
+    if (!this.available) return { status: "unavailable", conversations: [] };
+    const conversations = [...this.live.values()].map((l) => ({
+      conversation: l.key,
+      status: liveStatus(l),
+      queued: l.untaken.length,
+    }));
+    const any = (s: AgentStatus) => conversations.some((c) => c.status === s);
+    return { status: any("working") ? "working" : any("starting") ? "starting" : "idle", conversations };
+  }
+
+  /** A conversation's status: idle when no process of its runs. */
+  statusOf(key: string): AgentStatus {
+    if (!this.available) return "unavailable";
+    const l = this.live.get(key);
+    return l ? liveStatus(l) : "idle";
+  }
+
+  /** The agent's name, as its notices give it ("Claude Code"): the one running the conversation, else the one in use. */
+  agentName(key?: string): string {
+    const l = key ? this.live.get(key) : undefined;
+    return l?.backend.name ?? this.opts.backends?.[this.settings().agent]?.name ?? "The agent";
   }
 
   /** Every event, with its conversation. Returns the function that stops listening. */
@@ -158,7 +190,7 @@ export class AgentService {
   /** The conversation a Claude Code session belongs to, when it's one of the panel's. */
   async conversationOf(sessionId: string): Promise<string | undefined> {
     await this.upgrade();
-    if (this.live?.sessionId === sessionId) return this.live.key;
+    for (const l of this.live.values()) if (l.sessionId === sessionId) return l.key;
     const file = await this.readFile();
     return Object.entries(file.conversations).find(([, c]) => c.sessionId === sessionId)?.[0];
   }
@@ -170,10 +202,10 @@ export class AgentService {
     if (!body) throw new EzError(ErrorCode.BadRequest, "The message is empty.");
     if (!this.available) throw unavailable();
     await this.upgrade();
-    // While a card of this conversation is open, Claude sits in the tool call that asked, and a message sent to it
-    // would wait for that call (up to 10 minutes). So the message answers the card: a question's reply, or a deny
-    // whose reason is the message, as typing does at Claude Code's own prompts.
-    const open = this.live?.key === key ? this.opts.needs.newestOpen(key) : undefined;
+    // While a card of this conversation is open, the message answers it, as typing does at Claude Code's own
+    // prompts: a question's reply (delivered as its result), or a deny whose reason is the message (the agent sits
+    // in the permission call meanwhile, and a message would wait for it).
+    const open = this.live.has(key) ? this.opts.needs.newestOpen(key) : undefined;
     if (open) {
       const id = randomUUID().slice(0, 8);
       this.emit(key, { kind: "user", at: new Date().toISOString(), id, text: body, taken: true });
@@ -181,29 +213,54 @@ export class AgentService {
       else this.opts.needs.decide(open.id, false, body);
       return { id };
     }
-    if (this.live && this.live.key !== key) {
-      if (this.live.busy) {
-        throw new EzError(
-          ErrorCode.BadRequest,
-          `${this.live.backend.name} is still working in another conversation.`,
-          "Stop it, or wait until it's done, then send this again.",
-        );
+    return this.write(key, { id: randomUUID().slice(0, 8), text: body, at: new Date().toISOString() });
+  }
+
+  /**
+   * What a tool call left pending in a panel conversation (an ask's answers, how a review ended), sent to the
+   * conversation once `result` settles: a message in an `<ezapply-result>` block that starts its next turn, or joins
+   * the running one, resuming its process if it ended. The panel shows its `label` instead of the block. Dropped
+   * when the conversation was reset or forgotten meanwhile, since the new session never asked; nothing is sent when
+   * `result` settles to null.
+   */
+  deliverLater(
+    key: string,
+    what: { tool: string; id: string },
+    result: Promise<{ value: object; label: string } | null>,
+  ): void {
+    void (async () => {
+      const asked = (await this.readFile()).conversations[key]?.sessionId;
+      const settled = await result;
+      if (!settled) return;
+      const { value, label } = settled;
+      if (!asked || (await this.readFile()).conversations[key]?.sessionId !== asked) {
+        this.opts.log.info({ conversation: key, tool: what.tool }, "agent: result for an ended session dropped");
+        return;
       }
-      await this.closeLive();
-    }
-    const live = this.live ?? (await this.start(key));
-    const message = { id: randomUUID().slice(0, 8), text: body, at: new Date().toISOString() };
+      const text = `<ezapply-result tool="${what.tool}" id="${what.id}">\n${JSON.stringify(value)}\n</ezapply-result>`;
+      await this.write(key, { id: randomUUID().slice(0, 8), text, at: new Date().toISOString(), delivery: label });
+    })().catch((err: Error) =>
+      this.opts.log.warn({ err: err.message, conversation: key, tool: what.tool }, "agent: couldn't deliver a result"),
+    );
+  }
+
+  /** Write a message to the conversation's process, started (or resumed) when none runs. */
+  private async write(key: string, message: Untaken): Promise<{ id: string }> {
+    const live = await this.liveFor(key);
     live.untaken.push(message);
     live.busy = true;
-    this.emit(key, { kind: "user", at: message.at, id: message.id, text: body, taken: false });
-    live.process.send(body);
+    this.emit(key, shownMessage(message, false));
+    live.process.send(message.text);
     this.stateChanged();
     return { id: message.id };
   }
 
-  /** End the running turn. A tool call already running finishes in the companion, but Claude drops its result. */
-  stop(): boolean {
-    const l = this.live;
+  /**
+   * End a conversation's running turn. A tool call already running finishes in the companion, but the agent drops
+   * its result. The other conversations go on.
+   */
+  stop(key: string): boolean {
+    const l = this.live.get(key);
     if (!l?.busy) return false;
     l.stopping = true;
     l.process.interrupt();
@@ -217,10 +274,7 @@ export class AgentService {
   async reset(key: string): Promise<void> {
     checkKey(key);
     await this.upgrade();
-    if (this.live?.key === key) {
-      this.live.process.kill();
-      this.live = null;
-    }
+    this.kill(key);
     this.opts.needs.withdraw(key);
     const { agent } = await this.settings();
     await this.updateFile((f) => renewed(f, key, agent));
@@ -235,11 +289,10 @@ export class AgentService {
     if (!postingConversation(`${postingId}/tailor`))
       throw new EzError(ErrorCode.BadRequest, `Not a posting: ${postingId}`);
     const keys = new Set([postingId, `${postingId}/tailor`, `${postingId}/fill`]);
-    if (this.live && keys.has(this.live.key)) {
-      this.live.process.kill();
-      this.live = null;
+    for (const key of keys) {
+      this.kill(key);
+      this.opts.needs.withdraw(key);
     }
-    for (const key of keys) this.opts.needs.withdraw(key);
     await this.updateFile((f) => ({
       ...f,
       conversations: Object.fromEntries(Object.entries(f.conversations).filter(([k]) => !keys.has(k))),
@@ -325,8 +378,8 @@ export class AgentService {
     const before = this.settings();
     this.prefs = AgentPrefs.parse(prefs);
     const next = this.settings();
-    const l = this.live;
-    if (l?.process.alive) {
+    for (const l of this.live.values()) {
+      if (!l.process.alive) continue;
       const switches = l.backend.switches !== false;
       const modeChanged = next.permissionMode !== before.permissionMode;
       const modelChanged = next.model !== before.model;
@@ -338,17 +391,18 @@ export class AgentService {
       if (restart || next.effort !== before.effort || next.agent !== before.agent) {
         if (l.busy) l.restartAfterTurn = true;
         // Not awaited: the panel shows the change at once, and the next message waits for the exit instead.
-        else void this.closeLive();
+        else void this.closeLive(l.key);
       }
     }
     if (JSON.stringify(next) !== JSON.stringify(before)) this.opts.log.info({ ...next }, "agent: settings changed");
     return next;
   }
 
-  /** End the running process (the companion is closing), and finish writing the logs and records. */
+  /** End the running processes (the companion is closing), and finish writing the logs and records. */
   async close(): Promise<void> {
-    await this.closeLive(3000);
-    await this.closing;
+    await Promise.allSettled([...this.starting.values()]);
+    await Promise.all([...this.live.keys()].map((key) => this.closeLive(key, 3000)));
+    await Promise.all(this.closing.values());
     while (this.appending.size > 0) await Promise.all(this.appending);
     await this.fileWrites;
   }
@@ -388,8 +442,28 @@ export class AgentService {
     return this.upgraded;
   }
 
+  /** The conversation's running process, or one started for it (once, however many sends wait on it). */
+  private liveFor(key: string): Promise<Live> {
+    const running = this.live.get(key);
+    if (running) return Promise.resolve(running);
+    let started = this.starting.get(key);
+    if (!started) {
+      started = this.start(key).finally(() => this.starting.delete(key));
+      this.starting.set(key, started);
+    }
+    return started;
+  }
+
+  /** End a conversation's process at once (Reset, Forget). */
+  private kill(key: string): void {
+    const l = this.live.get(key);
+    if (!l) return;
+    this.live.delete(key);
+    l.process.kill();
+  }
+
   private async start(key: string, fresh = false): Promise<Live> {
-    await this.closing;
+    await this.closing.get(key);
     const settings = await this.settings();
     const backend = this.opts.backends?.[settings.agent];
     if (!backend) throw unavailable();
@@ -434,7 +508,7 @@ export class AgentService {
       onItem: (item) => this.onItem(live, item),
       onExit: (code, tail) => this.onExit(live, code, tail),
     });
-    this.live = live;
+    this.live.set(key, live);
     this.opts.log.info({ conversation: key, resumed, agent: backend.name }, "agent: started");
     return live;
   }
@@ -468,7 +542,7 @@ export class AgentService {
         return;
       case "taken": {
         const m = l.untaken.shift();
-        if (m) this.emit(l.key, { kind: "user", at: m.at, id: m.id, text: m.text, taken: true });
+        if (m) this.emit(l.key, shownMessage(m, true));
         this.stateChanged();
         return;
       }
@@ -484,9 +558,9 @@ export class AgentService {
           const cost = event.totalCostUsd;
           void this.updateFile((f) => withCost(f, l.key, l.sessionId, cost));
         }
-        if (l.restartAfterTurn && !l.busy && this.live === l) {
+        if (l.restartAfterTurn && !l.busy && this.live.get(l.key) === l) {
           l.restartAfterTurn = false;
-          void this.closeLive();
+          void this.closeLive(l.key);
           return;
         }
         this.stateChanged();
@@ -510,7 +584,7 @@ export class AgentService {
   }
 
   private onExit(l: Live, code: number | null, tail: string): void {
-    if (this.live === l) this.live = null;
+    if (this.live.get(l.key) === l) this.live.delete(l.key);
     const at = new Date().toISOString();
     // A session the agent no longer has (its transcript deleted) can't be resumed: start afresh with the
     // messages that were waiting, once.
@@ -547,12 +621,14 @@ export class AgentService {
     this.stateChanged();
   }
 
-  private async closeLive(graceMs?: number): Promise<void> {
-    const l = this.live;
+  private async closeLive(key: string, graceMs?: number): Promise<void> {
+    const l = this.live.get(key);
     if (!l) return;
-    this.live = null;
-    this.closing = l.process.close(graceMs);
-    await this.closing;
+    this.live.delete(key);
+    const closing = l.process.close(graceMs);
+    this.closing.set(key, closing);
+    await closing;
+    if (this.closing.get(key) === closing) this.closing.delete(key);
     this.stateChanged();
   }
 
@@ -564,7 +640,8 @@ export class AgentService {
   }
 
   private async appendLog(key: string, event: AgentEvent): Promise<void> {
-    const c = this.live?.key === key ? { sessionId: this.live.sessionId } : (await this.readFile()).conversations[key];
+    const l = this.live.get(key);
+    const c = l ? { sessionId: l.sessionId } : (await this.readFile()).conversations[key];
     if (!c) return;
     const path = this.logPath(key, c.sessionId);
     const prev = this.logWrites.get(path) ?? Promise.resolve();
@@ -602,6 +679,17 @@ export class AgentService {
   private stateChanged(): void {
     for (const fn of [...this.stateListeners]) fn();
   }
+}
+
+function liveStatus(l: Live): AgentStatus {
+  return !l.initialized && l.untaken.length > 0 ? "starting" : l.busy ? "working" : "idle";
+}
+
+/** A message as the panel shows it: a delivered result by its label. */
+function shownMessage(m: Untaken, taken: boolean): AgentEvent {
+  return m.delivery
+    ? { kind: "user", at: m.at, id: m.id, text: m.delivery, delivery: true, taken }
+    : { kind: "user", at: m.at, id: m.id, text: m.text, taken };
 }
 
 /** A new session for `key`; the one it had, if Claude Code ever had it, goes to `earlier`. */

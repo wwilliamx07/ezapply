@@ -30,6 +30,8 @@ export interface ReviewPageState {
   id: string;
   status: ReviewStatus;
   posting: { id: string; company?: string; role?: string };
+  /** The agent that opened the review, as the page says it: the panel's ("Antigravity"), or "Claude Code" in a terminal. */
+  agentName: string;
   expiresAt: string;
   files: ReviewPageFile[];
   /** What the user sent, once answered. */
@@ -131,6 +133,8 @@ export interface OnboardState {
   agentListening: boolean;
   /** Where the agent works: the side panel's, or Claude in a terminal when there's no panel agent. */
   agentIn: "panel" | "terminal";
+  /** The agent's name, as the page says it: the panel's chosen agent ("Antigravity"), or "Claude Code" in a terminal. */
+  agentName: string;
   tex: { done: boolean; detail: string; installCommand: string };
   extension: {
     connected: boolean;
@@ -160,6 +164,8 @@ export interface OnboardState {
     fromProfile: { id: string; canonical: string; source: string; value?: string }[];
   };
   preferences: OnboardPreferences;
+  /** A system notification when the panel's agent ends a turn or asks something, while no panel is in view. */
+  notifications: { turnEnd: boolean };
   library: string[];
 }
 

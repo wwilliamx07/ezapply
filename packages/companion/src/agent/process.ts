@@ -132,8 +132,8 @@ export const PANEL_PROMPT =
   "You are running headless behind ezapply's side panel in the user's browser: the user reads your messages there " +
   "and never sees a terminal. Put questions you need answered on a card with ask_user (a whole step's questions in " +
   "one call); a plain question in your message is fine when an open-ended reply is wanted, since the user can answer " +
-  "in the panel's chat. Commands that need approval are approved on the panel. Keep messages short: the panel is " +
-  "narrow.";
+  "in the panel's chat. When ask_user or review_documents returns pending, end your turn: the answer comes as your " +
+  "next message. Commands that need approval are approved on the panel. Keep messages short: the panel is narrow.";
 
 /**
  * A posting's two conversations, one for its documents and one for its application, whichever the user starts
@@ -141,11 +141,11 @@ export const PANEL_PROMPT =
  */
 export const PART_PROMPTS: Record<ConversationPart, string> = {
   tailor:
-    "This conversation prepares the active posting's documents (resume, cover letter, bundle) and their review. " +
+    "This conversation prepares its posting's documents (resume, cover letter, bundle) and their review. " +
     "Its application is filled in a separate conversation: don't fill, read or navigate application forms here. " +
     "When the user wants the application filled, tell them to press Fill form in the panel.",
   fill:
-    "This conversation fills the active posting's application. Its documents are written in a separate " +
+    "This conversation fills its posting's application. Its documents are written in a separate " +
     "conversation: don't write or edit a resume, cover letter or bundle here; you may show the ones already there " +
     "for review and attach them. When a document is missing, or the user asks for changes to one, tell them to " +
     "press Tailor documents in the panel (with their changes, if they asked for any), and fill the rest of the " +
@@ -160,8 +160,8 @@ export class AgentProcess implements AgentSession {
   constructor(opts: AgentProcessOptions) {
     const base = opts.env ?? process.env;
     const env: NodeJS.ProcessEnv = { ...base, [SESSION_ENV]: opts.sessionId, [DISABLE_BUNDLED_SKILLS]: "1" };
-    // A long MCP call (ask_user, a review) must hold the turn, which is -p's default; the user's own setting
-    // to background such calls would end the turn with the question open.
+    // A long MCP call (a permission prompt waiting on its card) must hold the turn, which is -p's default; the
+    // user's own setting to background such calls would end the turn with the approval open.
     delete env.CLAUDE_AUTO_BACKGROUND_TASKS;
     this.child = new LineProcess({
       command: opts.claude,

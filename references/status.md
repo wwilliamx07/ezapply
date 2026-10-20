@@ -24,12 +24,21 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   companion took about 1.5 s of it ([cli](components/cli.md#commands)).
 - **Everything in the browser.** The side panel drives a headless Claude Code, one process per conversation; there's
   no Claude Code in the terminal, so there's one way to run ezapply ([cli](components/cli.md#commands)).
+- **Applications side by side, with no cap.** Each panel conversation has its own agent process and works on its
+  own posting, resolved from its session (there's no workspace-wide active posting); a tab is bound to one application, and
+  shared files are written one at a time. The user decides how many to start
+  ([agent](components/agent.md#conversations-servicets)).
+- **No active posting.** A call's posting is the one it names, else its conversation's; the general conversation and
+  a terminal chat name it, and form calls without one credit nothing ([which posting](mcp-tools.md#postings)).
 - **The agent behind an interface.** The panel's service drives an agent backend, Claude Code's or Antigravity's, so
   each agent reads its own protocol without touching the conversations, cards or history
   ([agent](components/agent.md)).
-- **Antigravity without approvals.** Its headless mode can't ask anyone, so it runs on the user's own allow rules
-  plus ezapply's tools, never with its skip-permissions flag; a denied call ends the turn with a notice
-  ([agent](components/agent.md#antigravity-antigravityts)).
+- **Antigravity without approvals.** Its headless mode can't ask anyone, and on the user's allow rules alone every
+  command was denied and ended the turn, so Don't ask runs it with its skip-permissions flag, accepting that a
+  prompt injected through a posting isn't checked ([agent](components/agent.md#antigravity-antigravityts)).
+- **The user's answers start the agent's next turn.** In the panel, `ask_user` and `review_documents` return at once
+  and the answer comes as a message: a call held for the user timed out (Antigravity cuts any MCP call at 3 minutes)
+  and left the answer unread ([agent](components/agent.md#results-as-messages)).
 - **The extension keeps the agent settings,** each agent's own mode, model and effort, and gives them to the
   companion, which holds them in memory: the panel shows them as it opens instead of after ezapply answers
   ([agent](components/agent.md#permission-mode-model-and-effort)).
@@ -85,11 +94,12 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **A fresh Claude session per posting, and per part of it,** so finished work isn't re-sent every turn: each posting has its own panel conversations, one tailoring its documents and one filling its application, whichever comes first ([agent](components/agent.md#conversations-servicets)).
 - **One button on the review page**, under the edits box and stuck to the panel's foot, approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
 - **The side panel blocks a send from the press,** not from the state saying Claude works, which arrives only after the companion answers ([ui](components/ui.md#the-side-panel-srcpanel)).
+- **The side panel opens on the list of applications,** grouped by what each needs, and an application's conversation is opened from it, so applications in parallel each show their state ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **A screening question the profile answers isn't asked in the answer bank** (an entry with a `source` and no
   answer): the fact has one home, the profile, and a question like the degree needs the posting anyway
   ([answer bank](components/profile-and-templates.md#answer-bank-profileanswersyaml)).
 - **Binding an unconfirmed tab trusts the first tab that changes,** with a one-time `postingBound` notice naming the
-  page's title, rather than refusing until `posting_activate` ([which posting](mcp-tools.md#forms)).
+  page's title, rather than refusing until `tab_bind` ([which posting](mcp-tools.md#forms)).
 - **The reference is written for agents.** A "By task" table says what to read for each kind of change, the
   few hard rules sit in a `CLAUDE.md` beside the code they govern, it doesn't restate the code (no per-test
   lists), and a test checks its links and coverage: the agent reads less and still finds the page that matters
@@ -104,14 +114,32 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 - **Antigravity behind the panel** with ezapply itself ([agent](components/agent.md#antigravity-antigravityts)).
   `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through
-  the panel. Check: a posting tailored and a form filled from the panel, an `ask_user` card held the full 15
-  minutes, how many turns the skills lose to denied commands and to reading each tool's schema, and whether the
+  the panel. Check: a posting tailored and a form filled from the panel, how many turns the skills lose to reading each tool's schema, whether `--dangerously-skip-permissions`
+  still honours the `repo-cache` deny `init` writes, and whether the
   skills' Claude Code wording (the Edit tool, subagents) trips it. Also that no console window flashes when it
   starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
   once with the next message starting the new one.
+- **Answers delivered as messages** ([agent](components/agent.md#results-as-messages)), tested with the Claude Code
+  stub. Check, under both agents: after `review_documents` or `ask_user` returns `pending` the agent ends its turn
+  rather than checking again or going on with the step; a review left open past 10 minutes and answered then
+  starts the next turn, which reads the `<ezapply-result>` block and acts on it; the panel shows the note, not the
+  block; the turn-end notification says the documents are ready to review.
+- **A stopped setup task** ([ui](components/ui.md#the-agents-side-tasks)), tested with the Claude Code stub. Check:
+  Stop on a setup task in the panel's general conversation turns its line on the setup page to "Stopped before it
+  finished" under both agents, and the page names Antigravity when it's the one in use, as the review page does
+  (its button reads "Send to Antigravity").
+- **Turn-end notifications** ([extension](components/extension.md#notifications-notifyts)), tested with stubs of
+  Chrome's API. Check: a notification when a turn ends or a card opens with the browser in the background or the
+  panel closed, none for a turn's end while the panel is in view, a question's even then (gone once it's
+  answered), and that clicking one brings the window forward and opens the
+  panel (Chrome may not count the click as a gesture for `sidePanel.open`).
 - **The extension's one-socket connection** ([extension](components/extension.md#connection-companionconnection)),
   tested with a stand-in socket. Check: with the panel open for a long session, the panel's dot stays green and
   `companion.log` shows no run of `bridge: previous connection replaced`.
+- **"This tab" on an application in a frame or on its posting's page** ([agent](components/agent.md#the-panels-side-panelts)), tested over the
+  bridge only. Check: on a careers page showing a Greenhouse frame, the panel calls the tab an application and
+  offers Fill form, before and after `get_form` binds it; and on a Greenhouse board's posting page (the
+  posting and the form one page) the same, with the tab's site found as `greenhouse`.
 
 - **The agent settings kept by the extension** ([agent](components/agent.md#permission-mode-model-and-effort)):
   that they show as the panel opens and come back with their agent, that a reconnection (ezapply restarted) gives
@@ -141,6 +169,11 @@ What's built but hasn't run live, and what to check first. Each site's page list
   starting context on every call. The Workday nested-menu paths are an adapter change of their own: check them in
   a run with no other Workday change ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
 
+- **Workday's drifted date parts:** a Month/Day/Year date whose page rewrote the month as the first day digit
+  landed now enters the drifted parts once more and reads back right in the fixture. Check in a live run with no
+  other Workday change: such a date is `ok`, and the trace shows `date parts drifted` only where the page rewrote
+  a part ([dates](components/sites/workday.md#dates-typed-into-workdays-split-widget)).
+
 - **The rename retry:** a run on Windows with the panel open should no longer show "locked by another program"
   for a posting's `meta.json` ([architecture](architecture.md#cross-cutting-concerns)).
 
@@ -162,6 +195,17 @@ What's built but hasn't run live, and what to check first. Each site's page list
   to save that reply into the profile rather than the bank.
 - **The review page's per-document approval** in a real browser, with its one button: on to the next document, and
   the send on the last one; and a real resume's links (from `hyperref`) drawn where the text is and opening.
+- **Applications side by side:** two postings' Fill form at once, each filling its own tab (both under focus
+  emulation), Tailor documents on a third meanwhile, each row's Stop stopping only its own; that each agent's
+  `posting_get` is its own posting; and what two agents editing the answer bank at once do (Claude Code's Edit
+  refuses a file changed since its read; Antigravity's edits weren't checked)
+  ([agent](components/agent.md#conversations-servicets)).
+- **Without an active posting** in a real browser: **+ Capture** opens the new posting; the general conversation's
+  Reset button (in place of the posting popover) asks, then starts a new session; the This tab line follows the
+  posting shown; and the general conversation's agent asks for or looks up a posting's id instead of guessing
+  ([which posting](mcp-tools.md#postings)).
+- **The panel's list of applications** in a real browser: it opens on the list, a card or a working agent moves an
+  application to the top groups, the needs-you line opens the waiting one, and the list reads at 320 px.
 - **The panel and review-page fixes** in a real browser: a double click on Tailor or Fill, or a second Enter, sends
   one message; the review page's button stuck to the panel's foot under the edits box; and adding a comment (near
   the view's bottom, and on a window under 900 px) leaves the page where it was.

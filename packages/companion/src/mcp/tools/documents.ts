@@ -3,11 +3,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ShortDocument } from "../../documents/review.js";
 import type { Services } from "../../services.js";
-import { tool } from "../result.js";
+import { PENDING_HINT, tool } from "../result.js";
 
 const PATH_NOTE = "Paths may be absolute or relative to the workspace root.";
 
-export function registerDocumentTools(server: McpServer, s: Services): void {
+/** `session`: the chat session the request came from (the relay's header), a panel conversation's or a terminal chat's. */
+export function registerDocumentTools(server: McpServer, s: Services, session?: string): void {
   server.registerTool(
     "tex_compile",
     {
@@ -186,7 +187,8 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
   );
 
   // One tool opens the page and waits for the answer. With a separate wait call the agent opened reviews three
-  // times without waiting, and the user's answers sat unread until they asked.
+  // times without waiting, and the user's answers sat unread until they asked. In a panel conversation nothing waits
+  // in the call: ezapply delivers the answer as the next message (`AgentService.deliverLater`).
   server.registerTool(
     "review_documents",
     {
@@ -199,7 +201,8 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
         "the changed files. Only approval on the page lets upload_file attach a document, in the version shown: " +
         "if the user says it's approved in chat, ask them to press it on the page. Write your report before " +
         "calling. done: false means no answer yet: ask whether they saw the page, then call with reviewId to wait " +
-        "again. A resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
+        "again. In the panel it returns { pending } at once: end your turn, and the answer comes as your next " +
+        "message. A resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
         "with the reason it's meant to be shorter.",
       inputSchema: {
         files: z
@@ -241,9 +244,43 @@ export function registerDocumentTools(server: McpServer, s: Services): void {
             "files opens a new review; reviewId waits again for one that timed out.",
           );
         }
-        if (reviewId !== undefined) return { reviewId, ...(await s.reviews.wait(reviewId, timeoutSeconds * 1000)) };
-        const review = await s.reviews.open(files as string[], short);
+        const conversation = session ? await s.agent.conversationOf(session) : undefined;
+        if (reviewId !== undefined) {
+          // A panel conversation's answer is on its way as a message.
+          if (conversation && s.reviews.isOpen(reviewId)) return { reviewId, pending: reviewId, hint: PENDING_HINT };
+          return { reviewId, ...(await s.reviews.wait(reviewId, timeoutSeconds * 1000)) };
+        }
+        // The page names who gets the answer: the panel conversation's agent, or Claude Code in a terminal.
+        const agentName = conversation ? s.agent.agentName(conversation) : "Claude Code";
+        const review = await s.reviews.open(files as string[], short, agentName);
         const openedIn = await s.opener.url(review.url).catch(() => null);
+        // In a panel conversation the call doesn't wait: how the review ends starts the next turn.
+        if (conversation) {
+          s.agent.deliverLater(
+            conversation,
+            { tool: "review_documents", id: review.reviewId },
+            // A review replaced by a newer one is the agent's own doing: nothing to tell it.
+            s.reviews.settled(review.reviewId).then((end) =>
+              "supersededBy" in end
+                ? null
+                : {
+                    value: { reviewId: review.reviewId, ...end },
+                    label: end.done ? "Your review" : "The review expiring",
+                  },
+            ),
+          );
+          return {
+            ...review,
+            ...(openedIn
+              ? { openedIn }
+              : {
+                  openedBrowser: false,
+                  tell: `Ask the user to open ${review.url} to approve the documents or write what should change.`,
+                }),
+            pending: review.reviewId,
+            hint: PENDING_HINT,
+          };
+        }
         if (!openedIn) {
           // Nobody will see the page unless the agent gives the user the link, so don't wait first.
           return {

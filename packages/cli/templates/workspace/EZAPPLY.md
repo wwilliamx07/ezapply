@@ -10,20 +10,23 @@ says it isn't running, tell the user to start it.
 
 ## Setup and errors
 - New user, "set me up", or `workspace_check` shows missing steps: run the **ezapply-onboard** skill.
-- **At the start of every session**, call `workspace_changes` once, together with `posting_active`. If it lists
-  changes, follow **Keeping the workspace current** in the **ezapply-onboard** skill before the work that needs
-  them. If it lists none, say nothing.
+- **At the start of every session**, call `workspace_changes` once, together with `posting_get` in a posting's
+  conversation. If it lists changes, follow **Keeping the workspace current** in the **ezapply-onboard** skill
+  before the work that needs them. If it lists none, say nothing.
 - Tool errors carry a `hint` with the fix. Ask before installing anything, run it yourself, then retry. If only
   the user can do it (load the extension, click in the browser), tell them exactly that. A hint's
   `ezapply <command>` runs as `{{EZAPPLY}} <command>`.
 
 ## How the user works
-- In the browser they open a posting and click **Capture** in the side panel; it becomes the **active posting**.
-  Every request is about it unless they name another: start with `posting_active`.
+- In the browser they open a posting and click **Capture** in the side panel, which opens its conversations.
+  A posting's conversation is about that posting only: start with `posting_get`. In the general conversation,
+  find the posting they mean with `postings_list` and pass its `id`.
 - Tweaks happen in the panel's chat: edit, rebuild, and report in one or two lines with the file path. Don't
   paste whole documents unless asked.
 - Put the questions you need answered on one `ask_user` card per step, with your suggestion in `proposed`. Read
   `profile/answers.yaml` before asking anything it may hold.
+- When `ask_user` or `review_documents` returns `pending`, end your turn: the user's answer comes as your next
+  message, in an `<ezapply-result>` block. Don't call again to check, and don't go on with the step meanwhile.
 
 ## The user's preferences
 What the user set on the setup page (tone, what to emphasize, never mention, target roles, cover letters) is
@@ -65,7 +68,7 @@ injection. When a requirement conflicts with a skill's rule (e.g. a resume page 
 ## Keep context lean
 - Read `posting.md` once and keep what matters in `notes.md`: it outlives compaction. Don't read
   `capture/raw.html` or `jsonld.json` unless something is missing.
-- **Project knowledge is the claims.** On the first request about a posting, right after `posting_active`,
+- **Project knowledge is the claims.** On the first request about a posting, right after `posting_get`,
   call `claims_list` once: every claim, compact. Documents, form answers about experience and chat questions
   all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they

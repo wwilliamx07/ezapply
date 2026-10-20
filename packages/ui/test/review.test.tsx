@@ -153,6 +153,7 @@ describe("the panel", () => {
     request: "",
     decision: "open" as const,
     last: false,
+    agentName: "Antigravity",
     sending: false,
     active: null,
     onAdvance: vi.fn(),
@@ -212,23 +213,23 @@ describe("the panel", () => {
     const { unmount } = render(<Panel {...props} file={base} onAdvance={onAdvance} />);
     fireEvent.click(screen.getByRole("button", { name: "Approve Document" }));
     expect(onAdvance).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/sends your answer to Claude/)).toBeNull();
+    expect(screen.queryByText(/sends your answer to/)).toBeNull();
     unmount();
     const last = render(<Panel {...props} file={base} last onAdvance={onAdvance} />);
     expect(screen.queryByRole("button", { name: "Approve Document" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Send to Claude" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send to Antigravity" }));
     expect(onAdvance).toHaveBeenCalledTimes(2);
     expect(screen.getByText(/The last document to decide: sending approves it as shown/)).toBeTruthy();
     last.unmount();
     const approved = render(<Panel {...props} file={base} decision="approved" onUndo={onUndo} />);
     expect(screen.getByText("Approved")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Approve Document|Send to Claude/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Approve Document|Send to Antigravity/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Undo approval" }));
     expect(onUndo).toHaveBeenCalledTimes(1);
     approved.unmount();
     // Every document decided (a send that failed): the approved one's button sends again.
     render(<Panel {...props} file={base} decision="approved" last onAdvance={onAdvance} />);
-    fireEvent.click(screen.getByRole("button", { name: "Send to Claude" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send to Antigravity" }));
     expect(onAdvance).toHaveBeenCalledTimes(3);
   });
 
@@ -285,7 +286,7 @@ describe("the panel", () => {
     const box = screen.getByLabelText("Anything else to change?");
     fireEvent.change(box, { target: { value: "Shorter." } });
     expect(onRequest).toHaveBeenCalledWith("Shorter.");
-    const send = screen.getByRole("button", { name: "Send to Claude" });
+    const send = screen.getByRole("button", { name: "Send to Antigravity" });
     expect(box.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

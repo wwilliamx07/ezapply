@@ -61,6 +61,7 @@ export const greenhouseInfo = {
   tenant: greenhouseTenant,
   job: greenhouseJob,
   hostPageJob: greenhouseHostPageJob,
+  postingIsForm: true,
   jobParams: ["gh_jid"],
   providerHosts: /(^|\.)greenhouse\.io$/i,
   company: greenhouseTenant,

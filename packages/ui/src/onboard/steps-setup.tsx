@@ -19,11 +19,12 @@ export function TexStep() {
         </p>
       ) : (
         <>
-          <p>No LaTeX engine is installed. Claude can install it for you with this command:</p>
+          <p>No LaTeX engine is installed. {state.agentName} can install it for you with this command:</p>
           <Copyable value={state.tex.installCommand} label="Install command" />
           <p className="ez-help">
-            Claude runs it once you approve it{state.agentIn === "panel" ? " in the ezapply panel" : " in the terminal"}
-            . It takes a few minutes and several hundred MB.
+            {state.agentName} runs it once you approve it
+            {state.agentIn === "panel" ? " in the ezapply panel" : " in the terminal"}. It takes a few minutes and
+            several hundred MB.
           </p>
           <div className="ob-actions">
             <Button
@@ -31,7 +32,7 @@ export function TexStep() {
               disabled={busy}
               onClick={() => ask("install-tex", { command: state.tex.installCommand })}
             >
-              Ask Claude to install it
+              Ask {state.agentName} to install it
             </Button>
             <Button variant="ghost" onClick={refresh}>
               Check again
@@ -227,8 +228,8 @@ export function ReposStep() {
   return (
     <>
       <StepHead title="Repositories" done={done}>
-        Choose the projects that show your work. Claude reads each one and writes down what it shows you did, with the
-        lines of code that prove it.
+        Choose the projects that show your work. {state.agentName} reads each one and writes down what it shows you did,
+        with the lines of code that prove it.
       </StepHead>
       {error ? <ErrorNote error={error} /> : null}
       {!repos && !error ? <Spinner label="Listing your repositories" /> : null}
@@ -322,8 +323,8 @@ export function KnowledgeStep() {
   return (
     <>
       <StepHead title="Your projects, read" done={done}>
-        Claude reads each repository you chose and writes down what you built in it, each point backed by the code. Your
-        resume and cover letters draw only on what it finds there and in your profile.
+        {state.agentName} reads each repository you chose and writes down what you built in it, each point backed by the
+        code. Your resume and cover letters draw only on what it finds there and in your profile.
       </StepHead>
       {selected.length === 0 ? (
         <p>Choose repositories first (the step before this one).</p>
@@ -353,7 +354,7 @@ export function KnowledgeStep() {
           {todo.length ? (
             <div className="ob-actions">
               <Button variant="primary" disabled={busy} onClick={() => ask("index-repos", { repos: todo })}>
-                Have Claude read {todo.length} {todo.length === 1 ? "repository" : "repositories"}
+                Have {state.agentName} read {todo.length} {todo.length === 1 ? "repository" : "repositories"}
               </Button>
               <span className="ez-help">This takes a few minutes per repository. You can go on meanwhile.</span>
             </div>

@@ -29,7 +29,9 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
    myworkdaysite tenants were misread as `wd5` get fixed).
    **The application** (below) is looked for in the page; a re-capture keeps one the user set, else takes what
    the page now shows, else keeps the old one.
-6. `state.json` → `activePostingId` = this posting. The extension shows "Active: company: role".
+6. Listeners (`onChange`) hear of it, so the panel's list follows; the extension flashes "Captured: company: role".
+   Nothing is made "active": the panel's **+ Capture** opens the posting, and each posting's conversations work on it
+   ([which posting](../mcp-tools.md#postings)).
 
 ## Extraction (`extract.ts`)
 Input is the **visible** HTML only, so hidden text (collapsed sections, prompt-injection traps) never
@@ -81,8 +83,8 @@ Which application a posting is tied to, so the form tools can tell its tab from 
 - **Postings captured earlier** get it from `capture/raw.html` the first time they're active in a form call
   (`application(id)`), and it's saved; one with nothing found isn't searched again until the companion restarts,
   its `reqId` changes or it's captured again.
-- **Later:** the first form call that changes a page stores the tab's (`bound`), and `posting_activate
-  { id, tabId }` the tab the user names (`user`); `setApplication`.
+- **Later:** the first form call that changes a page stores the tab's (`bound`), and `tab_bind
+  { tabId }` the tab the user names (`user`); `setApplication`.
 
 Verified on real captures: employers' careers pages are tied to their Workday requisitions by the page's Apply
 link, and to a Greenhouse job by `gh_jid`. Pages that link to nothing in the registry (a school's job board, many
@@ -92,13 +94,14 @@ employers' own career sites, iCIMS) are bound on first use.
 - `list()`: every posting with a valid `meta.json`, newest update first (invalid ones are logged and
   skipped).
 - `details(id)`: meta plus folder, the paths of `posting.md`, `visible.txt` and `raw.html`, the files in the
-  folder (excluding `.history`, `.build`, `.previews`), and whether it's active.
-- `activate(id)`, `activeId()`, `requireActiveId()` (fails with `no_active_posting` and a hint to use
-  Capture or `posting_activate`).
-- `delete(id)`: removes the posting's folder for good, serialized with the other writes; when it was the active
-  posting, the active posting is unset (and its listeners hear of it). Only the side panel calls it
+  folder (excluding `.history`, `.build`, `.previews`).
+- `ownPosting(session)`: the posting of the conversation the session is (wired from the agent service with
+  `sessionPostings`), or none. `resolve(id?, session?)`: the posting a call is about: `id` when given (an unknown
+  one is `not_found`; another than the conversation's own is `bad_request`), else the conversation's, else
+  `no_posting` with a hint to name one from `postings_list`.
+- `delete(id)`: removes the posting's folder for good, serialized with the other writes; its listeners hear of it. Only the side panel calls it
   (`panel.deletePosting`); no MCP tool can delete a posting, so Claude can't.
-- **Ids** come from Claude (`posting_activate`, `posting_update_meta`), so `folder(id)` accepts only plain
+- **Ids** come from Claude (`posting_get`, `tab_bind`, `posting_update_meta`), so `folder(id)` accepts only plain
   folder names (`[\w.-]+`, not `.` or `..`) and refuses anything else with `bad_request`: an id like `../x`
   would otherwise resolve outside `postings/`. `list()` skips folders with other names.
 - `updateMeta(id, patch)`: validated, serialized, bumps `updatedAt`. A `reqId` is trimmed, and one of more than

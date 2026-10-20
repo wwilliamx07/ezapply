@@ -17,10 +17,9 @@ export async function setCardsWaiting(n: number): Promise<void> {
   await renderBadge();
 }
 
-/** Resting badge: a small coloured pill for the connection state; tooltip names the active posting. */
+/** Resting badge: a small coloured pill for the connection state, with what waits in the tooltip. */
 export async function renderBadge(conn?: ConnState): Promise<void> {
   const state = conn ?? (await store.connState());
-  const active = await store.activeLabel();
   const pending = await store.pendingCapture();
 
   let color = GREY;
@@ -53,7 +52,6 @@ export async function renderBadge(conn?: ConnState): Promise<void> {
   const lines = ["ezapply: open the panel", status];
   if (cardsWaiting > 0) lines.push(`${cardsWaiting} waiting for you in the panel.`);
   if (pending) lines.push("A capture is waiting to be sent.");
-  if (active) lines.push(`Active: ${active}`);
   await ext.action.setTitle({ title: lines.join("\n") });
 }
 

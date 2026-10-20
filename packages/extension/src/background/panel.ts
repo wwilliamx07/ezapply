@@ -5,6 +5,7 @@ import { PANEL_PORT, type PanelMessage, type PanelRequest } from "../panel/trans
 import { setCardsWaiting } from "./badge.js";
 import type { CompanionConnection } from "./connection.js";
 import { tabSites } from "./frames.js";
+import { cardsSettled, panelClosed, panelVisibility, showNotification } from "./notify.js";
 import { AGENT_PREFS, type ConnState, store } from "./settings.js";
 
 const ports = new Set<chrome.runtime.Port>();
@@ -29,10 +30,11 @@ export function servePanels(
     watch();
     port.onDisconnect.addListener(() => {
       ports.delete(port);
+      panelClosed(port);
       watch();
     });
     port.onMessage.addListener((req: PanelRequest) => {
-      void handle(req).then(
+      void handle(req, port).then(
         (result) => reply(port, { type: "response", id: req.id, ok: true, result }),
         (err) => reply(port, { type: "response", id: req.id, ok: false, error: EzError.from(err).message }),
       );
@@ -61,8 +63,11 @@ export function servePanels(
     if (info.url || info.status === "complete") tabChanged();
   });
 
-  async function handle(req: PanelRequest): Promise<unknown> {
+  async function handle(req: PanelRequest, port: chrome.runtime.Port): Promise<unknown> {
     switch (req.type) {
+      case "visibility":
+        panelVisibility(port, req.windowId, req.visible);
+        return {};
       case "call": {
         // Only the panel's own methods: a panel can't capture or fill through this.
         if (!req.method.startsWith("panel.") || !(req.method in CompanionApi))
@@ -78,12 +83,14 @@ export function servePanels(
       case "tab": {
         const tab = await currentTab(req.windowId);
         if (!tab?.id || !tab.url || !connection.connected) return null;
-        const { site } = await tabSites(tab);
+        const { site, frames } = await tabSites(tab);
         const what = await connection.request("panel.tab", {
           tabId: tab.id,
           url: tab.url,
           title: tab.title ?? "",
           site,
+          ...(frames.length ? { frames } : {}),
+          ...(req.postingId ? { postingId: req.postingId } : {}),
         });
         return { ...what, tabId: tab.id };
       }
@@ -100,9 +107,11 @@ export function servePanels(
   }
 }
 
-/** The companion's push: the badge's count, and the rest to every open panel. */
+/** The companion's push: the badge's count, a system notification, and the rest to every open panel. */
 export async function panelUpdate(update: PanelUpdate): Promise<Record<string, never>> {
   if (update.cards !== undefined) await setCardsWaiting(update.cards);
+  if (update.cards === 0) await cardsSettled().catch(() => undefined);
+  if (update.notify) await showNotification(update.notify).catch(() => undefined);
   if (update.event || update.changed) broadcast({ type: "push", push: { type: "update", update } });
   return {};
 }

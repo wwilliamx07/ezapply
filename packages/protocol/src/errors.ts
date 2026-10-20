@@ -12,7 +12,7 @@ export const ErrorCode = {
   ExtensionDisconnected: "extension_disconnected",
   Timeout: "timeout",
   NotFound: "not_found",
-  NoActivePosting: "no_active_posting",
+  NoPosting: "no_posting",
   CaptureFailed: "capture_failed",
   PathNotAllowed: "path_not_allowed",
   /** The application tab belongs to another posting than the active one: nothing that changes the page runs. */

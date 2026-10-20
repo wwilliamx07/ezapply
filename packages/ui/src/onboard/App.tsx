@@ -23,7 +23,7 @@ const STEPS: { id: OnboardStepId; label: string; render(): ReactNode }[] = [
 
 /**
  * Setting ezapply up, on a page: each workspace_check item a step, done ones ticked, in any order. What needs
- * Claude (installing, reading repositories, drafting the profile) goes to it as a task, and its progress shows
+ * the agent (installing, reading repositories, drafting the profile) goes to it as a task, and its progress shows
  * here.
  */
 export function OnboardApp() {
@@ -64,8 +64,8 @@ function Onboarding() {
       <MessagePage title={state.ready ? "You're set up" : "Setup paused"}>
         <p>
           {state.ready
-            ? "Next: open a job posting in your browser and press the ezapply button (or Alt+Shift+P) to capture it. Then ask Claude for a resume, a cover letter, or to fill in the application."
-            : "Some steps aren't done yet. Ask Claude to set you up again whenever you want to finish them."}
+            ? `Next: open a job posting in your browser and press the ezapply button (or Alt+Shift+P) to capture it. Then ask ${state.agentName} for a resume, a cover letter, or to fill in the application.`
+            : `Some steps aren't done yet. Ask ${state.agentName} to set you up again whenever you want to finish them.`}
         </p>
         <p className="ez-muted">You can close this tab.</p>
       </MessagePage>
@@ -167,26 +167,26 @@ function Onboarding() {
         {error ? <Banner tone="danger">{error}</Banner> : null}
       </main>
 
-      <aside className="ob-claude" aria-label="Claude">
+      <aside className="ob-claude" aria-label={state.agentName}>
         <h2>
-          Claude{" "}
+          {state.agentName}{" "}
           <span className={`ob-live${state.agentListening ? " ob-live-on" : ""}`}>
             {state.agentListening ? "listening" : "busy or away"}
           </span>
         </h2>
         <p className="ez-help">
           {state.agentIn === "panel"
-            ? "Claude does the steps that need judgment. Follow it in the ezapply panel, where you approve what it runs."
-            : "Claude does the steps that need judgment. It works in your terminal, where you approve what it runs."}
+            ? `${state.agentName} does the steps that need judgment. Follow it in the ezapply panel, where you approve what it runs.`
+            : `${state.agentName} does the steps that need judgment. It works in your terminal, where you approve what it runs.`}
         </p>
         {tasks.length === 0 ? (
-          <p className="ez-help">Nothing asked of Claude yet.</p>
+          <p className="ez-help">Nothing asked of {state.agentName} yet.</p>
         ) : (
           <ol className="ob-tasks">
             {tasks.map((t) => (
               <li key={t.id}>
                 <span className="ob-task-kind">{TASK_LABELS[t.kind]}</span>
-                <TaskLine task={t} listening={state.agentListening} agentIn={state.agentIn} />
+                <TaskLine task={t} agent={state} />
               </li>
             ))}
           </ol>
@@ -201,7 +201,7 @@ function Onboarding() {
           }}
         >
           <label className="ez-label" htmlFor="ob-question">
-            Ask Claude
+            Ask {state.agentName}
           </label>
           <textarea
             id="ob-question"

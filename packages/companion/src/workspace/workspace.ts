@@ -21,7 +21,6 @@ const Synced = z.object({ hash: z.string(), at: z.string() });
 
 const WorkspaceState = z.object({
   schemaVersion: z.literal(1),
-  activePostingId: z.string().optional(),
   synced: z
     .object({
       /** The resume template (main file and content files) the profile was last updated from. */
@@ -77,14 +76,27 @@ export class Workspace {
     return WorkspaceConfigSchema.parse(raw ?? { schemaVersion: 1 });
   }
 
+  /** Merge values into one section of ezapply.config.json, keeping every other value as written. */
+  async updateConfig<K extends Exclude<keyof WorkspaceConfig, "schemaVersion">>(
+    section: K,
+    patch: Partial<WorkspaceConfig[K]>,
+  ): Promise<WorkspaceConfig> {
+    const path = this.path("ezapply.config.json");
+    const raw = ((await readJson(path)) as Record<string, unknown> | null) ?? { schemaVersion: 1 };
+    const next = { ...raw, [section]: { ...((raw[section] as Record<string, unknown> | undefined) ?? {}), ...patch } };
+    const parsed = WorkspaceConfigSchema.parse(next);
+    await writeJsonAtomic(path, next);
+    return parsed;
+  }
+
   async readState(): Promise<WorkspaceState> {
     const raw = await readJson(this.path("state.json"));
     return raw ? WorkspaceState.parse(raw) : { schemaVersion: 1 };
   }
 
   /**
-   * Merge a change into state.json. Updates run one at a time: the active posting and the workspace check's
-   * baselines are written by different services, and two read-modify-writes at once would lose one. Repo
+   * Merge a change into state.json. Updates run one at a time: the workspace check's
+   * baselines and the repo timers are written by different services, and two read-modify-writes at once would lose one. Repo
    * timers that have run out are dropped on every write.
    */
   updateState(

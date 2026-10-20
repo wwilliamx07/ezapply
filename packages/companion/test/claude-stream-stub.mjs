@@ -1,6 +1,6 @@
 // Stands in for `claude -p --input-format stream-json --output-format stream-json` in the agent tests. Its output
 // follows lines recorded from Claude Code (stream.test.ts pins the fields read). Each start appends its arguments
-// to $STUB_LOG. Messages: anything → "echo: <text>"; "slow" → a tool call that waits for an interrupt; "crash" →
+// to $STUB_LOG. Messages: anything → "echo: <text>"; "slow" (or one with "[slow]" in it) → a tool call that waits for an interrupt; "crash" →
 // exits 3 mid-turn. With $STUB_FAIL_RESUME set, a --resume start fails before answering. A mode or model switch
 // is appended to $STUB_LOG too; with $STUB_REFUSE_SWITCH set, it's refused as Claude Code refuses one.
 import { appendFileSync } from "node:fs";
@@ -96,7 +96,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     process.stderr.write("boom: something broke\n");
     process.exit(3);
   }
-  if (text === "slow") {
+  if (text === "slow" || text.includes("[slow]")) {
     slow = "toolu_slow";
     out({
       type: "assistant",
