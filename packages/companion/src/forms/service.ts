@@ -907,11 +907,49 @@ export class FormsService {
    * user said so in the panel (`user`). Moves the status to `submitted` and logs it in form-log.jsonl.
    */
   async submitted(postingId: string, by: "confirmation" | "user", seen?: { url: string; at: string }): Promise<void> {
+    const { status: from } = await this.postings.get(postingId);
     await this.moveStatus(postingId, "submitted");
+    // `from`: what Mark open goes back to.
+    const before = from !== "submitted" ? { from } : {};
     const event =
       by === "confirmation"
-        ? { ts: seen?.at ?? new Date().toISOString(), event: "confirmation-seen", url: seen?.url, by: "watch" }
-        : { ts: new Date().toISOString(), event: "marked-submitted" };
+        ? {
+            ts: seen?.at ?? new Date().toISOString(),
+            event: "confirmation-seen",
+            url: seen?.url,
+            by: "watch",
+            ...before,
+          }
+        : { ts: new Date().toISOString(), event: "marked-submitted", ...before };
+    await this.appendLog(postingId, event);
+  }
+
+  /**
+   * The user says the application isn't submitted after all (the page was taken for a confirmation, or a click
+   * went astray): the posting goes back to the status it had before, as the log's last submission says, else
+   * `filled`, and the log gets `marked-open`.
+   */
+  async reopen(postingId: string): Promise<void> {
+    const meta = await this.postings.get(postingId);
+    if (meta.status !== "submitted") return;
+    const text = await readFile(join(this.postings.folder(postingId), "form-log.jsonl"), "utf8").catch(() => "");
+    let status: PostingStatus = "filled";
+    for (const line of text.split(/\r?\n/).reverse()) {
+      let e: { event?: string; from?: PostingStatus };
+      try {
+        e = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (e.event !== "confirmation-seen" && e.event !== "marked-submitted") continue;
+      if (e.from && STATUS_ORDER.indexOf(e.from) >= 0 && e.from !== "submitted") status = e.from;
+      break;
+    }
+    await this.postings.updateMeta(postingId, { status });
+    await this.appendLog(postingId, { ts: new Date().toISOString(), event: "marked-open", status });
+  }
+
+  private async appendLog(postingId: string, event: Record<string, unknown>): Promise<void> {
     await appendFile(join(this.postings.folder(postingId), "form-log.jsonl"), `${JSON.stringify(event)}\n`, "utf8");
   }
 }

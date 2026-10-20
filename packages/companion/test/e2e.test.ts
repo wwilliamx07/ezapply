@@ -1063,7 +1063,13 @@ describe("form tools over MCP", () => {
     await ext.peer.request("posting.submitted", { postingId: cap.postingId, url: APPLY_URL, at });
     expect((await callJson(client, "posting_get")).data.status).toBe("submitted");
     const last = (await readFile(join(folder, "form-log.jsonl"), "utf8")).trim().split(/\r?\n/).at(-1) as string;
-    expect(JSON.parse(last)).toEqual({ ts: at, event: "confirmation-seen", url: APPLY_URL, by: "watch" });
+    expect(JSON.parse(last)).toEqual({
+      ts: at,
+      event: "confirmation-seen",
+      url: APPLY_URL,
+      by: "watch",
+      from: "filled",
+    });
     // A posting deleted since is answered all the same, so the extension stops sending it.
     await expect(ext.peer.request("posting.submitted", { postingId: "gone", url: APPLY_URL, at })).resolves.toEqual({});
 

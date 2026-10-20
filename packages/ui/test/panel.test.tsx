@@ -266,7 +266,7 @@ describe("the side panel", () => {
     confirm.mockRestore();
   });
 
-  it("marks a posting submitted from its popover, offered only until it's submitted", async () => {
+  it("marks a posting submitted from its popover until it's submitted, then open again", async () => {
     const t = fakeTransport({ conv: conversation() });
     render(<PanelApp transport={t.transport} />);
     await openApp();
@@ -280,6 +280,8 @@ describe("the side panel", () => {
     await openApp();
     expect(await screen.findByText("resume.pdf")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mark submitted" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mark open" }));
+    await waitFor(() => expect(done.calls).toContainEqual(["panel.markOpen", { postingId: POSTING.id }]));
   });
 
   it("captures from the list into the posting's conversation, opens its application, back to the list, and resets after asking", async () => {

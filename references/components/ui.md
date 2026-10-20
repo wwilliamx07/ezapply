@@ -143,7 +143,8 @@ Top to bottom, in an application:
    (draft, under review, changes asked), the name opening the PDF and **Review** bringing a waiting review's tab back ("No documents
    yet." before there are any), an approved document with a **trash** button that deletes the PDF (asks first; its
    LaTeX source stays); **Mark submitted** (until the posting is submitted or archived: for a Submit the
-   extension's watch missed, [postings](postings.md#status)); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
+   extension's watch missed, [postings](postings.md#status)), or **Mark open** once it is (in case a page was taken
+   for a confirmation, or the click went astray); **Reset Conversation** (red when hovered; asks first: a new session for the conversation
    shown, documents or application; the files stay); and **Delete posting** (red when hovered; asks first; disabled
    while an agent works in either of the posting's conversations; refused while the posting has a review open), which deletes the posting's folder and both its conversations for good, after which the panel goes back to
    the list. The panel

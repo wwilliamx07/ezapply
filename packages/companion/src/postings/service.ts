@@ -151,7 +151,7 @@ export class PostingsService {
     );
   }
 
-  /** Call `fn` after a capture or a delete (the panel's list follows). Returns the function that stops it. */
+  /** Call `fn` after a capture, a change to a posting's meta, or a delete (the panel follows). Returns the function that stops it. */
   onChange(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -180,6 +180,7 @@ export class PostingsService {
       const meta = await this.get(id);
       const next = PostingMeta.parse({ ...meta, ...stripUndefined(patch), updatedAt: new Date().toISOString() });
       await writeJsonAtomic(this.metaPath(id), next);
+      this.changed();
       return next;
     });
   }

@@ -254,11 +254,14 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       fail(err);
     }
   };
-  /** When the extension missed the confirmation page (the tab closed first, a page it didn't recognise). */
-  const markSubmitted = async () => {
+  /**
+   * Submitted: when the extension missed the confirmation page (the tab closed first, a page it didn't recognise).
+   * Open: when it took a page for one, or the click went astray.
+   */
+  const markSubmitted = async (submitted: boolean) => {
     if (!posting) return;
     try {
-      await transport.call("panel.markSubmitted", { postingId: posting.id });
+      await transport.call(submitted ? "panel.markSubmitted" : "panel.markOpen", { postingId: posting.id });
       await refreshState();
       await refreshConv();
     } catch (err) {
@@ -450,10 +453,21 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                     variant="ghost"
                     size="sm"
                     disabled={!connected}
-                    onClick={() => void markSubmitted()}
+                    onClick={() => void markSubmitted(true)}
                     title="You submitted this application: move it to Done"
                   >
                     Mark submitted
+                  </Button>
+                ) : null}
+                {posting.status === "submitted" ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!connected}
+                    onClick={() => void markSubmitted(false)}
+                    title="This application isn't submitted: move it back to Open"
+                  >
+                    Mark open
                   </Button>
                 ) : null}
                 <Button

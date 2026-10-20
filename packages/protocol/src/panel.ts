@@ -453,6 +453,8 @@ export const PanelMethods = {
   "panel.deletePosting": { params: z.object({ postingId: z.string() }), result: Empty },
   /** The user says they submitted the application: when the confirmation page went unseen. */
   "panel.markSubmitted": { params: z.object({ postingId: z.string() }), result: Empty },
+  /** The user says a submitted posting isn't: back to the status it had before. */
+  "panel.markOpen": { params: z.object({ postingId: z.string() }), result: Empty },
   /** Delete one of a posting's PDFs for good (its LaTeX source stays). Refused while it's in an open review. */
   "panel.deleteDocument": { params: z.object({ postingId: z.string(), file: z.string() }), result: Empty },
   /** Open, for the user: a review's tab again, a posting's file, or the setup page. */

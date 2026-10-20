@@ -423,14 +423,38 @@ describe("the side panel over the bridge", () => {
     await expect(ext.peer.request("panel.deletePosting", { postingId: id })).rejects.toThrow(/No posting/);
   });
 
-  it("marks a posting submitted for the user, and logs it", async () => {
+  it("marks a posting submitted and open again for the user, back to its status before, and logs both", async () => {
     const { peer } = await extension();
     const id = await capture();
+    const status = async () => (await peer.request("panel.state", {})).postings.find((p) => p.id === id)?.status;
+    await handle.services.postings.updateMeta(id, { status: "filled" });
     await peer.request("panel.markSubmitted", { postingId: id });
-    const state = await peer.request("panel.state", {});
-    expect(state.postings.find((p) => p.id === id)?.status).toBe("submitted");
+    expect(await status()).toBe("submitted");
+    await peer.request("panel.markOpen", { postingId: id });
+    expect(await status()).toBe("filled");
     const log = await readFile(join(dir, "ws", "postings", id, "form-log.jsonl"), "utf8");
-    expect(JSON.parse(log.trim())).toMatchObject({ event: "marked-submitted" });
+    expect(
+      log
+        .trim()
+        .split(/\r?\n/)
+        .map((l) => JSON.parse(l)),
+    ).toMatchObject([
+      { event: "marked-submitted", from: "filled" },
+      { event: "marked-open", status: "filled" },
+    ]);
+  });
+
+  it("tells the open panels when a posting's status moves on its own, as when the watch sees Submit", async () => {
+    const ext = await extension();
+    const id = await capture();
+    await ext.peer.request("panel.watch", { open: 1 });
+    ext.updates.splice(0);
+    await ext.peer.request("posting.submitted", {
+      postingId: id,
+      url: "https://example.com/done",
+      at: "2026-01-01T00:00:00Z",
+    });
+    await waitFor(async () => (ext.updates.some((u) => u.changed) ? true : null), 5000);
   });
 
   it("opens the setup page and a posting's file for the user, and refuses a file outside the posting", async () => {

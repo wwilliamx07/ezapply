@@ -120,7 +120,9 @@ confirmation page: read by `get_form`, or seen by the extension, which watches t
 the user's Submit has no form call after it ([the watch](extension.md#watching-for-the-users-submit-submit-watchts))),
 never backward, and only for the posting the application tab is credited to
 ([which posting](../mcp-tools.md#forms)). The panel's **Mark submitted** sets `submitted` by hand, for a
-confirmation the watch missed. `archived` is set by hand.
+confirmation the watch missed, and **Mark open** undoes it: back to the status the log's last submission
+recorded (`from`), else `filled` (`FormsService.reopen`). `archived` is set by hand. Every change to a
+posting's meta tells the `onChange` listeners, so an open panel shows a status that moved on its own.
 
 ## No database
 The posting folder is the application record: `meta.json` (status and details) and `form-log.jsonl`

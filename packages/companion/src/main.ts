@@ -157,6 +157,10 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
         await forms.submitted(postingId, "user");
         return {};
       },
+      "panel.markOpen": async ({ postingId }) => {
+        await forms.reopen(postingId);
+        return {};
+      },
       "panel.deleteDocument": async ({ postingId, file }) => {
         await panel.deleteDocument(postingId, file);
         return {};
