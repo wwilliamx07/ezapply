@@ -11,6 +11,7 @@ import {
   settle,
   text,
   waitFor,
+  watchRequests,
 } from "@ezapply/engine/dom";
 import { T } from "@ezapply/engine/timing";
 import { branch } from "@ezapply/engine/trace";
@@ -93,13 +94,27 @@ function optionInfo(el: HTMLElement): OptionInfo {
  * quiet returned the previous query's results (or none), one call behind. One of them must also hold the
  * query: on a hierarchical prompt, live, the category menu ("All", …) rendered after the query was typed and was
  * taken for the results before the search had answered.
+ *
+ * The query is typed only once the requests the press started are back: some prompts fetch the start of their
+ * whole list on a press, and live (a field of study) that list came back after the search's quicker results and
+ * replaced them, so every search read the same first page.
  */
 async function typeQuery(c: HTMLElement, query: string): Promise<HTMLInputElement | null> {
   const input = c.querySelector<HTMLInputElement>(`${within(SEL.multiSelect, "input")}, input`);
   if (!input) return null;
   input.focus();
-  press(input);
-  await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
+  const requests = watchRequests(c.ownerDocument);
+  try {
+    press(input);
+    await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
+    if (requests.pending() > 0) {
+      branch("typeahead list loading", { pending: requests.pending() });
+      await waitFor(() => requests.pending() === 0, T.typeaheadFocusRequestsMs, 100);
+      await settle(c.ownerDocument, T.typeaheadFocusQuietMs, T.typeaheadFocusMaxMs);
+    }
+  } finally {
+    requests.stop();
+  }
   const before = promptSignature(c);
   // Done when new options show, or when "No Items." has stayed for a while (a search that found nothing:
   // it also shows briefly while results load).

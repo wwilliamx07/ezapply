@@ -67,7 +67,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   SmartRecruiters, Taleo and BrassRing wait for pages saved from a real application, since ezapply doesn't work
   around bot checks ([sites](components/sites.md#why-these-three)).
 - **A step's late values are waited for by its requests,** not by a longer quiet: Workday's requests for a
-  returning step's dropdown values run while the page shows nothing changing ([workday](components/sites/workday.md)).
+  returning step's dropdown values, and for the list a prompt loads on a press, run while the page shows nothing
+  changing ([workday](components/sites/workday.md)).
 - **Nothing is filled without the model.** Every value goes in through the agent's `fill_fields`; fields carry only
   profile hints. Filling from the profile and answer bank without the model saved values, not turns (every step
   still took a `fill_fields` call for the rest), and its mistakes passed as clean fills (a word in a 1–10 scale
@@ -190,6 +191,11 @@ What's built but hasn't run live, and what to check first. Each site's page list
   other Workday change: such a date is `ok`, and the trace shows `date parts drifted` only where the page rewrote
   a part ([dates](components/sites/workday.md#dates-typed-into-workdays-split-widget)).
 
+- **Workday's prompt waiting for the list its press loads:** a field of study that fetches its list on the press
+  now searches once that request is back, and the fixture's prompt that does the same fills. Check in a live run
+  with no other Workday change: a field of study fills by search (the trace shows `typeahead list loading` before
+  its query), and skills cost no more than before ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
+
 - **The rename retry:** a run on Windows with the panel open should no longer show "locked by another program"
   for a posting's `meta.json` ([architecture](architecture.md#cross-cutting-concerns)).
 
@@ -280,8 +286,6 @@ What's built but hasn't run live, and what to check first. Each site's page list
 ## Known issues
 - **"Could not open the dropdown"** on Workday after its own list was read without a choice; the adapter retries
   once, and nothing records whether the retry ran ([details](components/sites/workday.md#workdays-dropdown-finding-its-listbox)).
-- **Unexplained on Workday:** a "Field of Study" search returning only its top level in a step's fill but taken
-  when filled alone.
 - **A `go_next` after the user advanced the step themselves** presses the next step's button.
 - **The default cover letter test** failed once with MiKTeX and didn't reproduce; capture its `hint` if it recurs.
 

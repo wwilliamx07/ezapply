@@ -23,6 +23,7 @@ export const STANDARD_WAITS = {
   dropdownClosedMs: 200,
   typeaheadFocusQuietMs: 150,
   typeaheadFocusMaxMs: 1000,
+  typeaheadFocusRequestsMs: 3000,
   typeaheadResultsMs: 4000,
   typeaheadResultsRetryMs: 2000,
   typeaheadNoResultsMs: 2000,
@@ -79,6 +80,8 @@ export const TIMING_DOCS: Record<TimingKey, string> = {
   dropdownClosedMs: "dropdown: wait for its list to disappear",
   typeaheadFocusQuietMs: "typeahead (skills, school…): after clicking into it, wait for quiet",
   typeaheadFocusMaxMs: "typeahead: but never longer than this",
+  typeaheadFocusRequestsMs:
+    "typeahead: then wait for the requests the click started (a list it loads), where the site does",
   typeaheadResultsMs: "typeahead: wait for this search's results",
   typeaheadResultsRetryMs: "typeahead: wait again after pressing Enter a second way",
   typeaheadNoResultsMs: "typeahead: how long 'No Items.' must stay to count as no results",

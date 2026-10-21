@@ -38,8 +38,10 @@ export interface StepOptions {
    * The Skills prompt as two live variants. `checkboxes`: each option has a checkbox and a press toggles it (a
    * pill added or removed, the popup left open), and Enter ticks a search's only result itself. `menuFirst`: Enter
    * shows the category menu at once, where the plain prompt shows "No Items.", and the results after it.
+   * `listOnFocus`: a press into it fetches the start of the whole list, which takes SKILLS_LIST_MS and shows
+   * when it lands, over the results of a search sent after it that came back sooner (live, a field of study).
    */
-  skillsPrompt?: "checkboxes" | "menuFirst";
+  skillsPrompt?: "checkboxes" | "menuFirst" | "listOnFocus";
   /**
    * Back shows the step with its chosen dropdowns reading "Select One" until their values come back from a
    * request (`fetch`) this many ms long, started just after the step shows, as live: Workday fetches a
@@ -53,6 +55,12 @@ const liveListeners = new WeakMap<Document, AbortController>();
 
 /** Search delay of the Skills prompt, which shows "No Items." until its results arrive. */
 const SKILLS_SEARCH_MS = 400;
+
+/**
+ * How long the `listOnFocus` prompt's list takes: it lands just after a search sent once the press went quiet
+ * has shown its results, while the page settles after them.
+ */
+const SKILLS_LIST_MS = 625;
 
 const SKILLS = [
   "Python (Programming Language)",
@@ -347,6 +355,12 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
         toggle(results[0] as string, leaves[0] as HTMLElement);
     }, SKILLS_SEARCH_MS);
   });
+  if (opts.skillsPrompt === "listOnFocus") {
+    const w = doc.defaultView as Window & typeof globalThis;
+    skillsInput.addEventListener("click", () => {
+      void w.fetch("/skills").then(() => skillsPopup(SKILLS.slice(0, 4)));
+    });
+  }
 
   // Prompt: Enter in the input opens a popup with matching options (and a nested category).
   const sourceInput = doc.querySelector<HTMLInputElement>("#ms-source input") as HTMLInputElement;
@@ -509,10 +523,12 @@ export function buildWorkdayStep(doc: Document, opts: StepOptions = {}): { submi
       }, 50);
     }
   });
-  if (opts.savedListsLoadMs !== undefined) {
-    const ms = opts.savedListsLoadMs;
-    (doc.defaultView as Window & typeof globalThis).fetch = (() =>
-      new Promise((resolve) => setTimeout(() => resolve({} as Response), ms))) as typeof fetch;
+  const requestMs: Record<string, number> = {};
+  if (opts.savedListsLoadMs !== undefined) requestMs["/values"] = opts.savedListsLoadMs;
+  if (opts.skillsPrompt === "listOnFocus") requestMs["/skills"] = SKILLS_LIST_MS;
+  if (Object.keys(requestMs).length) {
+    (doc.defaultView as Window & typeof globalThis).fetch = ((url: string) =>
+      new Promise((resolve) => setTimeout(() => resolve({} as Response), requestMs[url] ?? 0))) as typeof fetch;
   }
   next.addEventListener("click", () => {
     if (next.textContent === "Submit") {

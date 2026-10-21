@@ -127,6 +127,13 @@ wordings of an option it found. `"Job Board > LinkedIn"` walks nested menus. Val
   prompt (a field of study under "All" and "Partial List…") the category menu rendered just after the query was
   typed and was read as the results. Results that hold no part of the query cost the full wait and its retry,
   about 6 s.
+- **A list loaded on the press.** The query is typed only once the page's requests started by the press into the
+  prompt are back (`watchRequests`, up to `typeaheadFocusRequestsMs`, then quiet again; the trace notes
+  `typeahead list loading`). *Why:* live, a field of study fetched the start of its whole list on the press
+  (about 0.7 s) while the page showed nothing changing; the search sent on that quiet came back sooner, and the
+  list landed over its results, so every search and fill read the same first page ("Accounting",
+  "Actuarial Science"…). A prompt whose press fetches nothing, such as skills, doesn't wait. The fixture models it
+  (`skillsPrompt: "listOnFocus"`).
 - **Checkbox lists.** Some multi-selects tick each option (`promptLeafNode` with `data-automation-checked`), stay
   open on a press, toggle on every press, and tick a search's only result themselves on Enter; pressing it then
   unticked it (live: skills and a citizenship selected, then unselected). An option already selected (its chip, or

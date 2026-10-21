@@ -548,7 +548,7 @@ describe("skills prompts as live variants", () => {
       .getForm()
       .sections.flatMap((s) => s.fields)
       .find((f) => f.automationId === automationId)?.id as string;
-  const build = (skillsPrompt: "checkboxes" | "menuFirst") => {
+  const build = (skillsPrompt: "checkboxes" | "menuFirst" | "listOnFocus") => {
     fixture = buildWorkdayStep(document, { skillsPrompt });
     api = createWorkdayApi(document, () => "https://acme.wd5.myworkdayjobs.com/en-US/External/job/x/apply");
   };
@@ -572,6 +572,18 @@ describe("skills prompts as live variants", () => {
       "Structured Query Language (SQL)",
       "U-SQL",
     ]);
+  }, 20_000);
+
+  it("searches once the list a press fetches is in, so it doesn't land over the results", async () => {
+    build("listOnFocus");
+    await api.remove(id("formField-skills"));
+    const [r] = await api.fill([{ fieldId: id("formField-skills"), value: ["TypeScript"] }]);
+    expect(r).toMatchObject({ ok: true, readBack: ["TypeScript"] });
+    expect((await api.searchOptions(id("formField-skills"), "react")).map((o) => o.label)).toEqual([
+      "React.js",
+      "React Native",
+    ]);
+    expect(window.fetch.name).not.toBe("wrapped");
   }, 20_000);
 });
 
