@@ -494,17 +494,10 @@
   font-weight: 600;
   color: var(--text-2);
 }
-.ob-ask {
+.ob-chat-note {
   margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-}
-.ob-ask .ez-label {
-  align-self: flex-start;
 }
 
 /* ---- narrow windows ---- */

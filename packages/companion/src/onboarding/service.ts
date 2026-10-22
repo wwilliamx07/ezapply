@@ -80,8 +80,6 @@ const HOW: Record<OnboardTaskKind, string> = {
   "cover-from-example":
     "params.file is in the workspace (library/…): template_import_example { sourcePath } with its absolute path, " +
     "then follow Build from an example in the ezapply-cover-letter skill.",
-  "revise-cover": "Change the cover template as params.request says, then tex_compile { path } it.",
-  question: "Answer params.text in a few sentences in note: the page shows it to the user.",
 };
 
 const TaskBody = z.object({
@@ -592,11 +590,12 @@ export class OnboardingService {
 
   // ---- internals ---------------------------------------------------------------------------------
 
-  /** A template's PDF beside its main file, once built. */
-  private async builtPdf(kind: "resume" | "cover", main?: string): Promise<{ pdf?: string }> {
+  /** A template's PDF beside its main file, once built, and when it was last built. */
+  private async builtPdf(kind: "resume" | "cover", main?: string): Promise<{ pdf?: string; builtAt?: string }> {
     if (!main) return {};
     const abs = this.services().workspace.path("templates", kind, main.replace(/\.tex$/i, ".pdf"));
-    return (await stat(abs).catch(() => null)) ? { pdf: this.rel(abs) } : {};
+    const st = await stat(abs).catch(() => null);
+    return st ? { pdf: this.rel(abs), builtAt: st.mtime.toISOString() } : {};
   }
 
   private async doneSummary(): Promise<OnboardingNext> {

@@ -487,7 +487,7 @@ describe("setup tasks for the panel's agent", () => {
     const res = await fetch(`${u.origin}/onboard/action?t=${u.searchParams.get("t")}`, {
       method: "POST",
       headers: { Origin: u.origin, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "task", kind: "question", params: { text: "What does ezapply do?" } }),
+      body: JSON.stringify({ action: "task", kind: "draft-profile", params: { main: "templates/resume/resume.tex" } }),
     });
     const { task } = (await res.json()) as { task: { id: string } };
     const events: string[] = [];
@@ -495,7 +495,7 @@ describe("setup tasks for the panel's agent", () => {
       if (k === "general" && e.kind === "text") events.push(e.text);
     });
     await waitFor(async () => (events.length > 0 ? true : null), 10_000);
-    expect(events[0]).toMatch(/^echo: Setup task t1 from the setup page \(question\)/);
+    expect(events[0]).toMatch(/^echo: Setup task t1 from the setup page \(draft-profile\)/);
     expect(events[0]).toContain('onboarding { taskId: "t1", result: { ok, note? } }');
 
     const client = new Client({ name: "test", version: "0.0.0" });
@@ -506,14 +506,14 @@ describe("setup tasks for the panel's agent", () => {
     );
     const r = await client.callTool({
       name: "onboarding",
-      arguments: { taskId: task.id, result: { ok: true, note: "Answered." } },
+      arguments: { taskId: task.id, result: { ok: true, note: "Drafted." } },
     });
     expect(JSON.parse((r.content as { text: string }[])[0]?.text ?? "null")).toEqual({ reported: true });
     const state = await (await fetch(`${u.origin}/onboard/state?t=${u.searchParams.get("t")}`)).json();
     expect(state).toMatchObject({
       agentIn: "panel",
       agentListening: true,
-      tasks: [{ id: "t1", status: "done", note: "Answered." }],
+      tasks: [{ id: "t1", status: "done", note: "Drafted." }],
     });
     await client.close();
   });
@@ -525,7 +525,7 @@ describe("setup tasks for the panel's agent", () => {
     await fetch(`${u.origin}/onboard/action?t=${t}`, {
       method: "POST",
       headers: { Origin: u.origin, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "task", kind: "question", params: { text: "[slow]" } }),
+      body: JSON.stringify({ action: "task", kind: "draft-profile", params: { main: "[slow]" } }),
     });
     const stateOf = async () => (await (await fetch(`${u.origin}/onboard/state?t=${t}`)).json()) as OnboardState;
     expect((await stateOf()).agentName).toBe("Claude Code");

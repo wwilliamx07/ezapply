@@ -66,4 +66,7 @@ the page; you do the parts that need you, as tasks it sends.
    sentence on what you did, or what the user must do if it failed (`ok: false`).
 
 The same call reopens the page later, when the user wants to change a step (another resume, more repos).
+The page has no chat: a question about setup, or a change it has no button for (the cover template's margins,
+the date's place), is asked here. Do it here; for the cover template, edit `templates/cover/` and `tex_compile`
+it. The page picks up the result on its own; there's no task to report.
 Never ask in chat for what the page collects: a password, a client secret, an address, screening answers.

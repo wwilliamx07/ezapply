@@ -9,6 +9,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **The extension watches for Submit; the user can mark it.** The user presses Submit, so no form call sees the
   confirmation page; watching the tab from the hand-off records it without an agent, and **Mark submitted** in the
   panel covers what the watch misses ([extension](components/extension.md#watching-for-the-users-submit-submit-watchts)).
+- **The setup page has no chat.** Questions and changes no button covers go to the panel's general conversation,
+  which already is one; the page's previews follow the PDF's build time, so the agent's work there shows on the page
+  ([ui](components/ui.md#what-each-step-does)).
 - **No daemon.** The companion lives inside `./ezapply` and ends with it. Nothing runs in the
   background, so there is nothing to start, stop or keep secure while the user isn't applying
   ([architecture](architecture.md#processes-and-lifecycle)).

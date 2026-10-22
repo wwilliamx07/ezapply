@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -135,21 +135,26 @@ describe("onboarding on a page", () => {
     expect((await p.act({ action: "task", kind: "nonsense" })).status).toBe(400);
 
     // Two tasks, taken in order; the first comes back to the waiting call with what to do.
-    await p.act({ action: "task", kind: "question", params: { text: "What do you read?" } });
+    await p.act({ action: "task", kind: "fix-template-build", params: { main: "templates/resume/resume.tex" } });
     await p.act({ action: "task", kind: "index-repos", params: { repos: ["jane/api"] } });
     const first = await waiting;
     expect(first).toMatchObject({
       url,
       openedIn: "default",
-      task: { id: "t1", kind: "question", params: { text: "What do you read?" }, status: "running" },
+      task: {
+        id: "t1",
+        kind: "fix-template-build",
+        params: { main: "templates/resume/resume.tex" },
+        status: "running",
+      },
     });
     expect(first.task.how).toMatch(/note/);
     // Reporting waits for the next in the same call; the page shows the note.
-    const second = await call(client, { taskId: "t1", result: { ok: true, note: "Only what you choose." } });
+    const second = await call(client, { taskId: "t1", result: { ok: true, note: "Added the font's path." } });
     expect(second.task).toMatchObject({ id: "t2", kind: "index-repos" });
     expect(second.openedIn).toBeUndefined();
     expect((await p.state()).tasks).toMatchObject([
-      { id: "t1", status: "done", note: "Only what you choose." },
+      { id: "t1", status: "done", note: "Added the font's path." },
       { id: "t2", status: "running" },
     ]);
     // A task taken and never reported is given again.
@@ -326,6 +331,24 @@ hobbies: [chess]
     expect((await p.state()).library).toEqual(["transcript-2.pdf", "transcript.pdf"]);
     // The page's PDF route serves templates' PDFs only.
     expect((await p.get("file?path=library/transcript.pdf")).status).toBe(400);
+  });
+
+  it("says when a template's PDF was built, so a build from the chat reloads the page's preview", async () => {
+    const p = page(handle.services.onboarding.open().url);
+    const folder = join(ws, "templates", "cover");
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "template.json"), JSON.stringify({ schemaVersion: 1, main: "cover.tex" }));
+    await writeFile(join(folder, "cover.tex"), "\\documentclass{letter}");
+    expect((await p.state()).cover.builtAt).toBeUndefined();
+
+    await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 a");
+    await utimes(join(folder, "cover.pdf"), new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+    expect((await p.state()).cover).toMatchObject({
+      pdf: "templates/cover/cover.pdf",
+      builtAt: "2026-01-01T00:00:00.000Z",
+    });
+    await utimes(join(folder, "cover.pdf"), new Date("2026-01-02T00:00:00Z"), new Date("2026-01-02T00:00:00Z"));
+    expect((await p.state()).cover.builtAt).toBe("2026-01-02T00:00:00.000Z");
   });
 
   it("deletes a library file the step lists, and nothing outside library/", async () => {
