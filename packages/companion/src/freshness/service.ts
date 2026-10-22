@@ -1,6 +1,6 @@
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { ErrorCode, EzError } from "@ezapply/protocol";
+import { ErrorCode, EzError, type WorkspaceChangeKind } from "@ezapply/protocol";
 import type { Logger } from "../logger.js";
 import type { ProfileService } from "../profile/service.js";
 import type { RepoService } from "../repos/service.js";
@@ -9,26 +9,19 @@ import { hashFiles, hashValue } from "../util/hash.js";
 import { unifiedDiff } from "../util/line-diff.js";
 import type { Workspace } from "../workspace/workspace.js";
 
-type ChangeKind =
-  | "repo-pushed"
-  | "repo-deselected"
-  | "template-source"
-  | "template-untracked"
-  | "library-template"
-  | "resume-edited"
-  | "profile-identity";
-
 /** Something derived in the workspace that its source has moved past. */
-interface WorkspaceChange {
+export interface WorkspaceChange {
   /** Names the exact state (`repo-pushed:owner/name@<sha>`): a change put off and then changed again is new. */
   id: string;
-  kind: ChangeKind;
+  kind: WorkspaceChangeKind;
   summary: string;
   /** How it's brought current. */
   detail: string;
   /** For `resume-edited`: what changed in the template since the profile was last updated from it. */
   diff?: string;
-  /** What the stale part feeds, so the agent can tell whether the request in hand needs it first. */
+  /** For `template-source` and `library-template`: the file or folder an update imports from. */
+  source?: string;
+  /** What the stale part feeds, so the request in hand can tell whether it needs it first. */
   affects: ("claims" | "resume" | "cover" | "profile" | "forms")[];
 }
 
@@ -89,14 +82,17 @@ interface Options {
  * came from, the profile behind the resume template, the cover letter's fields behind the profile, and
  * knowledge from repos no longer selected. The repo check needs the network, so it runs once per chat, in
  * the background from `start()`; the local checks are cheap and run on every call. Nothing here changes
- * the derived files: the agent does that with the user's agreement, then marks the change done. A repo put
- * off gets a timer in state.json and isn't checked until it runs out; any other change put off is hidden
- * until the chat ends.
+ * the derived files: the user's choice on the panel's card or the setup page does (`WorkspaceUpdates`), and
+ * marks the change. A repo put off gets a timer in state.json and isn't checked until it runs out; any other
+ * change put off is hidden in that conversation until ezapply stops.
  */
 export class FreshnessService {
   private repoCheck: Promise<RepoCheck> | null = null;
-  /** Changes the user put off, hidden until the chat ends (this service lives as long as the chat). */
-  private readonly later = new Set<string>();
+  /** The last repo check's result, once it's in. */
+  private repoResult: RepoCheck | null = null;
+  /** Changes the user put off, by the conversation they were put off in (a panel conversation, the setup page). */
+  private readonly later = new Map<string, Set<string>>();
+  private readonly listeners = new Set<() => void>();
   private readonly waitMs: number;
   private readonly remoteTimeoutMs: number;
 
@@ -117,12 +113,23 @@ export class FreshnessService {
     this.runRepoCheck();
   }
 
-  async changes(opts: { refresh?: boolean } = {}): Promise<ChangesResult> {
+  /** Called when a repo check finishes, or a change is marked: the list may differ. */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  /**
+   * What's out of date, without what was put off in `conversation`. A repo check still running is waited on for
+   * up to `waitMs` (the agent's call), or not at all with `wait: false` (a card, which `onChange` updates).
+   */
+  async changes(opts: { refresh?: boolean; conversation?: string; wait?: boolean } = {}): Promise<ChangesResult> {
     if (opts.refresh || !this.repoCheck) this.runRepoCheck();
-    const timeout = new Promise<null>((r) => setTimeout(() => r(null), this.waitMs).unref());
-    const remote = await Promise.race([this.repoCheck, timeout]);
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), opts.wait === false ? 0 : this.waitMs).unref());
+    const remote = this.repoResult ?? (await Promise.race([this.repoCheck, timeout]));
     const current = await this.current(remote);
-    const changes = current.changes.filter((c) => !this.later.has(c.id));
+    const hidden = this.later.get(opts.conversation ?? "") ?? new Set<string>();
+    const changes = current.changes.filter((c) => !hidden.has(c.id));
     const { notChecked } = current;
     const deferred = [...(await this.deferredRepos()).values()];
     return {
@@ -142,31 +149,36 @@ export class FreshnessService {
     };
   }
 
-  /**
-   * `later` puts a repo's new commits off for `hours` (a day by default, at most 90 days), past the end of
-   * the chat, and hides any other change for the rest of the chat. `done` records that the derived part is
-   * current: the template with its source, the profile with the resume template, the cover fields with the
-   * profile; for a deselected repo it deletes the repo's knowledge and cache. A repo's new commits are ended
-   * by `knowledge_mark_indexed` only, after re-indexing. Every id is checked before any is marked.
-   */
-  async mark(ids: string[], as: "done" | "later", hours?: number): Promise<{ marked: Marked[] }> {
-    const current = (await this.current(await this.repoCheck)).changes;
-    const picked = ids.map((id) => {
+  /** The current changes with these ids, in their order; refused whole when one isn't current. */
+  async find(ids: string[]): Promise<WorkspaceChange[]> {
+    const current = (await this.current(this.repoResult ?? (await this.repoCheck))).changes;
+    return ids.map((id) => {
       const change = current.find((c) => c.id === id);
       if (!change) {
         throw new EzError(
           ErrorCode.NotFound,
           `No current change ${id}.`,
-          "It may be done already, or changed again since: call workspace_changes for the current ids.",
+          "It may be done already, or changed again since: the list shows the current ones.",
         );
       }
       return change;
     });
+  }
+
+  /**
+   * `later` puts a repo's new commits off for `hours` (a day by default, at most 90 days), past ezapply's end,
+   * and hides any other change in `conversation` until ezapply stops. `done` records that the derived part is
+   * current: the template with its source, the profile with the resume template, the cover fields with the
+   * profile; for a deselected repo it deletes the repo's knowledge and cache. A repo's new commits are ended
+   * by `knowledge_mark_indexed` only, after re-indexing. Every id is checked before any is marked.
+   */
+  async mark(ids: string[], as: "done" | "later", hours?: number, conversation = ""): Promise<{ marked: Marked[] }> {
+    const picked = await this.find(ids);
     if (as === "done" && picked.some((c) => c.kind === "repo-pushed")) {
       throw new EzError(
         ErrorCode.BadRequest,
         "A repo's new commits are ended by re-indexing it, not by marking.",
-        "Run the ezapply-index-repo skill for it (knowledge_mark_indexed ends this change), or mark it `later`.",
+        "Update it (knowledge_mark_indexed ends this change), or put it off.",
       );
     }
     const timed = picked.find((c) => c.kind !== "repo-pushed");
@@ -174,16 +186,22 @@ export class FreshnessService {
       throw new EzError(
         ErrorCode.BadRequest,
         `\`hours\` puts off a repo's new commits only${timed ? `; ${timed.id} is a ${timed.kind} change` : ""}.`,
-        "Mark the others `later` without hours: a template or profile behind its source feeds the next document, " +
-          "so the next chat asks again.",
+        "Put the others off without hours: a template or profile behind its source feeds the next document, " +
+          "so the next conversation asks again.",
       );
     }
     const marked: Marked[] = [];
-    for (const change of picked) marked.push(await this.markOne(change, as, hours));
+    for (const change of picked) marked.push(await this.markOne(change, as, hours, conversation));
+    this.emit();
     return { marked };
   }
 
-  private async markOne(change: WorkspaceChange, as: "done" | "later", hours?: number): Promise<Marked> {
+  private async markOne(
+    change: WorkspaceChange,
+    as: "done" | "later",
+    hours: number | undefined,
+    conversation: string,
+  ): Promise<Marked> {
     const { id } = change;
     const rest = id.slice(id.indexOf(":") + 1);
     if (as === "later" && change.kind === "repo-pushed") {
@@ -197,7 +215,8 @@ export class FreshnessService {
       return { id, as, until };
     }
     if (as === "later") {
-      this.later.add(id);
+      const hidden = this.later.get(conversation) ?? new Set<string>();
+      this.later.set(conversation, hidden.add(id));
       return { id, as };
     }
     switch (change.kind) {
@@ -238,11 +257,26 @@ export class FreshnessService {
   // ---- repos (network once per chat, the rest every call) --------------------------------------
 
   private runRepoCheck(): void {
+    this.repoResult = null;
     const check = this.checkRepos().catch((err: unknown) => {
       this.log.warn({ err: (err as Error).message }, "repo check failed");
       return { pushed: [], notChecked: [] };
     });
     this.repoCheck = check;
+    void check.then((result) => {
+      if (this.repoCheck !== check) return;
+      this.repoResult = result;
+      this.emit();
+    });
+  }
+
+  /** Something the list is made from changed (a template imported, a repo selected): tell those who show it. */
+  touched(): void {
+    this.emit();
+  }
+
+  private emit(): void {
+    for (const fn of this.listeners) fn();
   }
 
   /**
@@ -300,8 +334,7 @@ export class FreshnessService {
         id: `repo-deselected:${repo}`,
         kind: "repo-deselected",
         summary: `knowledge/${repo.replace("/", "__")} is from ${repo}, which is no longer selected; its claims are still in claims_list.`,
-        detail:
-          'Ask the user: delete that knowledge and the repo\'s cache (workspace_change_mark as done), or select the repo again on the setup page (onboarding { step: "repos" }).',
+        detail: "On the card: delete that knowledge and the repo's cache, or select the repo again.",
         affects: ["claims"],
       });
     }
@@ -317,7 +350,7 @@ export class FreshnessService {
         id: `repo-pushed:${fullName}@${head.slice(0, 7)}`,
         kind: "repo-pushed",
         summary: `${fullName} has new commits since it was indexed (${indexedSha.slice(0, 7)} → ${head.slice(0, 7)}).`,
-        detail: "Re-index it with the ezapply-index-repo skill (only what changed); knowledge_mark_indexed ends this.",
+        detail: "Update re-indexes it (only what changed) as a task for the agent; knowledge_mark_indexed ends this.",
         affects: ["claims"],
       });
     }
@@ -364,8 +397,7 @@ export class FreshnessService {
           kind: "template-untracked",
           summary: `templates/${kind}/ was imported from a copy in a Claude scratchpad (${meta.importedFrom}), so the user's edits to their own file go unnoticed.`,
           detail:
-            `${hint}Ask the user which file or folder they edit (outside the workspace, or in library/), then ` +
-            `template_import { source, kind: "${kind}", replace: true } from it. If they keep none, mark this done: ` +
+            `${hint}On the card the user chooses the file or folder they edit, which is imported; if they keep none, ` +
             "the copy stops being watched.",
           affects: [kind],
         });
@@ -391,9 +423,9 @@ export class FreshnessService {
             ? `The ${kind} template's source (${src.from}) differs from the copy in templates/${kind}/.`
             : `The ${kind} template's source (${src.from}) changed since it was imported.`,
         detail:
-          `Re-import it with template_import { source, kind: "${kind}", replace: true } after the user agrees (the ` +
-          "current copy moves to templates/.old/). If the difference doesn't matter (or is a fix made in the workspace " +
-          "copy), mark it done.",
+          "Update re-imports it from its source and builds it (the current copy moves to templates/.old/); keeping " +
+          "the copy (a fix made in the workspace) marks it done.",
+        source: src.from,
         affects: [kind],
       });
     }
@@ -404,10 +436,10 @@ export class FreshnessService {
         kind: "library-template",
         summary: `${doc.path} is a LaTeX document that neither template was imported from, and it differs from both.`,
         detail:
-          "Ask the user whether it's their resume or cover letter (newer than the one in templates/). If so, " +
-          `template_import { source: ${JSON.stringify(doc.pullsIn ? dirname(doc.abs) : doc.abs)}, kind, replace: true }` +
-          `${doc.pullsIn ? " (its folder: it \\inputs files beside it)" : ""}; the check then watches it for their ` +
-          "edits. If it isn't a template, mark this done: it comes back only if the file changes.",
+          "On the card the user says whether it's their resume or cover letter (newer than the one in templates/), " +
+          `which imports ${doc.pullsIn ? "its folder (it \\inputs files beside it)" : "it"}, or neither: then it comes ` +
+          "back only if the file changes.",
+        source: doc.pullsIn ? dirname(doc.abs) : doc.abs,
         affects: ["resume", "cover"],
       });
     }
@@ -422,8 +454,8 @@ export class FreshnessService {
           kind: "resume-edited",
           summary: "templates/resume/ changed since the profile was last brought in line with it.",
           detail:
-            "Update profile/profile.yaml from the diff (add or change only what it shows; ask before dropping an entry), " +
-            "run profile_check, then mark it done. A change that doesn't touch the profile is marked done too.",
+            "Update has the agent update profile/profile.yaml from the diff, as a task; a change that doesn't touch " +
+            "the profile is marked done.",
           diff: await this.resumeDiff(resume.files),
           affects: ["profile", "forms"],
         });
@@ -440,8 +472,8 @@ export class FreshnessService {
           kind: "profile-identity",
           summary: "The profile's name, contact or links changed since the cover template's fields were set.",
           detail:
-            "Update \\myname and \\mycontact (or the template's equivalent) in templates/cover/ from the profile, compile, " +
-            "render, then mark it done.",
+            "Update sets \\myname and \\mycontact in ezapply's default cover template from the profile and builds it; " +
+            "in another template the agent does it, as a task.",
           affects: ["cover"],
         });
       }

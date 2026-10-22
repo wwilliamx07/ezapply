@@ -539,3 +539,135 @@ describe("setup tasks for the panel's agent", () => {
     expect(task?.note).toMatch(/^Stopped before it finished/);
   });
 });
+
+describe("the Workspace changes card", () => {
+  const profileYaml = (email: string) =>
+    [
+      "schemaVersion: 1",
+      "identity: { firstName: Jane, lastName: Doe }",
+      `contact: { email: ${email}, address: { city: Austin, region: TX, country: United States } }`,
+      "links: { linkedin: 'https://www.linkedin.com/in/jane-doe/' }",
+    ].join("\n");
+
+  /** ezapply's default cover letter and a profile whose contact then changes: a profile-identity change. */
+  async function identityChange(): Promise<string> {
+    const ws = join(dir, "ws");
+    await mkdir(join(ws, "templates", "cover"), { recursive: true });
+    await writeFile(
+      join(ws, "templates", "cover", "cover.tex"),
+      "\\newcommand{\\myname}{Your Name}\n\\newcommand{\\mycontact}{City, ST \\quad\\textbar\\quad you@example.com}\n",
+    );
+    await writeFile(
+      join(ws, "templates", "cover", "template.json"),
+      '{"schemaVersion":1,"main":"cover.tex","origin":"default"}',
+    );
+    await mkdir(join(ws, "profile"), { recursive: true });
+    await writeFile(join(ws, "profile", "profile.yaml"), profileYaml("jane@example.com"));
+    await handle.services.freshness.changes(); // the first sight is the baseline
+    await writeFile(join(ws, "profile", "profile.yaml"), profileYaml("jane_doe@example.com"));
+    const [change] = (await handle.services.freshness.changes()).changes;
+    return change?.id ?? "";
+  }
+
+  it("marks what a posting's documents need, and not what its form needs", async () => {
+    const { peer } = await extension();
+    const posting = await capture();
+    const id = await identityChange();
+    const tailor = await peer.request("panel.workspaceChanges", { key: `${posting}/tailor` });
+    expect(tailor.changes).toEqual([
+      { id, kind: "profile-identity", summary: expect.stringContaining("name, contact"), needed: true },
+    ]);
+    const fill = await peer.request("panel.workspaceChanges", { key: `${posting}/fill` });
+    expect(fill.changes[0]?.needed).toBe(false);
+  });
+
+  it("puts a change off in one conversation only, and refuses a length on one that isn't a repo's", async () => {
+    const { peer } = await extension();
+    const id = await identityChange();
+    await expect(
+      peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "later", hours: 24 }),
+    ).rejects.toThrow(/puts off a repo's new commits only/);
+    const r = await peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "later" });
+    expect(r.outcomes).toEqual([{ id, outcome: "later" }]);
+    expect((await peer.request("panel.workspaceChanges", { key: "general" })).changes).toEqual([]);
+    expect((await peer.request("panel.workspaceChanges", { key: "setup" })).changes.map((c) => c.id)).toEqual([id]);
+  });
+
+  it("refuses unknown ids before acting on any", async () => {
+    const { peer } = await extension();
+    const id = await identityChange();
+    await expect(
+      peer.request("panel.workspaceChange", {
+        key: "general",
+        ids: [id, "resume-edited@000000000000"],
+        action: "update",
+      }),
+    ).rejects.toThrow(/No current change resume-edited@000000000000/);
+    const tex = await readFile(join(dir, "ws", "templates", "cover", "cover.tex"), "utf8");
+    expect(tex).toContain("Your Name");
+  });
+
+  it("sets the default cover letter's name and contact from the profile by code, and the change ends", async () => {
+    const { peer } = await extension();
+    const id = await identityChange();
+    const r = await peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "update" });
+    // Built or not (TeX may be missing here), the fields are set and the change is done.
+    expect(r.outcomes[0]).toMatchObject({ id, outcome: expect.stringMatching(/^(updated|failed)$/) });
+    const tex = await readFile(join(dir, "ws", "templates", "cover", "cover.tex"), "utf8");
+    expect(tex).toContain("\\newcommand{\\myname}{Jane Doe}");
+    expect(tex).toContain(
+      "\\newcommand{\\mycontact}{Austin, TX \\quad\\textbar\\quad jane\\_doe@example.com \\quad\\textbar\\quad linkedin.com/in/jane-doe}",
+    );
+    expect((await peer.request("panel.workspaceChanges", { key: "general" })).changes).toEqual([]);
+  });
+
+  it("hands a cover letter of the user's own to the agent, and the change ends once it reports", async () => {
+    const { peer } = await extension();
+    const id = await identityChange();
+    const meta = join(dir, "ws", "templates", "cover", "template.json");
+    await writeFile(meta, '{"schemaVersion":1,"main":"cover.tex","origin":"imported"}');
+    const events: string[] = [];
+    handle.services.agent.onEvent((k, e) => {
+      if (k === "general" && e.kind === "text") events.push(e.text);
+    });
+    const r = await peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "update" });
+    expect(r.outcomes).toEqual([{ id, outcome: "task" }]);
+    expect((await peer.request("panel.workspaceChanges", { key: "general" })).changes[0]).toMatchObject({
+      id,
+      working: true,
+    });
+    await waitFor(async () => (events.length > 0 ? true : null), 10_000);
+    expect(events[0]).toMatch(/^echo: Workspace task t1 \(fill-cover-identity\)/);
+    handle.services.onboarding.report("t1", { ok: true });
+    await waitFor(
+      async () => ((await peer.request("panel.workspaceChanges", { key: "general" })).changes.length ? null : true),
+      5000,
+    );
+  });
+
+  it("deletes a deselected repo's knowledge only once the user confirms", async () => {
+    const { peer } = await extension();
+    await mkdir(join(dir, "ws", "profile"), { recursive: true });
+    await writeFile(join(dir, "ws", "profile", "repos.yaml"), "schemaVersion: 1\nrepos:\n  - fullName: jane/new\n");
+    const knowledge = join(dir, "ws", "knowledge", "jane__old");
+    await mkdir(knowledge, { recursive: true });
+    await writeFile(
+      join(knowledge, "meta.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        repo: "jane/old",
+        url: "",
+        indexedSha: "a".repeat(40),
+        indexedAt: "2026-01-01",
+      }),
+    );
+    const id = "repo-deselected:jane/old";
+    expect((await peer.request("panel.workspaceChanges", { key: "general" })).changes.map((c) => c.id)).toEqual([id]);
+    await expect(peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "done" })).rejects.toThrow(
+      /needs the user's confirmation/,
+    );
+    expect(existsSync(knowledge)).toBe(true);
+    await peer.request("panel.workspaceChange", { key: "general", ids: [id], action: "done", confirm: true });
+    expect(existsSync(knowledge)).toBe(false);
+  });
+});

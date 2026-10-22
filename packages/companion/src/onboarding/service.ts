@@ -13,6 +13,7 @@ import {
   type OnboardStepId,
   type OnboardTask,
   type OnboardTaskKind,
+  WorkspaceChangeRequest,
 } from "@ezapply/protocol";
 import { z } from "zod";
 import { extensionFolders, startPairing } from "../bridge/pairing.js";
@@ -34,6 +35,8 @@ import { htmlPage } from "../util/html.js";
 import { installCommand } from "../util/install-hints.js";
 
 const BASE = "/onboard";
+/** What the setup page puts changes off in: not a panel conversation, so none of them is marked needed. */
+const SETUP_CONVERSATION = "setup";
 /** How often the open page's state is compared, to tell it what changed (a login, a repo indexed). */
 const WATCH_MS = 2000;
 const LIBRARY_MAX_BYTES = 25 * 1024 * 1024;
@@ -67,7 +70,14 @@ const HOW: Record<OnboardTaskKind, string> = {
     "two. Each ends with knowledge_mark_indexed, which the page shows as it happens.",
   "fix-template-build":
     "tex_compile { path: params.main }. Fix only what the environment needs (a font path, a `% !TEX program` line), " +
-    "never the content. Say what you changed in note.",
+    "never the content. When params.previous names the copy this one replaced (templates/.old/…), carry over such a " +
+    "fix from it. Say what you changed in note.",
+  "update-profile":
+    "Update profile/profile.yaml from params.diff alone (what changed in the resume template since the profile was " +
+    "last updated from it), with the Edit tool: add or change only what it shows (a new job, a degree, skills, " +
+    "reworded highlights). Keep what the resume never held (address, work authorization, answers given in chat). A " +
+    "job or degree gone from the resume is asked about (ask_user), not deleted: forms often want the full history. " +
+    "profile_check until valid. A diff that touches nothing in the profile changes nothing: say so in note.",
   "draft-profile":
     "Read the resume template's source (params.main and its content files) and write profile/profile.yaml: identity, " +
     "contact, links, work (YYYY-MM dates, end: null for the current role), education, skills, languages, " +
@@ -117,6 +127,7 @@ const Action = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("notifications"), turnEnd: z.boolean() }),
   z.object({ action: z.literal("deleteLibrary"), name: z.string().min(1).max(500) }),
+  WorkspaceChangeRequest.extend({ action: z.literal("change"), change: WorkspaceChangeRequest.shape.action }),
   z.object({ action: z.literal("finish") }),
 ]);
 type Action = z.infer<typeof Action>;
@@ -149,6 +160,8 @@ export class OnboardingService {
   private readonly inTurn = new Set<OnboardTask>();
   /** Tasks sent to the panel's agent and not ended yet. */
   private readonly sent = new Set<OnboardTask>();
+  /** What to do once a task is reported done: a workspace change it brings current is marked so. */
+  private readonly onDone = new Map<OnboardTask, () => Promise<unknown>>();
   private followingAgent = false;
 
   constructor(
@@ -212,7 +225,45 @@ export class OnboardingService {
     }
     task.status = result.ok ? "done" : "failed";
     if (result.note) task.note = result.note.slice(0, 4000);
+    const then = this.onDone.get(task);
+    this.onDone.delete(task);
+    if (result.ok && then) {
+      void then().catch((err: Error) =>
+        this.services().log.warn({ task: task.id, err: err.message }, "onboarding: after a task"),
+      );
+    }
     this.changed();
+  }
+
+  /**
+   * Hand the agent a task from outside the page (a workspace change the user chose to update), the way the page's
+   * own are: a message to the panel's general conversation, or the next for an agent waiting in `onboarding`.
+   * `then` runs once it's reported done.
+   */
+  queue(kind: OnboardTaskKind, params: Record<string, unknown>, then?: () => Promise<unknown>): OnboardTask {
+    const task = this.add(kind, params, "workspace");
+    if (then) this.onDone.set(task, then);
+    return task;
+  }
+
+  /** A task by its id: what the page and the card show of it. */
+  task(id: string): OnboardTask | undefined {
+    return this.tasks.find((t) => t.id === id);
+  }
+
+  private add(kind: OnboardTaskKind, params: Record<string, unknown>, from: "setup" | "workspace"): OnboardTask {
+    const task: OnboardTask = {
+      id: `t${this.tasks.length + 1}`,
+      kind,
+      params,
+      status: "queued",
+      createdAt: new Date().toISOString(),
+    };
+    this.tasks.push(task);
+    if (this.services().agent.available) this.dispatch(task, from);
+    else for (const w of this.waiters) w();
+    this.changed();
+    return task;
   }
 
   // ---- the page ----------------------------------------------------------------------------------
@@ -265,19 +316,8 @@ export class OnboardingService {
   private async act(a: Action): Promise<unknown> {
     const s = this.services();
     switch (a.action) {
-      case "task": {
-        const task: OnboardTask = {
-          id: `t${this.tasks.length + 1}`,
-          kind: a.kind,
-          params: a.params,
-          status: "queued",
-          createdAt: new Date().toISOString(),
-        };
-        this.tasks.push(task);
-        if (s.agent.available) this.dispatch(task);
-        else for (const w of this.waiters) w();
-        return { task };
-      }
+      case "task":
+        return { task: this.add(a.kind, a.params, "setup") };
       case "pair": {
         const p = await startPairing(s, a.replace);
         return { connected: p.connected, built: p.built };
@@ -323,6 +363,10 @@ export class OnboardingService {
       }
       case "deleteLibrary":
         return this.deleteLibrary(a.name);
+      case "change": {
+        const { action: _, change, ...rest } = a;
+        return s.updates.act(SETUP_CONVERSATION, { ...rest, action: change });
+      }
       case "finish":
         this.finished = true;
         for (const w of this.waiters) w();
@@ -334,12 +378,16 @@ export class OnboardingService {
    * Hand a task to the panel's agent, as a message to the general conversation, which runs beside any other. A send
    * that fails (no agent) fails the task with why; the page offers it again.
    */
-  private dispatch(task: OnboardTask): void {
+  private dispatch(task: OnboardTask, from: "setup" | "workspace"): void {
     const s = this.services();
     this.followAgent();
     task.status = "running";
+    const what =
+      from === "setup"
+        ? `Setup task ${task.id} from the setup page (${task.kind}).`
+        : `Workspace task ${task.id} (${task.kind}): the user chose to update this, which is out of date.`;
     const message =
-      `Setup task ${task.id} from the setup page (${task.kind}). ${HOW[task.kind]}\n` +
+      `${what} ${HOW[task.kind]}\n` +
       `Parameters: ${JSON.stringify(task.params)}\n` +
       `When it's done, report it: onboarding { taskId: "${task.id}", result: { ok, note? } }.`;
     s.agent.send(GENERAL_CONVERSATION, message).then(
@@ -658,6 +706,7 @@ export class OnboardingService {
       } satisfies OnboardPreferences,
       notifications: { turnEnd: (await s.workspace.readConfig()).notifications.turnEnd },
       library: await s.profile.libraryFiles(),
+      changes: await s.updates.list(SETUP_CONVERSATION),
     };
   }
 

@@ -122,6 +122,15 @@
   max-width: 820px;
   margin: 0 auto 16px;
 }
+.ob-changes {
+  max-width: 820px;
+  margin: 0 auto 16px;
+  padding: 18px 32px;
+}
+.ob-changes h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
 .ob-step {
   max-width: 820px;
   margin: 0 auto;
@@ -547,7 +556,8 @@
   .ob-main {
     padding: 16px;
   }
-  .ob-step {
+  .ob-step,
+  .ob-changes {
     padding: 20px;
   }
   .ob-sticky {

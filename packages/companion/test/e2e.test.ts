@@ -477,13 +477,14 @@ describe("extension bridge", () => {
 });
 
 describe("workspace changes", () => {
-  it("lists what's out of date over MCP and refuses to mark an id that isn't current", async () => {
+  it("lists what's out of date over MCP, read-only: marking is the user's, on the card", async () => {
     const client = await mcpClient();
     const res = await callJson(client, "workspace_changes");
     expect(res.isError).toBe(false);
     expect(res.data).toEqual({ changes: [] });
-    const mark = await callJson(client, "workspace_change_mark", { ids: ["resume-edited@000000000000"], as: "done" });
-    expect(mark).toMatchObject({ isError: true, data: { error: { code: "not_found" } } });
+    const tools = (await client.listTools()).tools.map((t) => t.name);
+    expect(tools).toContain("workspace_changes");
+    expect(tools).not.toContain("workspace_change_mark");
     await client.close();
   });
 });

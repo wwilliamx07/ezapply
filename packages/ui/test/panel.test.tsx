@@ -8,6 +8,7 @@ import {
   type PanelConversation,
   type PanelPosting,
   type PanelState,
+  type WorkspaceChanges,
 } from "@ezapply/protocol";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,6 +62,7 @@ function fakeTransport(opts: {
   conv?: PanelConversation;
   tab?: Awaited<ReturnType<PanelTransport["tab"]>>;
   prefs?: AgentPrefs;
+  changes?: WorkspaceChanges;
 }) {
   const listeners = new Set<(p: PanelPush) => void>();
   const calls: [string, unknown][] = [];
@@ -82,6 +84,9 @@ function fakeTransport(opts: {
       }
       if (method === "panel.send") return { id: "m1" };
       if (method === "panel.stop") return { stopped: true };
+      if (method === "panel.workspaceChanges") return opts.changes ?? { changes: [] };
+      if (method === "panel.workspaceChange")
+        return { outcomes: (params as { ids: string[] }).ids.map((id) => ({ id, outcome: "task" })) };
       return {};
     }) as PanelTransport["call"],
     capture: vi.fn(async () => ({ ok: true as const, postingId: POSTING.id, label: "Acme: Software Developer" })),
@@ -156,7 +161,7 @@ describe("the side panel", () => {
       tab: { kind: "application", text: "Acme: Software Developer: the application on Workday", tabId: 7 },
     });
     const call = t.transport.call;
-    let answer: () => void = () => {};
+    let answer: (() => void) | null = null;
     t.transport.call = vi.fn(async (method: string, params: unknown) => {
       if (method === "panel.send") await new Promise<void>((r) => (answer = r));
       return call(method as never, params as never);
@@ -176,7 +181,8 @@ describe("the side panel", () => {
     fireEvent.keyDown(box, { key: "Enter" });
     expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
 
-    await act(async () => answer());
+    await waitFor(() => expect(answer).not.toBeNull());
+    await act(async () => answer?.());
     await waitFor(() => expect((tailor as HTMLButtonElement).disabled).toBe(false));
     expect(t.calls.filter(([m]) => m === "panel.send")).toEqual([
       ["panel.send", { key: TAILOR, text: REQUESTS.tailor }],
@@ -757,5 +763,43 @@ describe("the conversation", () => {
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
     expect(container.querySelectorAll("li")).toHaveLength(2);
     expect(container.querySelector("pre")?.textContent).toBe("code");
+  });
+});
+
+describe("the Workspace changes card", () => {
+  const RESUME = {
+    id: "resume-edited:resume.pdf",
+    kind: "resume-edited" as const,
+    summary: "Your resume changed since the profile was built from it.",
+    needed: true,
+  };
+
+  it("shows what's out of date on the list, and nothing when nothing is", async () => {
+    const t = fakeTransport({ changes: { changes: [RESUME] } });
+    render(<PanelApp transport={t.transport} />);
+    expect(await screen.findByText(/Workspace changes · 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Update my profile" }));
+    await waitFor(() =>
+      expect(t.calls).toContainEqual(["panel.workspaceChange", { key: "general", ids: [RESUME.id], action: "update" }]),
+    );
+    expect(await screen.findByText(/Handed to .*General conversation/)).toBeTruthy();
+    cleanup();
+    render(<PanelApp transport={fakeTransport({}).transport} />);
+    await screen.findByRole("heading", { name: "Applications" });
+    expect(screen.queryByText(/Workspace changes/)).toBeNull();
+  });
+
+  it("holds Tailor back while the work uses a pending change, and Go on anyway sends it", async () => {
+    const t = fakeTransport({ changes: { changes: [RESUME] } });
+    render(<PanelApp transport={t.transport} />);
+    await openApp();
+    const tailor = await screen.findByRole("button", { name: /Tailor documents/ });
+    await waitFor(() => expect((tailor as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(tailor);
+    expect(await screen.findByText(/This work draws on what's out of date/)).toBeTruthy();
+    expect(t.calls.some(([m]) => m === "panel.send")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Go on anyway" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.send", { key: TAILOR, text: REQUESTS.tailor }]));
+    expect(screen.queryByText(/This work draws on what's out of date/)).toBeNull();
   });
 });

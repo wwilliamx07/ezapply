@@ -28,8 +28,8 @@ const TemplateMeta = z.object({
   importedAt: z.string().optional(),
   /**
    * Hash of the files in `importedFrom` (what an import would copy: a folder's files, or the one file) when the template was last current with
-   * it: written by template_import, or by workspace_change_mark when the user decides a change there
-   * doesn't need a re-import. The workspace check compares it with the folder as it is now.
+   * it: written by template_import, or when the user keeps the workspace copy of a change there (it
+   * doesn't need a re-import). The workspace check compares it with the folder as it is now.
    */
   sourceHash: z.string().optional(),
 });

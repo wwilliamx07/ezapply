@@ -69,7 +69,8 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
    their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
    skill with one of those names is kept and reported. Skills ezapply no longer ships (`RETIRED_SKILLS`:
-   `ezapply-repos`, since the setup page chooses repos) are removed the same way from `.claude/skills/` and
+   `ezapply-repos`, since the setup page chooses repos, and `ezapply-onboard`, since the Workspace changes card
+   does its triage) are removed the same way from `.claude/skills/` and
    `.agents/skills/`: the copy only adds and overwrites, so an earlier init's copy would otherwise stay and run.
    Also `agent/settings.json`, where an earlier version kept the panel's agent settings, is removed: the
    extension keeps them now ([agent](agent.md#permission-mode-model-and-effort)).

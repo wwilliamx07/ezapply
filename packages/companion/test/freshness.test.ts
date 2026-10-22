@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DEFER_MAX_HOURS, FreshnessService } from "../src/freshness/service.js";
+import { setMacro } from "../src/freshness/updates.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { GitHubService } from "../src/github/service.js";
 import { createLogger } from "../src/logger.js";
@@ -344,7 +345,7 @@ describe("FreshnessService: templates and profile", () => {
     expect(changes[0]?.detail).toMatch(/library document listed here/);
     expect(changes[1]).toMatchObject({ affects: ["resume", "cover"] });
     expect(changes[1]?.id).toMatch(/^library-template:library\/resume\.tex@[0-9a-f]{12}$/);
-    expect(changes[1]?.detail).toContain(JSON.stringify(ws.path("library", "resume.tex")));
+    expect(changes[1]?.source).toBe(ws.path("library", "resume.tex"));
 
     // Importing it ends both, and the profile then hears about the new resume.
     await templates.importTemplate({ source: ws.path("library", "resume.tex"), kind: "resume", replace: true });
@@ -389,6 +390,15 @@ describe("FreshnessService: templates and profile", () => {
 
   it("refuses an id that isn't current", async () => {
     await expect(service().mark(["resume-edited@000000000000"], "done")).rejects.toThrow(/No current change/);
+  });
+});
+
+describe("the cover letter's identity macros", () => {
+  it("replaces a macro's whole body, braces and escapes included, and nothing else", () => {
+    const tex = "\\newcommand{\\mycontact}{A {\\small b} \\} c}\n\\newcommand{\\myname}{X}\n";
+    expect(setMacro(tex, "mycontact", "new")).toBe("\\newcommand{\\mycontact}{new}\n\\newcommand{\\myname}{X}\n");
+    expect(setMacro(tex, "mysignature", "new")).toBeNull();
+    expect(setMacro("\\newcommand{\\myname}{open", "myname", "new")).toBeNull();
   });
 });
 

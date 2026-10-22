@@ -422,6 +422,72 @@ export const PanelTab = z.object({
 });
 export type PanelTab = z.infer<typeof PanelTab>;
 
+// ---- what's out of date in the workspace, for the user to update ----
+
+export const WorkspaceChangeKind = z.enum([
+  "template-source",
+  "template-untracked",
+  "library-template",
+  "profile-identity",
+  "resume-edited",
+  "repo-pushed",
+  "repo-deselected",
+]);
+export type WorkspaceChangeKind = z.infer<typeof WorkspaceChangeKind>;
+
+/** A change as the panel's card and the setup page show it: the buttons follow its kind. */
+export const WorkspaceChangeView = z.object({
+  id: z.string(),
+  kind: WorkspaceChangeKind,
+  summary: z.string(),
+  /** The conversation's work draws on it: a posting's documents on templates, profile and claims, its form on the profile. */
+  needed: z.boolean(),
+  /** The agent is updating it, as a task, or the system's file dialog is open for it. */
+  working: z.boolean().optional(),
+  /** What went wrong the last time it was acted on in the background (an import after the dialog). */
+  note: z.string().optional(),
+});
+export type WorkspaceChangeView = z.infer<typeof WorkspaceChangeView>;
+
+export const WorkspaceChanges = z.object({
+  changes: z.array(WorkspaceChangeView),
+  /** Repos whose new commits are put off, until when. */
+  deferred: z.array(z.object({ repo: z.string(), until: z.string() })).optional(),
+  /** What couldn't be checked that the user can fix (an expired login, a moved folder). */
+  notChecked: z.array(z.object({ what: z.string(), reason: z.string(), hint: z.string().optional() })).optional(),
+});
+export type WorkspaceChanges = z.infer<typeof WorkspaceChanges>;
+
+/**
+ * The user's choice on changes. `update` brings them current (by code, or as a task for the agent); `kind` says
+ * which template a library document is, `pick` opens the system's dialog for the file or folder the user edits.
+ * `later` hides them for this conversation, or puts a repo's new commits off for `hours`. `done` keeps what's
+ * there; on a deselected repo it deletes its knowledge, and needs `confirm`.
+ */
+export const WorkspaceChangeRequest = z.object({
+  ids: z.array(z.string().max(500)).min(1).max(50),
+  action: z.enum(["update", "later", "done"]),
+  hours: z
+    .number()
+    .int()
+    .min(1)
+    .max(90 * 24)
+    .optional(),
+  kind: z.enum(["resume", "cover"]).optional(),
+  pick: z.enum(["folder", "tex"]).optional(),
+  confirm: z.boolean().optional(),
+});
+export type WorkspaceChangeRequest = z.infer<typeof WorkspaceChangeRequest>;
+
+export const WorkspaceChangeOutcome = z.object({
+  id: z.string(),
+  /** `dialog`: the system's file dialog opened; the import follows the user's choice there. */
+  outcome: z.enum(["updated", "task", "dialog", "later", "done", "cancelled", "failed"]),
+  /** What happened, for the user: a build's error, until when a repo is put off. */
+  note: z.string().optional(),
+});
+export type WorkspaceChangeOutcome = z.infer<typeof WorkspaceChangeOutcome>;
+
 const Empty = z.object({});
 /** Methods the companion serves for the panel (`CompanionApi`). */
 export const PanelMethods = {
@@ -457,6 +523,13 @@ export const PanelMethods = {
   "panel.markOpen": { params: z.object({ postingId: z.string() }), result: Empty },
   /** Delete one of a posting's PDFs for good (its LaTeX source stays). Refused while it's in an open review. */
   "panel.deleteDocument": { params: z.object({ postingId: z.string(), file: z.string() }), result: Empty },
+  /** What's out of date in the workspace, marked against the conversation `key`'s work. */
+  "panel.workspaceChanges": { params: z.object({ key: z.string() }), result: WorkspaceChanges },
+  /** The user's choice on changes from the card; every id is checked before any is acted on. */
+  "panel.workspaceChange": {
+    params: WorkspaceChangeRequest.extend({ key: z.string() }),
+    result: z.object({ outcomes: z.array(WorkspaceChangeOutcome) }),
+  },
   /** Open, for the user: a review's tab again, a posting's file, or the setup page. */
   "panel.open": {
     params: z.discriminatedUnion("what", [

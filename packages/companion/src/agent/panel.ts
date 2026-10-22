@@ -88,6 +88,8 @@ export class PanelService {
     });
     s.postings.onChange(() => this.changed());
     s.reviews.onChange(() => this.changed());
+    // The repo check finishing, or a change acted on: the card reads the list again.
+    s.freshness.onChange(() => this.changed());
   }
 
   /** The number of open panels: cards are shown, and updates pushed, while it's more than none. */

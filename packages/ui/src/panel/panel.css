@@ -733,3 +733,22 @@ body {
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* The Workspace changes card (changes.tsx): above the conversation, folded to one line until opened. */
+.ez-panel-changes {
+  flex: none;
+  max-height: 45vh;
+  overflow-y: auto;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+}
+.ez-panel-changes > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.ez-panel-changes[open] > summary {
+  margin-bottom: 6px;
+}

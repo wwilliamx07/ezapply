@@ -191,7 +191,8 @@ Top to bottom, in an application:
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
    or while an agent works in the conversation the button goes to: the other one, and every other application,
-   can start at the same time.
+   can start at the same time. With a workspace change the work needs still pending, the request waits on the
+   Workspace changes card ([below](#workspace-changes)).
    **Sending blocks at once:** from the press of anything that starts a turn (these buttons, Send, Enter) until the
    companion has answered the send and the state read after it says the agent works, the buttons and Send are
    disabled and the box is read-only (it keeps its focus); a ref holds it within the same frame, so a double click
@@ -219,6 +220,32 @@ Top to bottom, in an application:
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
 end or a turn's end, and every "changed", reads the state and the conversation again.
+
+### Workspace changes
+What in the workspace is out of date ([companion](companion.md#keeping-the-workspace-current-workspace_changes)),
+for the user to act on: the panel's **Workspace changes** card (`panel/changes.tsx`), under the general card and
+above the conversation, and the setup page's **Changes** list, both drawn by `WorkspaceChangesList`
+(`components/changes.tsx`). Nothing listed, no card. The card is collapsed, its title counting the changes and the
+ones the conversation's work uses; it reads the list for the conversation shown (the general one on the list of
+applications) again on every "changed".
+
+Each change is a line (its `summary`, **this work uses it** when `needed`) with buttons by kind: a template's
+source changed (**Update now**, **Keep the current copy**), a template imported from a copy nothing edits (**Choose
+the file I edit** or **Choose the folder**, which open the system's file dialog, or **I keep none**), a LaTeX
+document in `library/` (**It's my resume**, **It's my cover letter**, **Neither**), the profile's name or contact
+(**Update now**), an edited resume (**Update my profile**, **Nothing to change**), a repo's new commits (**Read it
+again**, or **Put off** for a day, a week or a month), a repo no longer selected (**Select it again**, **Delete its
+knowledge** after a confirm). Every kind but a repo's new commits has **Later**, which hides it in this
+conversation until ezapply stops. **Update all N**
+updates the ones that need no choice in one request. What each press did stays under the list after the change
+leaves it ("Updated.", "Handed to Claude Code: follow it in the General conversation."), and a change being worked on
+shows **Being updated…** instead of buttons. Then the repos put off, until when, and what couldn't be checked.
+
+**Tailor documents and Fill form check first** (`panel.workspaceChanges` for the conversation they go to): with a
+needed change pending that isn't being updated, the panel switches to that conversation and opens the card with
+**Go on anyway** and **Cancel**, and nothing is sent until one is pressed. The check counts as sending, so a second
+press meanwhile is refused; a check that fails sends at once. *Why not block:* the user may know the change doesn't
+matter to this posting.
 
 ## The review page (`/review/<id>`)
 What it's for and how approvals work: [documents](documents.md#review-before-attaching). Its routes, all under
@@ -371,14 +398,17 @@ it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes
 
 **Actions** (`POST action`, validated with zod): `task { kind, params }`, `pair { replace? }`, `github { app? }`,
 `repos { repos }`, `addRepo { url }`, `browse { kind: folder | tex, title? }`, `import { kind, source, main?, replace? }`,
-`compile { kind }`, `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
+`compile { kind }`, `change { ids, change: update | later | done, hours?, kind?, pick?, confirm? }` (the Changes list's
+buttons, as `panel.workspaceChange` with the key `setup`), `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
 neverMention, targets, coverLetters }`, `deleteLibrary { name }` (only a file the step lists, by its exact name, so no
 name reaches outside `library/`), `finish`.
 
 ### The agent's side: tasks
 What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,
-`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `question`, each
-with `how`, what to do (`HOW` in the service), so no skill is needed for it. Where the agent is decides how it
+`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `update-profile`
+(the profile from an edited resume's diff), `question`, each with `how`, what to do (`HOW` in the service), so no
+skill is needed for it. The Workspace changes card queues them too (`OnboardingService.queue`), as "Workspace task
+tN"; a task queued with a follow-up runs it when reported done (marking the change done). Where the agent is decides how it
 gets one (`agentIn` in the page's state):
 - **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
   ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:

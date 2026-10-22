@@ -5,6 +5,7 @@ import type { ReviewService } from "./documents/review.js";
 import type { DocumentsService } from "./documents/service.js";
 import type { FormsService } from "./forms/service.js";
 import type { FreshnessService } from "./freshness/service.js";
+import type { WorkspaceUpdates } from "./freshness/updates.js";
 import type { GitHubService } from "./github/service.js";
 import type { Logger } from "./logger.js";
 import type { OnboardingService } from "./onboarding/service.js";
@@ -31,6 +32,8 @@ export interface Services {
   repos: RepoService;
   /** What in the workspace is behind its source (`workspace_changes`). */
   freshness: FreshnessService;
+  /** The user's choices on those changes, from the panel's card or the setup page. */
+  updates: WorkspaceUpdates;
   forms: FormsService;
   /** Onboarding on a page, and the agent's tasks from it (`onboarding`). */
   onboarding: OnboardingService;

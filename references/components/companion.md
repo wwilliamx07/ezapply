@@ -29,7 +29,8 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `ui/assets.ts` | `UiAssets`: the UI package's files at `/ui/`, each page's HTML shell, `UI_CSP`, the base stylesheet's address → [ui](ui.md#serving-companionsrcuiassetsts) |
 | `ui/session.ts` | What the pages share: the token traded for a cookie (`presentedToken`, `pageCookie`, `tokenOk`), `sameOrigin`, `readJsonBody`, `sendJson`, `EventStreams` (Server-Sent Events) → [ui](ui.md#how-a-page-talks-to-the-companion) |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
-| `freshness/service.ts` | `FreshnessService`: what in the workspace is behind its source, behind `workspace_changes` and `workspace_change_mark` ([below](#keeping-the-workspace-current-workspace_changes)) |
+| `freshness/service.ts` | `FreshnessService`: what in the workspace is behind its source, behind `workspace_changes` and the Workspace changes card ([below](#keeping-the-workspace-current-workspace_changes)) |
+| `freshness/updates.ts` | `WorkspaceUpdates`: what the card's and the setup page's buttons do to a change, by code or as an agent task ([below](#acting-on-a-change-workspaceupdates)) |
 | `postings/` | Capture ingest and extraction, the application a posting is tied to (`application.ts`) → [postings.md](postings.md) |
 | `documents/` | `service.ts`, `review.ts` (the review page's API, approvals, `reviewed.json`, the attach mode; for the side panel `onChange`, `openFor`, `urlOf`, `documentStates`), `tex/engines.ts`, `tex/log.ts`, `pdf/toolkit.ts`, `pdf/pages.ts` (Letter/A4 sizes, page-range parsing) → [documents.md](documents.md) |
 | `profile/` | `service.ts` (profile, answers, repo selection, preferences, library; the onboarding page's in-place writes: `saveProfile`, `saveAnswers`, `savePreferences`, `parsePreferences`, `formatPreferences`), `schema.ts`, `seed-answers.ts` (the 33 seeded screening questions) → [profile-and-templates.md](profile-and-templates.md) |
@@ -224,9 +225,9 @@ remembered to ask.
 Each change is `{ id, kind, summary, detail, diff?, affects[] }`. The `id` names the exact state
 (`repo-pushed:owner/name@<sha7>`, `template-source:resume@<hash>`, `library-template:library/resume.tex@<hash>`,
 `resume-edited@<hash>`; `template-untracked:<kind>` has no state to name), so a change that was
-put off and then changed again comes back under a new id, and `done` on an id that's no longer current is
-refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) tells the agent whether the request in
-hand needs it first.
+put off and then changed again comes back under a new id, and acting on an id that's no longer current is
+refused. `affects` (`claims`, `resume`, `cover`, `profile`, `forms`) says what the change feeds; the card marks it
+`needed` against a conversation's work ([below](#acting-on-a-change-workspaceupdates)).
 
 - **The repos are checked once per chat** (a run of `ezapply`), in the background from startup, and the heads kept
   for it: every posting gets its own conversations, and a check per conversation would repeat for nothing.
@@ -249,8 +250,8 @@ hand needs it first.
   the current state and reports nothing: it can't tell what changed before. A template imported before
   `sourceHash` existed is compared with its workspace copy file by file (without the added `% !TEX program`
   line): equal, the hash is recorded silently; different, it's reported as differing from the copy.
-- **`later` on a repo's new commits starts a timer.** `workspace_change_mark { ids, as: "later", hours? }` on
-  `repo-pushed` changes writes `state.json` `deferred.repos["<owner>/<name>"] = { until, at }`: 24 hours by
+- **`later` on a repo's new commits starts a timer.** **Later** with a duration on `repo-pushed` changes
+  (`FreshnessService.mark`) writes `state.json` `deferred.repos["<owner>/<name>"] = { until, at }`: 24 hours by
   default (`DEFER_DEFAULT_HOURS`), longer when the user says, capped at 90 days (`DEFER_MAX_HOURS`; a longer
   `hours` is cut to it, and the returned `until` says so) so no repo is silenced for good: deselecting it is how
   to stop for good. While it runs the repo isn't checked at all, in this chat or any other: the background
@@ -260,16 +261,17 @@ hand needs it first.
   timer ends early when the repo is re-indexed (`RepoService.markIndexed` drops it) or deselected
   (`ProfileService.writeRepos`, behind both `repos_selection_set` and the setup page, drops timers of repos no
   longer listed). Expired timers are dropped on any write to `state.json` (`Workspace.updateState`), and only
-  running timers of selected repos count. `workspace_changes` lists them as `deferred[] { repo, until }`, so the
-  agent can answer "what did I put off?" and offer to re-index one early. *Why a timer per repo, not per id:*
-  a change's id names the head, so a repo pushed to daily would come back under a new id every day; and the
-  per-chat `later` would ask anyone opening several chats a day the same question each time.
-- **`later` on anything else** is kept in the companion's memory by id, so the sessions after a capture don't
-  ask again, and a new chat does. `hours` on these is refused, with a hint: a template or profile behind its
-  source feeds the next document, so asking each chat is right for them.
-- **`ids` takes several changes in one call** (all the repos, or the ones the user named). Every id is checked
-  before any is marked: one that isn't current, `done` on a `repo-pushed`, or `hours` alongside a change that
-  isn't a repo's refuses the whole call. Returns `{ marked[] { id, as, removed?, until? } }`.
+  running timers of selected repos count. The list carries them as `deferred[] { repo, until }`, which the card
+  shows and the agent answers "what did I put off?" from. *Why a timer per repo, not per id:*
+  a change's id names the head, so a repo pushed to daily would come back under a new id every day; and a
+  per-conversation `later` would ask about the same push in every posting's conversation.
+- **`later` on anything else** is kept in the companion's memory by id, per conversation (a panel conversation's
+  key, or the setup page's `setup`), until ezapply stops: that conversation doesn't show it again, another does.
+  `hours` on these is refused: a template or profile behind its source feeds the next document, so asking in
+  each conversation is right for them.
+- **Several changes at once** (Update all, or all the repos): every id is checked before any is marked, and one
+  that isn't current, `done` on a `repo-pushed`, or `hours` alongside a change that isn't a repo's refuses the
+  whole request.
 - **A template source that's gone** (moved, an unplugged drive) goes into `notChecked`; nothing nags about it.
 - **A source nobody edits, and a file nobody imported.** A template imported from a copy Claude made in its
   scratchpad would be watched through that copy, which never changes, and a newer resume the user put in
@@ -285,8 +287,44 @@ hand needs it first.
   API is rate-limited for public repos; `ezapply-index-repo` finds a push that changes nothing indexed
   cheaply). Managed files from an older build aren't this check's: `ezapply init` refreshes them.
 
-What the agent does with the list is in `ezapply-onboard`'s "Keeping the workspace current" ([workspace](workspace.md#skills-claudeskills)).
-*Why an explicit call at the start of each session* rather than carrying the changes on `posting_get` or
-a Claude Code `SessionStart` hook: the first hides the upkeep inside an unrelated tool, the second adds a managed
-hook and a process to every session start. One small call (`{ changes: [] }` when current) is the simplest
-thing that makes the agent look.
+The list reaches the user, not the agent: the panel's Workspace changes card and the setup page's Changes list
+show it ([ui](ui.md#workspace-changes)), read again whenever the list may have changed (`FreshnessService.onChange`
+fires after the repo check, a mark or an update, and the panel pushes `changed`). `workspace_changes` stays for the
+agent, read-only, to answer what's out of date or put off.
+
+### Acting on a change (`WorkspaceUpdates`)
+`panel.workspaceChanges { key }` lists the changes for a conversation, and `panel.workspaceChange { key, ids,
+action, … }` acts on them ([agent](agent.md#the-panels-side-panelts)); the setup page's `change` action calls the
+same code with the key `setup`. Each change comes as `{ id, kind, summary, needed, working?, note? }`:
+
+- **`needed`** is the change's `affects` against the conversation's work: a posting's `tailor` conversation draws
+  on claims, the resume, the cover letter and the profile; `fill` on the profile and forms. The general
+  conversation and the setup page need none. Tailor documents or Fill form pressed with a needed change pending
+  shows the card first ([ui](ui.md#workspace-changes)).
+- **`working`** while the agent's task on it is queued or running, or its file dialog is open; **`note`** keeps
+  what went wrong in the background (a dialog that couldn't open, an import that failed) until it's acted on again.
+
+**Update**, per kind, by code where it's mechanical and as an agent task where it needs judgement:
+
+| Kind | Done by | What happens |
+|---|---|---|
+| `template-source` | Code | Imported again from its source with its main file (`replace`, the old copy kept in `templates/.old/`), then compiled. A failed build becomes a `fix-template-build` task carrying the replaced copy's path, which may hold the font path or engine line the environment needs |
+| `template-untracked` | Code | The system's file dialog (`pick`: the folder or the `.tex` file the user edits), then the same import and build. It runs in the background: the dialog waits as long as the user takes, past the extension's 60 s relay timeout, so the answer is `dialog` and the change is `working` until it closes |
+| `library-template` | Code | Imported as the `kind` the user chose (resume or cover letter); **Neither** is `done` |
+| `profile-identity` | Code, else agent | In ezapply's default cover template, `\myname` and `\mycontact` are rewritten from the profile (TeX-escaped, contact as place, email, phone, links), compiled, and marked done. Another template, or one without both macros, becomes a `fill-cover-identity` task |
+| `repo-deselected` | Code | Selected again in `repos.yaml` (from the app when it lists the repo, else by address). **Delete its knowledge** is `done` with `confirm`, without which it's refused |
+| `resume-edited` | Agent | An `update-profile` task with the diff |
+| `repo-pushed` | Agent | All the repos pressed together in one `index-repos` task |
+
+The tasks are setup tasks ([ui](ui.md#the-agents-side-tasks)), sent to the general conversation as "Workspace
+task tN" and reported with `onboarding { taskId, result }`. A change a task works on is marked done when the
+task reports success (`update-profile`, `fill-cover-identity`), or ends on its own when the knowledge is marked
+indexed (`index-repos`) or the template imported again (`fix-template-build`).
+
+**Order.** In one request, code updates run first, templates then the cover's fields, and the agent's tasks are
+queued after them, so `update-profile` reads a resume imported a moment before.
+
+*Why buttons, not an agent skill:* the user's press is the consent, so no update happens without it and the
+agent can't mark a change done the user never saw (there's no tool for it); what's mechanical costs no agent
+turn; and nothing costs a call at the start of each session. The agent gets only what needs judgement, as a
+task with its own instructions.

@@ -1,5 +1,6 @@
 import type { OnboardStepId } from "@ezapply/protocol";
 import { type ReactNode, useEffect, useState } from "react";
+import { WorkspaceChangesList } from "../components/changes.js";
 import { Banner, Brand, Button, Icon, MessagePage, Spinner } from "../components/ui.js";
 import { ProfileStep } from "./ProfileStep.js";
 import { TaskLine } from "./parts.js";
@@ -162,6 +163,17 @@ function Onboarding() {
             {state.agentFile.detail}
           </Banner>
         ) : null}
+        {state.changes.changes.length ? (
+          <section className="ob-changes ez-card" aria-label="Changes">
+            <h2>Changes</h2>
+            <p className="ez-help">What's out of date in your workspace since it was set up.</p>
+            <WorkspaceChangesList
+              data={state.changes}
+              agentName={state.agentName}
+              act={({ action, ...rest }) => act("change", { ...rest, change: action })}
+            />
+          </section>
+        ) : null}
         <article className="ob-step ez-card">{step?.render()}</article>
         <div className="ob-pager">
           {index > 0 ? (
@@ -246,5 +258,6 @@ const TASK_LABELS: Record<string, string> = {
   "restyle-cover": "Match the resume's look",
   "cover-from-example": "Letter from your example",
   "revise-cover": "Change the letter",
+  "update-profile": "Update your profile from the resume",
   question: "Your question",
 };

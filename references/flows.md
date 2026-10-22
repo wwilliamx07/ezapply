@@ -55,14 +55,18 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 Any tool failure along the way comes back with a `hint`; Claude follows it (ask, fix, retry). The page shows a
 failed action's message and hint under the button that ran it.
 
-**At the start of every session** (after onboarding too), Claude calls `workspace_changes` (with
-`posting_get` in a posting's conversation). The companion has checked in the background since the chat started: repos pushed since
+**Keeping the workspace current** (after onboarding too): the companion checks in the background from the start of
+each run: repos pushed since
 indexing, knowledge from repos no longer selected, a template's source folder edited since import (or a template imported from a scratchpad copy, which nothing can watch), a LaTeX document in `library/` no template came from, the resume
 template edited since the profile was updated from it, the profile's contact changed under the cover's fields.
-Nothing listed, Claude says nothing. Otherwise it lists them, and with the user's agreement re-imports,
-updates the profile from the diff, updates the cover fields and re-indexes, marking each done, or marks them
-`later`: a repo for a day unless the user says longer (it isn't checked in any chat until then), anything else
-for the rest of the chat ([details](components/companion.md#keeping-the-workspace-current-workspace_changes)).
+Nothing listed, nothing shows. Otherwise the panel's Workspace changes card (and the setup page's Changes list)
+lists them with a button for each choice ([ui](components/ui.md#workspace-changes)): the user presses Update, and
+the companion re-imports the template, sets the default cover letter's name and contact, or selects a repo again
+by itself, and hands the agent what needs judgement as a task in the general conversation (the profile from the
+resume's diff, re-reading pushed repos, a template that no longer builds); or **Later**: a repo for a day, a week
+or a month (it isn't checked in any conversation until then), anything else for that conversation until ezapply
+stops. Tailor documents and Fill form show the card first when their work uses a change still pending
+([details](components/companion.md#acting-on-a-change-workspaceupdates)).
 
 ## 2. Pairing the extension
 On the setup page its extension step does steps 1 and 2 (the same `startPairing`); later, in chat, Claude does:

@@ -1,7 +1,10 @@
 /**
- * What the companion's pages (the UI package) and the companion say to each other over HTTP. Types only, so the
- * pages import them without bundling anything (`import type`).
+ * What the companion's pages (the UI package) and the companion say to each other over HTTP. Types, besides the
+ * setup page's step ids (which the companion validates against), so the pages import them without bundling
+ * anything (`import type`).
  */
+
+import type { WorkspaceChanges } from "./panel.js";
 
 /** A rectangle on a page, as fractions of the page's width and height, so it holds at any zoom. */
 export interface PageRect {
@@ -103,6 +106,7 @@ export type OnboardTaskKind =
   | "restyle-cover"
   | "cover-from-example"
   | "revise-cover"
+  | "update-profile"
   | "question";
 
 export interface OnboardTask {
@@ -169,6 +173,8 @@ export interface OnboardState {
   /** A system notification when the panel's agent ends a turn or asks something, while no panel is in view. */
   notifications: { turnEnd: boolean };
   library: string[];
+  /** What's out of date in the workspace, with the same choices as the panel's card. */
+  changes: WorkspaceChanges;
 }
 
 export interface OnboardPreferences {

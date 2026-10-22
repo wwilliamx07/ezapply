@@ -180,11 +180,14 @@ export async function writeLauncher(root: string, report: InitReport, platform =
 const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter", "bundle", "apply", "answers"];
 /**
  * Skills ezapply no longer ships: the copy step only adds and overwrites, so an earlier init's copy would stay and
- * keep running. Choosing repos is the setup page's step.
+ * keep running. Choosing repos is the setup page's step; what's out of date is the panel's Workspace changes card.
  */
-const RETIRED_SKILLS: Record<string, string> = { "ezapply-repos": "the setup page chooses repos" };
+const RETIRED_SKILLS: Record<string, string> = {
+  "ezapply-repos": "the setup page chooses repos",
+  "ezapply-onboard": "the setup page and the panel's Workspace changes card do it",
+};
 const EZAPPLY_TOOL =
-  /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check)\b/;
+  /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check|workspace_changes)\b/;
 
 async function removeLegacySkills(skillsDir: string, report: InitReport): Promise<void> {
   for (const name of LEGACY_SKILLS) {

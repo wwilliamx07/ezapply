@@ -11,9 +11,6 @@ while `ezapply` runs; if a tool says it isn't running, tell the user to start it
 ## Setup and errors
 - New user, "set me up", `workspace_check` shows missing steps, or the user wants to change a setup step (repos,
   resume, …): call `onboarding { step? }`, which opens the setup page (at that step); they do it there.
-- **At the start of every session**, call `workspace_changes` once, together with `posting_get` in a posting's
-  conversation. If it lists changes, follow **Keeping the workspace current** in the **ezapply-onboard** skill
-  before the work that needs them. If it lists none, say nothing.
 - Tool errors carry a `hint` with the fix. Ask before installing anything, run it yourself, then retry. If only
   the user can do it (load the extension, click in the browser), tell them exactly that. A hint's
   `ezapply <command>` runs as `{{EZAPPLY}} <command>`.

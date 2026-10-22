@@ -129,7 +129,8 @@ describe("skills", () => {
   it("are installed under ezapply- names that can't shadow Claude Code commands", async () => {
     await initWorkspace(config);
     const names = await readdir(skills());
-    expect(names).toEqual(expect.arrayContaining(["ezapply-onboard", "ezapply-resume", "ezapply-apply"]));
+    expect(names).toEqual(expect.arrayContaining(["ezapply-resume", "ezapply-apply"]));
+    expect(names).not.toContain("ezapply-onboard");
     for (const n of names.filter((n) => n.startsWith("ezapply-"))) {
       const md = await readFile(join(skills(), n, "SKILL.md"), "utf8");
       // The frontmatter is `name` and a one-line `description`, closed by `---` on its own line. A reflow once

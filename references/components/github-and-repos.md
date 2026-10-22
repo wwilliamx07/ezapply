@@ -140,8 +140,8 @@ anonymously; the setup page's Repositories step adds one by its address, once an
   10 s timeout. It fetches nothing, so the cache stays as it was. The workspace check compares it with each
   indexed repo's `indexedSha` once per chat ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).
 - **`forget`**: deletes a repo's `repo-cache/` mirror (made writable first, queued behind any sync of it) and
-  its `knowledge/` folder. Only `workspace_change_mark` calls it, for a repo no longer selected, after the
-  user agrees.
+  its `knowledge/` folder. Only the Workspace changes card's **Delete its knowledge** calls it, for a repo no longer selected,
+  after a confirm ([companion](companion.md#acting-on-a-change-workspaceupdates)).
 - **Timers:** a repo whose new commits the user put off isn't asked about by `remoteHead` until its timer
   (`state.json` `deferred.repos`) runs out. `markIndexed` drops the repo's timer, and writing `repos.yaml` drops
   the timers of repos it no longer lists ([keeping the workspace current](companion.md#keeping-the-workspace-current-workspace_changes)).

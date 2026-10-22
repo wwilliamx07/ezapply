@@ -13,6 +13,7 @@ import { ReviewService } from "./documents/review.js";
 import { DocumentsService } from "./documents/service.js";
 import { FormsService } from "./forms/service.js";
 import { FreshnessService } from "./freshness/service.js";
+import { WorkspaceUpdates } from "./freshness/updates.js";
 import { KeyringStore, type SecretStore } from "./github/secrets.js";
 import { GitHubService } from "./github/service.js";
 import { createHttpServer } from "./http.js";
@@ -165,6 +166,8 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
         await panel.deleteDocument(postingId, file);
         return {};
       },
+      "panel.workspaceChanges": ({ key }) => services.updates.list(key),
+      "panel.workspaceChange": ({ key, ...req }) => services.updates.act(key, req),
       "panel.open": async (what) => {
         await panel.open(what);
         return {};
@@ -216,6 +219,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     github,
     repos,
     freshness,
+    updates: new WorkspaceUpdates(() => services),
     forms,
     onboarding,
     agent,
@@ -241,8 +245,8 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   });
   port = (server.address() as AddressInfo).port;
   log.info({ port, workspace: workspace.root, version: COMPANION_VERSION }, "companion listening");
-  // What's out of date in the workspace, for `workspace_changes`: the repos need the network, so they're
-  // checked once per chat, in the background, never in the way of the first call or the extension's handshake.
+  // What's out of date in the workspace, for the panel's card: the repos need the network, so they're checked once
+  // per run, in the background, never in the way of the first call or the extension's handshake.
   freshness.start();
   panel.start();
 

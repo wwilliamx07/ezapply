@@ -349,11 +349,12 @@ own and no web page can reach it.
 | `panel.markOpen { postingId }` | A submitted posting isn't: back to its status before ([postings](postings.md#status)), logged as `marked-open` (`FormsService.reopen`). Nothing for a posting not `submitted` |
 | `panel.deletePosting { postingId }` | Delete a posting for good: its conversations (`forgetPosting`), then its folder (`PostingsService.delete`). Refused while it has a review open |
 | `panel.deleteDocument { postingId, file }` | Delete one of the PDFs the panel lists for the posting, and nothing else (any other name is `not_found`). The `.tex` source stays, so Claude can build it again. Refused while the PDF is in an open review |
+| `panel.workspaceChanges { key }`, `panel.workspaceChange { key, ids, action, … }` | The Workspace changes card: what's out of date, marked against the conversation's work, and the user's Update, Later or Keep on it ([companion](companion.md#acting-on-a-change-workspaceupdates)) |
 | `panel.open { what }` | Open for the user, in the extension's browser: a review's tab again (`reviewId`), a posting's file (only inside its folder), or the setup page |
 
 **Updates** (`panel.update`, the companion calling the extension): each agent event with its conversation, and
 `changed` when the panel's state may have changed (the agent's state, a card, a posting captured or deleted, a review),
-coalesced over 50 ms; both only while a panel watches, and only while the extension is connected (an update is
+or the workspace changes (`FreshnessService.onChange`), coalesced over 50 ms; both only while a panel watches, and only while the extension is connected (an update is
 never waited for). The number of open cards (`cards`) is pushed on every change of the cards even while no panel
 is open: the toolbar badge shows it. So is a **`notify`** ("Claude Code finished", "… has a question", "… asks
 before running something", "… stopped", with the conversation's part: General, Documents or Application, and never
@@ -365,7 +366,9 @@ ends the turn.
 A card's is marked `card`: the extension shows a turn's end only while no panel is in view, and a card's always
 ([notifications](extension.md#notifications-notifyts)).
 
-**Setup tasks** go to the agent as messages to the general conversation ([ui](ui.md#the-agents-side-tasks)).
+**Setup tasks** go to the agent as messages to the general conversation ([ui](ui.md#the-agents-side-tasks)), and so
+do the workspace tasks the Workspace changes card hands it ("Workspace task tN (update-profile): the user chose to
+update this…"; [companion](companion.md#acting-on-a-change-workspaceupdates)).
 
 ## Open questions
 - Chrome's side panel is per window: two windows show the same conversations and cards, and either can answer a

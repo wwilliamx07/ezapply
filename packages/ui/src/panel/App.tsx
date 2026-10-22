@@ -22,6 +22,7 @@ import {
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Banner, Brand, Button, Icon } from "../components/ui.js";
 import { AskCardView, PermissionCardView } from "./cards.js";
+import { ChangesCard } from "./changes.js";
 import { Markdown } from "./markdown.js";
 import type { ConnectionState, PanelTransport } from "./transport.js";
 
@@ -92,6 +93,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
   /** The list of applications is showing, rather than one application's conversation. */
   const [home, setHome] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped on every "changed" from the companion: the Workspace changes card reads its list again. */
+  const [tick, setTick] = useState(0);
+  /** A request held back while the work it starts needs a workspace change: the card asks first. */
+  const [gate, setGate] = useState<{ to: ConversationPart; text: string } | null>(null);
   const postingId = picked ?? GENERAL_CONVERSATION;
   const busy = busyConversations(state);
   const running = busy.map((c) => postingConversation(c.conversation)).find((c) => c?.postingId === postingId);
@@ -139,6 +144,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
       } else if (push.update.changed) {
         void refreshState().catch(fail);
         void refreshConv().catch(fail);
+        setTick((t) => t + 1);
       }
     });
     void transport.connection().then((c) => {
@@ -217,14 +223,29 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
     });
   };
   /** A request from a button: to the posting's conversation for it, which the panel then shows. */
-  const request = (to: ConversationPart, text: string) => {
+  const go = (to: ConversationPart, text: string) => {
+    setGate(null);
     setPart(to);
     void send(text, conversationKey(postingId, to)).catch(() => {});
+  };
+  /** Held back when the work draws on a workspace change still pending: the card shows it first, with Go on. */
+  const request = async (to: ConversationPart, text: string) => {
+    // The check counts as sending, so a second press while it's read is refused like one during the send.
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    const r = await transport.call("panel.workspaceChanges", { key: conversationKey(postingId, to) }).catch(() => null);
+    sendingRef.current = false;
+    setSending(false);
+    if (!r?.changes?.some((c) => c.needed && !c.working)) return go(to, text);
+    setPart(to);
+    setGate({ to, text });
   };
   const pick = (key: string) => {
     setPicked(key);
     setPart(null);
     setHome(false);
+    setGate(null);
   };
   const general = selected === GENERAL_CONVERSATION;
   const resetWhat = general
@@ -574,6 +595,16 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         <div className={connected ? "ez-general" : "ez-general ez-panel-off"} aria-disabled={!connected}>
           <GeneralCard general={list.general} onOpen={pick} onStop={stopApplication} />
         </div>
+      ) : null}
+
+      {connected ? (
+        <ChangesCard
+          transport={transport}
+          conversation={home ? GENERAL_CONVERSATION : gate ? conversationKey(postingId, gate.to) : selected}
+          agentName={agentName}
+          tick={tick}
+          {...(gate && !home ? { gate: { onGoOn: () => go(gate.to, gate.text), onCancel: () => setGate(null) } } : {})}
+        />
       ) : null}
 
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}

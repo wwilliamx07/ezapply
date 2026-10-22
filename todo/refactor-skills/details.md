@@ -1,6 +1,6 @@
 # Refactor the skills: details
 
-The skills this item covers are the ones left after "Remove the onboarding skill": `ezapply-resume`,
+The skills this item covers: `ezapply-resume`,
 `-cover-letter`, `-bundle`, `-apply`, `-answers`, `-index-repo`, and `EZAPPLY.md`. The honesty rules don't
 change: nothing is fabricated, sensitive and unanswered questions are asked, and the application is never
 submitted. Nothing on a form is filled without the model (§3).

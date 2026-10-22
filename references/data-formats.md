@@ -170,9 +170,9 @@ last brought in line with it; `profileIdentity`, the hash of the profile's `iden
 when the cover template's fields were last set from them; `library`, per LaTeX document in `library/` the user
 said isn't a template, the hash of it and the `.tex` files it pulls in at the time (it's reported again once
 that changes). All are 12 hex characters of SHA-256 and written
-by the companion only (on first sight, or by `workspace_change_mark { as: "done" }`).
+by the companion only (on first sight, or when the user updates the change or keeps it as it is on the Workspace changes card).
 
-`deferred.repos` holds the repos whose new commits the user put off (`workspace_change_mark { as: "later" }` on
+`deferred.repos` holds the repos whose new commits the user put off (**Put off** on
 a `repo-pushed` change): `until` (ISO time; at most 90 days after `at`) and `at`, when it was put off. Until then
 the repo isn't checked. Re-indexing or deselecting the repo removes its entry, and entries past `until` are
 removed on any write. Both keys are optional, so adding them needed no `schemaVersion` bump. Writes to
@@ -348,8 +348,7 @@ and marking that done removes `importedFrom` and `sourceHash`.
 
 `sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and
 contents, line endings normalised; build output skipped; for a single file, that file), as of the last time
-the template was current with it. Written by `template_import`, and by `workspace_change_mark` when the user decides a change there
-needs no re-import. A template imported before the field existed gets it on the first check that finds the
+the template was current with it. Written by `template_import`, and when the user keeps the current copy on the Workspace changes card. A template imported before the field existed gets it on the first check that finds the
 source unchanged.
 
 ### `templates/.synced/resume/`
