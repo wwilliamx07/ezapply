@@ -98,7 +98,8 @@ installation it fails with the install URL in the hint.
 ## Selection
 `profile/repos.yaml` lists the selected repos. `source: "app"` repos are fetched with the user's token;
 `source: "public-url"` repos (public projects the user contributed to but doesn't own) are cloned
-anonymously.
+anonymously; the setup page's Repositories step adds one by its address, once an anonymous `ls-remote` answers
+([ui](ui.md#what-each-step-does)).
 
 ## Repo cache (`RepoService`)
 `repo-cache/<owner>__<name>/`: one mirror per selected repo.

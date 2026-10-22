@@ -94,6 +94,7 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("pair"), replace: z.boolean().optional() }),
   z.object({ action: z.literal("github"), app: z.enum(["new", "existing"]).optional() }),
   z.object({ action: z.literal("repos"), repos: z.array(z.string().regex(/^[\w.-]+\/[\w.-]+$/)).max(500) }),
+  z.object({ action: z.literal("addRepo"), url: z.string().min(1).max(500) }),
   z.object({ action: z.literal("browse"), kind: z.enum(["folder", "tex"]), title: z.string().max(200).optional() }),
   z.object({
     action: z.literal("import"),
@@ -155,11 +156,17 @@ export class OnboardingService {
     private readonly localBaseUrl: () => string,
   ) {}
 
-  /** The page's URL; a new link the first time, the same one after. Asking again reopens a finished page. */
-  open(): { url: string; pageOpen: boolean } {
+  /**
+   * The page's URL; a new link the first time, the same one after. Asking again reopens a finished page. With a
+   * step, the link opens there (its hash), and a page already open moves to it.
+   */
+  open(step?: OnboardStepId): { url: string; pageOpen: boolean } {
     this.token ??= randomBytes(24).toString("base64url");
     this.finished = false;
-    return { url: `${this.localBaseUrl()}${BASE}?t=${this.token}`, pageOpen: this.events.count() > 0 };
+    const pageOpen = this.events.count() > 0;
+    if (pageOpen) this.changed();
+    if (pageOpen && step) this.events.send("step", { step });
+    return { url: `${this.localBaseUrl()}${BASE}?t=${this.token}${step ? `#${step}` : ""}`, pageOpen };
   }
 
   /**
@@ -285,6 +292,8 @@ export class OnboardingService {
         await s.profile.writeRepos({ schemaVersion: 1, repos });
         return { selected: repos.map((r) => r.fullName) };
       }
+      case "addRepo":
+        return this.addRepo(a.url);
       case "browse":
         return pickPath(a.kind, a.title ?? (a.kind === "folder" ? "Choose the folder" : "Choose the .tex file"));
       case "import": {
@@ -478,12 +487,72 @@ export class OnboardingService {
     return { deleted: `library/${name}` };
   }
 
-  /** The repos the app can read, with which to suggest when nothing is selected yet. */
+  /**
+   * Select a public repo the app can't see (one the user contributed to but doesn't own), by its URL or
+   * `owner/name`. It's read without the app's token, so it must answer anonymously; one the app lists is ticked
+   * in the list instead, where it keeps the app's access.
+   */
+  private async addRepo(input: string): Promise<{ added: string }> {
+    const s = this.services();
+    const fullName = repoFromUrl(input);
+    if (!fullName) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `${input.slice(0, 100)} isn't a GitHub repository's address.`,
+        "Paste it as https://github.com/owner/name.",
+      );
+    }
+    const sel = await s.profile.repos();
+    const repos = sel.exists && sel.valid ? sel.value.repos : [];
+    const same = (r: { fullName: string }) => r.fullName.toLowerCase() === fullName.toLowerCase();
+    const already = repos.find(same);
+    if (already) return { added: already.fullName };
+    const listed = (await s.github.listRepos().catch(() => [])).find(same);
+    if (listed) {
+      throw new EzError(
+        ErrorCode.BadRequest,
+        `${listed.fullName} is one the GitHub App can read already.`,
+        "Tick it in the list above.",
+      );
+    }
+    try {
+      await s.repos.remoteHead(fullName, "public-url");
+    } catch {
+      throw new EzError(
+        ErrorCode.NotFound,
+        `${fullName} couldn't be read as a public repository.`,
+        "Check the address. A private repository is added by giving the GitHub App access to it.",
+      );
+    }
+    await s.profile.writeRepos({ schemaVersion: 1, repos: [...repos, { fullName, source: "public-url" }] });
+    return { added: fullName };
+  }
+
+  /**
+   * The repos the app can read, with which to suggest when nothing is selected yet, then the ones added by URL
+   * (so saving the list keeps them).
+   */
   private async repos(): Promise<OnboardRepo[]> {
     const s = this.services();
     const [list, sel, gh] = await Promise.all([s.github.listRepos(), s.profile.repos(), s.github.status()]);
     const selected = new Set(sel.exists && sel.valid ? sel.value.repos.map((r) => r.fullName) : []);
-    return list.map((r) => {
+    const byUrl: OnboardRepo[] = (sel.exists && sel.valid ? sel.value.repos : [])
+      .filter((r) => r.source === "public-url")
+      .map((r) => ({
+        fullName: r.fullName,
+        source: "public-url",
+        private: false,
+        fork: false,
+        archived: false,
+        language: null,
+        sizeKb: 0,
+        pushedAt: null,
+        description: null,
+        stars: 0,
+        selected: true,
+        suggested: false,
+      }));
+    const fromApp = list.map((r) => {
       const reason = skipReason(r, gh.login);
       return {
         fullName: r.fullName,
@@ -500,6 +569,8 @@ export class OnboardingService {
         ...(reason ? { skipReason: reason } : {}),
       };
     });
+    const listed = new Set(list.map((r) => r.fullName));
+    return [...fromApp, ...byUrl.filter((r) => !listed.has(r.fullName))];
   }
 
   async state(): Promise<OnboardState> {
@@ -642,6 +713,15 @@ export class OnboardingService {
     }, WATCH_MS);
     this.watcher.unref();
   }
+}
+
+/** `owner/name` from a GitHub repository's address (or `owner/name` itself); null for anything else. */
+export function repoFromUrl(input: string): string | null {
+  const m =
+    /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i.exec(input.trim()) ??
+    /^([\w.-]+)\/([\w.-]+?)(?:\.git)?$/.exec(input.trim());
+  if (!m?.[1] || !m[2] || m[1].startsWith(".") || m[2].startsWith(".")) return null;
+  return `${m[1]}/${m[2]}`;
 }
 
 /** Why a repo isn't suggested, by the rules that need no judgment; undefined to suggest it. */

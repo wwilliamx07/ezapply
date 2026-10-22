@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
 import { type CompanionHandle, startCompanion } from "../src/main.js";
-import { skipReason } from "../src/onboarding/service.js";
+import { repoFromUrl, skipReason } from "../src/onboarding/service.js";
 import { formatPreferences, parsePreferences } from "../src/profile/service.js";
 
 const MCP_TOKEN = "t".repeat(43);
@@ -339,6 +340,78 @@ hobbies: [chess]
     expect((await p.act({ action: "deleteLibrary", name: "transcript.pdf" })).status).toBe(400);
     expect((await p.act({ action: "deleteLibrary", name: "../profile-copy.yaml" })).status).toBe(400);
     expect(await readFile(join(ws, "profile-copy.yaml"), "utf8")).toBe("name: x");
+  });
+
+  it("adds a public repo by its address, keeping the selection, and refuses one that doesn't answer", async () => {
+    // A local repository stands in for github.com: the address names it, the remote is a folder.
+    const remote = join(dir, "remote");
+    await mkdir(remote, { recursive: true });
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: remote, stdio: "ignore" });
+    git("init", "-q");
+    await writeFile(join(remote, "README.md"), "hi");
+    git("add", ".");
+    git("-c", "user.name=Jane Doe", "-c", "user.email=jane@example.com", "commit", "-qm", "init");
+    await handle.close();
+    handle = await startCompanion({
+      config: {
+        schemaVersion: 1,
+        host: "127.0.0.1",
+        port: 0,
+        mcpToken: MCP_TOKEN,
+        pairingToken: "ABCD-EFGH-JKLM-NPQR",
+        workspace: ws,
+      },
+      log: createLogger({ toFile: false, level: "silent" }),
+      appDataDir: join(dir, "app"),
+      secrets: new MemoryStore(),
+      saveConfig: async () => {},
+      opener: { file: async () => "default", url: async () => "default" },
+      github: { cloneUrl: (name) => (name === "acme/widgets" ? remote : join(dir, "missing")) },
+    });
+    await mkdir(join(ws, "profile"), { recursive: true });
+    await writeFile(join(ws, "profile", "repos.yaml"), "schemaVersion: 1\nrepos:\n  - fullName: jane/api\n");
+    const p = page(handle.services.onboarding.open().url);
+
+    const added = await p.act({ action: "addRepo", url: "https://github.com/acme/widgets.git" });
+    expect(await added.json()).toEqual({ added: "acme/widgets" });
+    const sel = await handle.services.profile.repos();
+    expect(sel.exists && sel.valid && sel.value.repos).toEqual([
+      { fullName: "jane/api", source: "app" },
+      { fullName: "acme/widgets", source: "public-url" },
+    ]);
+    // Saving the list again keeps how it was added.
+    await p.act({ action: "repos", repos: ["acme/widgets"] });
+    const after = await handle.services.profile.repos();
+    expect(after.exists && after.valid && after.value.repos).toEqual([
+      { fullName: "acme/widgets", source: "public-url" },
+    ]);
+
+    const missing = await p.act({ action: "addRepo", url: "acme/private-thing" });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({ error: expect.stringContaining("couldn't be read") });
+    expect((await p.act({ action: "addRepo", url: "https://example.com/x" })).status).toBe(400);
+  });
+
+  it("opens at a step, and moves a page already open to it", async () => {
+    const { url } = handle.services.onboarding.open("repos");
+    expect(new URL(url).hash).toBe("#repos");
+    const p = page(url);
+    const events = await p.get("events");
+    const reader = (events.body as ReadableStream<Uint8Array>).getReader();
+    expect(handle.services.onboarding.open("resume").pageOpen).toBe(true);
+    let text = "";
+    while (!text.includes('"step":"resume"')) text += new TextDecoder().decode((await reader.read()).value);
+    expect(text).toContain("event: step");
+    await reader.cancel();
+  });
+
+  it("reads a repo's address", () => {
+    expect(repoFromUrl("https://github.com/acme/widgets")).toBe("acme/widgets");
+    expect(repoFromUrl("github.com/acme/widgets.git")).toBe("acme/widgets");
+    expect(repoFromUrl("https://github.com/acme/widgets/tree/main/src")).toBe("acme/widgets");
+    expect(repoFromUrl(" acme/widgets ")).toBe("acme/widgets");
+    expect(repoFromUrl("https://gitlab.com/acme/widgets")).toBeNull();
+    expect(repoFromUrl("../etc")).toBeNull();
   });
 
   it("suggests repos by the rules that need no judgment", () => {

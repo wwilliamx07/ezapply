@@ -22,8 +22,8 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
-| 1 | [Remove the onboarding and repos skills](remove-onboarding-repos-skills/overview.md) | Medium | M | — |
-| 2 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | Remove the onboarding and repos skills |
+| 1 | [Remove the onboarding skill](remove-onboarding-repos-skills/overview.md) | Medium | M | — |
+| 2 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | Remove the onboarding skill |
 | 3 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
 | 4 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
 | 5 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | A page saved from a real one |
@@ -42,7 +42,7 @@ Why this order:
 - **Bugs first**, in the table's order: the agent stopping at its first tool call breaks a session outright; the
   rest cost turns or quality on every run.
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
-  later item. Removing the onboarding and repos skills comes before refactoring the rest, which moves every other
+  later item. Removing the onboarding skill comes before refactoring the rest, which moves every other
   mechanical step into code.
 - **Application forms on an employer's own page** waits for a saved careers page whose application is its own form,
   with no frame.
@@ -53,7 +53,7 @@ Why this order:
 
 - **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, CI timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
-  touch, Remove the onboarding and repos skills, Refactor the skills, A writing spec for claims, Compatibility with
+  touch, Remove the onboarding skill, Refactor the skills, A writing spec for claims, Compatibility with
   various agents.
 - **Adapter building:** Agents that try to break a new adapter, Application forms on an
   employer's own page.

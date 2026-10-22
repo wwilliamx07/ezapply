@@ -14,11 +14,11 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    it hosts the companion, which starts Claude Code headless for the side panel, and ezapply runs only while it
    does. It opens the setup page while setup isn't finished. After an update, a running ezapply must be stopped and started again.
 
-**On the setup page** (driven by `EZAPPLY.md` and the `ezapply-onboard` skill; resumable, steps in any order;
-[ui](components/ui.md#the-onboarding-page-onboard)):
+**On the setup page** (resumable, steps in any order; [ui](components/ui.md#the-onboarding-page-onboard)):
 1. Under `ezapply`, the setup page opens when ezapply starts while setup isn't finished, or from the panel's
    Setup; what needs Claude goes to the panel's agent as messages ([tasks](components/ui.md#the-agents-side-tasks)).
-   Asked to set the user up, Claude calls `onboarding {}`, which opens the page (or gives Claude the link).
+   Asked to set the user up, or to change a step ("add repo X", "use another resume"), Claude calls
+   `onboarding { step? }`, which opens the page at that step (or gives Claude the link); the user does it there.
 2. The page shows the `workspace_check` items as steps, done ones ticked
    ([the items](components/companion.md#readiness-checklist-workspace_check)). It opens on the first required step
    not done.
@@ -31,7 +31,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    secret typed into that page, never the chat. Details: [github-and-repos](components/github-and-repos.md).
 6. **Repos:** every repository the app can read, the ones a person would rarely pick (forks, archived, nearly
    empty, the profile README, dotfiles) left out of the suggestion; the user ticks and saves
-   (`profile/repos.yaml`).
+   (`profile/repos.yaml`). A public repository they contributed to but don't own is added by its address.
 7. **Knowledge base:** an `index-repos` task: Claude runs the `ezapply-index-repo` skill per repo (in parallel via
    subagents when there are more than two), and the page ticks each as it's marked indexed. See
    [knowledge-base](components/knowledge-base.md).

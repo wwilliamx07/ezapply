@@ -111,6 +111,7 @@ async function initAntigravity(root: string, skillsSrc: string, report: InitRepo
     await cp(skillsSrc, join(root, ".agents", "skills"), { recursive: true, force: true });
     report.updated.push(".agents/skills/");
   }
+  await removeRetiredSkills(join(root, ".agents", "skills"), report);
   await mergeJson(join(root, ".agents", "mcp_config.json"), report, (cur) => ({
     ...cur,
     mcpServers: {
@@ -177,20 +178,34 @@ export async function writeLauncher(root: string, report: InitReport, platform =
  * user's own that happens to share a name is kept.
  */
 const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter", "bundle", "apply", "answers"];
+/**
+ * Skills ezapply no longer ships: the copy step only adds and overwrites, so an earlier init's copy would stay and
+ * keep running. Choosing repos is the setup page's step.
+ */
+const RETIRED_SKILLS: Record<string, string> = { "ezapply-repos": "the setup page chooses repos" };
 const EZAPPLY_TOOL =
   /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check)\b/;
 
 async function removeLegacySkills(skillsDir: string, report: InitReport): Promise<void> {
   for (const name of LEGACY_SKILLS) {
-    const dir = join(skillsDir, name);
-    const text = await readFile(join(dir, "SKILL.md"), "utf8").catch(() => null);
-    if (text === null) continue;
-    if (EZAPPLY_TOOL.test(text)) {
-      await rm(dir, { recursive: true, force: true });
-      report.updated.push(`${dir} (removed: renamed to ezapply-${name})`);
-    } else {
-      report.kept.push(`${dir} (not ezapply's)`);
-    }
+    await removeIfOurs(join(skillsDir, name), `renamed to ezapply-${name}`, report);
+  }
+  await removeRetiredSkills(skillsDir, report);
+}
+
+async function removeRetiredSkills(skillsDir: string, report: InitReport): Promise<void> {
+  for (const [name, why] of Object.entries(RETIRED_SKILLS)) await removeIfOurs(join(skillsDir, name), why, report);
+}
+
+/** Remove a skill folder only when its SKILL.md uses ezapply's tools, so a skill of the user's own is kept. */
+async function removeIfOurs(dir: string, why: string, report: InitReport): Promise<void> {
+  const text = await readFile(join(dir, "SKILL.md"), "utf8").catch(() => null);
+  if (text === null) return;
+  if (EZAPPLY_TOOL.test(text)) {
+    await rm(dir, { recursive: true, force: true });
+    report.updated.push(`${dir} (removed: ${why})`);
+  } else {
+    report.kept.push(`${dir} (not ezapply's)`);
   }
 }
 

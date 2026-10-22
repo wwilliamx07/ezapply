@@ -1,5 +1,5 @@
 import type { OnboardStepId } from "@ezapply/protocol";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Banner, Brand, Button, Icon, MessagePage, Spinner } from "../components/ui.js";
 import { ProfileStep } from "./ProfileStep.js";
 import { TaskLine } from "./parts.js";
@@ -49,15 +49,28 @@ export function OnboardApp() {
 function Onboarding() {
   const { state, act, ask } = useOnboard();
   const firstOpen = state.steps.find((s) => s.required && !s.done)?.id ?? "tex";
-  const [current, setCurrent] = useState<OnboardStepId>(firstOpen);
+  // The address's hash names a step when the agent opened the page at one (`onboarding { step }`).
+  const [current, setCurrent] = useState<OnboardStepId>(() => stepOf(location.hash) ?? firstOpen);
   const [finishing, setFinishing] = useState(false);
   const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // A new step starts at its top.
+  // A new step starts at its top, and the hash follows it so a reload stays there.
   const showStep = (id: OnboardStepId) => {
     setCurrent(id);
+    history.replaceState(history.state, "", `#${id}`);
     document.getElementById("ob-main")?.scrollTo({ top: 0 });
   };
+  useEffect(() => {
+    const onHash = () => {
+      const id = stepOf(location.hash);
+      if (id) {
+        setCurrent(id);
+        document.getElementById("ob-main")?.scrollTo({ top: 0 });
+      }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   if (state.status === "finished") {
     return (
@@ -218,6 +231,10 @@ function Onboarding() {
       </aside>
     </div>
   );
+}
+
+function stepOf(hash: string): OnboardStepId | undefined {
+  return STEPS.find((s) => `#${s.id}` === hash)?.id;
 }
 
 const TASK_LABELS: Record<string, string> = {

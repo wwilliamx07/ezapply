@@ -1,6 +1,6 @@
 ---
 name: ezapply-onboard
-description: Set up or resume ezapply on its setup page in the browser (TeX, extension, GitHub and repos, resume and profile, cover letter template, screening answers, preferences), doing the tasks the page hands you, and keep the workspace current. Use when the user says onboard, set up, or get started, wants to change a setup step, when workspace_check reports missing steps, or when workspace_changes lists changes.
+description: Keep the workspace current when workspace_changes lists changes (a template, the profile, the cover letter's fields or the project knowledge behind what they come from). Use when workspace_changes lists changes, or the user asks what they put off.
 ---
 
 # Keeping the workspace current
@@ -46,24 +46,8 @@ user's agreement: these cost time, and the templates and profile are theirs.
      more than two. Its `knowledge_mark_indexed { repo }` ends the change. If `claims_list` was read earlier in this
      session, read it again afterwards.
    - **`repo-deselected`:** ask whether to delete that repo's knowledge and cache (mark it `done`, which deletes
-     them) or select the repo again (the **ezapply-repos** skill).
+     them) or select the repo again on the setup page (`onboarding { step: "repos" }`).
 3. Finish with one line on what was updated, then carry on with the user's request.
 
 `notChecked` lists what couldn't be checked. Mention it only when the user can fix it: an expired GitHub login
 (its hint says `github_login`), or a template's source folder that has moved.
-
-# Onboarding
-
-Onboarding happens on a page in the user's browser, not in this chat: TeX, the extension, GitHub and repos,
-the resume and profile, the cover letter template, screening answers, preferences, library. The user fills in
-the page; you do the parts that need you, as tasks it sends.
-
-1. Call `onboarding {}`. It opens the page, or gives you its `url` to pass on when no browser
-   opened. Tell the user in one line that setup is on that page and you'll handle what it hands you.
-2. A task arrives as a message ("Setup task t3 from the setup page …") with what to do and its parameters. Do
-   it, with your tools and the skills it names. Keep the chat short: the page shows the user what you're doing.
-   Then report it: `onboarding { taskId, result: { ok, note? } }`. `note` is shown on the page: a
-   sentence on what you did, or what the user must do if it failed (`ok: false`).
-
-The same call reopens the page later, when the user wants to change a step (another resume, more repos).
-Never ask in chat for what the page collects: a password, a client secret, an address, screening answers.

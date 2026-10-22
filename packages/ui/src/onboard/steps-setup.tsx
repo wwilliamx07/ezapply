@@ -185,6 +185,9 @@ export function ReposStep() {
   const [showSkipped, setShowSkipped] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [address, setAddress] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!state.github.loggedIn) return;
@@ -197,6 +200,23 @@ export function ReposStep() {
       () => setError("Your repositories couldn't be listed. Check the GitHub step, then reload this page."),
     );
   }, [base, state.github.loggedIn]);
+
+  // A public repository the app can't see is saved at once, and joins the list ticked.
+  const addByAddress = async () => {
+    setAdding(true);
+    setAddError(null);
+    try {
+      const { added } = await act<{ added: string }>("addRepo", { url: address.trim() });
+      const list = await getJson<OnboardRepo[]>(`${base}/repos`);
+      setRepos(list);
+      setPicked((p) => new Set([...p, added]));
+      setAddress("");
+    } catch (e) {
+      setAddError(messageOf(e));
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -260,6 +280,7 @@ export function ReposStep() {
                     <span className="ob-repo-name">
                       {r.fullName}
                       {r.private ? <Badge>private</Badge> : null}
+                      {r.source === "public-url" ? <Badge>added by address</Badge> : null}
                       {r.skipReason ? <Badge tone="warn">{r.skipReason}</Badge> : null}
                     </span>
                     {r.description ? <span className="ob-repo-desc">{r.description}</span> : null}
@@ -287,6 +308,29 @@ export function ReposStep() {
               , then reload this page.
             </p>
           ) : null}
+          <form
+            className="ob-row ob-add-repo"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (address.trim()) void addByAddress();
+            }}
+          >
+            <label className="ez-label" htmlFor="ob-repo-address">
+              A public repository you contributed to but don't own
+            </label>
+            <input
+              id="ob-repo-address"
+              className="ez-input"
+              type="text"
+              placeholder="https://github.com/owner/name"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+            <Button type="submit" disabled={adding || !address.trim()}>
+              {adding ? "Adding…" : "Add"}
+            </Button>
+          </form>
+          <ErrorNote error={addError} />
           <div className="ob-actions">
             <Button
               variant="primary"

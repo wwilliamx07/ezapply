@@ -149,6 +149,23 @@ describe("skills", () => {
     expect(await readFile(join(skills(), "apply", "SKILL.md"), "utf8")).toContain("My own apply notes.");
     expect(report.updated.some((u) => u.includes("renamed to ezapply-resume"))).toBe(true);
   });
+
+  it("removes a retired skill an earlier init copied, for both agents, but keeps a user's skill of that name", async () => {
+    const agents = join(config.workspace, ".agents", "skills");
+    for (const dir of [skills(), agents]) {
+      await mkdir(join(dir, "ezapply-repos"), { recursive: true });
+      await writeFile(join(dir, "ezapply-repos", "SKILL.md"), "---\nname: ezapply-repos\n---\n`github_list_repos`\n");
+    }
+    const report = await initWorkspace(config);
+    await expect(stat(join(skills(), "ezapply-repos"))).rejects.toThrow();
+    await expect(stat(join(agents, "ezapply-repos"))).rejects.toThrow();
+    expect(report.updated.some((u) => u.includes("the setup page chooses repos"))).toBe(true);
+
+    await mkdir(join(skills(), "ezapply-repos"), { recursive: true });
+    await writeFile(join(skills(), "ezapply-repos", "SKILL.md"), "---\nname: ezapply-repos\n---\nMine.\n");
+    await initWorkspace(config);
+    expect(await readFile(join(skills(), "ezapply-repos", "SKILL.md"), "utf8")).toContain("Mine.");
+  });
 });
 
 describe("the agent settings an older build kept", () => {

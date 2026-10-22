@@ -1,3 +1,4 @@
+import { ONBOARD_STEP_IDS, type OnboardStepId } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
@@ -12,11 +13,14 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
     {
       title: "Onboarding page",
       description:
-        "Open the setup page in the user's browser (if it isn't open). The user does setup on the page; what needs " +
-        'you arrives as a message ("Setup task t3 from the setup page …"): do it, then report it with ' +
-        "onboarding { taskId, result: { ok, note? } }. Use it when workspace_check isn't ready, or when the user " +
-        "wants to change a setup step.",
+        "Open the setup page in the user's browser (if it isn't open), at `step` when given. Use it when " +
+        "workspace_check isn't ready, or when the user wants to change a setup step: to add or remove repos, use " +
+        "another resume and so on, open that step and tell them they do it there. Never ask in chat for what the " +
+        "page collects (a password, a client secret, an address, screening answers). What needs you arrives as a " +
+        'message ("Setup task t3 from the setup page …"): do it, then report it with ' +
+        "onboarding { taskId, result: { ok, note? } }.",
       inputSchema: {
+        step: z.enum(ONBOARD_STEP_IDS).optional().describe("The step to open the page at."),
         taskId: z.string().optional().describe("The task you finished."),
         result: z
           .object({
@@ -38,11 +42,13 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
       s.log,
       "onboarding",
       async ({
+        step,
         taskId,
         result,
         timeoutSeconds,
         wait,
       }: {
+        step?: OnboardStepId;
         taskId?: string;
         result?: { ok: boolean; note?: string };
         timeoutSeconds: number;
@@ -52,14 +58,14 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
         if (!wait) {
           // The panel's agent: tasks come as messages, so it reports, or opens the page, and goes on.
           if (taskId) return { reported: true };
-          const { url, pageOpen } = s.onboarding.open();
-          if (pageOpen) return { url, pageOpen: true };
+          const { url, pageOpen } = s.onboarding.open(step);
+          if (pageOpen) return { url, pageOpen: true, ...(step ? { showing: step } : {}) };
           const openedIn = await s.opener.url(url).catch(() => null);
           return openedIn
             ? { url, openedIn }
             : { url, openedBrowser: false, tell: `Ask the user to open ${url} to set ezapply up.` };
         }
-        const { url, pageOpen } = s.onboarding.open();
+        const { url, pageOpen } = s.onboarding.open(step);
         if (!pageOpen) {
           const openedIn = await s.opener.url(url).catch(() => null);
           if (!openedIn) {

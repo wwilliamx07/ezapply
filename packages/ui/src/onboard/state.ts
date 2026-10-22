@@ -39,7 +39,14 @@ export function useOnboardState(): Onboard {
 
   useEffect(() => {
     void refresh();
-    const stop = subscribe(`${base}/events`, { state: () => void refresh() });
+    const stop = subscribe(`${base}/events`, {
+      state: () => void refresh(),
+      // The agent opened the page at a step while it was open: the step follows the address's hash.
+      step: (data) => {
+        const step = (data as { step?: unknown } | null)?.step;
+        if (typeof step === "string") location.hash = step;
+      },
+    });
     // Back from another tab (GitHub's pages, the extensions page): read it again at once.
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);

@@ -68,7 +68,8 @@ whether to write cover letters by default. Done at 10+ words. `EZAPPLY.md` impor
 in every session without reading it ([how](workspace.md#how-it-stays-in-context)).
 
 ## Repo selection (`profile/repos.yaml`)
-`repos[] { fullName, source: "app" | "public-url", note? }`, written by `repos_selection_set`. See
+`repos[] { fullName, source: "app" | "public-url", note? }`, written by the setup page's Repositories step and
+`repos_selection_set`. See
 [github-and-repos.md](github-and-repos.md).
 
 ## Templates (`templates/resume/`, `templates/cover/`)
@@ -96,8 +97,8 @@ file structure, so a diff against the template stays readable.)
   *Why a single file and `library/`:* the source is what the workspace check watches for the user's edits.
   With folders outside the workspace only, a resume kept as one file next to other documents (in `library/`,
   say) could only be imported through a copy Claude made in its scratchpad, and the check then watched that
-  copy, which never changes, so the user's edits went unnoticed. The tool description and onboarding skill
-  tell Claude to pass the user's own path, never a copy, and a source in a Claude scratchpad (`inScratchpad`)
+  copy, which never changes, so the user's edits went unnoticed. The tool description tells
+  Claude to pass the user's own path, never a copy, and a source in a Claude scratchpad (`inScratchpad`)
   is refused. A template imported that way earlier, and a LaTeX document in `library/` that no template came
   from, are reported by the workspace check (`template-untracked`, `library-template`). Other workspace
   folders stay refused: they're ezapply's own output.

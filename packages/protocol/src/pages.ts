@@ -78,18 +78,20 @@ export interface ReviewAnswer {
 // ---- onboarding ----------------------------------------------------------------------------------
 
 /** The onboarding page's steps, in order (from `workspace_check`'s items). */
-export type OnboardStepId =
-  | "tex"
-  | "extension"
-  | "github"
-  | "repos"
-  | "knowledge"
-  | "resume"
-  | "profile"
-  | "cover"
-  | "answers"
-  | "preferences"
-  | "library";
+export const ONBOARD_STEP_IDS = [
+  "tex",
+  "extension",
+  "github",
+  "repos",
+  "knowledge",
+  "resume",
+  "profile",
+  "cover",
+  "answers",
+  "preferences",
+  "library",
+] as const;
+export type OnboardStepId = (typeof ONBOARD_STEP_IDS)[number];
 
 /** Work the page hands to the agent: what needs judgment or the agent's shell. */
 export type OnboardTaskKind =
@@ -178,8 +180,10 @@ export interface OnboardPreferences {
   coverLetters: string;
 }
 
-/** A repo the GitHub app can read, as the repos step lists it. */
+/** A repo the GitHub app can read, or one added by its URL, as the repos step lists it. */
 export interface OnboardRepo {
+  /** Added by its URL: a public repo the app can't see, read without the app's token. */
+  source?: "public-url";
   fullName: string;
   private: boolean;
   fork: boolean;

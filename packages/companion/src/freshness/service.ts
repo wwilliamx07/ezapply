@@ -301,7 +301,7 @@ export class FreshnessService {
         kind: "repo-deselected",
         summary: `knowledge/${repo.replace("/", "__")} is from ${repo}, which is no longer selected; its claims are still in claims_list.`,
         detail:
-          "Ask the user: delete that knowledge and the repo's cache (workspace_change_mark as done), or select the repo again (repos_selection_set).",
+          'Ask the user: delete that knowledge and the repo\'s cache (workspace_change_mark as done), or select the repo again on the setup page (onboarding { step: "repos" }).',
         affects: ["claims"],
       });
     }

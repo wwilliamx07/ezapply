@@ -6,6 +6,9 @@ open questions. What is built, and how, is on the component pages; history is in
 ## Decisions
 Each gives the choice and the reason in a line or two; the linked page has the detail.
 
+- **Setup and repos have no skill.** The setup page does each step as a form, and a task it hands the agent
+  carries its own instructions; `onboarding { step }` opens a step for a change asked in chat, instead of a skill
+  repeating the step a turn of chat at a time ([workspace](components/workspace.md#skills-claudeskills)).
 - **The extension watches for Submit; the user can mark it.** The user presses Submit, so no form call sees the
   confirmation page; watching the tab from the hand-off records it without an agent, and **Mark submitted** in the
   panel covers what the watch misses ([extension](components/extension.md#watching-for-the-users-submit-submit-watchts)).
@@ -277,7 +280,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **Debug mode's adapter trace** on a real page: its size through the bridge, the failure screenshot, the export.
 - **Keeping the workspace current:** `ls-remote` against GitHub with the app's token, and the agent following
   `workspace_changes` (including putting a repo off for a set time).
-- **Setup end to end:** a real GitHub login (and connecting an existing app), onboarding's steps against the real
+- **Setup end to end:** a real GitHub login (and connecting an existing app), adding a public repo by its address
+  (anonymous `ls-remote` against GitHub), the agent opening the page at a step while it is open, onboarding's steps against the real
   things, the OS folder dialog, a full onboarding in Claude Code with MiKTeX installed from a hint, and CI's `tex`
   job on GitHub.
 - **Opening in the user's browser:** a new tab in the running window, a Chrome user

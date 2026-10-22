@@ -277,6 +277,13 @@
 }
 
 /* Repositories */
+.ob-add-repo {
+  margin-top: 14px;
+}
+.ob-add-repo > .ez-label {
+  flex-basis: 100%;
+  margin: 0;
+}
 .ob-filter .ez-input {
   max-width: 280px;
 }

@@ -1,33 +1,15 @@
-# Remove the onboarding and repos skills: details
+# Remove the onboarding skill: details
 
-`ezapply-onboard` has two halves: **Onboarding**, a shim around the setup page's task loop, and **Keeping the
-workspace current**, the agent's triage of `workspace_changes`. `ezapply-repos` repeats the setup page's
-Repositories step in chat. Done in two stages; each ships on its own.
+`ezapply-onboard` is now only **Keeping the workspace current**, the agent's triage of `workspace_changes`. The
+repos skill and the onboarding half are gone: the setup page adds a repo by its address and opens at a step
+(`onboarding { step }`).
 
 What stays the agent's, as setup tasks with their `how` (`HOW` in `onboarding/service.ts`), not as a skill:
 updating the profile from the resume's diff, re-indexing a repo, fixing a template that fails to build, and
 filling the cover's identity fields in a template that isn't ezapply's default. Nothing here decides for the user:
 each update still waits on their yes, now given on a card or the page instead of in chat.
 
-## 1. The repos skill and the onboarding half (S)
-- **The page adds a repo by URL.** The Repositories step keeps sources added with `source: "public-url"` but
-  can't add one. Add a field for a public repository's URL (one the user contributed to but doesn't own) that
-  calls `repos_selection_set`'s logic with that source, refusing what `github_list_repos` already lists.
-- **Opening the page at a step.** `onboarding { step? }` opens or focuses the page on that step (`repos`,
-  `resume`, …); the page reads it from the URL's hash. "Add repo X" or "use another resume" in chat becomes that
-  call; the tool's description says so.
-- **The task message is the instruction.** It already carries `how` and the report call. `onboarding`'s
-  description keeps the one line on reporting; the skill's "never ask in chat for what the page collects" moves
-  into the description too.
-- **Freshness hints that name the skill.** `repo-deselected`'s detail (`freshness/service.ts`) names
-  `ezapply-repos`: point to `onboarding { step: "repos" }` instead.
-- **`EZAPPLY.md`.** "New user, set me up, or `workspace_check` shows missing steps: call `onboarding {}`."
-- **Removing the files.** `ezapply init` copies the skills with `cp … force` and never deletes, so existing
-  workspaces keep both folders. Add `ezapply-repos` (and `ezapply-onboard` in stage 2) to a removal list beside
-  `LEGACY_SKILLS` in `cli/src/workspace-init.ts`, with the same guard: remove a folder only when its `SKILL.md`
-  uses ezapply's tools. Test it in `workspace-init.test.ts`, whose expected names lose `ezapply-onboard`.
-
-## 2. Keeping the workspace current (M)
+## Keeping the workspace current (M)
 **The companion raises the changes, not the agent.** `FreshnessService` already checks in the background from
 the conversation's start. When a panel conversation opens (or the background check finishes) with changes listed,
 the panel shows a **Workspace changes** card above the conversation: one line per change (its `summary`), the ones
@@ -72,7 +54,7 @@ user never saw. Its `repo-deselected` deletion is no longer reachable from the a
 agents"), the setup page shows the same list under a **Changes** heading with the same buttons, so nothing
 depends on the panel's UI alone.
 
-Then delete `ezapply-onboard` (and add it to init's removal list).
+Then delete `ezapply-onboard` (and add it to `RETIRED_SKILLS` in `cli/src/workspace-init.ts`).
 
 ## Tests
 - `freshness`: `affects` per conversation kind; the order of a mixed update.
@@ -83,10 +65,10 @@ Then delete `ezapply-onboard` (and add it to init's removal list).
 - UI: the card renders, hides when empty, blocks Tailor/Fill with a needed change pending.
 
 ## References
-`workspace.md` (the skills table loses two rows; `EZAPPLY.md`'s setup lines), `flows.md` (setup, and "at the
+`workspace.md` (the skills table loses its row; `EZAPPLY.md`'s session-start lines), `flows.md` (setup, and "at the
 start of every session" becomes the card), `companion.md` ("Keeping the workspace current": who acts on the list),
-`ui.md` (the page's URL field, its step hash, its Changes list; the panel's card), `agent.md` (workspace tasks in
-the general conversation), `mcp-tools.md` (`onboarding { step? }`, `workspace_change_mark` removed), `cli.md`
+`ui.md` (the page's Changes list; the panel's card), `agent.md` (workspace tasks in
+the general conversation), `mcp-tools.md` (`workspace_change_mark` removed), `cli.md`
 (the skills list, init's removal), and a line in `status.md`'s decisions: why triage is UI, not a skill (consent
 given on a button can't be skipped, and it costs no call per session). The live run in `status.md`: an edited
 resume and a pushed repo, from the card through the agent's tasks.

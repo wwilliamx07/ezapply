@@ -319,14 +319,17 @@ Approvals stay per version (the hash): the diff is a reading aid. A renamed file
 ## The onboarding page (`/onboard`)
 The `workspace_check` items as steps the user works through in any order, done ones ticked, required and optional
 marked, with a progress bar. One page per chat (`OnboardingService`, `companion/src/onboarding/service.ts`): the
-token is made on the first `onboarding` call and kept for the chat.
+token is made on the first `onboarding` call and kept for the chat. The address's hash names the step shown
+(`#repos`): `onboarding { step }` opens the link with it, a page already open gets a `step` event that sets it, and
+moving between steps updates it, so a reload stays on the step. Without one the page opens on the first required
+step not done.
 
 | Route | Does |
 |---|---|
 | `GET` (with `?t=`) | The page; sets the cookie (`Path=/onboard`) |
 | `GET state` | `OnboardState`: status (`open`, `finished`), `ready`, the agent file's state, the steps, the tasks, whether the agent is listening, and per step what it shows ([below](#what-each-step-does)) |
-| `GET events` | Server-Sent Events: `state` on every change |
-| `GET repos` | The repositories the GitHub app can read, each with `selected`, `suggested` and `skipReason` |
+| `GET events` | Server-Sent Events: `state` on every change, `step { step }` when the agent opens the open page at a step |
+| `GET repos` | The repositories the GitHub app can read, each with `selected`, `suggested` and `skipReason`, then the selected ones added by address (`source: "public-url"`), so saving the list keeps them |
 | `GET file?path=` | A built template's PDF, under `templates/` only |
 | `POST action` | `{ action, … }` (below); the answer, or 400 `{ error, hint? }` with an `EzError`'s words |
 | `POST library?name=` | A file's bytes into `library/` |
@@ -342,7 +345,7 @@ window gets focus. The comparison stops when no page listens.
 | LaTeX | The engine found; else the install command for this OS, and **Ask Claude to install it** | task `install-tex` |
 | Browser extension | The steps for Chrome and other Chromium browsers and the folder to load (copyable: a page can't open `chrome://extensions`); **connect** opens the 15-minute pairing window and the step turns green when it connects; a warning when the extension isn't built | `pair` (`startPairing`, shared with `extension_pair`, `bridge/pairing.ts`) |
 | GitHub | Without an app: create a new one or connect an existing one; **Continue on GitHub** opens the `/github/` flow in a new tab (opened in the click, so it isn't blocked, then pointed at the address the companion gives); a port mismatch's hint | `github` |
-| Repositories | Every repository with language, last push, description, private, a search, and the ones left out (forks, archived, under 10 KB, the profile README repo, dotfiles or config) behind a toggle; nothing selected yet → the rest preselected; a link to give the app access to a missing one | `repos` (sources of repos added by URL kept) |
+| Repositories | Every repository with language, last push, description, private, a search, and the ones left out (forks, archived, under 10 KB, the profile README repo, dotfiles or config) behind a toggle; nothing selected yet → the rest preselected; a link to give the app access to a missing one; a field for a public repository the user contributed to but doesn't own (its address or `owner/name`), saved at once and listed ticked | `repos` (sources of repos added by URL kept), `addRepo { url }`: refused when it isn't a GitHub address, when the app lists it (tick it there, keeping the app's access), or when it doesn't answer an anonymous `ls-remote` (private, or no such repo); else appended with `source: "public-url"` |
 | Your projects, read | Each selected repository read or not; **Have Claude read N repositories** | task `index-repos` |
 | Your resume | A folder or one `.tex` file, typed or chosen with **Browse…**; **Import and build**; the build's outcome (pages, over the limit, its first error) and a preview; a build that fails offers **Ask Claude to fix the build** | `browse`, `import` (`template_import`, then `tex_compile`), task `fix-template-build` |
 | Your profile | None yet: **Have Claude draft it from my resume**. Then a form of every field the schema has, the often-asked ones marked when empty, the schema's errors under their fields; a draft that arrives replaces the form unless the user has started editing | task `draft-profile`, `profile` |
@@ -357,7 +360,7 @@ what's next (capture a posting with the panel's Capture or Alt+Shift+P); asking 
 it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes it, not the page.
 
 **Actions** (`POST action`, validated with zod): `task { kind, params }`, `pair { replace? }`, `github { app? }`,
-`repos { repos }`, `browse { kind: folder | tex, title? }`, `import { kind, source, main?, replace? }`,
+`repos { repos }`, `addRepo { url }`, `browse { kind: folder | tex, title? }`, `import { kind, source, main?, replace? }`,
 `compile { kind }`, `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
 neverMention, targets, coverLetters }`, `deleteLibrary { name }` (only a file the step lists, by its exact name, so no
 name reaches outside `library/`), `finish`.
@@ -365,7 +368,7 @@ name reaches outside `library/`), `finish`.
 ### The agent's side: tasks
 What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,
 `draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `question`, each
-with `how`, what to do (`HOW` in the service), so the skill needs no copy of it. Where the agent is decides how it
+with `how`, what to do (`HOW` in the service), so no skill is needed for it. Where the agent is decides how it
 gets one (`agentIn` in the page's state):
 - **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
   ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:
