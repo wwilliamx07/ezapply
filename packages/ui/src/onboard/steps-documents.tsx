@@ -112,7 +112,6 @@ export function ResumeStep() {
   const [compiled, setCompiled] = useState<CompileOutcome | null>(null);
   const [changing, setChanging] = useState(false);
   const done = state.steps.find((s) => s.id === "resume")?.done ?? false;
-  const doneTasks = state.tasks.filter((t) => t.status === "done").length;
   const pdf = compiled?.pdf ?? state.resume.pdf;
   return (
     <>
@@ -140,20 +139,18 @@ export function ResumeStep() {
       )}
       {compiled ? <CompileResult result={compiled} kind="resume" /> : null}
       <TaskStatus kinds={["fix-template-build"]} />
-      {pdf ? <PdfPreview path={pdf} version={`${compiled?.pdf ?? ""}${doneTasks}`} /> : null}
+      {pdf ? <PdfPreview path={pdf} version={state.resume.builtAt ?? ""} /> : null}
     </>
   );
 }
 
 export function CoverStep() {
   const { state, ask, act } = useOnboard();
-  const busy = useBusy(["fill-cover-identity", "restyle-cover", "cover-from-example", "revise-cover"]);
+  const busy = useBusy(["fill-cover-identity", "restyle-cover", "cover-from-example"]);
   const [choice, setChoice] = useState<"default" | "own" | "example">("default");
   const [compiled, setCompiled] = useState<CompileOutcome | null>(null);
-  const [request, setRequest] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
-  const doneTasks = state.tasks.filter((t) => t.status === "done").length;
   const pdf = compiled?.pdf ?? state.cover.pdf;
   const done = state.steps.find((s) => s.id === "cover")?.done ?? false;
   return (
@@ -218,34 +215,15 @@ export function CoverStep() {
       {choice === "example" ? <ExampleLetter /> : null}
       <ErrorNote error={error} />
       {compiled ? <CompileResult result={compiled} kind="cover" /> : null}
-      <TaskStatus kinds={["fill-cover-identity", "restyle-cover", "cover-from-example", "revise-cover"]} />
+      <TaskStatus kinds={["fill-cover-identity", "restyle-cover", "cover-from-example"]} />
       {pdf ? (
         <>
-          <PdfPreview path={pdf} version={`${compiled?.pdf ?? ""}${doneTasks}`} />
-          <div className="ez-field">
-            <label className="ez-label" htmlFor="ob-cover-change">
-              Anything to change in how it looks?
-            </label>
-            <textarea
-              id="ob-cover-change"
-              className="ez-textarea"
-              rows={2}
-              value={request}
-              placeholder="Smaller margins, the date on the right, my name in bold…"
-              onChange={(e) => setRequest(e.target.value)}
-            />
-          </div>
-          <div className="ob-actions">
-            <Button
-              disabled={busy || !request.trim()}
-              onClick={async () => {
-                await ask("revise-cover", { request: request.trim() });
-                setRequest("");
-              }}
-            >
-              Ask {state.agentName} to change it
-            </Button>
-          </div>
+          <PdfPreview path={pdf} version={state.cover.builtAt ?? ""} />
+          <p className="ez-help">
+            Want it to look different (margins, the date's place, your name in bold)? Ask {state.agentName} in{" "}
+            {state.agentIn === "panel" ? "the ezapply panel" : "your terminal"}; the preview here updates when it's
+            rebuilt.
+          </p>
         </>
       ) : null}
     </>

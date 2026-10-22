@@ -3,13 +3,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskLine } from "../src/onboard/parts.js";
 import { type Onboard, OnboardContext } from "../src/onboard/state.js";
-import { LibraryStep, PreferencesStep } from "../src/onboard/steps-documents.js";
+import { CoverStep, LibraryStep, PreferencesStep } from "../src/onboard/steps-documents.js";
 import { ReposStep } from "../src/onboard/steps-setup.js";
 
 // The bundle defines the PDF worker's address at build time (lib/pdf.ts); the step imports it with its previews.
 vi.hoisted(() => {
   (globalThis as { __PDF_WORKER__?: string }).__PDF_WORKER__ = "";
 });
+
+// The previews load nothing here: the tests only see which address each asks for.
+const { loadPdf } = vi.hoisted(() => ({ loadPdf: vi.fn((_url: string) => new Promise<never>(() => {})) }));
+vi.mock("../src/lib/pdf.js", () => ({ loadPdf }));
 
 afterEach(cleanup);
 
@@ -119,9 +123,50 @@ describe("the repositories step", () => {
 
 describe("a task's line", () => {
   it("names the agent in use, not Claude", () => {
-    const task = { id: "t1", kind: "question", params: {}, status: "running", createdAt: "" } as const;
+    const task = { id: "t1", kind: "install-tex", params: {}, status: "running", createdAt: "" } as const;
     render(<TaskLine task={task} agent={{ agentListening: true, agentIn: "panel", agentName: "Antigravity" }} />);
     expect(screen.getByText(/^Antigravity is working on it\./)).toBeTruthy();
     expect(screen.queryByText(/Claude/)).toBeNull();
+  });
+});
+
+describe("the cover letter step", () => {
+  function cover(builtAt: string): Onboard {
+    return {
+      base: "/onboard",
+      state: {
+        steps: [],
+        tasks: [],
+        agentName: "Claude Code",
+        agentIn: "panel",
+        profile: { valid: true },
+        resume: { main: "templates/resume/resume.tex" },
+        cover: { main: "templates/cover/cover.tex", isDefault: false, pdf: "templates/cover/cover.pdf", builtAt },
+      },
+      error: null,
+      refresh: async () => {},
+      act: async () => ({}),
+      ask: async () => {},
+    } as unknown as Onboard;
+  }
+
+  it("has no request box, and reloads its preview when the PDF is rebuilt, by the agent in chat too", async () => {
+    const { rerender } = render(
+      <OnboardContext.Provider value={cover("2026-01-01T00:00:00.000Z")}>
+        <CoverStep />
+      </OnboardContext.Provider>,
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText(/Ask Claude Code in the ezapply panel/)).toBeTruthy();
+    await waitFor(() => expect(loadPdf).toHaveBeenCalledTimes(1));
+    expect(loadPdf.mock.calls[0]?.[0]).toContain("v=2026-01-01T00%3A00%3A00.000Z");
+
+    rerender(
+      <OnboardContext.Provider value={cover("2026-01-02T00:00:00.000Z")}>
+        <CoverStep />
+      </OnboardContext.Provider>,
+    );
+    await waitFor(() => expect(loadPdf).toHaveBeenCalledTimes(2));
+    expect(loadPdf.mock.calls[1]?.[0]).toContain("v=2026-01-02T00%3A00%3A00.000Z");
   });
 });

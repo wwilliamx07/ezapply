@@ -43,7 +43,7 @@ End-to-end behaviour, step by step. Each step names the component that does it.
    EEO answers or "decline"); the page saves it in place, keeping the file's comments.
 10. **Cover letter template:** keep the default (Claude fills in the identity fields, or restyles it like the
    resume), import the user's own LaTeX, or drop an example letter for Claude to rebuild the layout from; a preview,
-   and changes asked of Claude. See [profile-and-templates](components/profile-and-templates.md).
+   and other changes asked of Claude in the panel's chat (the page has no chat), which the preview picks up. See [profile-and-templates](components/profile-and-templates.md).
 11. **Answer bank:** unanswered screening questions eight at a time, each with its suggestion filled in, saved in
    place. Questions the profile answers (sponsorship, relocation, start date…) aren't asked again; the step lists
    them with the profile's value.

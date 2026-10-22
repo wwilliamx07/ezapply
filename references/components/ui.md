@@ -374,7 +374,9 @@ step not done.
 **Seeing changes made elsewhere.** A login finished in GitHub's tab, the extension connecting, a repository the
 agent indexed: none of them goes through the page. While a page listens, the companion compares its state every
 2 s (`workspace_check` is cheap) and sends `state` when it differs; the page also reads it again whenever its
-window gets focus. The comparison stops when no page listens.
+window gets focus. The comparison stops when no page listens. The resume's and cover's `builtAt` (their PDF's
+modified time) are part of that state, and each preview reloads when it changes, so a template the agent
+rebuilt from the panel's chat shows here without a task.
 
 ### What each step does
 | Step | On the page | Action |
@@ -386,13 +388,16 @@ window gets focus. The comparison stops when no page listens.
 | Your projects, read | Each selected repository read or not; **Have Claude read N repositories** | task `index-repos` |
 | Your resume | A folder or one `.tex` file, typed or chosen with **Browse…**; **Import and build**; the build's outcome (pages, over the limit, its first error) and a preview; a build that fails offers **Ask Claude to fix the build** | `browse`, `import` (`template_import`, then `tex_compile`), task `fix-template-build` |
 | Your profile | None yet: **Have Claude draft it from my resume**. Then a form of every field the schema has, the often-asked ones marked when empty, the schema's errors under their fields; a draft that arrives replaces the form unless the user has started editing | task `draft-profile`, `profile` |
-| Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview and "Anything to change in how it looks?" | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`; `compile`, `import` |
+| Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview, and under it where to ask for any other change (the panel's chat) | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`; `compile`, `import` |
 | Screening questions | The unanswered ones, eight at a time, the suggestion filled in (a sensitive one's too: Claude still asks about it every time, suggesting what's saved; left empty, there's no suggestion); **Save these**. Then, read-only, the questions [answered from the profile](profile-and-templates.md#answer-bank-profileanswersyaml), each with what the profile holds or that it holds nothing yet | `answers` |
 | Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters. Below them, a setting of its own, saved the moment it's changed (it's the extension's behaviour, not how Claude writes): **Notify me when Claude finishes a reply or asks me something** ([notifications](extension.md#notifications-notifyts)) | `preferences` (`attach_mode`'s setting and `profile/preferences.md`); `notifications { turnEnd }` (`notifications.turnEnd` in `ezapply.config.json`) |
 | Library | A drop zone (or the browser's picker: here only contents are needed), the files there, each with a trash button that deletes it for good after asking | `library` |
 
-Plus **Finish setup** (**Finish later** while required steps remain), which ends the agent's wait, and an
-**Ask Claude** box in Claude's panel (task `question`, the answer shown as the task's note). A finished page says
+Plus **Finish setup** (**Finish later** while required steps remain), which ends the agent's wait. Claude's pane
+lists the tasks and says that questions and changes no button covers are asked in the panel's chat (in the
+terminal, without a panel agent). **Why no chat on the page:** the panel's general conversation already is one;
+a second box split the conversation, could only answer in a task's one-line note, and every free-text request
+needed a task kind of its own. The page keeps buttons whose task is fixed. A finished page says
 what's next (capture a posting with the panel's Capture or Alt+Shift+P); asking the agent to set up again reopens
 it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes it, not the page.
 
@@ -405,10 +410,10 @@ name reaches outside `library/`), `finish`.
 
 ### The agent's side: tasks
 What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,
-`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `revise-cover`, `update-profile`
-(the profile from an edited resume's diff), `question`, each with `how`, what to do (`HOW` in the service), so no
-skill is needed for it. The Workspace changes card queues them too (`OnboardingService.queue`), as "Workspace task
-tN"; a task queued with a follow-up runs it when reported done (marking the change done). Where the agent is decides how it
+`draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `update-profile` (the profile from an
+edited resume's diff), each with `how`, what to do (`HOW` in the service), so no skill is needed for it. The
+Workspace changes card queues them too (`OnboardingService.queue`), as "Workspace task tN"; a task queued with a
+follow-up runs it when reported done (marking the change done). Where the agent is decides how it
 gets one (`agentIn` in the page's state):
 - **Under `ezapply` (`panel`):** the page's task is at once a message to the panel's general conversation
   ([agent](agent.md)): "Setup task t3 from the setup page (kind)", its `how`, its parameters, and how to report:

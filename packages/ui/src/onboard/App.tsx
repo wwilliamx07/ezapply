@@ -48,12 +48,11 @@ export function OnboardApp() {
 }
 
 function Onboarding() {
-  const { state, act, ask } = useOnboard();
+  const { state, act } = useOnboard();
   const firstOpen = state.steps.find((s) => s.required && !s.done)?.id ?? "tex";
   // The address's hash names a step when the agent opened the page at one (`onboarding { step }`).
   const [current, setCurrent] = useState<OnboardStepId>(() => stepOf(location.hash) ?? firstOpen);
   const [finishing, setFinishing] = useState(false);
-  const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
   // A new step starts at its top, and the hash follows it so a reload stays there.
   const showStep = (id: OnboardStepId) => {
@@ -216,30 +215,11 @@ function Onboarding() {
             ))}
           </ol>
         )}
-        <form
-          className="ob-ask"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!question.trim()) return;
-            await ask("question", { text: question.trim() });
-            setQuestion("");
-          }}
-        >
-          <label className="ez-label" htmlFor="ob-question">
-            Ask {state.agentName}
-          </label>
-          <textarea
-            id="ob-question"
-            className="ez-textarea"
-            rows={2}
-            value={question}
-            placeholder="What does ezapply read in my repositories?"
-            onChange={(e) => setQuestion(e.target.value)}
-          />
-          <Button type="submit" size="sm" disabled={!question.trim()}>
-            Ask
-          </Button>
-        </form>
+        <p className="ez-help ob-chat-note">
+          {state.agentIn === "panel"
+            ? `A question, or a change to a step? Ask ${state.agentName} in the ezapply panel's chat. This page shows what changes.`
+            : `A question, or a change to a step? Ask ${state.agentName} in your terminal. This page shows what changes.`}
+        </p>
       </aside>
     </div>
   );
@@ -257,7 +237,5 @@ const TASK_LABELS: Record<string, string> = {
   "fill-cover-identity": "Name and contact in the letter",
   "restyle-cover": "Match the resume's look",
   "cover-from-example": "Letter from your example",
-  "revise-cover": "Change the letter",
   "update-profile": "Update your profile from the resume",
-  question: "Your question",
 };

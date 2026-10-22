@@ -16,7 +16,9 @@ export function registerOnboardingTools(server: McpServer, s: Services): void {
         "Open the setup page in the user's browser (if it isn't open), at `step` when given. Use it when " +
         "workspace_check isn't ready, or when the user wants to change a setup step: to add or remove repos, use " +
         "another resume and so on, open that step and tell them they do it there. Never ask in chat for what the " +
-        "page collects (a password, a client secret, an address, screening answers). What needs you arrives as a " +
+        "page collects (a password, a client secret, an address, screening answers). The page has no chat: a change " +
+        "it has no button for (the cover template's look) is asked in chat; do it there (edit templates/cover/, " +
+        "tex_compile it), and the page shows the result, with nothing to report. What needs you arrives as a " +
         'message ("Setup task t3 from the setup page …"): do it, then report it with ' +
         "onboarding { taskId, result: { ok, note? } }.",
       inputSchema: {

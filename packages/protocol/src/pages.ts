@@ -105,9 +105,7 @@ export type OnboardTaskKind =
   | "fill-cover-identity"
   | "restyle-cover"
   | "cover-from-example"
-  | "revise-cover"
-  | "update-profile"
-  | "question";
+  | "update-profile";
 
 export interface OnboardTask {
   id: string;
@@ -152,8 +150,9 @@ export interface OnboardState {
   };
   github: { appRegistered: boolean; loggedIn: boolean; login?: string; manageUrl?: string; problem?: string };
   repos: { selected: string[]; indexed: Record<string, string | null> };
-  resume: { main?: string; source?: string; pdf?: string };
-  cover: { main?: string; isDefault: boolean; example?: string; pdf?: string };
+  /** `builtAt`: the PDF's modified time (ISO), so a preview reloads after any build, the agent's in chat too. */
+  resume: { main?: string; source?: string; pdf?: string; builtAt?: string };
+  cover: { main?: string; isDefault: boolean; example?: string; pdf?: string; builtAt?: string };
   profile: {
     exists: boolean;
     valid: boolean;
