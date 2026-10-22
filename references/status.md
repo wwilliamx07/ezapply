@@ -110,6 +110,7 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **One button on the review page**, under the edits box and stuck to the panel's foot, approves a document (or asks for its changes), moves to the next one to decide, and on the last sends the answer ([ui](components/ui.md#the-review-page-reviewid)).
 - **The side panel blocks a send from the press,** not from the state saying Claude works, which arrives only after the companion answers ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **The side panel opens on the list of applications,** grouped by what each needs, and an application's conversation is opened from it, so applications in parallel each show their state ([ui](components/ui.md#the-side-panel-srcpanel)).
+- **The general conversation is a card pinned above the list,** not one of its rows, since it isn't an application ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **A screening question the profile answers isn't asked in the answer bank** (an entry with a `source` and no
   answer): the fact has one home, the profile, and a question like the degree needs the posting anyway
   ([answer bank](components/profile-and-templates.md#answer-bank-profileanswersyaml)).
@@ -234,7 +235,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
   posting shown; and the general conversation's agent asks for or looks up a posting's id instead of guessing
   ([which posting](mcp-tools.md#postings)).
 - **The panel's list of applications** in a real browser: it opens on the list, a card or a working agent moves an
-  application to the top groups, the needs-you line opens the waiting one, and the list reads at 320 px.
+  application to the top groups, the needs-you line opens the waiting one, and the list reads at 320 px; the pinned
+  general card stays put as the list scrolls, its pills and amber state read in both themes, and it fits at 320 px.
 - **The panel and review-page fixes** in a real browser: a double click on Tailor or Fill, or a second Enter, sends
   one message; the review page's button stuck to the panel's foot under the edits box; and adding a comment (near
   the view's bottom, and on a window under 900 px) leaves the page where it was.

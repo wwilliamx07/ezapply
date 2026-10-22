@@ -570,6 +570,12 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
         </div>
       ) : null}
 
+      {home && list ? (
+        <div className={connected ? "ez-general" : "ez-general ez-panel-off"} aria-disabled={!connected}>
+          <GeneralCard general={list.general} onOpen={pick} onStop={stopApplication} />
+        </div>
+      ) : null}
+
       {/* Only the conversation scrolls: the buttons and the chat box stay put below it, however long it gets. */}
       <div className={connected ? "ez-panel-body" : "ez-panel-body ez-panel-off"} aria-disabled={!connected}>
         {home ? (
@@ -734,8 +740,8 @@ export function applications(
     general: {
       key: GENERAL_CONVERSATION,
       title: "General",
-      sub: "Not about a posting",
-      what: now?.what ?? "Ask anything",
+      sub: "",
+      what: now?.what ?? "Anything not about one posting",
       group: now?.group ?? "open",
     },
   };
@@ -769,24 +775,10 @@ function Applications({
         </span>
         <Icon name="chevronRight" size={15} />
       </button>
-      {r.group === "working" ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="ez-btn-icon"
-          aria-label={`Stop ${r.title}`}
-          title="Stop"
-          onClick={() => onStop(r.key)}
-        >
-          <Icon name="stop" size={14} />
-        </Button>
-      ) : null}
+      {r.group === "working" ? <StopButton row={r} onStop={onStop} /> : null}
     </li>
   );
-  // The general conversation joins the groups while it waits on the user or the agent is in it, else it's last.
-  const busy = list.general.group === "needs" || list.general.group === "working";
-  const rows = busy ? [...list.rows, list.general] : list.rows;
-  const groups = (Object.keys(GROUPS) as Group[]).filter((g) => rows.some((r) => r.group === g));
+  const groups = (Object.keys(GROUPS) as Group[]).filter((g) => list.rows.some((r) => r.group === g));
   return (
     <nav className="ez-apps" aria-label="Applications">
       {list.rows.length === 0 ? (
@@ -795,16 +787,57 @@ function Applications({
       {groups.map((g) => (
         <section key={g} aria-label={GROUPS[g]}>
           <h2 className="ez-label">{GROUPS[g]}</h2>
-          <ul>{rows.filter((r) => r.group === g).map(row)}</ul>
+          <ul>{list.rows.filter((r) => r.group === g).map(row)}</ul>
         </section>
       ))}
-      {busy ? null : (
-        <section aria-label="Other">
-          <h2 className="ez-label">Other</h2>
-          <ul>{row(list.general)}</ul>
-        </section>
-      )}
     </nav>
+  );
+}
+
+function StopButton({ row, onStop }: { row: ApplicationRow; onStop: (key: string) => void }) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="ez-btn-icon"
+      aria-label={`Stop ${row.title}`}
+      title="Stop"
+      onClick={() => onStop(row.key)}
+    >
+      <Icon name="stop" size={14} />
+    </Button>
+  );
+}
+
+/**
+ * The general conversation, pinned above the list rather than one of its rows: it isn't an application, so it never
+ * moves between the groups, and a pill says when it needs the user or the agent is in it.
+ */
+function GeneralCard({
+  general,
+  onOpen,
+  onStop,
+}: {
+  general: ApplicationRow;
+  onOpen: (key: string) => void;
+  onStop: (key: string) => void;
+}) {
+  return (
+    <div className={general.group === "needs" ? "ez-general-card ez-general-needs" : "ez-general-card"}>
+      <button type="button" className="ez-general-open" onClick={() => onOpen(general.key)}>
+        <span className="ez-general-icon" aria-hidden="true">
+          <Icon name="comment" size={17} />
+        </span>
+        <span className="ez-app-text">
+          <span className="ez-app-title">{general.title}</span>
+          <span className="ez-app-what ez-general-what">{general.what}</span>
+        </span>
+        {general.group === "working" ? <span className="ez-pill ez-pill-busy">Working</span> : null}
+        {general.group === "needs" ? <span className="ez-pill ez-pill-warn">Needs you</span> : null}
+        <Icon name="chevronRight" size={15} />
+      </button>
+      {general.group === "working" ? <StopButton row={general} onStop={onStop} /> : null}
+    </div>
   );
 }
 

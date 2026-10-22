@@ -134,6 +134,77 @@ body {
 .ez-app-what {
   font-size: 13px;
 }
+/* The general conversation, pinned above the list: it isn't an application, so it doesn't scroll with them. */
+.ez-general {
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ez-general-card {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.ez-general-card:hover {
+  border-color: var(--accent);
+}
+.ez-general-needs,
+.ez-general-needs:hover {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.ez-general-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px 8px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ez-general-open > svg {
+  flex: none;
+  color: var(--text-3);
+}
+.ez-general-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.ez-general-what {
+  color: var(--text-2);
+}
+.ez-pill {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ez-pill-busy {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.ez-pill-warn {
+  background: var(--warn);
+  color: var(--surface);
+}
 /* The header's one tinted button; the picker gives way first when the panel is narrow. */
 .ez-panel-capture {
   flex: none;

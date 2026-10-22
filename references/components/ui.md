@@ -112,11 +112,21 @@ and not in an application, since it adds an application to the list.
 the row says which, and the card's title or the tool to approve), **Working** (an agent is in one or both of its
 conversations, named: "Documents and Application: Claude Code is working"; a **Stop** button beside it stops those,
 `panel.stop { key }` for each, and no other application's), **Open** (where it stands, from its `PostingStatus`), **Done** (submitted or archived), newest
-first within each. The general conversation joins the groups while it needs the user or the agent is in it, and is
-otherwise last, under Other. The companion lists the 20 newest postings and any older one a card waits on or the
+first within each. The companion lists the 20 newest postings and any older one a card waits on or the
 agent is in, so an application that needs the user is never left off. Opening a row opens that posting's conversations; the companion keeps no "active" posting. On
 the list the footer has only the agent line and the agent settings, and the Needs you cards are only a terminal
 chat's.
+
+**The general conversation is pinned above the list** (`GeneralCard`), under the header and outside the part that
+scrolls: a tinted card with a chat icon, "General" and what it's doing (what it waits on, "… is working", or what
+it's for), a **Working** pill and a **Stop** button while the agent is in it, and a **Needs you** pill (the card
+turns amber) while a card waits in it. It is never one of the groups. **Why:** it isn't an application, it has no
+posting, status or documents, and a row that moved between the groups looked like one and was hard to find again.
+Rejected: a row last under Other (the old layout; it looked like an application); a pinned plain row with company
+avatars on the applications (less distinct, more change to every row); a chat box in the list's footer (two chat
+boxes that look alike, this one and an application's); tabs for Applications and General (the tabs rejected
+above); a Chat button in the header (the header is already full at 320 px). The cost is the card's height on every
+visit to the list.
 
 Top to bottom, in an application:
 

@@ -319,6 +319,27 @@ describe("the side panel", () => {
     confirm.mockRestore();
   });
 
+  it("pins the general conversation above the list, out of its groups even while the agent is in it", async () => {
+    const t = fakeTransport({
+      state: state({
+        agent: {
+          status: "working",
+          conversations: [{ conversation: "general", status: "working", queued: 0 }],
+          agents: ["claude"],
+          models: {},
+        },
+      }),
+    });
+    render(<PanelApp transport={t.transport} />);
+    const list = within(await screen.findByRole("navigation", { name: "Applications" }));
+    expect(list.queryByRole("region", { name: "Working" })).toBeNull();
+    expect(list.queryByText("General")).toBeNull();
+    const card = screen.getByRole("button", { name: /^General/ });
+    expect(within(card).getByText("Working")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Stop General" }));
+    await waitFor(() => expect(t.calls).toContainEqual(["panel.stop", { key: "general" }]));
+  });
+
   it("shows the permission mode, model and effort, and keeps a change in the extension", async () => {
     const t = fakeTransport({});
     render(<PanelApp transport={t.transport} />);
@@ -515,10 +536,13 @@ describe("the side panel", () => {
     };
     const t = fakeTransport({ state: state({ cards: [ask, perm] }) });
     render(<PanelApp transport={t.transport} />);
-    // The list puts both first, each with what it waits on.
+    // The list puts the application first, and the pinned general card says it waits too, each with what it waits on.
     const needs = within(await screen.findByRole("region", { name: "Needs you" }));
     expect(needs.getByText("Documents: Acme, step 3")).toBeTruthy();
-    expect(needs.getByText("approve Bash")).toBeTruthy();
+    expect(needs.queryByText("approve Bash")).toBeNull();
+    const general = within(screen.getByRole("button", { name: /^General/ }));
+    expect(general.getByText("approve Bash")).toBeTruthy();
+    expect(general.getByText("Needs you")).toBeTruthy();
     await openApp();
     // An application shows its own cards; another's is a line that opens it.
     expect(await screen.findByText("Needs you · 1")).toBeTruthy();
