@@ -146,11 +146,27 @@ export function ResumeStep() {
 
 export function CoverStep() {
   const { state, ask, act } = useOnboard();
-  const busy = useBusy(["fill-cover-identity", "restyle-cover", "cover-from-example"]);
+  const busy = useBusy(["restyle-cover", "cover-from-example"]);
   const [choice, setChoice] = useState<"default" | "own" | "example">("default");
   const [compiled, setCompiled] = useState<CompileOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [building, setBuilding] = useState(false);
+  // Which build runs: the name and contact put in, or a plain preview.
+  const [building, setBuilding] = useState<"identity" | "preview" | null>(null);
+  const build = async (which: "identity" | "preview") => {
+    setBuilding(which);
+    setError(null);
+    try {
+      const r =
+        which === "identity"
+          ? await act<{ compile: CompileOutcome }>("coverIdentity")
+          : await act<{ compile: CompileOutcome }>("compile", { kind: "cover" });
+      setCompiled(r.compile);
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBuilding(null);
+    }
+  };
   const pdf = compiled?.pdf ?? state.cover.pdf;
   const done = state.steps.find((s) => s.id === "cover")?.done ?? false;
   return (
@@ -180,31 +196,17 @@ export function CoverStep() {
           {state.cover.isDefault ? (
             <Button
               variant="primary"
-              disabled={busy || !state.profile.valid}
-              onClick={() => ask("fill-cover-identity")}
+              disabled={busy || building !== null || !state.profile.valid}
+              onClick={() => build("identity")}
             >
-              Put my name and contact in it
+              {building === "identity" ? <Spinner /> : null} Put my name and contact in it
             </Button>
           ) : null}
           <Button disabled={busy || !state.resume.main} onClick={() => ask("restyle-cover")}>
             Match my resume's look
           </Button>
-          <Button
-            variant="ghost"
-            disabled={building}
-            onClick={async () => {
-              setBuilding(true);
-              setError(null);
-              try {
-                setCompiled((await act<{ compile: CompileOutcome }>("compile", { kind: "cover" })).compile);
-              } catch (e) {
-                setError(messageOf(e));
-              } finally {
-                setBuilding(false);
-              }
-            }}
-          >
-            {building ? <Spinner /> : null} Show a preview
+          <Button variant="ghost" disabled={building !== null} onClick={() => build("preview")}>
+            {building === "preview" ? <Spinner /> : null} Show a preview
           </Button>
         </div>
       ) : null}
@@ -215,7 +217,7 @@ export function CoverStep() {
       {choice === "example" ? <ExampleLetter /> : null}
       <ErrorNote error={error} />
       {compiled ? <CompileResult result={compiled} kind="cover" /> : null}
-      <TaskStatus kinds={["fill-cover-identity", "restyle-cover", "cover-from-example"]} />
+      <TaskStatus kinds={["restyle-cover", "cover-from-example"]} />
       {pdf ? (
         <>
           <PdfPreview path={pdf} version={state.cover.builtAt ?? ""} />

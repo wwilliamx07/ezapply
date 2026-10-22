@@ -22,8 +22,9 @@ End-to-end behaviour, step by step. Each step names the component that does it.
 2. The page shows the `workspace_check` items as steps, done ones ticked
    ([the items](components/companion.md#readiness-checklist-workspace_check)). It opens on the first required step
    not done.
-3. **TeX:** if missing, the page shows the install command for this OS and hands Claude an `install-tex` task;
-   Claude runs it once the user approves it (an approval card in the panel). No restart is needed.
+3. **TeX:** if missing, the page shows the install command for this OS and **Install it**, which the companion runs
+   (a Terminal window on a Mac; the system asks for permission or the password). No restart is needed
+   ([ui](components/ui.md#installing-tex)).
 4. **Extension:** the page gives the steps and folder for the user's browser and opens the pairing window
    ([flow 2](#2-pairing-the-extension)); it turns green when the extension connects.
 5. **GitHub:** a new app or an existing one, then the `/github/` flow in a new tab, as `github_login` runs it:

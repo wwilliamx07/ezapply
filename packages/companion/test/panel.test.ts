@@ -621,6 +621,31 @@ describe("the Workspace changes card", () => {
     expect((await peer.request("panel.workspaceChanges", { key: "general" })).changes).toEqual([]);
   });
 
+  it("sets them from the setup page's button by code too, and refuses a cover letter of the user's own", async () => {
+    await extension();
+    const id = await identityChange();
+    const u = new URL(handle.services.onboarding.open().url);
+    const press = () =>
+      fetch(`${u.origin}/onboard/action?t=${u.searchParams.get("t")}`, {
+        method: "POST",
+        headers: { Origin: u.origin, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "coverIdentity" }),
+      });
+    const res = await press();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ compile: { main: "templates/cover/cover.tex" } });
+    const tex = await readFile(join(dir, "ws", "templates", "cover", "cover.tex"), "utf8");
+    expect(tex).toContain("\\newcommand{\\myname}{Jane Doe}");
+    // The profile's identity is recorded as matched: the change is gone without a mark.
+    expect((await handle.services.freshness.changes()).changes.map((c) => c.id)).not.toContain(id);
+
+    const meta = join(dir, "ws", "templates", "cover", "template.json");
+    await writeFile(meta, '{"schemaVersion":1,"main":"cover.tex","origin":"imported"}');
+    const refused = await press();
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: expect.stringContaining("your own") });
+  });
+
   it("hands a cover letter of the user's own to the agent, and the change ends once it reports", async () => {
     const { peer } = await extension();
     const id = await identityChange();

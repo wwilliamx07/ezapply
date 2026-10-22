@@ -122,7 +122,8 @@ file structure, so a diff against the template stays readable.)
 `packages/cli/templates/cover/` ships `cover.tex` (XeLaTeX, US Letter, 11 pt, 1 in margins, Latin Modern
 via fontspec) and `template.json` with `origin: "default"`. `ezapply init` copies it into
 `templates/cover/` only when that folder is empty. It has:
-- identity fields `\myname`, `\mycontact`, filled once from the profile;
+- identity fields `\myname`, `\mycontact`, set by code from the profile (on the setup page, and again when the
+  profile's contact changes: [companion](companion.md#acting-on-a-change-workspaceupdates));
 - per-letter fields `\letterdate`, `\addressee`, `\company`;
 - a name header, contact line, date, addressee block, salutation, the body between `% BODY START` and
   `% BODY END`, and a sign-off. No subject (`Re:`) line: the opening paragraph names the role.

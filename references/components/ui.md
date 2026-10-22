@@ -381,14 +381,14 @@ rebuilt from the panel's chat shows here without a task.
 ### What each step does
 | Step | On the page | Action |
 |---|---|---|
-| LaTeX | The engine found; else the install command for this OS, and **Ask Claude to install it** | task `install-tex` |
+| LaTeX | The engine found; else the install command for this OS and, where ezapply can run it (`canInstall`), **Install it**, which shows **Installing…**, a Terminal window to watch on a Mac, or why it failed; elsewhere the command to run and **Check again** | `installTex` (`util/install-tex.ts`, [below](#installing-tex)) |
 | Browser extension | The steps for Chrome and other Chromium browsers and the folder to load (copyable: a page can't open `chrome://extensions`); **connect** opens the 15-minute pairing window and the step turns green when it connects; a warning when the extension isn't built | `pair` (`startPairing`, shared with `extension_pair`, `bridge/pairing.ts`) |
 | GitHub | Without an app: create a new one or connect an existing one; **Continue on GitHub** opens the `/github/` flow in a new tab (opened in the click, so it isn't blocked, then pointed at the address the companion gives); a port mismatch's hint | `github` |
 | Repositories | Every repository with language, last push, description, private, a search, and the ones left out (forks, archived, under 10 KB, the profile README repo, dotfiles or config) behind a toggle; nothing selected yet → the rest preselected; a link to give the app access to a missing one; a field for a public repository the user contributed to but doesn't own (its address or `owner/name`), saved at once and listed ticked | `repos` (sources of repos added by URL kept), `addRepo { url }`: refused when it isn't a GitHub address, when the app lists it (tick it there, keeping the app's access), or when it doesn't answer an anonymous `ls-remote` (private, or no such repo); else appended with `source: "public-url"` |
 | Your projects, read | Each selected repository read or not; **Have Claude read N repositories** | task `index-repos` |
 | Your resume | A folder or one `.tex` file, typed or chosen with **Browse…**; **Import and build**; the build's outcome (pages, over the limit, its first error) and a preview; a build that fails offers **Ask Claude to fix the build** | `browse`, `import` (`template_import`, then `tex_compile`), task `fix-template-build` |
 | Your profile | None yet: **Have Claude draft it from my resume**. Then a form of every field the schema has, the often-asked ones marked when empty, the schema's errors under their fields; a draft that arrives replaces the form unless the user has started editing | task `draft-profile`, `profile` |
-| Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview, and under it where to ask for any other change (the panel's chat) | tasks `fill-cover-identity`, `restyle-cover`, `cover-from-example`; `compile`, `import` |
+| Cover letter | Keep the template (and **Put my name and contact in it** for ezapply's default, set by code and built, **Match my resume's look**, **Show a preview**), use one's own LaTeX (as for the resume), or drop an example letter; a preview, and under it where to ask for any other change (the panel's chat) | `coverIdentity`; tasks `restyle-cover`, `cover-from-example`; `compile`, `import` |
 | Screening questions | The unanswered ones, eight at a time, the suggestion filled in (a sensitive one's too: Claude still asks about it every time, suggesting what's saved; left empty, there's no suggestion); **Save these**. Then, read-only, the questions [answered from the profile](profile-and-templates.md#answer-bank-profileanswersyaml), each with what the profile holds or that it holds nothing yet | `answers` |
 | Preferences | Before a document is attached (approval first, or at once), then tone, emphasis, never mention, target roles and places, cover letters. Below them, a setting of its own, saved the moment it's changed (it's the extension's behaviour, not how Claude writes): **Notify me when Claude finishes a reply or asks me something** ([notifications](extension.md#notifications-notifyts)) | `preferences` (`attach_mode`'s setting and `profile/preferences.md`); `notifications { turnEnd }` (`notifications.turnEnd` in `ezapply.config.json`) |
 | Library | A drop zone (or the browser's picker: here only contents are needed), the files there, each with a trash button that deletes it for good after asking | `library` |
@@ -403,13 +403,15 @@ it. A missing or unimported `EZAPPLY.md` shows as a banner: `ezapply init` fixes
 
 **Actions** (`POST action`, validated with zod): `task { kind, params }`, `pair { replace? }`, `github { app? }`,
 `repos { repos }`, `addRepo { url }`, `browse { kind: folder | tex, title? }`, `import { kind, source, main?, replace? }`,
-`compile { kind }`, `change { ids, change: update | later | done, hours?, kind?, pick?, confirm? }` (the Changes list's
+`compile { kind }`, `coverIdentity` (the cover's `\myname` and `\mycontact` from the profile, as the
+Workspace changes card sets them: [companion](companion.md#acting-on-a-change-workspaceupdates); refused for a
+template the user imported, whose layout ezapply doesn't know), `installTex`, `change { ids, change: update | later | done, hours?, kind?, pick?, confirm? }` (the Changes list's
 buttons, as `panel.workspaceChange` with the key `setup`), `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
 neverMention, targets, coverLetters }`, `deleteLibrary { name }` (only a file the step lists, by its exact name, so no
 name reaches outside `library/`), `finish`.
 
 ### The agent's side: tasks
-What needs judgment or a shell goes to the agent as a task: `install-tex`, `index-repos`, `fix-template-build`,
+What needs judgment goes to the agent as a task: `index-repos`, `fix-template-build`,
 `draft-profile`, `fill-cover-identity`, `restyle-cover`, `cover-from-example`, `update-profile` (the profile from an
 edited resume's diff), each with `how`, what to do (`HOW` in the service), so no skill is needed for it. The
 Workspace changes card queues them too (`OnboardingService.queue`), as "Workspace task tN"; a task queued with a
@@ -437,9 +439,23 @@ The page shows each task (queued, running, done with the agent's note, failed). 
 uses (Claude Code or Antigravity, `AgentService.agentName`), or Claude Code in a terminal. The step texts in the
 table above say "Claude" for short.
 
-**Why the agent installs TeX, not the page:** Claude Code's permission prompt (in the terminal, or an approval card
-in the panel) is where the user approves a command, and a loopback page able to start installers would widen what a
-stolen token could do.
+### Installing TeX
+**Install it** runs this system's install command from the companion, in the background (`installTex`, one at a
+time; the page follows `tex.install` in its state, and the step turns green once `workspace_check` finds an
+engine):
+- **Windows:** `winget` installs MiKTeX, then `initexmf` lets it fetch the packages a document needs without a
+  prompt nobody would see. The installer asks for elevation itself if it needs it. Done when an engine is found
+  afterwards (`which` adds MiKTeX's folders to `PATH`); else the output's last line says why.
+- **macOS with Homebrew:** a Terminal window runs `brew install --cask mactex-no-gui`, since the installer asks
+  for the password and only a terminal can. Nothing waits on it.
+- **Linux with `pkexec` and `apt-get`:** `pkexec apt-get install -y texlive-xetex latexmk`, polkit asking for
+  the password.
+- **Anything else** (no `winget`, no Homebrew, another package manager): no button, the command to run.
+
+*Why the page, not the agent:* installing is the same fixed command every time, with nothing to judge, so a turn of
+the agent's (and its approval card) added only a wait. The user approves through the system instead: the
+installer's elevation prompt, polkit's or sudo's password. The page sends no command, only `installTex`, so a
+stolen page token can start this one install of TeX and nothing else.
 
 ### Writing the user's files
 - **The profile** (`ProfileService.saveProfile`): only the top-level keys the schema models are written, each

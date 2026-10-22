@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskLine } from "../src/onboard/parts.js";
 import { type Onboard, OnboardContext } from "../src/onboard/state.js";
 import { CoverStep, LibraryStep, PreferencesStep } from "../src/onboard/steps-documents.js";
-import { ReposStep } from "../src/onboard/steps-setup.js";
+import { ReposStep, TexStep } from "../src/onboard/steps-setup.js";
 
 // The bundle defines the PDF worker's address at build time (lib/pdf.ts); the step imports it with its previews.
 vi.hoisted(() => {
@@ -123,7 +123,7 @@ describe("the repositories step", () => {
 
 describe("a task's line", () => {
   it("names the agent in use, not Claude", () => {
-    const task = { id: "t1", kind: "install-tex", params: {}, status: "running", createdAt: "" } as const;
+    const task = { id: "t1", kind: "index-repos", params: {}, status: "running", createdAt: "" } as const;
     render(<TaskLine task={task} agent={{ agentListening: true, agentIn: "panel", agentName: "Antigravity" }} />);
     expect(screen.getByText(/^Antigravity is working on it\./)).toBeTruthy();
     expect(screen.queryByText(/Claude/)).toBeNull();
@@ -168,5 +168,61 @@ describe("the cover letter step", () => {
     );
     await waitFor(() => expect(loadPdf).toHaveBeenCalledTimes(2));
     expect(loadPdf.mock.calls[1]?.[0]).toContain("v=2026-01-02T00%3A00%3A00.000Z");
+  });
+});
+
+describe("the LaTeX step", () => {
+  function tex(over: Record<string, unknown>, act = vi.fn(async () => ({}))): Onboard {
+    return {
+      base: "/onboard",
+      state: {
+        steps: [],
+        tasks: [],
+        agentName: "Claude Code",
+        agentIn: "panel",
+        tex: { done: false, detail: "", installCommand: "winget install --id MiKTeX.MiKTeX", ...over },
+      },
+      error: null,
+      refresh: async () => {},
+      act,
+      ask: async () => {},
+    } as unknown as Onboard;
+  }
+
+  it("installs it with one press, by ezapply rather than the agent, and shows a failure's reason", async () => {
+    const act = vi.fn(async () => ({}));
+    const { rerender } = render(
+      <OnboardContext.Provider value={tex({ canInstall: true }, act)}>
+        <TexStep />
+      </OnboardContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Install it" }));
+    await waitFor(() => expect(act).toHaveBeenCalledWith("installTex"));
+
+    rerender(
+      <OnboardContext.Provider value={tex({ canInstall: true, install: { status: "running" } }, act)}>
+        <TexStep />
+      </OnboardContext.Provider>,
+    );
+    expect((screen.getByRole("button", { name: /Installing/ }) as HTMLButtonElement).disabled).toBe(true);
+
+    rerender(
+      <OnboardContext.Provider
+        value={tex({ canInstall: true, install: { status: "failed", error: "The install didn't finish." } }, act)}
+      >
+        <TexStep />
+      </OnboardContext.Provider>,
+    );
+    expect(screen.getByText("The install didn't finish.")).toBeTruthy();
+  });
+
+  it("only shows the command where ezapply can't install it", () => {
+    render(
+      <OnboardContext.Provider value={tex({ canInstall: false })}>
+        <TexStep />
+      </OnboardContext.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: "Install it" })).toBeNull();
+    expect(screen.getByText(/Run it in a terminal/)).toBeTruthy();
   });
 });

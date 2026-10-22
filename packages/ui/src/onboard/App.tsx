@@ -230,7 +230,6 @@ function stepOf(hash: string): OnboardStepId | undefined {
 }
 
 const TASK_LABELS: Record<string, string> = {
-  "install-tex": "Install LaTeX",
   "index-repos": "Read repositories",
   "fix-template-build": "Fix the template's build",
   "draft-profile": "Draft your profile",

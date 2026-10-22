@@ -98,7 +98,6 @@ export type OnboardStepId = (typeof ONBOARD_STEP_IDS)[number];
 
 /** Work the page hands to the agent: what needs judgment or the agent's shell. */
 export type OnboardTaskKind =
-  | "install-tex"
   | "index-repos"
   | "fix-template-build"
   | "draft-profile"
@@ -139,7 +138,17 @@ export interface OnboardState {
   agentIn: "panel" | "terminal";
   /** The agent's name, as the page says it: the panel's chosen agent ("Antigravity"), or "Claude Code" in a terminal. */
   agentName: string;
-  tex: { done: boolean; detail: string; installCommand: string };
+  /**
+   * `canInstall`: ezapply can install it from here. `install`: one under way (`running`), handed to a Terminal
+   * window (`terminal`), or failed with why.
+   */
+  tex: {
+    done: boolean;
+    detail: string;
+    installCommand: string;
+    canInstall: boolean;
+    install?: { status: "running" | "terminal" | "failed"; error?: string };
+  };
   extension: {
     connected: boolean;
     paired: boolean;

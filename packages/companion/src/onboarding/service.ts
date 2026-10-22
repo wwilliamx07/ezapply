@@ -33,6 +33,8 @@ import { pickPath } from "../util/dialog.js";
 import { exists } from "../util/fs.js";
 import { htmlPage } from "../util/html.js";
 import { installCommand } from "../util/install-hints.js";
+import { installTex, texInstallPlan } from "../util/install-tex.js";
+import { which } from "../util/proc.js";
 
 const BASE = "/onboard";
 /** What the setup page puts changes off in: not a panel conversation, so none of them is marked needed. */
@@ -62,9 +64,6 @@ const STEPS: [string, OnboardStepId][] = [
  * copy of it and stays the same when a kind is added.
  */
 const HOW: Record<OnboardTaskKind, string> = {
-  "install-tex":
-    "Say in one line what this installs and roughly how big it is, then run params.command with your shell tool " +
-    "(it can take several minutes; the user approves it). workspace_check confirms it.",
   "index-repos":
     "Run the ezapply-index-repo skill for each repo in params.repos, in parallel subagents when there are more than " +
     "two. Each ends with knowledge_mark_indexed, which the page shows as it happens.",
@@ -112,6 +111,8 @@ const Action = z.discriminatedUnion("action", [
     replace: z.boolean().optional(),
   }),
   z.object({ action: z.literal("compile"), kind: z.enum(["resume", "cover"]) }),
+  z.object({ action: z.literal("coverIdentity") }),
+  z.object({ action: z.literal("installTex") }),
   z.object({ action: z.literal("profile"), value: z.record(z.string(), z.unknown()) }),
   z.object({ action: z.literal("answers"), answers: z.record(z.string(), z.string().max(4000).nullable()) }),
   z.object({
@@ -146,6 +147,8 @@ type OnboardingNext =
 export class OnboardingService {
   private token: string | null = null;
   private finished = false;
+  /** The TeX install the page started, until it succeeds. */
+  private texInstall: { status: "running" | "terminal" | "failed"; error?: string } | null = null;
   private readonly tasks: OnboardTask[] = [];
   private readonly waiters = new Set<() => void>();
   private listening = 0;
@@ -345,6 +348,19 @@ export class OnboardingService {
       }
       case "compile":
         return { compile: await this.compile(a.kind) };
+      case "installTex":
+        return this.installTex();
+      case "coverIdentity": {
+        const { filled } = await s.updates.fillCoverIdentity();
+        if (!filled) {
+          throw new EzError(
+            ErrorCode.BadRequest,
+            "This cover letter is your own: ezapply doesn't know where its name and contact go.",
+            "Ask in the panel's chat to put them in.",
+          );
+        }
+        return { compile: await this.compile("cover") };
+      }
       case "profile":
         return s.profile.saveProfile(a.value);
       case "answers":
@@ -653,6 +669,8 @@ export class OnboardingService {
         done: item("tex")?.done ?? false,
         detail: item("tex")?.detail ?? "",
         installCommand: installCommand("tex"),
+        canInstall: texInstallPlan(process.platform, (bin) => which(bin) !== null) !== null,
+        ...(this.texInstall ? { install: this.texInstall } : {}),
       },
       extension: {
         connected: bridge.connected,
@@ -709,6 +727,21 @@ export class OnboardingService {
   }
 
   // ---- internals ---------------------------------------------------------------------------------
+
+  /**
+   * Install TeX with this system's fixed command, in the background: it takes minutes, and the page follows it in
+   * its state. One at a time.
+   */
+  private installTex(): { install: NonNullable<OnboardingService["texInstall"]> } {
+    if (this.texInstall?.status !== "running") {
+      this.texInstall = { status: "running" };
+      void installTex().then((r) => {
+        this.texInstall = "terminal" in r ? { status: "terminal" } : r.ok ? null : { status: "failed", error: r.error };
+        this.changed();
+      });
+    }
+    return { install: this.texInstall as NonNullable<OnboardingService["texInstall"]> };
+  }
 
   /** A template's PDF beside its main file, once built, and when it was last built. */
   private async builtPdf(kind: "resume" | "cover", main?: string): Promise<{ pdf?: string; builtAt?: string }> {

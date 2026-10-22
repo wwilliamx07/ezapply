@@ -225,10 +225,11 @@ export class WorkspaceUpdates {
   }
 
   /**
-   * The cover letter's name and contact from the profile. In ezapply's default template that's two macros, set
-   * here; another template may lay them out its own way, so the agent does it.
+   * The cover letter's name and contact from the profile, written into the template (not built). ezapply's letter
+   * holds them in two macros, set here, and so does one restyled from it; a template the user imported may lay them
+   * out its own way, so it's left alone (`filled: false`) for the agent. Records the profile's identity as matched.
    */
-  private async coverIdentity(c: WorkspaceChange): Promise<WorkspaceChangeOutcome> {
+  async fillCoverIdentity(): Promise<{ filled: boolean; main: string }> {
     const s = this.s();
     const [meta, main, profile] = await Promise.all([
       s.templates.templateMeta("cover"),
@@ -236,22 +237,31 @@ export class WorkspaceUpdates {
       s.profile.profile(),
     ]);
     if (!main) throw new EzError(ErrorCode.NotFound, "There's no cover letter template.");
-    if (!profile.exists || !profile.valid) throw new EzError(ErrorCode.BadRequest, "The profile isn't valid.");
+    if (!profile.exists || !profile.valid) {
+      throw new EzError(ErrorCode.BadRequest, "The profile isn't valid.", "Fix the profile step first.");
+    }
     const tex = await readFile(main, "utf8");
     const filled =
-      meta?.origin === "default"
-        ? setMacro(setMacro(tex, NAME_MACRO, coverName(profile.value)), CONTACT_MACRO, coverContact(profile.value))
-        : null;
-    if (filled === null) {
+      meta?.origin === "imported"
+        ? null
+        : setMacro(setMacro(tex, NAME_MACRO, coverName(profile.value)), CONTACT_MACRO, coverContact(profile.value));
+    if (filled === null) return { filled: false, main };
+    await writeFileAtomic(main, filled);
+    await s.freshness.recordProfileIdentity();
+    return { filled: true, main };
+  }
+
+  private async coverIdentity(c: WorkspaceChange): Promise<WorkspaceChangeOutcome> {
+    const s = this.s();
+    const { filled, main } = await this.fillCoverIdentity();
+    if (!filled) {
       const task = s.onboarding.queue("fill-cover-identity", { path: this.rel(main) }, () =>
         s.freshness.mark([c.id], "done"),
       );
       this.tasks.set(c.id, task.id);
       return { id: c.id, outcome: "task" };
     }
-    await writeFileAtomic(main, filled);
     const built = await s.documents.compile(main);
-    await s.freshness.mark([c.id], "done");
     if (built.ok) return { id: c.id, outcome: "updated" };
     return { id: c.id, outcome: "failed", note: built.diagnostics.find((d) => d.severity === "error")?.message };
   }

@@ -6,8 +6,10 @@ import { Copyable, ErrorNote, StepHead, TaskStatus, useBusy } from "./parts.js";
 import { messageOf, useOnboard } from "./state.js";
 
 export function TexStep() {
-  const { state, ask, refresh } = useOnboard();
-  const busy = useBusy(["install-tex"]);
+  const { state, act, refresh } = useOnboard();
+  const [error, setError] = useState<string | null>(null);
+  const install = state.tex.install;
+  const running = install?.status === "running";
   return (
     <>
       <StepHead title="LaTeX" done={state.tex.done}>
@@ -19,28 +21,48 @@ export function TexStep() {
         </p>
       ) : (
         <>
-          <p>No LaTeX engine is installed. {state.agentName} can install it for you with this command:</p>
+          <p>
+            No LaTeX engine is installed.{" "}
+            {state.tex.canInstall ? "ezapply can install it with this command:" : "Install it with this command:"}
+          </p>
           <Copyable value={state.tex.installCommand} label="Install command" />
           <p className="ez-help">
-            {state.agentName} runs it once you approve it
-            {state.agentIn === "panel" ? " in the ezapply panel" : " in the terminal"}. It takes a few minutes and
-            several hundred MB.
+            It takes a few minutes and several hundred MB.
+            {state.tex.canInstall
+              ? " Your system may ask you to allow it or for your password."
+              : " Run it in a terminal, then check again."}
           </p>
           <div className="ob-actions">
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() => ask("install-tex", { command: state.tex.installCommand })}
-            >
-              Ask {state.agentName} to install it
-            </Button>
+            {state.tex.canInstall ? (
+              <Button
+                variant="primary"
+                disabled={running}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    await act("installTex");
+                  } catch (e) {
+                    setError(messageOf(e));
+                  }
+                }}
+              >
+                {running ? <Spinner /> : null} {running ? "Installing…" : "Install it"}
+              </Button>
+            ) : null}
             <Button variant="ghost" onClick={refresh}>
               Check again
             </Button>
           </div>
+          {install?.status === "terminal" ? (
+            <p className="ez-help">
+              The install runs in the Terminal window that opened: enter your password there. This step turns green when
+              it's done.
+            </p>
+          ) : null}
+          {install?.status === "failed" ? <ErrorNote error={install.error ?? "The install failed."} /> : null}
+          <ErrorNote error={error} />
         </>
       )}
-      <TaskStatus kinds={["install-tex"]} />
     </>
   );
 }

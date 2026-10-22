@@ -246,11 +246,9 @@ export class FreshnessService {
       case "resume-edited":
         await this.recordResume();
         return { id, as };
-      case "profile-identity": {
-        const hash = await this.identityHash();
-        if (hash) await this.recordSynced("profileIdentity", hash);
+      case "profile-identity":
+        await this.recordProfileIdentity();
         return { id, as };
-      }
     }
   }
 
@@ -517,6 +515,13 @@ export class FreshnessService {
     const lines = parts.join("\n").split("\n");
     if (lines.length <= DIFF_MAX_LINES) return lines.join("\n");
     return `${lines.slice(0, DIFF_MAX_LINES).join("\n")}\n… (${lines.length - DIFF_MAX_LINES} more lines: compare templates/.synced/resume/ with templates/resume/)`;
+  }
+
+  /** The cover letter's identity fields now match the profile (set by code, or by the agent and marked done). */
+  async recordProfileIdentity(): Promise<void> {
+    const hash = await this.identityHash();
+    if (hash) await this.recordSynced("profileIdentity", hash);
+    this.emit();
   }
 
   /** What the cover letter's identity fields come from. Null while the profile is missing or invalid. */

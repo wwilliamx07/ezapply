@@ -9,6 +9,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Setup and repos have no skill.** The setup page does each step as a form, and a task it hands the agent
   carries its own instructions; `onboarding { step }` opens a step for a change asked in chat, instead of a skill
   repeating the step a turn of chat at a time ([workspace](components/workspace.md#skills-claudeskills)).
+- **The setup page installs TeX and fills the cover's name and contact itself.** Both are the same every time,
+  with nothing to judge, so an agent turn added only a wait; the system asks for permission to install
+  ([ui](components/ui.md#installing-tex)).
 - **Keeping the workspace current is a card, not a skill.** The user's press on the Workspace changes card is
   the consent, so nothing is updated without it and the agent can't mark a change done the user never saw; code
   does the mechanical updates, and the agent gets only what needs judgement, as a task. No call at the start of
@@ -293,7 +296,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
   template imported from a copy; putting a repo off for a set time; the Tailor documents gate.
 - **Setup end to end:** a real GitHub login (and connecting an existing app), adding a public repo by its address
   (anonymous `ls-remote` against GitHub), the agent opening the page at a step while it is open, onboarding's steps against the real
-  things, the OS folder dialog, a full onboarding in Claude Code with MiKTeX installed from a hint, and CI's `tex`
+  things, the OS folder dialog, a full onboarding in Claude Code, **Install it** for TeX on each system (MiKTeX by
+  winget, Terminal on a Mac, polkit on Linux), and CI's `tex`
   job on GitHub.
 - **Opening in the user's browser:** a new tab in the running window, a Chrome user
   with several profiles.
