@@ -54,7 +54,7 @@ record them at the top of `postings/<id>/notes.md` under `## Application require
 - documents asked for (resume, cover letter, transcript, writing sample, references, portfolio) and ones
   it says not to send;
 - **"all files in one PDF"** or a single upload: set it with `posting_update_meta { bundleRequired: true }`
-  and use the **ezapply-bundle** skill;
+  and build it with `bundle_build`;
 - file format, file naming, size limits, page or word limits, who to address, reference numbers to quote,
   questions to answer in the letter, deadline.
 

@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { openReviewFor } from "../../documents/agent-review.js";
 import type { DocumentReason } from "../../documents/review.js";
+import { type BundleInput, buildBundle, startDocument } from "../../documents/tailor.js";
 import type { Services } from "../../services.js";
 import { PENDING_HINT, tool } from "../result.js";
 
@@ -29,6 +30,91 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
     },
     tool(s.log, "tex_compile", ({ path, maxPages }: { path: string; maxPages?: number }) =>
       s.documents.compile(path, maxPages === undefined ? {} : { maxPages }),
+    ),
+  );
+
+  server.registerTool(
+    "document_start",
+    {
+      title: "Start a document",
+      description:
+        "Set up this posting's resume or cover letter and get what writing it draws on, in one call: copies the " +
+        "template (and its content files) into the posting folder unless the document exists, sets status " +
+        "drafting, and returns the document's path, the posting's text, notes.md (requirementsMissing when it has no " +
+        "## Application requirements yet), the profile, every claim, and the cover format. Replaces reading those " +
+        "files and claims_list.",
+      inputSchema: {
+        kind: z.enum(["resume", "cover"]),
+        id: z.string().optional().describe("Posting id; defaults to this conversation's posting."),
+      },
+    },
+    tool(s.log, "document_start", async ({ kind, id }: { kind: "resume" | "cover"; id?: string }) =>
+      startDocument(s, await s.postings.resolve(id, session), kind),
+    ),
+  );
+
+  server.registerTool(
+    "tex_edit",
+    {
+      title: "Edit LaTeX and compile",
+      description:
+        "Apply exact text replacements to a .tex file under postings/ or templates/, then compile it: the result is " +
+        "tex_compile's, plus `changed` (each edited passage with a line on each side). Each old must occur exactly " +
+        "once (in the text as the edits before it leave it) and differ from its new; else nothing is written. Copy " +
+        "old from the .tex as it is, never from pdf_text or lint. Put one round's edits in one call. " +
+        PATH_NOTE,
+      inputSchema: {
+        path: z.string().describe("The .tex file."),
+        edits: z
+          .array(z.object({ old: z.string().min(1), new: z.string() }))
+          .min(1)
+          .max(40),
+      },
+    },
+    tool(s.log, "tex_edit", ({ path, edits }: { path: string; edits: { old: string; new: string }[] }) =>
+      s.documents.edit(path, edits),
+    ),
+  );
+
+  server.registerTool(
+    "bundle_build",
+    {
+      title: "Build the application bundle",
+      description:
+        "Build this posting's single-PDF bundle, for a posting or form that takes one file: by default the cover " +
+        "letter (if any), then the resume, then `extras` from library/ (transcripts…); `inputs` sets the whole " +
+        "order instead (the posting's own). Rebuilds a .tex newer than its PDF, labels each section, names the file " +
+        "Last_First_Company_Application.pdf, checks one page size and a one-page resume, compresses past maxBytes " +
+        "(default 5 MB), and sets bundleRequired. Returns the sections with their pages and any `warnings`. Scans " +
+        "and photos go through pdf_from_images first.",
+      inputSchema: {
+        inputs: z
+          .array(z.object({ path: z.string(), pages: z.string().optional(), label: z.string().optional() }))
+          .min(1)
+          .optional()
+          .describe("Every section in order, instead of the default."),
+        extras: z
+          .array(z.object({ path: z.string(), pages: z.string().optional(), label: z.string().optional() }))
+          .optional()
+          .describe('library/ files after the default sections; pages like "1".'),
+        output: z.string().optional().describe("The bundle's path, when the posting names the file."),
+        maxBytes: z.number().int().positive().optional().describe("The form's upload limit."),
+        id: z.string().optional().describe("Posting id; defaults to this conversation's posting."),
+      },
+    },
+    tool(
+      s.log,
+      "bundle_build",
+      async ({
+        id,
+        ...opts
+      }: {
+        inputs?: BundleInput[];
+        extras?: BundleInput[];
+        output?: string;
+        maxBytes?: number;
+        id?: string;
+      }) => buildBundle(s, await s.postings.resolve(id, session), opts),
     ),
   );
 

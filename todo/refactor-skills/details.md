@@ -1,36 +1,19 @@
 # Refactor the skills: details
 
 The skills this item covers: `ezapply-resume`,
-`-cover-letter`, `-bundle`, `-apply`, `-answers`, `-index-repo`, and `EZAPPLY.md`. The honesty rules don't
+`-cover-letter`, `-apply`, `-answers`, `-index-repo`, and `EZAPPLY.md`. The honesty rules don't
 change: nothing is fabricated, sensitive and unanswered questions are asked, and the application is never
 submitted. Nothing on a form is filled without the model (§3).
 
 ## Which steps are mechanical
 | Skill | Mechanical, into code | Judgement, stays in the skill |
 |---|---|---|
-| resume, cover letter | `posting_get`; read the posting and requirements; copy the template's main and `contentFiles`; status `drafting`; compile after an edit; the `pdf_text` reading-order check; opening the review; quoting what changed since the last review | Correcting the capture's company and role; the evidence map and gaps; which bullets and projects, the wording, the angle; what to cut to fit; the self-check against evidence |
-| bundle | The default order, labels, title, author and file name; merge; page and size checks; compress; `bundleRequired` | Whether a bundle is needed; the posting's own order; which `library/` extras and pages |
+| resume, cover letter | the `pdf_text` reading-order check; opening the review; quoting what changed since the last review | Correcting the capture's company and role; the evidence map and gaps; which bullets and projects, the wording, the angle; what to cut to fit; the self-check against evidence |
 | answers | Validation (already `answers_check`); adding a `toSave` entry; adding a form's wording to `variants` once the user picks the entry | Merging duplicates; which entry a new wording belongs to, when that isn't exact |
 | apply | Pressing Apply on a posting page; marking prefilled fields and stale files; writing the answers the user confirmed into the bank; the hand-off card | Every value, row, upload and question on the form; matching questions to the bank by meaning; polarity; free text; tailored experience descriptions; skills for the role; a field that won't take its value; what the user says mid-application |
 | index-repo | Choosing between full index, re-index and rebuild from `repo_sync`; filtering out lock, generated and vendored paths; `claims_check` before marking indexed (already enforced) | Splitting into components; the docs; the claims and their confidence; how much of a diff to read |
 
-## 2. Tailoring
-**`document_start { kind }`** (`resume` | `cover`) for the conversation's posting. It copies the template's main and
-`contentFiles` into the posting folder (only if absent), sets status `drafting`, and returns the brief: the posting's
-text, the `## Application requirements` block (or `missing`, so the agent writes it), `preferences.md`, the
-profile's relevant parts, and `claims_list`. One call replaces five to seven reads and the skill's setup section.
-The evidence map stays the agent's work.
-
-**Edits and compiles** already go in one message. If the turns they take still show in a run, a
-`tex_edit { path, edits[] }` tool applies exact replacements and returns the compile (JSON arguments avoid the
-escaping that rules out scripted edits).
-
-**`bundle_build { inputs?, extras?, output? }`** replaces `ezapply-bundle`. By default it uses cover, resume, then
-the given `library/` extras. It recompiles a `.tex` newer than its PDF, labels and titles from the profile and
-posting meta, names the file `<Last>_<First>_<Company>_Application.pdf`, merges, checks one page size and the
-resume's single page, compresses to the limit, sets `bundleRequired`, and returns the sections. The review opens at the turn's end, as for any new document. The decision to bundle stays in `EZAPPLY.md`'s application requirements, which name the tool. Without a skill,
-the description of `pdf_merge` and the requirements cover what's left.
-
+## Tailoring
 **"Build from an example"** (cover letter) becomes a supporting file beside the skill's `SKILL.md`, read only when the
 user gives an example. If the setup page's cover step hands it over as a task, it goes in that task's `how`
 instead.

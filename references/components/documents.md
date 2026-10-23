@@ -7,7 +7,7 @@ Compiling LaTeX, checking the result, and handling PDFs. `DocumentsService` hold
 
 | Operation | Allowed folders (workspace-relative) |
 |---|---|
-| TeX source (`tex_compile`, `tex_diff`) | `postings/`, `templates/` |
+| TeX source (`tex_compile`, `tex_edit`, `tex_diff`) | `postings/`, `templates/` |
 | Read PDFs (`pdf_text`, `pdf_info`, merge inputs) | `postings/`, `templates/`, `library/` |
 | Write PDFs (merge output, images → PDF, compress output) | `postings/`, `library/` |
 | Images for `pdf_from_images` | `postings/`, `library/` |
@@ -216,6 +216,36 @@ same bytes), and an open review.
 **Only the page approves.** No tool approves a document, and a chat message saying "approved" doesn't: the
 skills ask the user to press it on the page. So a prompt injection in a posting or a form can't approve
 anything either.
+
+## Editing (`tex_edit`)
+`DocumentsService.edit` applies exact replacements in order, each `old` matched once in the text the edits before it
+leave, then compiles. Edits are written in the file's line endings, so one written with `
+` matches a file saved
+with `
+`. Anything wrong (an `old` missing or found twice, one equal to its `new`) refuses the whole call before
+anything is written, naming the edit. The result carries each edited passage with a line on each side, so the
+agent checks it against its neighbours without reading the file again. *Why a tool:* with Python at hand, agents
+edited `.tex` through scripts that dropped or mangled LaTeX's backslashes (`"	"` in `"	extbf"` becomes a tab),
+and each agent's own edit tool is named and shaped differently; JSON arguments carry backslashes as they are, and
+the compile in the same call saves a turn per round.
+
+## Starting a document and the bundle (`tailor.ts`)
+**`document_start`** (`startDocument`) does a document's fixed setup and returns its brief. It copies the template's
+main file and its `contentFiles` into the posting folder (the folder comes first on TeX's search path, so the
+copies are built) only when the document isn't there yet, so a revision keeps its edits, and moves the status
+from `captured` to `drafting`. The brief is the posting's `posting.md`, its `notes.md` (saying when it has no
+`## Application requirements` yet, which the agent writes first), `profile.yaml` without its EEO answers, every
+claim as `claims_list` gives them, and the cover letter's `format.md`. `preferences.md` isn't in it: `EZAPPLY.md`
+imports it into every session. *Why:* the skills began with five to seven reads and copies, the same every time,
+each a turn that re-sent the conversation; the evidence map and everything after stay the agent's.
+
+**`bundle_build`** (`buildBundle`) replaced the `ezapply-bundle` skill, whose steps were fixed: default order
+(cover letter, resume, extras), a rebuild of a `.tex` newer than its PDF, a bookmark label per section ("Cover
+Letter", "Resume", an extra's from its file name), the title and author from the profile and the posting, the file
+name `<Last>_<First>_<Company>_Application.pdf` (each word reduced to letters, digits and hyphens), the checks
+(one page size, a one-page resume) and compression to the limit. It sets `bundleRequired`. Deciding that a
+bundle is needed, the posting's own order and which `library/` files go in stay the agent's; scans go through
+`pdf_from_images` first, and the bundle is reviewed as a new document.
 
 ## Log parsing (`tex/log.ts`)
 `parseTexLog` turns a TeX log (file-line-error style, unwrapped lines) into up to 60 de-duplicated

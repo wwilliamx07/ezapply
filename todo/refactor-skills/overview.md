@@ -8,8 +8,6 @@ depend on the model. Fields that the site prefills from the resume
 are often left as they came. The skills still name one agent's tools.
 
 **Plan.**
-- Tailoring: one call sets a document up and returns its brief; one call edits and compiles. The bundle skill
-  becomes one tool.
 - Applying: reading a form presses Apply on a posting page and marks prefilled fields, stale files and exact bank
   matches. Code writes the answers the user confirmed, and the panel shows the hand-off. Nothing is filled without
   the model.

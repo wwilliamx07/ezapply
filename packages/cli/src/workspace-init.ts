@@ -185,6 +185,7 @@ const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter
 const RETIRED_SKILLS: Record<string, string> = {
   "ezapply-repos": "the setup page chooses repos",
   "ezapply-onboard": "the setup page and the panel's Workspace changes card do it",
+  "ezapply-bundle": "bundle_build builds the bundle",
 };
 const EZAPPLY_TOOL =
   /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check|workspace_changes)\b/;

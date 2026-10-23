@@ -143,10 +143,11 @@ page, fix what `lint` lists and fill what `freeLines` leaves, report; the review
 unless `short` says why.
 
 ## 6. Bundle ("put them in one PDF")
-The `ezapply-bundle` skill (also triggered by "all files in one PDF" in the recorded requirements): record `bundleRequired`, order (posting's order, else cover → resume → extras),
-convert scans with `pdf_from_images`, `pdf_merge` with a bookmark per section and page sizes normalized,
-check with `pdf_info` (and that the resume section is still one page), `pdf_compress` if over the limit
-(form limit, else 5 MB).
+`bundle_build` (also asked for by "all files in one PDF" in the recorded requirements): the agent picks the order
+(the posting's, else cover → resume → extras) and the `library/` extras, converting scans with `pdf_from_images`
+first; the tool rebuilds stale documents, merges with a bookmark per section and page sizes normalized, checks one
+page size and a one-page resume, compresses past the limit (the form's, else 5 MB) and sets `bundleRequired`
+([documents](components/documents.md#starting-a-document-and-the-bundle-tailorts)).
 
 ## 7. Filling the application ("fill out the application")
 The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the site adapters

@@ -834,6 +834,95 @@ describe("document tools over MCP", () => {
     expect(names).not.toContain("pdf_render");
     await client.close();
   });
+
+  async function tailoringPosting() {
+    const r = await handle.services.postings.capture({
+      url: "https://example.com/jobs/1",
+      pageTitle: "Backend Engineer",
+      html: `<h1>Backend Engineer</h1><p>${LONG}</p>`,
+      visibleHtml: `<h1>Backend Engineer</h1><p>${LONG}</p>`,
+      visibleText: `Backend Engineer\n${LONG}`,
+      jsonLd: [],
+      capturedAt: "2026-01-01T00:00:00.000Z",
+      tabId: 5,
+    });
+    await handle.services.postings.updateMeta(r.postingId, { company: "Example Co.", role: "Backend Engineer" });
+    const ws = join(dir, "ws");
+    await mkdir(join(ws, "templates", "resume", "sections"), { recursive: true });
+    await writeFile(
+      join(ws, "templates", "resume", "template.json"),
+      JSON.stringify({ schemaVersion: 1, main: "main.tex", contentFiles: ["sections/exp.tex"] }),
+    );
+    await writeFile(join(ws, "templates", "resume", "main.tex"), "\\input{sections/exp}\n");
+    await writeFile(join(ws, "templates", "resume", "sections", "exp.tex"), "\\item Built things\n");
+    await mkdir(join(ws, "profile"), { recursive: true });
+    await writeFile(
+      join(ws, "profile", "profile.yaml"),
+      "schemaVersion: 1\nidentity: { firstName: Jane, lastName: Doe }\ncontact:\n  email: jane@example.com\n  address: { city: Toronto, country: Canada }\neeo: { gender: Prefer not to say }\n",
+    );
+    return {
+      id: r.postingId,
+      folder: join(ws, "postings", r.postingId),
+      client: await postingClient(r.postingId, "tailor"),
+    };
+  }
+
+  it("document_start copies the template once, sets drafting, and returns the brief", async () => {
+    const { id, folder, client } = await tailoringPosting();
+    const first = (await callJson(client, "document_start", { kind: "resume" })).data;
+    expect(first.document).toMatchObject({
+      path: `postings/${id}/resume.tex`,
+      copied: ["resume.tex", "sections/exp.tex"],
+      attachMode: "after-approval",
+    });
+    expect(first.posting).toMatchObject({ id, company: "Example Co.", role: "Backend Engineer" });
+    expect(first.requirementsMissing).toMatch(/Application requirements/);
+    expect(first.postingText).toContain("payment services");
+    expect(first.profile).toContain("firstName: Jane");
+    expect(first.profile).not.toContain("gender");
+    expect(first.claims).toMatch(/No claims yet/);
+    expect((await handle.services.postings.get(id)).status).toBe("drafting");
+
+    // A revision keeps the tailored copy.
+    await writeFile(join(folder, "sections", "exp.tex"), "\\item Built payment services\n");
+    await writeFile(join(folder, "notes.md"), "## Application requirements\n- Resume only\n");
+    const again = (await callJson(client, "document_start", { kind: "resume" })).data;
+    expect(again.document.existing).toBe(true);
+    expect(again.requirementsMissing).toBeUndefined();
+    expect(again.notes).toContain("Resume only");
+    expect(await readFile(join(folder, "sections", "exp.tex"), "utf8")).toContain("payment services");
+
+    const cover = await callJson(client, "document_start", { kind: "cover" });
+    expect(cover).toMatchObject({ isError: true, data: { error: { code: "not_found" } } });
+    await client.close();
+  });
+
+  it("bundle_build merges the cover letter, the resume and the extras, named and titled, and sets bundleRequired", async () => {
+    const { id, folder, client } = await tailoringPosting();
+    await writeFile(join(folder, "cover.pdf"), await textPdf(["Dear hiring manager"]));
+    await writeFile(join(folder, "resume.pdf"), await textPdf(["Jane Doe", "Experience"]));
+    await mkdir(join(dir, "ws", "library"), { recursive: true });
+    await writeFile(join(dir, "ws", "library", "unofficial_transcript.pdf"), await textPdf(["Transcript"]));
+    const r = (await callJson(client, "bundle_build", { extras: [{ path: "library/unofficial_transcript.pdf" }] }))
+      .data;
+    expect(r).toMatchObject({
+      output: `postings/${id}/Doe_Jane_Example-Co_Application.pdf`,
+      pages: 3,
+      sections: [
+        { label: "Cover Letter", pages: "1-1" },
+        { label: "Resume", pages: "2-2" },
+        { label: "Unofficial transcript", pages: "3-3" },
+      ],
+    });
+    expect(r.warnings).toBeUndefined();
+    const info = await handle.services.documents.info(r.output);
+    expect(info).toMatchObject({ title: "Jane Doe: Application for Backend Engineer", author: "Jane Doe" });
+    expect((await handle.services.postings.get(id)).bundleRequired).toBe(true);
+
+    await rm(join(folder, "resume.pdf"));
+    expect((await callJson(client, "bundle_build", {})).data.error.code).toBe("not_found");
+    await client.close();
+  });
 });
 
 describe("form tools over MCP", () => {
