@@ -7,6 +7,7 @@
 import type { SiteInfo } from "@ezapply/protocol/sites";
 import { ashbyInfo } from "./ashby/registry.js";
 import { dayforceInfo } from "./dayforce/registry.js";
+import { genericEntry } from "./generic/registry.js";
 import { greenhouseInfo } from "./greenhouse/registry.js";
 import { leverInfo } from "./lever/registry.js";
 import { oracleInfo } from "./oracle/registry.js";
@@ -29,6 +30,18 @@ const ENTRIES = [
 export type FormSiteId = (typeof ENTRIES)[number]["id"];
 
 export const SITES: readonly SiteInfo<FormSiteId>[] = ENTRIES;
+
+/**
+ * The definition for an application on an employer's own page (`generic/`): not in `SITES`, so nothing detects it
+ * and no list of sites names it. The extension uses it only when a form call names a tab no registry site claims.
+ */
+export const GENERIC: SiteInfo<"generic"> = genericEntry((url) => {
+  for (const s of SITES) {
+    const job = s.hostPageJob?.(url);
+    if (job) return job;
+  }
+  return undefined;
+});
 
 /** Every form site's id, in registry order. */
 export const FORM_SITE_IDS: readonly FormSiteId[] = SITES.map((s) => s.id);

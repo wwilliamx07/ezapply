@@ -1,4 +1,4 @@
-| 11 | | 10 | | 9 | | 8 | | 7 | | 6 | | 5 | | 4 | | 3 | | 2 | | 1 | # ezapply: todo
+# ezapply: todo
 
 Only work that isn't built, one directory per item; how items are written and kept is in [CLAUDE.md](CLAUDE.md).
 
@@ -25,7 +25,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | 1 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | — |
 | 2 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
 | 3 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
-| 4 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | A page saved from a real one |
+| 4 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
 | 5 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
 | 6 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
 | 7 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | Refactor the skills |
@@ -42,8 +42,8 @@ Why this order:
   rest cost turns or quality on every run.
 - **The agent's footing first.** The skills are what agents apply from, so improving them pays off on every
   later item. Refactoring them moves every mechanical step left in them into code.
-- **Application forms on an employer's own page** waits for a saved careers page whose application is its own form,
-  with no frame.
+- **Employer's own forms beyond plain HTML** waits for a saved careers page whose application is its own form,
+  with no frame: its widgets decide what's worth reading.
 - **The application manager** (tracker, job search, alerts, auto mode) is built in that order, each on the one
   before; auto mode last, and only once the rest has shown the quality holds without the user watching.
 
@@ -53,8 +53,7 @@ Why this order:
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
   touch, Refactor the skills, A writing spec for claims, Compatibility with
   various agents.
-- **Adapter building:** Agents that try to break a new adapter, Application forms on an
-  employer's own page.
+- **Adapter building:** Agents that try to break a new adapter, Employer's own forms beyond plain HTML.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:

@@ -651,7 +651,8 @@ export class FormsService {
   /**
    * Whether the call's posting may be credited with what happens on the tab (forms/match.ts). Where nothing in the
    * URLs settles it and the posting has a role, the page is read for the job title it shows. Inside the tab's
-   * queue, so that read never lands in the middle of another call.
+   * queue, so that read never lands in the middle of another call. A tab of no registry site (an employer's own form,
+   * read by the generic adapter) is matched the same way: its URL says nothing, so its binding or title decides.
    */
   private async decide(
     base: TargetBase,
@@ -660,7 +661,7 @@ export class FormsService {
   ): Promise<Pick<Target, "posting" | "mismatch" | "match" | "application" | "matchChanged">> {
     const { tab, own, facts } = base;
     const application = base.application ? { application: base.application } : {};
-    if (!own || !facts || !isFormSite(tab.site)) return { posting: own, ...application, matchChanged: false };
+    if (!own || !facts) return { posting: own, ...application, matchChanged: false };
     const binding = this.bindings.get(tab.tabId);
     let page: TabFacts = { url: tab.url, site: tab.site };
     let match = matchPosting(facts, page, binding);
@@ -750,25 +751,28 @@ export class FormsService {
     if (!asked) {
       throw new EzError(ErrorCode.NotFound, `Tab ${tabId} no longer exists.`, "Call browser_status for open tabs.");
     }
-    // Its own page when that's an application, else the application embedded in it.
+    // Its own page when that's an application, else the application embedded in it. A page of no registry site (an
+    // employer's own form) is bound too, without an application to keep: its URL names no site, tenant or job.
     const tab = formTabs(asked)[0] ?? asked;
     const here = tabSite(tab.url, tab.site);
-    if (!here.site) {
+    if (!here.site && !/^https?:/i.test(tab.url)) {
       throw new EzError(
         ErrorCode.BadRequest,
-        `Tab ${tabId} isn't an application on a supported site.`,
+        `Tab ${tabId} isn't an application page.`,
         "Pass the tabId of the application tab (browser_status lists them, with their site).",
       );
     }
     this.bindings.set(tabId, { postingId, ...(here.tenant ? { tenant: here.tenant } : {}), byUser: true });
-    await this.postings.setApplication(postingId, {
-      url: tab.url,
-      site: here.site,
-      ...(here.tenant ? { tenant: here.tenant } : {}),
-      ...(here.job ? { job: here.job } : {}),
-      from: "user",
-      at: new Date().toISOString(),
-    });
+    if (here.site) {
+      await this.postings.setApplication(postingId, {
+        url: tab.url,
+        site: here.site,
+        ...(here.tenant ? { tenant: here.tenant } : {}),
+        ...(here.job ? { job: here.job } : {}),
+        from: "user",
+        at: new Date().toISOString(),
+      });
+    }
     this.reported.delete(tabId);
     this.log.info({ tabId, posting: postingId }, "application tab bound to the posting by the user");
     return { tabId, url: tab.url };

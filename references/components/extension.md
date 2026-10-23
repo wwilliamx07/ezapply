@@ -31,7 +31,7 @@ on the companion's review page.
 | `src/capture/frames.ts` | `chooseFrame` (which frame holds the posting) and `unreadableBoard` (an embedded job board it couldn't read) |
 | `src/options/options.ts`, `static/options.html` | Options page: status, access to websites when it's withheld, manual pairing |
 | `static/manifest.json` | The manifest. Its host permissions are written by the build from the protocol's `HOST_PERMISSIONS` |
-| `build.mjs` | esbuild bundles (one adapter per registry site, from its definition in [the sites package](sites.md#the-package), on [the engine](adapters.md); the panel) and `dist/` |
+| `build.mjs` | esbuild bundles (one adapter per registry site and the generic one, from its definition in [the sites package](sites.md#the-package), on [the engine](adapters.md); the panel) and `dist/` |
 | `icons.mjs`, `static/icons/` | The extension's and toolbar button's icons: ezapply's mark (`ui/static/mark.svg`) as 16, 32, 48 and 128 px PNGs |
 
 ## Manifest
@@ -57,7 +57,8 @@ on the companion's review page.
 ## Builds (`npm run build -w @ezapply/extension`)
 esbuild bundles `background.js` (ESM), `options.js` and `grant.js` (IIFE), `panel.js` and `panel.css` (ESM, minified, JSX: the UI
 package's panel and React, with the base and panel stylesheets; about 700 KB, most of it React and the protocol's
-schemas, which the panel's answer checks use), and one adapter per registry site, `<site>-main.js` from
+schemas, which the panel's answer checks use), and one adapter per registry site and `generic` (an employer's own
+form), `<site>-main.js` from
 `packages/sites/src/<site>/definition/main.ts` (IIFE, 50–80 KB each and without zod: they import only the
 protocol's import-free subpaths) for
 `chrome120`, with linked source maps. Each adapter gets its `ADAPTER_VERSION` stamped in: the first 12 hex characters of a SHA-256 of the bundle, written over a placeholder of the same length
@@ -219,8 +220,9 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
 - **Per tab still:** focus emulation covers the whole tab. `tab.show` reads `hidden` in the frame, and takes `focused` from the top page under focus emulation, else
   from `windows.get` (the browser window's focus): a frame's own `document.hasFocus()` is false whenever focus is
   in the page around it. `tab.screenshot` takes the whole tab.
-- **Not covered:** a form rendered straight into the company's page with no frame (`todo/`, "Application
-  forms on an employer's own page").
+- **No frame:** a form rendered straight into the company's page is read by the generic adapter, only when a
+  call names its tab ([serving form requests](#serving-form-requests-formsts)); a page with a form site's frame is
+  always left to that frame.
 
 ## Serving form requests (`forms.ts`)
 1. **Tab:** the explicit `tabId`; else the focused window's active tab if its page is an application site's (a
@@ -231,9 +233,12 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
 2. **Access:** `permissions.contains` for the page's origin (the frame's, for an embedded application), before
    anything is read. Missing, the call asks for every site and waits up to 15 s ([access](#access-to-websites)).
    A page that isn't on the web is never readable, and its URL decides.
-3. **Site:** the tab (or the frame) must be an application site, by what its page shows, else by its URL
-   ("not an application page of a supported site" otherwise). That picks the adapter: `<site>-main.js`, installed
-   as `window.__ezapply_<site>`.
+3. **Site:** the tab (or the frame) must be an application site, by what its page shows, else by its URL. That
+   picks the adapter: `<site>-main.js`, installed as `window.__ezapply_<site>`. A call that named the tab, on a web
+   page no registry site claims and with no form site in its frames, gets the generic adapter (`generic-main.js`:
+   an employer's own form, [sites](sites.md#employers-own-forms-generic)); a `form.get` there that finds no
+   application form (page kind `unknown`, no fields) fails as below. Without a named tab the generic adapter is
+   never chosen, since almost any page has a form. Anything else is "not an application page of a supported site".
 4. Inject the adapter into the page's MAIN world (idempotent; only the frame, with `frameId`), then call its
    `window.__ezapply_<site>[method](...args)` through a second `executeScript`, with the waits set first
    (`setTiming`) and then debug mode (`setDebug`, the call's `debug` or null). Results and thrown errors
@@ -275,7 +280,7 @@ that tab until it shows a confirmation:
 
 - **How it looks:** `confirmationIn` (`forms.ts`) asks the site's adapter for the page kind alone (`pageKind`,
   no schema sent back) on the tab's own page when it's a form site's, else on each form frame (an embedded form
-  gets new frame ids as it moves on). Only a page on the host of the application's `url` counts, so a tab reused
+  gets new frame ids as it moves on), else the generic adapter on the tab's own page (an employer's own form). Only a page on the host of the application's `url` counts, so a tab reused
   for something else doesn't mark the posting. It never asks for access to websites: it runs unattended.
 - **When:** every 3 s while the background runs and something is watched (a single-page site doesn't navigate),
   when a watched tab finishes loading, and on the reconnect alarm (a background woken from sleep has no timer).

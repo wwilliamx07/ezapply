@@ -3,17 +3,20 @@ import { join } from "node:path";
 import { createAdapter } from "@ezapply/engine/api";
 import { extract } from "@ezapply/engine/extract";
 import type { SiteDefinition } from "@ezapply/engine/types";
+import { generic } from "../src/generic/definition/site.js";
 import { greenhouse } from "../src/greenhouse/definition/site.js";
 import { oracle } from "../src/oracle/definition/site.js";
 import { workday } from "../src/workday/definition/site.js";
 
 /**
  * Each site's adapter on a test document: the engine with the site's definition, as its bundle installs it. Shared
- * with the companion's end-to-end tests, which drive the Workday, Oracle and Greenhouse adapters through the bridge.
+ * with the companion's end-to-end tests, which drive the Workday, Oracle, Greenhouse and generic adapters through the
+ * bridge.
  */
 export const createWorkdayApi = (doc: Document, getUrl: () => string) => createAdapter(workday, doc, getUrl);
 export const createOracleApi = (doc: Document, getUrl: () => string) => createAdapter(oracle, doc, getUrl);
 export const createGreenhouseApi = (doc: Document, getUrl: () => string) => createAdapter(greenhouse, doc, getUrl);
+export const createGenericApi = (doc: Document, getUrl: () => string) => createAdapter(generic, doc, getUrl);
 
 /** A site's extraction of a page, without an adapter around it. */
 export const extractPage = (site: SiteDefinition, doc: Document, url: string) => extract(site, doc, url);

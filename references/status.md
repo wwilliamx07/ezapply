@@ -19,6 +19,9 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **The extension watches for Submit; the user can mark it.** The user presses Submit, so no form call sees the
   confirmation page; watching the tab from the hand-off records it without an agent, and **Mark submitted** in the
   panel covers what the watch misses ([extension](components/extension.md#watching-for-the-users-submit-submit-watchts)).
+- **An employer's own form is read only on a tab the call names.** Almost any page has a form, so the generic
+  definition has no signature and is never chosen by looking; it reads native controls only, starting strict, and
+  its submit test errs wide, since a false positive only blocks a press ([sites](components/sites.md#employers-own-forms-generic)).
 - **The setup page has no chat.** Questions and changes no button covers go to the panel's general conversation,
   which already is one; the page's previews follow the PDF's build time, so the agent's work there shows on the page
   ([ui](components/ui.md#what-each-step-does)).
@@ -142,6 +145,12 @@ What's built but hasn't run live, and what to check first. Each site's page list
   tested with stubs. Check on each site: the confirmation page is recognised by `pageKind` and lands on the
   application's host (an embedded form's frame included); the background keeps polling while the tab sits on the
   review page; a report made while `ezapply` was closed arrives on the next start.
+
+- **Employer's own forms** ([sites](components/sites.md#employers-own-forms-generic)), built and tested on
+  synthetic pages only. Check on a real careers page with a frameless form: the right form is picked, every
+  native field is read with its prompt, what's left out is counted, a Submit or Apply press is blocked, the tab is
+  matched to its posting by title or binding, and the thank-you page after the user's Submit marks it submitted.
+  Save the page, scrubbed, as `generic/fixtures/` and the conformance page.
 
 - **Antigravity behind the panel** with ezapply itself ([agent](components/agent.md#antigravity-antigravityts)).
   `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through

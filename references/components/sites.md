@@ -33,8 +33,9 @@ packages/sites/                 @ezapply/sites
     test/                       its URL rules, its saved pages read, its behavioural tests and golden schemas,
                                 page.ts (the page the conformance test checks it on)
     fixtures/                   its saved, scrubbed pages
-  src/registry.ts               SITES, in detection order, and what asks it
-  src/definitions.ts            SITE_DEFINITIONS: the extension's side
+  src/generic/                  the employer's own form: registry entry, definition, notes, tests, no fixtures yet
+  src/registry.ts               SITES, in detection order, GENERIC beside them, and what asks it
+  src/definitions.ts            SITE_DEFINITIONS and GENERIC_DEFINITION: the extension's side
   src/notes.ts, src/readers.ts  SITE_NOTES, POSTING_READERS: the companion's side
   test/                         what every site must pass (conformance), and the shared test helpers
 packages/engine/                @ezapply/engine: the adapter engine and its drivers (src/widgets/)
@@ -55,7 +56,8 @@ packages/engine/                @ezapply/engine: the adapter engine and its driv
   as a string ([protocol](protocol.md#bridge-handshake)).
 - **Two builds.** The companion runs under Node, so `tsc` builds the registry, the notes and the readers to `dist/`
   (the package's exports: `.`, `./notes`, `./readers`); the definitions are left out of it and stay source, which
-  `esbuild` bundles from TypeScript (`extension/build.mjs` builds `src/<site>/definition/main.ts` for each of `SITES`).
+  `esbuild` bundles from TypeScript (`extension/build.mjs` builds `src/<site>/definition/main.ts` for each of `SITES`
+  and `GENERIC`).
   `tsconfig.definitions.json` typechecks everything with the browser's types. The engine is source only (its exports
   point at `src/`); nothing runs it under Node but the tests.
 
@@ -101,6 +103,54 @@ host stayed unreadable until something already knew its site, which only the URL
 `HOST_PERMISSIONS` is `<all_urls>`, which also lets `tab.screenshot` work. The cost is Chrome's broadest
 install warning ("Read and change all your data on all websites"), accepted for this; the extension still acts
 on a page only for Capture or a call from Claude ([security](../security.md)).
+
+## Employer's own forms (`generic/`)
+Some careers pages show the application in their own page, with no provider frame. Such a form is the employer's
+own: submitting through a provider's API (Greenhouse's Job Board API, Lever's postings API, Ashby's
+`applicationForm.submit`) takes the employer's secret key, so the browser posts to the employer's server, which
+forwards it. It carries none of a provider's markup, so no signature finds it and no site's definition could read
+it. `generic/` reads it from what standard HTML says.
+
+- **Not a registered site.** `GENERIC` (`src/registry.ts`, from `generic/registry.ts`) is a `SiteInfo` beside the
+  registry, not in `SITES`: it has an empty signature and no URL rule, since almost any page has a form, so nothing
+  detects it, no list of sites names it, and the knowledge test doesn't count it. Its tenant is the page's host;
+  its job, a registry site's `hostPageJob` of the URL (a careers page with `?gh_jid=`). Its definition is
+  `GENERIC_DEFINITION` (`definitions.ts`) and its notes are in `SITE_NOTES` as `generic`. The extension uses it only
+  for a form call that names a tab no registry site claims ([extension](extension.md#serving-form-requests-formsts)).
+- **The form:** each visible `<form>` that holds an email field (`type=email`, the `email` autocomplete token, or a
+  control named `email`) and either a file field or at least four labelled fields; never one with a password field
+  (sign-in and account forms stay the user's). Of several, the one with the most fields. None → no fields, and the
+  page is `unknown`, or `confirmation` when it thanks the user (`singlePageKind`).
+- **Fields:** the form's native controls (`form.elements`, so `form=`-tied ones count), in page order, visible or
+  with a visible label (a file input behind its "Attach" label). Text, email, tel and url inputs and textareas,
+  number, date and month inputs, single `<select>`s and file inputs each get the shared driver for their kind, with
+  the control itself as the container. Radios and checkboxes are grouped by `name`: the group's container is the
+  smallest element holding all of them and no other choice, grown to its fieldset or ARIA group when that holds no
+  other choice either, and never the form itself; a lone checkbox is its own field. Hidden, search, password and
+  button inputs are never fields.
+- **Prompts:** a control's label (`for` or wrapping, without the controls inside it), `aria-labelledby`,
+  `aria-label`, else its placeholder. A group's: its legend, its ARIA group's label, else the text in its container
+  before the first option. Required: `required`, `aria-required`, or a trailing `*`. Errors: `ariaError`, and the
+  form's own `[role=alert]`s.
+- **Ids:** the control's `name`, slugged (`urls[LinkedIn]` → `urls-linkedin`), else its id, else the prompt's slug;
+  the section is the nearest heading (`h1`–`h6`) before the field in the form, else "Application". Legends aren't
+  sections: a question's legend would name the fields after it.
+- **Hints:** the HTML `autocomplete` token first (`given-name`, `family-name`, `email`, `tel`, `country-name`…:
+  a standard many forms set), then the name or prompt for name, email, phone, LinkedIn, GitHub and website. Nothing
+  else is guessed; the agent reads the rest by prompt.
+- **What it leaves out:** a control without a prompt, a group it can't hold apart (choices straight in the form), a
+  type it doesn't fill (time, range, a multiple select), and ARIA widgets in place of native controls (comboboxes,
+  listboxes, switches, contenteditable). It counts them in `messages`, so the agent asks the user to fill them;
+  its notes tell the agent to say the form isn't from a known site and to have the user check every field.
+- **One page, Submit at the end:** `lastPage`, `next` refuses, no Back. The job title is the page's first visible
+  `h1`, else its document title.
+- **Submit, broadly:** `isSubmitByText`, plus a form's default buttons (a `<button>` without a type, an image
+  input), any button in a form reading "Apply…", and the form element itself, so the guard also cancels a synthetic
+  `submit` event. With no site's pages to write the test from, it errs wide: a false positive only blocks a press,
+  never submits ([never submitting](adapters.md#never-submitting)).
+
+Tests: synthetic pages (`generic/test/forms.ts`, standard HTML only; no live page has been saved yet), read,
+filled and guarded in `generic.test.ts`, and the conformance test every definition passes.
 
 ## Why these three
 Sites were chosen by how often employers use them, not by the user's own postings. Published market-share

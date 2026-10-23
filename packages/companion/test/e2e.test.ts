@@ -23,9 +23,16 @@ import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { installDomShims } from "../../engine/test/shims.js";
+import { APPLICATION } from "../../sites/src/generic/test/forms.js";
 import { buildOracleApplication } from "../../sites/src/oracle/test/fixture.js";
 import { buildWorkdayStep } from "../../sites/src/workday/test/fixture.js";
-import { createGreenhouseApi, createOracleApi, createWorkdayApi, savedPage } from "../../sites/test/adapters.js";
+import {
+  createGenericApi,
+  createGreenhouseApi,
+  createOracleApi,
+  createWorkdayApi,
+  savedPage,
+} from "../../sites/test/adapters.js";
 import type { AppConfig } from "../src/config/app.js";
 import { MemoryStore } from "../src/github/secrets.js";
 import { createLogger } from "../src/logger.js";
@@ -153,13 +160,22 @@ interface FakeTab {
   noEmulation?: boolean;
   /** Applications embedded in the page, each its own document with its site's adapter. */
   frames?: { frameId: number; url: string }[];
+  /** The page is an employer's own application form, this body, read by the generic adapter. */
+  employerForm?: string;
 }
 
-/** A page with its site's real adapter: Oracle's or Workday's fixture, or Greenhouse's saved application. */
-function adapterPage(url: () => string) {
+/**
+ * A page with its site's real adapter: Oracle's or Workday's fixture, Greenhouse's saved application, or an
+ * employer's own form (`employerForm`) with the generic adapter.
+ */
+function adapterPage(url: () => string, employerForm?: string) {
   const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: url() });
   installDomShims(dom.window as unknown as Window);
   const doc = dom.window.document;
+  if (employerForm) {
+    doc.body.innerHTML = employerForm;
+    return createGenericApi(doc, url);
+  }
   switch (detectSite(url())) {
     case "oracle":
       buildOracleApplication(doc);
@@ -184,8 +200,9 @@ function applicationTabs(tabs: FakeTab[], opts: { tabShow?: boolean } = {}) {
   const pages = tabs.map((t, i) => ({
     ...t,
     active: t.active ?? i === 0,
-    // A page of no form site (a careers page around an embedded application) has no adapter.
-    api: isFormSite(detectSite(t.url)) ? adapterPage(() => t.url) : undefined,
+    // A page of no form site (a careers page around an embedded application) has no adapter, unless it's an
+    // employer's own form.
+    api: t.employerForm || isFormSite(detectSite(t.url)) ? adapterPage(() => t.url, t.employerForm) : undefined,
     frames: (t.frames ?? []).map((f) => ({ ...f, api: adapterPage(() => f.url) })),
   }));
   const page = (tabId?: number) => pages.find((p) => p.tabId === tabId) ?? (pages[0] as (typeof pages)[number]);
@@ -1880,6 +1897,40 @@ describe("form tools over MCP", () => {
       boundTab: { tabId: 7, url: EMBED },
       application: { from: "user", site: "greenhouse" },
     });
+    await client.close();
+  });
+
+  it("fills an employer's own form only on its named tab, matched by its title, then bound to the posting", async () => {
+    const ext = fakeExtension({
+      tabs: [{ tabId: 7, url: "https://careers.example.com/jobs/software-developer/apply", employerForm: APPLICATION }],
+    });
+    await ext.outcome;
+    const cap = await capture(ext, "https://www.example.com/listing/1", "Software Developer at Example Co");
+    const client = await postingClient(cap.postingId);
+    // Never chosen without its tab named: almost any page has a form.
+    expect((await callJson(client, "get_form")).isError).toBe(true);
+
+    const form = (await callJson(client, "get_form", { tabId: 7 })).data;
+    expect(form).toMatchObject({ adapter: "generic", lastPage: true, posting: cap.postingId });
+    expect(form.siteNotes).toMatch(/plain HTML form/);
+    expect(form.postingMismatch).toBeUndefined();
+    const fill = await callJson(client, "fill_fields", {
+      tabId: 7,
+      fills: [{ fieldId: "personal-information.first-name", value: "Jane", source: "profile" }],
+    });
+    expect(fill.data.results).toEqual([{ fieldId: "personal-information.first-name", ok: true }]);
+    const log = (await readFile(join(dir, "ws", "postings", cap.postingId, "form-log.jsonl"), "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => JSON.parse(l));
+    expect(log.at(-1)).toMatchObject({ event: "fill", ok: true, matchedBy: "title" });
+
+    // Another posting's conversation finds the tab bound to this one.
+    const other = await capture(ext, "https://www.example.com/listing/2", "Data Analyst at Example Co");
+    const second = await postingClient(other.postingId);
+    const mismatch = (await callJson(second, "get_form", { tabId: 7 })).data.postingMismatch;
+    expect(mismatch).toMatchObject({ by: "binding" });
+    await second.close();
     await client.close();
   });
 
