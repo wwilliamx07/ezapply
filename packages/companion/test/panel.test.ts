@@ -337,6 +337,27 @@ describe("the side panel over the bridge", () => {
     ]);
   });
 
+  it("opens the review of the documents a tailoring turn left new, but not of a failed build or from filling", async () => {
+    const ext = await extension();
+    const id = await capture();
+    const folder = join(dir, "ws", "postings", id);
+    // A filling turn opens nothing.
+    await writeFile(join(folder, "resume.pdf"), "%PDF-1.4 resume v1");
+    await ext.peer.request("panel.send", { key: `${id}/fill`, text: "fill it" });
+    await waitFor(async () => (ext.updates.some((u) => u.notify) ? true : null), 10_000);
+    expect(handle.services.reviews.openFor(id)).toBeUndefined();
+
+    // A .tex newer than its PDF is a build that failed: not shown.
+    await writeFile(join(folder, "cover.pdf"), "%PDF-1.4 cover v1");
+    await new Promise((r) => setTimeout(r, 20));
+    await writeFile(join(folder, "cover.tex"), "\\documentclass{article}");
+    await ext.peer.request("panel.send", { key: `${id}/tailor`, text: "tailor it" });
+    await waitFor(async () => (ext.updates.filter((u) => u.notify).length === 2 ? true : null), 10_000);
+    expect(ext.updates.filter((u) => u.notify).at(-1)?.notify?.title).toBe("Your documents are ready to review");
+    expect(handle.services.reviews.openFor(id)?.files).toEqual(["resume.pdf"]);
+    expect(opened.some((u) => u.includes("/review/"))).toBe(true);
+  });
+
   it("lists the newest postings, and an older one a card waits on", async () => {
     const { peer } = await extension();
     const ids: string[] = [];

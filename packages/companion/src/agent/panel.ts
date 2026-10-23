@@ -16,6 +16,7 @@ import {
   type SiteId,
 } from "@ezapply/protocol";
 import { isFormSite, siteInfo } from "@ezapply/sites";
+import { reviewAtTurnEnd } from "../documents/agent-review.js";
 import { matchPosting, postingFacts } from "../forms/match.js";
 import type { Services } from "../services.js";
 import { workspaceStatus } from "../status.js";
@@ -52,21 +53,25 @@ export class PanelService {
       if (s.agent.statusOf(conversation) === "working") return;
       // A turn that ends on a card waits on it: the card's notification says so, and this one would replace it.
       if (s.needs.list().some((c) => c.conversation === conversation)) return;
-      const name = s.agent.agentName(conversation);
-      const posting = postingConversation(conversation)?.postingId;
-      if (event.ok && posting && s.reviews.openFor(posting)) {
-        void this.notify(
+      void (async () => {
+        // A tailoring turn that leaves new documents opens their review (documents/agent-review.ts).
+        if (event.ok) await reviewAtTurnEnd(s, conversation);
+        const name = s.agent.agentName(conversation);
+        const posting = postingConversation(conversation)?.postingId;
+        if (event.ok && posting && s.reviews.openFor(posting)) {
+          await this.notify(
+            conversation,
+            "Your documents are ready to review",
+            "Approve them or say what to change on the review page.",
+          );
+          return;
+        }
+        await this.notify(
           conversation,
-          "Your documents are ready to review",
-          "Approve them or say what to change on the review page.",
+          event.ok ? `${name} finished` : `${name} stopped`,
+          event.ok ? "Its reply is in the ezapply panel." : "The turn ended with an error: see the ezapply panel.",
         );
-        return;
-      }
-      void this.notify(
-        conversation,
-        event.ok ? `${name} finished` : `${name} stopped`,
-        event.ok ? "Its reply is in the ezapply panel." : "The turn ended with an error: see the ezapply panel.",
-      );
+      })().catch((err: Error) => s.log.warn({ err: err.message, conversation }, "turn end: review not opened"));
     });
     s.agent.onState(() => this.changed());
     let shown = new Set<string>();

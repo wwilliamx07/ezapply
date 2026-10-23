@@ -1,4 +1,4 @@
-| 11 | | 10 | | 9 | | 8 | | 7 | | 6 | | 5 | | 4 | | 3 | | 2 | | 1 | # ezapply: todo
+# ezapply: todo
 
 Only work that isn't built, one directory per item; how items are written and kept is in [CLAUDE.md](CLAUDE.md).
 

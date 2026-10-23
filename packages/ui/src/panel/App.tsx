@@ -26,14 +26,18 @@ import { ChangesCard } from "./changes.js";
 import { Markdown } from "./markdown.js";
 import type { ConnectionState, PanelTransport } from "./transport.js";
 
-/** What each button asks, in words: the same as typing it, so the skills pick the request up either way. */
+/**
+ * What each button asks: its skill by name (`/ezapply-…`, which Claude Code and Antigravity both run as the skill),
+ * then the request in words, so the agent doesn't have to match the words to a skill.
+ */
 export const REQUESTS = {
   tailor:
-    "Tailor my resume for this posting, and write the cover letter if the posting or my preferences call for one.",
-  resume: "Tailor my resume for this posting.",
-  cover: "Write a cover letter for this posting.",
-  bundle: "Put this posting's documents in one PDF, as its application requirements ask.",
-  fill: (tabId: number) => `Fill out the application for this posting in the open tab (tabId ${tabId}).`,
+    "/ezapply-resume Tailor my resume for this posting, then write the cover letter with ezapply-cover-letter if " +
+    "the posting or my preferences call for one.",
+  resume: "/ezapply-resume Tailor my resume for this posting.",
+  cover: "/ezapply-cover-letter Write a cover letter for this posting.",
+  bundle: "Put this posting's documents in one PDF with bundle_build, as its application requirements ask.",
+  fill: (tabId: number) => `/ezapply-apply Fill out the application for this posting in the open tab (tabId ${tabId}).`,
 };
 
 type TabInfo = (PanelTab & { tabId: number }) | null;

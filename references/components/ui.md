@@ -186,8 +186,11 @@ Top to bottom, in an application:
 7. **Action buttons**, acting on the chosen posting: **Tailor documents** (the resume, and the cover letter when the posting or the
    preferences call for one), with a menu (opening upwards) for the resume only, the cover letter only, or one PDF;
    **Fill form** on the application's tab, or **Open the application** when the tab isn't it and the posting knows
-   its address. Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it
-   up either way; Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
+   its address. Each button sends its skill by name, then the request in words (`REQUESTS`: `/ezapply-resume …`,
+   `/ezapply-cover-letter …`, `/ezapply-apply …`; one PDF names `bundle_build`, which has no skill), so the agent
+   doesn't match words to a skill. Claude Code under stream-json input and Antigravity both run a message that
+   starts with `/<skill>` as that skill, Antigravity also after the `<ezapply-panel>` block its first message
+   carries (it reads the skill's file). Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
    or while an agent works in the conversation the button goes to: the other one, and every other application,

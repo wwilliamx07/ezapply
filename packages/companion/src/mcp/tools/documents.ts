@@ -1,6 +1,7 @@
 import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { openReviewFor } from "../../documents/agent-review.js";
 import type { DocumentReason } from "../../documents/review.js";
 import type { Services } from "../../services.js";
 import { PENDING_HINT, tool } from "../result.js";
@@ -257,37 +258,14 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
           if (conversation && s.reviews.isOpen(reviewId)) return { reviewId, pending: reviewId, hint: PENDING_HINT };
           return { reviewId, ...(await s.reviews.wait(reviewId, timeoutSeconds * 1000)) };
         }
-        // The page names who gets the answer: the panel conversation's agent, or Claude Code in a terminal.
-        const agentName = conversation ? s.agent.agentName(conversation) : "Claude Code";
-        const review = await s.reviews.open(files as string[], { short, again }, agentName);
-        const openedIn = await s.opener.url(review.url).catch(() => null);
         // In a panel conversation the call doesn't wait: how the review ends starts the next turn.
         if (conversation) {
-          s.agent.deliverLater(
-            conversation,
-            { tool: "review_documents", id: review.reviewId },
-            // A review replaced by a newer one is the agent's own doing: nothing to tell it.
-            s.reviews.settled(review.reviewId).then((end) =>
-              "supersededBy" in end
-                ? null
-                : {
-                    value: { reviewId: review.reviewId, ...end },
-                    label: end.done ? "Your review" : "The review expiring",
-                  },
-            ),
-          );
-          return {
-            ...review,
-            ...(openedIn
-              ? { openedIn }
-              : {
-                  openedBrowser: false,
-                  tell: `Ask the user to open ${review.url} to approve the documents or write what should change.`,
-                }),
-            pending: review.reviewId,
-            hint: PENDING_HINT,
-          };
+          const review = await openReviewFor(s, conversation, files as string[], { short, again });
+          return { ...review, pending: review.reviewId, hint: PENDING_HINT };
         }
+        // The page names who gets the answer: Claude Code in a terminal.
+        const review = await s.reviews.open(files as string[], { short, again }, "Claude Code");
+        const openedIn = await s.opener.url(review.url).catch(() => null);
         if (!openedIn) {
           // Nobody will see the page unless the agent gives the user the link, so don't wait first.
           return {

@@ -175,6 +175,20 @@ three reviews without waiting, and the user's change requests sat in the compani
 been dropped. The skills also say the page is a
 snapshot: after any rebuild, review the changed files again.
 
+**The review opens itself at the end of a tailoring turn** (`reviewAtTurnEnd`, `documents/agent-review.ts`, called
+by the panel's turn-end handler before its notification). When a posting's Documents conversation ends a turn
+without error, in `after-approval`, with no card of that conversation open and no review of that posting open, the
+posting's top-level PDFs that are drafts (neither approved nor last reviewed in their current bytes, and not
+`*-diff.pdf`) go to review together, as `review_documents { files }` from that conversation would open them, and the
+answer comes as its next message. A PDF older than its `.tex` is left out: its last build failed, so it isn't what
+the agent last wrote. A refusal (an underfilled document) goes to the conversation as a delivered result with the
+refusal's hint, once for the same files and reason, so the agent adds evidence or calls `review_documents` with
+`short`. *Why:* the skills told the agent to review each finished document, and turns still ended without it; the
+end of the turn is the step it can't skip. *Why not a failed build or over-limit document held back further:* the
+page shows the page count, and holding documents back is the failure this replaces. `review_documents` stays for
+`short`, `again`, a terminal chat, and the filling conversation, where `upload_file` refuses an unapproved document
+and points to it.
+
 Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
 a review expires after 2 hours, or when the chat ends; an open page hears each of these (Server-Sent Events). Every

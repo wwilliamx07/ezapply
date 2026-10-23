@@ -108,7 +108,7 @@ non-default ports.
    its application ([agent](components/agent.md#conversations-servicets)), so the next application starts clean,
    the earlier one isn't re-sent with every turn of it, and the earlier one can be picked up again.
 
-**Requests (flows 4 to 7)** come from the side panel: its buttons send them in words (Tailor documents, Fill
+**Requests (flows 4 to 7)** come from the side panel: its buttons send them with their skill's name (Tailor documents, Fill
 form), or the user types them in its chat bar. Tailoring (flows 4 to 6, and revising after a review) runs in the
 posting's documents conversation and filling (flow 7) in its application conversation, whichever comes first. Claude's questions come on cards in the panel (`ask_user`), its commands that need approval as approval
 cards, and its reports in the panel's conversation ([ui](components/ui.md#the-side-panel-srcpanel)).

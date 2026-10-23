@@ -9,6 +9,11 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **Setup and repos have no skill.** The setup page does each step as a form, and a task it hands the agent
   carries its own instructions; `onboarding { step }` opens a step for a change asked in chat, instead of a skill
   repeating the step a turn of chat at a time ([workspace](components/workspace.md#skills-claudeskills)).
+- **The review opens itself when a tailoring turn ends** with new documents, instead of the skills asking the
+  agent to; turns still ended without it. A failed build's PDF is left out, nothing else is held back
+  ([documents](components/documents.md#review-before-attaching)).
+- **The panel's buttons name their skill** (`/ezapply-resume …`), which Claude Code and Antigravity both run as the
+  skill, so the agent doesn't match the words to one ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **The setup page installs TeX and fills the cover's name and contact itself.** Both are the same every time,
   with nothing to judge, so an agent turn added only a wait; the system asks for permission to install
   ([ui](components/ui.md#installing-tex)).
