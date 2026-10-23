@@ -115,28 +115,26 @@ cards, and its reports in the panel's conversation ([ui](components/ui.md#the-si
 
 ## 4. Tailoring the resume ("tailor my resume")
 The `ezapply-resume` skill:
-1. `posting_get` → read `posting.md`; correct company or role with `posting_update_meta`. If
-   `notes.md` has no `## Application requirements`, write it (documents wanted, single PDF → `bundleRequired`,
-   format, naming, limits, addressee, deadline) and mention them to the user. Every later skill (cover
-   letter, bundle, apply) follows it. Any request about a posting does this first, per `EZAPPLY.md`.
-2. Read the profile (the preferences are already in context, imported by `EZAPPLY.md`), every claim (`claims_list`, already called at the first request per
-   `EZAPPLY.md`) and the template; copy the template's main file to
-   `postings/<id>/resume.tex` if it isn't there (it keeps the template's `% !TEX program` comment, so it
-   builds with the same engine), along with the files it `\input`s (`contentFiles` in `template.json`) at the
-   same relative paths; set status `drafting`.
-3. Write `notes.md`: requirements, key terms, an **evidence map** from each requirement to claim ids or
+1. `document_start { kind: "resume" }`: copies the template's main file and its `contentFiles` into the posting
+   folder unless the resume exists (it keeps the template's `% !TEX program` comment, so it builds with the same
+   engine), sets status `drafting`, and returns the posting, `notes.md`, the profile and every claim
+   ([documents](components/documents.md#starting-a-document-and-the-bundle-tailorts)). Claude corrects the company
+   or role with `posting_update_meta`. With `requirementsMissing`, it writes `## Application requirements`
+   (documents wanted, single PDF → `bundleRequired`, format, naming, limits, addressee, deadline) and mentions them
+   to the user; every later skill follows it.
+2. Write `notes.md`: requirements, key terms, an **evidence map** from each requirement to claim ids or
    profile entries, and gaps (never presented as skills).
-4. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet, each
-   round's Edits and its `tex_compile` in one message, then a reread of the changed passages.
-5. Loop: `tex_compile` (must be exactly one page; `*resume*`/`*cv*` files are checked against the page
-   limit, and `overflow` says how much ran over; within it, `lint` names layout problems) → fix what `lint`
-   lists → `pdf_text` for ATS order → self-check each bullet against its evidence.
-6. Report the changes and gaps in a few lines; `tex_diff` on request. Then the attach mode decides: see
-   [flow 8](#8-review-and-attach).
+3. Edit `resume.tex` content only (structure and styling stay), with a `% src:` comment per changed bullet, each
+   round's changes in one `tex_edit`, which compiles and returns the changed passages to check.
+4. Fit the page from the build: `overflow` says how much ran over; within it, `freeLines` and `lint` name what
+   to fix, the content findings included (numbers and skills without evidence, missing or unknown sources,
+   never-mention terms) → `pdf_text` for ATS order → self-check each bullet against its evidence.
+5. Report the changes and gaps in a few lines and end the turn; `tex_diff` on request. Then the attach mode
+   decides: see [flow 8](#8-review-and-attach).
 
 ## 5. Cover letter ("write a cover letter")
-The `ezapply-cover-letter` skill: same inputs plus `templates/cover/format.md` if the user supplied an example.
-Copy the template to `postings/<id>/cover.tex`, fill the per-letter fields, write the body between the
+The `ezapply-cover-letter` skill: `document_start { kind: "cover" }`, which also returns `templates/cover/format.md`
+(`coverFormat`) if the user supplied an example. Fill the per-letter fields, write the body between the
 `% BODY START` / `% BODY END` markers (opening, one evidence paragraph per project or role until the page is full,
 close; shorter only when the posting or `format.md` sets a length or the evidence runs out), compile to one
 page, fix what `lint` lists and fill what `freeLines` leaves, report; the review refuses it underfilled
@@ -167,7 +165,7 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    another app, results of calls that change the page carry `browserBehind`, which Claude passes on when a
    field (a date) isn't taken.
 2. `get_form`. The first read of a site's page in the session carries that site's `siteNotes`, which Claude
-   follows for the application ([site notes](mcp-tools.md#site-notes)). Then by `pageKind`: `posting` → `page_action apply`; `auth` → the user signs in (on Oracle: the
+   follows for the application ([site notes](mcp-tools.md#site-notes)). On a `posting` page `get_form` presses Apply itself and returns the page that follows (`pressedApply`). Then by `pageKind`: `auth` → the user signs in (on Oracle: the
    email step and its emailed code) and answers Claude's card ("Signed in") when done; `start-choice` → `page_action apply_manually` (on
    Oracle, "Welcome Back": the user chooses Use My Profile or an import); `review` → hand-off;
    `confirmation` → done; `unknown` → `get_form` again and `browser_status`, then the user is asked what the
@@ -177,9 +175,10 @@ The `ezapply-apply` skill, over the [form tools](mcp-tools.md#forms) and the sit
    its `save.<block>` button, one entry at a time.
    Dayforce's employment and education records are added the same way, and its Personal Information is saved
    with its own Update (`save.personal-information`); its Submit step is the review page.
-3. Each step: `get_form` (or the `form` `go_next` returned), then Claude decides every field (profile facts via
+3. Each step: `get_form` (or the `form` `go_next` returned), then Claude decides every field, `prefilled` ones
+   (a value this application didn't fill) checked like empty ones (profile facts via
    hints and labels, read as written: a level on a numeric scale takes a number; screening questions matched to the answer bank
-   by meaning, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
+   by meaning, `bankMatch` naming an exact wording's entry, with an explicit polarity check; numbers computed; unknown, sensitive, EEO or salary asked
    on one `ask_user` card per step, with Claude's suggestion where it has one (in chat without a panel), and a resolved miss or a new answer offered for saving to the answer bank; the
    skills that fit the role, not necessarily all), one `add_repeatable { addButtonIds }` for every row or item
    missing from each list against the profile's entries (work, education, languages, certifications, links), `fill_fields` once for the whole step with a

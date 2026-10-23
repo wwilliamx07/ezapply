@@ -1,14 +1,11 @@
 # Carried over from a previous application
 
-Some sites (`use_last_application`, a returning candidate's profile) pre-fill fields from the user's last
-application, so a field that already has a value may belong to another job. `fill_fields` only adds to
-multi-selects and `upload_file` only adds files, so clear first:
-- **File fields:** any attached file this application didn't upload (check `form-log.jsonl` for this posting's
-  `upload` events) is stale, even when its name matches, e.g. another job's `cover.pdf`.
-  `remove_items { fieldId, values?, reason? }` it (no `values` clears the field), then `upload_file { fieldId, path }`
-  the current document. Remove a stale file even when this posting wants no document in that field.
-- **Multi-selects such as Skills:** decide the list this application should have (from `profile.yaml` and the
-  posting), `remove_items` the entries that don't belong, then `fill_fields { fills: [{ fieldId, value, source }] }`
-  the missing ones.
-- Text, dropdowns and radios are simply overwritten by a fill; check that pre-filled ones match the profile.
-- Give a `reason` (e.g. "left from a previous application") and list what you removed in the step's report.
+Some sites pre-fill fields from the user's last application, so a value may belong to another job. A fill only adds
+to multi-selects and an upload only adds files, so clear first:
+- **`stale` files** (ones this application didn't upload, even with a current document's name):
+  `remove_items { fieldId, values?, reason? }` them, then upload the current document. Remove them even when this
+  posting wants no document in that field.
+- **Multi-selects such as Skills:** decide the list this application should have, `remove_items` what doesn't
+  belong, then fill what's missing.
+- **`prefilled` text, dropdowns and radios** are overwritten by a fill: check each against the profile.
+- Give a `reason` ("left from a previous application"): the hand-off card lists what was removed.

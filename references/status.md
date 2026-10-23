@@ -114,9 +114,11 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **An approved document isn't reviewed again by accident.** `review_documents` refuses one whose current bytes are
   approved unless `again` gives a reason: a fill that read the approvals before the user answered the tailoring's
   review opened a second review of the same bundle ([documents](components/documents.md#review-before-attaching)).
-- **Edits are reread, narrowly.** After a round of edits the agent rereads only the changed passages and their
-  neighbours: never rereading saved tokens but let edits clash; python is denied in the workspace so `.tex`
-  edits go through the Edit tool ([workspace](components/workspace.md#the-agent-file-ezapplymd)).
+- **Documents are edited with `tex_edit`**, which returns each changed passage with its neighbours: never rereading
+  saved tokens but let edits clash, and scripted edits corrupted LaTeX; python stays denied so a script isn't the
+  fallback ([documents](components/documents.md#editing-tex_edit)).
+- **Skills hold only judgement**, in words no one agent's tools: what's the same every time is code
+  ([workspace](components/workspace.md#skills-claudeskills)).
 - **Form tools that change the page return it** (`go_next`, `add_repeatable`, `remove_repeatable`), and long option
   lists go out as a count: each extra read was a turn re-sending the whole conversation
   ([forms](mcp-tools.md#forms)).
@@ -161,8 +163,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **Antigravity behind the panel** with ezapply itself ([agent](components/agent.md#antigravity-antigravityts)).
   `agy`'s stream, MCP calls, rules, includes, Stop and resume were run live with a stand-in MCP server, not through
   the panel. Check: a posting tailored and a form filled from the panel, how many turns the skills lose to reading each tool's schema, whether `--dangerously-skip-permissions`
-  still honours the `repo-cache` deny `init` writes, and whether the
-  skills' Claude Code wording (the Edit tool, subagents) trips it. Also that no console window flashes when it
+  still honours the `repo-cache` deny `init` writes, and whether it
+  follows the skills as written for any agent. Also that no console window flashes when it
   starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
   once with the next message starting the new one.
 - **Answers delivered as messages** ([agent](components/agent.md#results-as-messages)), tested with the Claude Code
@@ -215,6 +217,15 @@ What's built but hasn't run live, and what to check first. Each site's page list
   starting context on every call. The Workday nested-menu paths are an adapter change of their own: check them in
   a run with no other Workday change ([workday](components/sites/workday.md#workdays-prompt-searches-and-lists)).
 
+- **The skills refactor:** a tailoring and a Workday application, on Claude Code and on Antigravity, measured from
+  the transcripts and compared with the token cuts' runs above: turns, tokens, whether the review opened by itself,
+  questions asked that the answer bank already held, fields left to the user and fields filled wrong. Also that
+  `get_form`'s Apply press, `prefilled`, `stale` and `bankMatch` marks and the hand-off card hold on a live
+  form; that the content findings don't flag what the evidence holds (a tenant's date formats, a template's own
+  numbers); that `repo_sync`'s `components` match how a repo is organised; and that the Explore and Plan deny
+  sends a delegated read to a general-purpose subagent
+  ([workspace](components/workspace.md#skills-claudeskills), [forms](mcp-tools.md#forms)).
+
 - **Workday's drifted date parts:** a Month/Day/Year date whose page rewrote the month as the first day digit
   landed now enters the drifted parts once more and reads back right in the fixture. Check in a live run with no
   other Workday change: such a date is `ok`, and the trace shows `date parts drifted` only where the page rewrote
@@ -233,9 +244,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   tailoring and an application that follow a tone and a "never mention" entry without reading the file
   ([workspace](components/workspace.md#how-it-stays-in-context)).
 
-- **Tailoring edits:** in a live tailoring, check that the agent rereads only the passages it changed (not whole
-  files), that a cover letter comes back near a full page (`freeLines` 0–2) without a second page, that the
-  python deny sends `.tex` edits to the Edit tool, and that `freeLines` matches the page as rendered. Then that
+- **Tailoring edits:** in a live tailoring, check that the agent edits with `tex_edit` and checks its changed
+  passages without rereading files, that a cover letter comes back near a full page (`freeLines` 0–2) without a
+  second page, and that `freeLines` matches the page as rendered. Then that
   an underfilled first draft is refused at review and filled rather than excused, that `short` is used only
   with a real reason, and that the letter's paragraphs follow the evidence rather than the template's two.
 

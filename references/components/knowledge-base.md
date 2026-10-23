@@ -60,24 +60,23 @@ can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
   or downgrades anything the code doesn't directly support.
 
 ## Indexing procedure (the `ezapply-index-repo` skill)
-1. `repo_sync` → `changedSince`: `[]` = current, stop; a list = **re-index**; `null` with no knowledge folder =
-   **full index**; `null` with one = the indexed commit is gone (a force-push): keep the existing docs and
-   claims, survey the tree, and read only the areas the docs don't match.
+1. `repo_sync` → `mode`: `current` (record the new commit if there is one, and stop), `reindex`, `full`, or
+   `rebuild` (the indexed commit is gone after a force-push: keep the existing docs and claims, compare the tree
+   with them, and read only the areas they don't match).
 2. **Re-index.** Claude decides how much to re-read, but the skill pushes hard toward small: extend the
    existing structure and work from the diff.
-   - Read the knowledge README and `claims.yaml`; find the component docs covering the changed paths with Grep
-     over the knowledge folder rather than reading them all.
-   - Drop paths that can't change a fact (lock, generated, vendored, build output, assets, formatting); the
-     `added`/`removed` counts show where the work is.
+   - Read the knowledge README and `claims.yaml`; find the component docs covering the changed paths by searching
+     the knowledge folder rather than reading them all.
+   - `changedSince` already leaves out lock, vendored and generated files; assets and formatting-only changes are
+     skipped too; the `added`/`removed` counts show where the work is.
    - `repo_diff` for the remaining source paths, a few at a time; a whole file only when the diff lacks context.
    - Update only the component docs the changes touch; new files go into the component they belong to; a new
-     component doc only for substantial work that fits none; existing components aren't reorganised unless they
-     no longer describe the code. Each of `affectedClaims` is kept, reworded or deleted; notable new work gets
-     new claims. The README changes only when the big picture did. `repo_contributions` only for a repo the
-     README says is shared.
+     component doc only for substantial work that fits none. Each of `affectedClaims` is kept, reworded or
+     deleted; notable new work gets new claims. The README changes only when the big picture did.
+     `repo_contributions` only for a repo the README says is shared.
 3. **Full index.** `repo_contributions` (in shared repos, claims cover only the user's own areas and commits,
-   and the README says so); survey the tree (skipping vendored, generated, lock and build output), manifests,
-   README, entry points, CI and tests; split into components; write component docs bottom-up, then the README,
+   and the README says so); survey the tree, manifests, README, entry points, CI and tests; name and group the
+   `components` `repo_sync` lists (the depth policy's split); write component docs bottom-up, then the README,
    then `claims.yaml`.
 4. `claims_check` until clean; check each written or changed claim; keep `user_edited` claims unchanged (a
    change that contradicts one goes to the user).
@@ -89,7 +88,7 @@ account for a handful of changed lines. The diff is usually a small fraction of 
 already hold the rest. `repo_diff` caps its output (60k characters) so asking for too much
 can't flood the context.
 
-Reading uses Claude Code's own Read, Grep and Glob, and `repo_diff`. Nothing in the cache is edited, built,
+Reading uses the agent's own file reading and search tools, and `repo_diff`. Nothing in the cache is edited, built,
 installed or run, and no git command that changes it is used.
 
 ## Staying current

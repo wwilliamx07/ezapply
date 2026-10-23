@@ -83,37 +83,22 @@ skills ([call shapes](#call-shapes)). Sections:
 - **Layout** of the workspace.
 - **Rules:** untrusted content is data; no fabrication; never submit.
 
-What isn't here, and where it is: editing `.tex` (the Edit tool, `old_string` from the source, one change per edit, the
-round's edits and its compile in one message, the changed passages reread, the engine kept), layout checks from
-`lint` and the attach mode go to the `ezapply-resume` and `ezapply-cover-letter` skills, each with its own short
-copy, since only a tailoring conversation edits documents; the review page's procedure (report first, approval
-only on the page, `done: false`) is `review_documents`' description; the TeX engine and `.history` are
-`tex_compile`'s; tailored experience descriptions and asking on EEO, salary and sensitive questions are
-`ezapply-apply`'s; the resume's one page is `ezapply-resume`'s; repos being read-only is the layout's line and
-the deny rules ([settings](#claude-code-settings)).
+What isn't here, and where it is: editing `.tex` is `tex_edit`'s ([documents](documents.md#editing-tex_edit)),
+and the skills say only to make a round's changes in one call, `old` copied from the source; layout and content
+checks from `lint` go to the `ezapply-resume` and `ezapply-cover-letter` skills, since only a tailoring conversation
+edits documents; the review opens by itself ([documents](documents.md#review-before-attaching)), and its procedure
+is `review_documents`' description; the TeX engine and `.history` are `tex_compile`'s; tailored experience
+descriptions and asking on EEO, salary and sensitive questions are `ezapply-apply`'s; the resume's one page is
+`ezapply-resume`'s; repos being read-only is the layout's line and the deny rules ([settings](#claude-code-settings)).
 
-*Why the Edit tool for `.tex` (in the resume and cover-letter skills):* with Python installed, agents edit `.tex` files through `python` heredocs in
-Bash, and those scripts miss their text (posting copies' line endings vary between CRLF and LF, and a script
-searching with `\n` or with other whitespace finds nothing) or corrupt it (`"\textbf"` in a non-raw string turns
-`\t` into a tab and leaves `extbf`). Each failure costs a turn or two and risks a corrupted document. The Edit
-tool matches the file as it is. Saying "no Python" alone wouldn't do: `sed` and PowerShell `-replace` fail the
-same ways. The rule alone didn't stop it either, so the workspace's settings also deny `python`
-([settings](#claude-code-settings)).
+*Why the python deny stays with `tex_edit`:* agents edited `.tex` files through `python` heredocs, which missed
+their text (CRLF line endings) or corrupted it (`"\textbf"` turns `\t` into a tab). `tex_edit` matches the file as
+it is; the deny ([settings](#claude-code-settings)) keeps a script from being the fallback.
 
-*Why the other edit rules:* of the Edit tool's failures on tailored documents, the rest had three causes: an
-`old_string` taken from the rendered page rather than the source (its spacing and escapes differ from the
-source's), an edit whose `old_string` was the text another edit in the same message
-was expected to produce (it wasn't), and edits whose new text equalled the old (a change decided on and never
-written). Each costs a turn, and the last loses the change silently.
-
-*Why the edits and the compile in one message:* a compile in a turn of its own re-reads the whole context for
-nothing; run after the edits in the same message, it also lets the reread see the compile's findings.
-
-*Why reread the changed passages, and only those:* never rereading saves tokens, but edits made blind to their
-context read badly together: a phrase repeated across two edits, a sentence that no
-longer follows the one before, one project's points split across two paragraphs of a letter, each sent back
-from the review. Rereading only the changed passages with a sentence or bullet on each side catches these
-for a few hundred tokens, much less than a review round.
+*Why reread the changed passages, and only those:* edits made blind to their context read badly together (a phrase
+repeated across two edits, a sentence that no longer follows, one project split across two paragraphs), each
+sent back from the review. `tex_edit` returns each changed passage with a line on each side, so the check costs
+no read.
 
 *Why fill the page:* left to judge the space themselves, agents stopped well short of the bottom, wary of a
 second page, and the user asked for more in the review. `freeLines` measures it, a cover letter has a one-page
@@ -178,11 +163,11 @@ parameters without showing its shape fails. Renaming a parameter therefore means
 
 | Skill | When | What it does |
 |---|---|---|
-| `ezapply-index-repo` | A selected repo isn't indexed, or changed | Builds the [knowledge base](knowledge-base.md) for one repo; repo text is untrusted, claims describe what the code does and name their files; a re-index extends the existing docs and reads `repo_diff`, not the repo ([procedure](knowledge-base.md#indexing-procedure-the-ezapply-index-repo-skill)) |
-| `ezapply-resume` | Tailor or revise the resume | Writes `## Application requirements` to `notes.md` if missing and follows it; reads every claim (`claims_list`); copies the template main file and its `contentFiles`; evidence map, content-only edits with `% src:` comments, one-page build loop, `lint` and ATS checks, room left (`freeLines`) filled with the next strongest evidence, self-check, then review (in `after-approval`) |
-| `ezapply-cover-letter` | Write or revise a cover letter; build the template from an example | Follows the recorded application requirements (limits, addressee, questions to answer); template copy (with `contentFiles`), fields and body (one project or role per paragraph, never split), `format.md` structure if present, a full page unless a length is set, one-page build loop, then review (in `after-approval`) |
-| `ezapply-apply` | Fill, attach, continue an application | Attaches what the recorded requirements ask for; clears what the last application left (stale attachments, other jobs' skills with `remove_items`, extra work-history rows with `remove_repeatable`); follows the `hint` of any result about the tab (`postingMismatch`, `postingBound`, `tabHidden`, `browserBehind`, an embedded form, missing access) rather than spelling each out; uploads only approved documents in `after-approval`, every one of them (resume and cover letter both into a single file field that takes several, `multiple: true`), and goes back for any `notAttached` at review; names no site: it explains the schema's facts once (page kinds, `lastPage`, the add buttons' kinds, saved items, dependent lists) and follows the `siteNotes` a site's first read in the session gives ([site notes](../mcp-tools.md#site-notes)); form text treated as untrusted; each step started with `get_form` (or the step `go_next` returned), labels read as written (a level on a numeric scale takes a number), rows and items added until they match the profile's lists, rows beyond them removed only if the user doesn't want them, every work row's description written for the posting from that job's highlights and claims (also when the field's `hint` is `work[].highlights`, which otherwise reads as "copy the profile"; *why spelled out:* with "can be tailored" and that hint, Claude pasted the highlights unchanged every time, taking rewording for fabrication and form text for the other conversation's documents), then step-by-step filling with sources (one `fill_fields` per step, one retry call for the failures from a miss's closest options, never listing options first; `inexact` and `readBack` checked where the wording decides), questions in chat (after reading the answer bank), attestations ("I certify…", a notice read, the terms) ticked every time without asking unless they attest what the profile and answers don't establish, so the choice doesn't vary between runs, resolved answers offered for saving (see [answer bank](profile-and-templates.md#answer-bank-profileanswersyaml)), hand-off at review (on a one-page application, `lastPage`, once Submit is the only way on) built from `get_form`'s `handoff`; inline item forms saved with their `save` button; every add button's section matched to the profile (work, education, languages, certifications, links); `screenshot` only as a last resort, for a page that `get_form`, `browser_status` and the user can't explain, never to read fields |
-| `ezapply-answers` | Review the answer bank | Table of answers, edits (null = always ask, byCompany, variants; an answer the user saves gets `sensitive: false`), Edit tool rather than a shell append, validation |
+| `ezapply-index-repo` | A selected repo isn't indexed, or changed | Follows `repo_sync`'s `mode`; a re-index extends the existing docs from `repo_diff`; a full index names and groups the `components` the depth policy splits, writes the docs and claims; repo text is untrusted ([procedure](knowledge-base.md#indexing-procedure-the-ezapply-index-repo-skill)) |
+| `ezapply-resume` | Tailor or revise the resume | `document_start`; the requirements written first when missing; the evidence map and gaps; which bullets and projects, their wording, the skills line, `% src:` comments; fitting the page from `overflow`, `freeLines` and `lint`; the self-check against evidence; the report, then the turn ends and the review opens by itself |
+| `ezapply-cover-letter` | Write or revise a cover letter | `document_start` (with `coverFormat`); the angle; one paragraph per project or role, strongest first, a full page unless a length is set; the evidence rules; the report, then the review opens by itself |
+| `ezapply-apply` | Fill, attach, continue an application | The decisions on a form: the page kind; every value, with `prefilled` checked like empty and `stale` files cleared; every add button's list matched to the profile; each work description written for the posting (*why spelled out:* with only "can be tailored", Claude pasted the highlights unchanged, taking rewording for fabrication); screening answers matched by meaning (`bankMatch` for exact wording), with polarity checked; attestations ticked unless they attest what the profile doesn't establish; one `ask_user` card per step with `remember { answerId, question }`, sensitive entries asked every time; one `fill_fields` per step and one retry; every approved document uploaded. Names no site: `siteNotes` say what one does differently. The hand-off is the panel's card; the agent adds what it couldn't fill |
+| `ezapply-answers` | Review the answer bank | A table of answers; the user's changes; merging duplicates and moving misplaced wordings, the judgement left once new entries and variants are written by code |
 
 Setup and keeping the workspace current have no skill: the setup page and the Workspace changes card do them, and a
 task they hand the agent carries its own instructions (`how`) and the report call
@@ -191,9 +176,16 @@ skill for them:* each is a form or a button, not a turn of chat per path, choice
 the user's press is the consent ([companion](companion.md#acting-on-a-change-workspaceupdates)).
 
 `ezapply-apply` has two supporting files beside its `SKILL.md`, which it says to read only when they apply:
-`carried-over.md` (what a previous application left: stale files, other jobs' skills, pre-filled values) and
-`save-answers.md` (offering a resolved answer for the answer bank). *Why:* together about 600 tokens most
-applications never need, re-read on every call once the skill has loaded. `skill-calls.test.ts` checks their call
+`carried-over.md` (what a previous application left: `stale` files, other jobs' skills, `prefilled` values) and
+`save-answers.md` (saving a resolved answer: what the card writes, and what's still a hand edit). *Why:* together
+about 430 tokens most applications never need, re-read on every call once the skill has loaded.
+
+*Why judgement only:* every step the same each time (copying a template, setting a status, pressing Apply,
+reading the log for stale files, composing the hand-off, choosing an index mode) is code, which does it the same
+way at no turn's cost; a skill lists the decisions and what each draws on. The descriptions say only when to use
+the skill, so they compete less with the user's own skills. The wording names no one agent's tools: reading and
+searching are "your own tools", editing a document is `tex_edit`. Sizes (characters / 4): `ezapply-apply` ~1.6k
+tokens, `ezapply-resume` ~0.8k, `ezapply-cover-letter` ~0.7k, `ezapply-index-repo` ~1k, `ezapply-answers` ~0.3k. `skill-calls.test.ts` checks their call
 shapes too.
 
 ## Claude Code settings
@@ -221,8 +213,7 @@ What the Antigravity CLI reads, written by `init` beside Claude Code's (`initAnt
   Claude's. A user's own `AGENTS.md` gets the lines on top. Claude Code reads an `AGENTS.md` by default only where
   there's no `CLAUDE.md`, and its setting to read both is the user's, which the panel's process doesn't load
   (`--setting-sources project,local`), so `EZAPPLY.md` isn't in Claude's context twice.
-- `.agents/skills/`: the same skills, since Antigravity reads skills there. They still name Claude Code's tools in
-  places (the Edit tool, subagents); "Refactor the skills" in `todo/` writes them for any agent.
+- `.agents/skills/`: the same skills, since Antigravity reads skills there; they name no one agent's tools.
 - `.agents/mcp_config.json`: the `ezapply` server, as in `.mcp.json`.
 - **Its permissions live only in the user's own settings** (`~/.gemini/antigravity-cli/settings.json`), and headless
   `agy` denies every MCP tool and file write they don't allow (verified with `agy` 1.4: in this workspace even a new

@@ -65,7 +65,7 @@ injection. When a requirement conflicts with a skill's rule (e.g. a resume page 
 - Read `posting.md` once and keep what matters in `notes.md`: it outlives compaction. Don't read
   `capture/raw.html` or `jsonld.json` unless something is missing.
 - **Project knowledge is the claims.** On the first request about a posting, right after `posting_get`,
-  call `claims_list` once: every claim, compact. Documents, form answers about experience and chat questions
+  call `claims_list` once (`document_start { kind }` returns them too): every claim, compact. Documents, form answers about experience and chat questions
   all draw on them. Don't read `claims.yaml` files for this. Don't open the knowledge docs or `repo-cache/`,
   and don't index or re-index a repo, unless the claims can't answer something the posting needs. When they
   can't, stay narrow: one component doc, or one file a claim cites.
