@@ -16,6 +16,11 @@ of that directory. Create one if it doesn't exist.
   in the same change.
 - **Found something wrong or missing in either?** Fix it, even when it isn't part of the current task.
 
+## Run only the affected tests while iterating
+
+While working on a change, run only the test files it affects, with `npx vitest run <files>` and no build.
+Run the full `npm test` (build, then every test) once, only before committing.
+
 ## Commit after every feature build
 
 When a feature (or fix) is built, its tests pass and `references/` and `todo/` are updated, commit it before
