@@ -39,9 +39,10 @@ drivers for its own framework's widgets.
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
 remote code, and whatever touches a form should be reviewed and tested.
 
-**No generic definition.** There's no "plain HTML" definition that would run on any site: page kinds and the
-submit test would be guesses there, and a guess about Submit is the one this project can't make. A site gets a
-definition built from its own pages ([building adapters](../building-adapters.md)).
+**A site's own definition, and one for plain forms.** A site gets a definition built from its own pages
+([building adapters](../building-adapters.md)). The one "plain HTML" definition, for an employer's own form, runs
+only where a call names the tab and no site claims it, never by detection, and its submit test errs wide: there,
+a guess about Submit can only block a press ([employer's own forms](sites.md#employers-own-forms-generic)).
 
 **No globals.** Event, observer, `File`, `DataTransfer` and element-prototype constructors come from the
 element's own window (`win(node)`). The engine and drivers run the same in the page, in a jsdom test
@@ -130,6 +131,9 @@ so a loose pick is seen, and nothing fills without the model ([status](../status
 | `selectDriver({ settled? })` | A native `<select>`; an option with an empty value ("Select...") is the placeholder, not a choice. `settled` (Phenom): for a React list that puts the old value back at once and takes the new one a moment later, set it past React's tracker and wait for the read-back, without calling React's handler (which by then reads the old value) |
 | `radioDriver({ label?, fallback? })`, `checkboxDriver({ fallback? })`, `checkboxGroupDriver({ label?, fallback? })` | By their own labels (`choiceLabel`, or the site's `label`). When pressing the input didn't change it, `fallback` says what's next: its label takes the click (a hidden input; the default), React's `onChange` gets the state wanted (`"react"`, Workday), or nothing (`"none"`, Oracle's checkboxes). The group fills exactly the options named and removes some |
 | `dateInputDriver()` | Native `date` and `month` inputs, `YYYY-MM-DD` or `YYYY-MM` |
+
+The text, select, checkbox and date drivers take the control itself as the container as well as an element
+holding it, so a definition that finds bare controls (the generic one) needs no wrapper for each.
 | `monthPickerDriver()` (`datepicker.ts`) | A react-datepicker that picks a month (`MM/YYYY`; date parts `MM`, `YYYY`), driven through its calendar because its input takes no typing: opened from the input, the year chosen from the header's list (else stepped to with its arrows), the month pressed. A year the list lacks is refused with the years on offer, a disabled month as outside the dates the page allows |
 | `reactSelectDriver()` (`react-select.ts`) | react-select, through its own props ([below](#react-select-through-its-props)) |
 | `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
@@ -295,7 +299,8 @@ its hooks come off after 15 minutes regardless.
   its `aria-label`) begins with "Submit". Phenom goes by
   the words alone, since its Next is a `type=submit` button too; Dayforce by its Submit's hook and the words, since
   its forms' Update buttons are `type=submit`; SuccessFactors by Apply's hook (`_submitBtn`) and the words "Apply" or
-  "Submit". On a one-page
+  "Submit"; the generic definition broadly, the form element included
+  ([employer's own forms](sites.md#employers-own-forms-generic)). On a one-page
   site Submit sits beside every field, so the guard's Enter case matters as much as the click.
 - The conformance test checks, for every registered site, that the guard blocks a synthetic click and Enter on
   its Submit and that `next` doesn't press it.

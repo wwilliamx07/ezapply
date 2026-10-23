@@ -9,7 +9,8 @@ description: Fill out the job application on a supported application site for th
 for workarounds; the user presses Submit.
 
 The form tools work the same way on every supported site. `browser_status` lists each tab's `site`, and `get_form`
-says which in `adapter` (`generic` is a page of none of them).
+says which in `adapter`. When the application is on the employer's own page (its tab's `site` is `generic`, with no
+form `frames`), pass that tab's `tabId` to every form call: it's read as a plain HTML form (`adapter: generic`).
 
 **Site notes.** The first `get_form` on a site's page in this session carries `siteNotes`: what that site does
 differently. Read them before acting and follow them for this application; where they differ from this skill, they

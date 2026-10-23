@@ -5,15 +5,16 @@ import type { SiteDefinition } from "@ezapply/engine/types";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { installDomShims } from "../../engine/test/shims.js";
-import { SITE_DEFINITIONS } from "../src/definitions.js";
+import { GENERIC_DEFINITION, SITE_DEFINITIONS } from "../src/definitions.js";
 import { SITE_NOTES } from "../src/notes.js";
 import { POSTING_READERS } from "../src/readers.js";
-import { FORM_SITE_IDS, SITES } from "../src/registry.js";
+import { FORM_SITE_IDS, GENERIC, SITES } from "../src/registry.js";
 import { type ConformancePage, savedPage } from "./adapters.js";
 
 /**
  * What every site must do, checked on a page of each: its fixture or a saved live page (`<site>/test/page.ts`). A new
- * site gets its directory, its entry in each list and its page, and passes the same checks before it's used.
+ * site gets its directory, its entry in each list and its page, and passes the same checks before it's used. The
+ * generic definition (an employer's own form, `GENERIC`) has a directory and passes them too, outside the registry.
  */
 
 const SRC = join(import.meta.dirname, "..", "src");
@@ -46,13 +47,13 @@ const SAVED: Record<string, string[]> = Object.fromEntries(
 describe("the registry, the lists and the directories", () => {
   const sorted = (ids: Iterable<string>) => [...ids].sort();
 
-  it("has a directory for every registered site, and no directory that isn't one", () => {
-    expect(sorted(dirs)).toEqual(sorted(FORM_SITE_IDS));
+  it("has a directory for every registered site and the generic definition, and no directory that isn't one", () => {
+    expect(sorted(dirs)).toEqual(sorted([...FORM_SITE_IDS, GENERIC.id]));
   });
 
   it("lists every site on each side: its definition, its notes, its reader where it has one", () => {
     expect(sorted(Object.keys(SITE_DEFINITIONS))).toEqual(sorted(FORM_SITE_IDS));
-    expect(sorted(Object.keys(SITE_NOTES))).toEqual(sorted(FORM_SITE_IDS));
+    expect(sorted(Object.keys(SITE_NOTES))).toEqual(sorted([...FORM_SITE_IDS, GENERIC.id]));
     expect(sorted(Object.keys(POSTING_READERS))).toEqual(sorted(dirs.filter((id) => has(id, "reader.ts"))));
   });
 
@@ -109,8 +110,12 @@ describe("telling a site by its page (signatures)", () => {
   });
 });
 
-describe.each(FORM_SITE_IDS)("site %s", (id) => {
-  const site: SiteDefinition = SITE_DEFINITIONS[id];
+const DEFINITIONS: [string, SiteDefinition][] = [
+  ...FORM_SITE_IDS.map((id): [string, SiteDefinition] => [id, SITE_DEFINITIONS[id]]),
+  [GENERIC.id, GENERIC_DEFINITION],
+];
+
+describe.each(DEFINITIONS)("site %s", (id, site) => {
   const page = PAGES[id] as { build: (doc: Document) => void; url: string };
   let doc: Document;
   /** A window of its own per page: each site's adapter (and its submit guard) on a page of that site only. */

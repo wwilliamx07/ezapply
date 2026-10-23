@@ -9,7 +9,7 @@ import {
   type SiteId,
   WithDebug,
 } from "@ezapply/protocol";
-import { isFormSite, SITES, siteInfo } from "@ezapply/sites";
+import { GENERIC, isFormSite, SITES, siteInfo } from "@ezapply/sites";
 import { ext } from "../ext.js";
 import { askForAccess } from "./access.js";
 import { captureAttached, emulateFocus } from "./emulation.js";
@@ -20,9 +20,12 @@ type FormHandlers = Omit<Handlers<typeof ExtensionApi>, "browser.status" | "pane
 /** The sites the form tools work on, as the user knows them. */
 const SUPPORTED = SITES.map((s) => s.name).join(", ");
 
-/** A site's adapter bundle (`<site>-main.js`, built per registry entry) and the name it defines on the window. */
+/**
+ * A site's adapter bundle (`<site>-main.js`, built per registry entry and for the generic definition) and the name
+ * it defines on the window.
+ */
 const adapterOf = (site: SiteId) =>
-  siteInfo(site) ? { file: `${site}-main.js`, global: `__ezapply_${site}` } : undefined;
+  siteInfo(site) || site === GENERIC.id ? { file: `${site}-main.js`, global: `__ezapply_${site}` } : undefined;
 
 /**
  * Pick the tab to act on: explicit id, else the focused window's active application tab (of a registry site, by its
@@ -58,18 +61,29 @@ interface FormTarget {
   url: string;
 }
 
-/** The tab's own page, when it's a form site's: by its body, read once the extension has access to it. */
-async function requireFormSite(tab: chrome.tabs.Tab): Promise<FormTarget> {
+/** A form call on a tab that holds no application ezapply can read. */
+const notApplication = (tabId: number | undefined, url: string | undefined) =>
+  new EzError(
+    ErrorCode.BadRequest,
+    `Tab ${tabId} is not an application page of a supported site (${url ?? "unknown"}).`,
+    `The form tools support ${SUPPORTED}, and an employer's own application form when the call names its tab.`,
+  );
+
+/**
+ * The tab's own page, when it's a form site's: by its body, read once the extension has access to it. A call that
+ * named the tab (`asked`) on a web page no registry site claims, with no form site in its frames either (an embedded
+ * board always wins), gets the generic adapter: the employer's own form (`GENERIC`). Never without a tab named: almost
+ * any page has a form, so the generic adapter is never chosen by looking.
+ */
+async function requireFormSite(tab: chrome.tabs.Tab, asked: boolean): Promise<FormTarget> {
   if (tab.id && tab.url) await requireAccess(tab.url);
   const site = await tabSite(tab);
-  if (!tab.id || !tab.url || !isFormSite(site)) {
-    throw new EzError(
-      ErrorCode.BadRequest,
-      `Tab ${tab.id} is not an application page of a supported site (${tab.url ?? "unknown"}).`,
-      `The form tools support ${SUPPORTED}.`,
-    );
+  if (!tab.id || !tab.url) throw notApplication(tab.id, tab.url);
+  if (isFormSite(site)) return { tabId: tab.id, site, url: tab.url };
+  if (asked && site === GENERIC.id && /^https?:/i.test(tab.url) && !(await tabSites(tab)).frames.length) {
+    return { tabId: tab.id, site: GENERIC.id, url: tab.url };
   }
-  return { tabId: tab.id, site, url: tab.url };
+  throw notApplication(tab.id, tab.url);
 }
 
 /**
@@ -208,13 +222,18 @@ function mapResult<T, R>(out: T | WithDebug<T>, fn: (r: T) => R): R | WithDebug<
 /** The tab's own page, or the frame asked for (`frameId` 0 is the tab's own page), with access to it checked. */
 const target = async ({ tabId, frameId }: { tabId?: number; frameId?: number }) => {
   const tab = await resolveTab(tabId);
-  return frameId ? requireFormFrame(tab, frameId) : requireFormSite(tab);
+  return frameId ? requireFormFrame(tab, frameId) : requireFormSite(tab, tabId !== undefined);
 };
 
 export const formHandlers: FormHandlers = {
   "form.get": async ({ timing, debug, ...at }) => {
     const t = await target(at);
     const out = await callAdapter<Record<string, unknown>>(t, "getForm", [], { timing, debug });
+    // The generic adapter reads any page: one with no application form on it (nor a confirmation) isn't one.
+    const schema = (out instanceof WithDebug ? out.result : out) as { pageKind?: string; sections?: unknown[] };
+    if (t.site === GENERIC.id && schema.pageKind === "unknown" && !schema.sections?.length) {
+      throw notApplication(t.tabId, t.url);
+    }
     return mapResult(
       out,
       (schema) => ({ ...schema, tabId: t.tabId, ...(t.frameId !== undefined ? { frameId: t.frameId } : {}) }) as never,
@@ -284,6 +303,8 @@ export async function confirmationIn(tabId: number, host: string): Promise<strin
     ...(isFormSite(site) ? [{ tabId, site, url: tab.url }] : []),
     ...frames.map((f) => ({ tabId, frameId: f.frameId, site: f.site, url: f.url })),
   ];
+  // An employer's own form was watched by the generic adapter: its confirmation is read the same way.
+  if (!places.length && site === GENERIC.id) places.push({ tabId, site, url: tab.url });
   for (const place of places) {
     const url = new URL(place.url);
     if (url.host !== host || !(await ext.permissions.contains({ origins: [`${url.origin}/*`] }))) continue;

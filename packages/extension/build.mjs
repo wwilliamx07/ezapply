@@ -3,7 +3,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOST_PERMISSIONS } from "@ezapply/protocol/sites";
-import { SITES } from "@ezapply/sites";
+import { GENERIC, SITES } from "@ezapply/sites";
 import { build } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -55,7 +55,8 @@ await build({
 // change reaches tabs that hold an older copy without anyone remembering to bump a number. The placeholder has the
 // hash's length, keeping the source map exact.
 const VERSION_PLACEHOLDER = "@ADAPTER_VER"; // 12 characters, like the hash
-for (const { id: site } of SITES) {
+// The generic adapter (an employer's own form) is built beside them, though no list of sites names it.
+for (const { id: site } of [...SITES, GENERIC]) {
   const adapter = await build({
     ...common,
     entryPoints: [join(root, `../sites/src/${site}/definition/main.ts`)],

@@ -251,14 +251,56 @@ describe("telling a page's site", () => {
     expect(files).toContainEqual(["phenom-main.js"]);
   });
 
-  it("refuses a tab whose page shows no form site, and whose URL is none", async () => {
+  /** A form read on a page of no site, the generic adapter answering with `schema`. */
+  const onNoSite = async (schema: Record<string, unknown>) => {
     const { formHandlers } = await import("../src/background/forms.js");
-    chromeStub.tabs.get.mockResolvedValue({ id: 5, windowId: 1, url: POSTING, active: true });
-    pagesShow({ 0: null });
-    await expect(formHandlers["form.get"]({ tabId: 5 })).rejects.toMatchObject({
-      code: "bad_request",
-      message: expect.stringMatching(/not an application page of a supported site/),
-    });
+    const tab = { id: 5, windowId: 1, url: POSTING, active: true };
+    chromeStub.tabs.get.mockResolvedValue(tab);
+    chromeStub.tabs.query.mockResolvedValue([tab]);
+    pagesShow({ 0: null }, [{ result: { __ok: { adapter: "generic", url: POSTING, ...schema } } }]);
+    return formHandlers;
+  };
+  const injected = () => chromeStub.scripting.executeScript.mock.calls.map((c) => (c[0] as { files?: string[] }).files);
+  const NOT_APPLICATION = { code: "bad_request", message: expect.stringMatching(/not an application page/) };
+
+  it("reads a named tab whose page shows no site with the generic adapter (an employer's own form)", async () => {
+    const step = { pageKind: "step", sections: [{ id: "application", title: "Application", fields: [] }] };
+    const handlers = await onNoSite(step);
+    expect(await handlers["form.get"]({ tabId: 5 })).toMatchObject({ adapter: "generic", tabId: 5 });
+    expect(injected()).toContainEqual(["generic-main.js"]);
+    // Its confirmation page has no form, and still counts.
+    const done = await onNoSite({ pageKind: "confirmation", sections: [] });
+    expect(await done["form.get"]({ tabId: 5 })).toMatchObject({ pageKind: "confirmation" });
+  });
+
+  it("refuses a named tab of no site whose page holds no application form", async () => {
+    const handlers = await onNoSite({ pageKind: "unknown", sections: [] });
+    await expect(handlers["form.get"]({ tabId: 5 })).rejects.toMatchObject(NOT_APPLICATION);
+  });
+
+  it("never chooses a page of no site itself: only a call naming its tab gets the generic adapter", async () => {
+    const handlers = await onNoSite({ pageKind: "step", sections: [{ id: "a", title: "A", fields: [] }] });
+    await expect(handlers["form.get"]({})).rejects.toMatchObject({ message: /No application tab is open/ });
+    expect(injected()).not.toContainEqual(["generic-main.js"]);
+  });
+
+  it("sees the confirmation of an employer's own form after the user's Submit, with the generic adapter", async () => {
+    await onNoSite({ pageKind: "step", sections: [] });
+    const { confirmationIn } = await import("../src/background/forms.js");
+    pagesShow({ 0: null }, [{ result: { __ok: "confirmation" } }]);
+    expect(await confirmationIn(5, "careers.example.com")).toBe(POSTING);
+    expect(injected()).toContainEqual(["generic-main.js"]);
+  });
+
+  it("leaves a page embedding a form site's frame to that site: no generic adapter on the page around it", async () => {
+    const handlers = await onNoSite({ pageKind: "step", sections: [{ id: "a", title: "A", fields: [] }] });
+    const EMBED = "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1000001";
+    chromeStub.webNavigation.getAllFrames.mockResolvedValueOnce([
+      { frameId: 0, parentFrameId: -1, url: POSTING },
+      { frameId: 7, parentFrameId: 0, url: EMBED },
+    ]);
+    await expect(handlers["form.get"]({ tabId: 5 })).rejects.toMatchObject(NOT_APPLICATION);
+    expect(injected()).not.toContainEqual(["generic-main.js"]);
   });
 
   it("sends the site the posting's page shows with its capture", async () => {

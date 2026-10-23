@@ -23,3 +23,6 @@ export const SITE_DEFINITIONS: Record<FormSiteId, SiteDefinition> = {
   dayforce,
   successfactors,
 };
+
+/** The definition for an application on an employer's own page (`GENERIC`), outside the registry's list. */
+export { generic as GENERIC_DEFINITION } from "./generic/definition/site.js";

@@ -187,12 +187,13 @@ export function radioDriver(opts: ChoiceOptions = {}): WidgetDriver {
   };
 }
 
-/** A single checkbox (an agreement): true ticks it, false unticks it. */
+/** A single checkbox (an agreement), or the container holding it: true ticks it, false unticks it. */
 export function checkboxDriver(opts: Pick<ChoiceOptions, "fallback"> = {}): WidgetDriver {
-  const box = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  const sel = 'input[type="checkbox"]';
+  const box = (c: HTMLElement) => (c.matches(sel) ? (c as HTMLInputElement) : c.querySelector<HTMLInputElement>(sel));
   return {
     kind: "checkbox",
-    is: (c) => c.querySelectorAll('input[type="checkbox"]').length === 1,
+    is: (c) => c.matches(sel) || c.querySelectorAll(sel).length === 1,
     value: (c) => {
       const b = box(c);
       return Boolean(b && checked(b));
@@ -256,9 +257,10 @@ export function checkboxGroupDriver(opts: ChoiceOptions = {}): WidgetDriver {
   };
 }
 
-/** A native date or month input: takes `YYYY-MM-DD` or `YYYY-MM`. */
+/** A native date or month input, or the container holding it: takes `YYYY-MM-DD` or `YYYY-MM`. */
 export function dateInputDriver(): WidgetDriver {
-  const input = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[type="date"], input[type="month"]');
+  const sel = 'input[type="date"], input[type="month"]';
+  const input = (c: HTMLElement) => (c.matches(sel) ? (c as HTMLInputElement) : c.querySelector<HTMLInputElement>(sel));
   return {
     kind: "date",
     is: (c) => Boolean(input(c)),
