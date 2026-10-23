@@ -16,7 +16,7 @@ export type TexInstallPlan =
 export function texInstallPlan(platform: NodeJS.Platform, has: (bin: string) => boolean): TexInstallPlan | null {
   if (platform === "win32") {
     if (!has("winget")) return null;
-    const [program, ...args] = installCommand("tex").split(" ") as [string, ...string[]];
+    const [program, ...args] = installCommand("tex", platform).split(" ") as [string, ...string[]];
     // MiKTeX fetches the packages a document needs; without this it asks, in a window nobody sees.
     return {
       how: "run",

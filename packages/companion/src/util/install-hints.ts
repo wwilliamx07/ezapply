@@ -1,10 +1,10 @@
 type InstallableTool = "tex" | "git" | "ghostscript";
 
-/** The command (or instruction) that installs a tool on this OS, for people: `ezapply doctor` prints it. */
-export function installCommand(tool: InstallableTool): string {
+/** The command (or instruction) that installs a tool on `platform` (this OS by default), for people: `ezapply doctor` prints it. */
+export function installCommand(tool: InstallableTool, platform: NodeJS.Platform = process.platform): string {
   const winget = (id: string) => `winget install --id ${id} -e --accept-source-agreements --accept-package-agreements`;
-  const win = process.platform === "win32";
-  const mac = process.platform === "darwin";
+  const win = platform === "win32";
+  const mac = platform === "darwin";
   switch (tool) {
     case "tex":
       return win

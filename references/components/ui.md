@@ -408,7 +408,9 @@ Workspace changes card sets them: [companion](companion.md#acting-on-a-change-wo
 template the user imported, whose layout ezapply doesn't know), `installTex`, `change { ids, change: update | later | done, hours?, kind?, pick?, confirm? }` (the Changes list's
 buttons, as `panel.workspaceChange` with the key `setup`), `profile { value }`, `answers { answers }`, `preferences { attachMode, tone, emphasis,
 neverMention, targets, coverLetters }`, `deleteLibrary { name }` (only a file the step lists, by its exact name, so no
-name reaches outside `library/`), `finish`.
+name reaches outside `library/`), `finish`. `import`, `compile` and `coverIdentity` end with a build of the template,
+and a build that can't run (no TeX engine yet) comes back as a failed build with its hint, not a refused action, so
+the import or the name and contact it followed stay done and the page says why it didn't build.
 
 ### The agent's side: tasks
 What needs judgment goes to the agent as a task: `index-repos`, `fix-template-build`,

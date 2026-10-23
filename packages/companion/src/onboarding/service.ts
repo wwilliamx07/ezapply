@@ -469,7 +469,14 @@ export class OnboardingService {
     const s = this.services();
     const main = await s.templates.templateMain(kind);
     if (!main) return { ok: false, hint: "No template yet." };
-    const r = await s.documents.compile(main);
+    // A build that can't start (no TeX engine, say) is a failed build, not a failed action: what came before it stays done.
+    const r = await s.documents.compile(main).catch((err: unknown) => {
+      if (!(err instanceof EzError)) throw err;
+      return err;
+    });
+    if (r instanceof EzError) {
+      return { ok: false, errors: [r.message], ...(r.hint ? { hint: r.hint } : {}), main: this.rel(main) };
+    }
     return {
       ok: r.ok,
       ...(r.pdf ? { pdf: this.rel(r.pdf) } : {}),
