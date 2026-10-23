@@ -197,6 +197,13 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
   postings.sessionPostings(
     async (session) => postingConversation((await agent.conversationOf(session)) ?? "")?.postingId,
   );
+  // An application's hand-off is a card in the conversation that filled it (a panel one; a terminal chat has none).
+  forms.onHandoff((_posting, session, handoff) => {
+    if (!session) return;
+    void agent.conversationOf(session).then((key) => {
+      if (key) agent.post(key, { kind: "handoff", at: new Date().toISOString(), ...handoff });
+    });
+  });
 
   const onboarding = new OnboardingService(
     () => services,

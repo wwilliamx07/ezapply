@@ -10,5 +10,6 @@ as the hand-off or the question. Saved answers are for the next form, so the use
 - An answer the user tells you to save is meant to be used: set `sensitive: false` unless they say to keep asking.
 - Don't add `source`: it names a profile path an answer is computed from, not who gave it.
 - Edit `answers.yaml` with the Edit tool (not a shell append), then `answers_check`.
-- On an `ask_user` card, `remember: { answerId }` makes this offer: what the user saves comes back in
-  `savedToAnswerBank`, and `toSave` lists the answers the bank has no entry for yet, to add as above.
+- On an `ask_user` card, `remember: { answerId, question }` (question: the form's wording) makes this offer, and
+  ezapply writes what the user saves, a new entry included (`savedToAnswerBank`). Edit by hand only what that
+  can't: an option under `byCompany`, or `sensitive`.

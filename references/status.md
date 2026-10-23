@@ -14,6 +14,10 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   ([documents](components/documents.md#review-before-attaching)).
 - **The panel's buttons name their skill** (`/ezapply-resume …`), which Claude Code and Antigravity both run as the
   skill, so the agent doesn't match the words to one ([ui](components/ui.md#the-side-panel-srcpanel)).
+- **Code does the fixed parts of applying:** `get_form` presses a posting's Apply, marks `prefilled`, `stale` and
+  `bankMatch` fields, refuses a sensitive answer the user didn't give for the posting and a bundle's parts; the
+  hand-off is a card built from the log, and a saved answer is written by code. The agent kept missing them, or
+  spent turns on them ([forms](mcp-tools.md#forms)).
 - **The setup page installs TeX and fills the cover's name and contact itself.** Both are the same every time,
   with nothing to judge, so an agent turn added only a wait; the system asks for permission to install
   ([ui](components/ui.md#installing-tex)).

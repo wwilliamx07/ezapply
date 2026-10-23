@@ -23,7 +23,7 @@ import type { PostingsService } from "../postings/service.js";
 import type { ProfileService } from "../profile/service.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
-import { type Handoff, handoff, type LogEvent, stepWarnings } from "./checklist.js";
+import { type Handoff, type HandoffCard, handoff, type LogEvent, stepWarnings } from "./checklist.js";
 import {
   type CallRecord,
   DebugRecorder,
@@ -33,6 +33,7 @@ import {
   stripBulk,
   type Trace,
 } from "./debug.js";
+import { bankIndex, type FieldFacts, markFields } from "./marks.js";
 import {
   type Binding,
   matchPosting,
@@ -189,6 +190,14 @@ export class FormsService {
   private readonly reported = new Map<number, string>();
   /** The sites whose notes each chat session has been given (`siteNotes`); "" for requests naming no session. */
   private readonly notesGiven = new Map<string, Set<string>>();
+  /** Each tab's field labels from its last read (`rememberLabels`). */
+  private readonly labels = new Map<number, Map<string, string>>();
+  private handoffListener: ((postingId: string, session: string | undefined, handoff: HandoffCard) => void) | null =
+    null;
+  /** The hand-off last shown per posting, so a read that changes nothing shows no second card. */
+  private readonly lastHandoff = new Map<string, string>();
+  /** Answer-bank entries the user answered on a card, per posting (`userAnswered`). */
+  private readonly answeredByUser = new Map<string, Set<string>>();
 
   constructor(
     private readonly ws: Workspace,
@@ -201,10 +210,26 @@ export class FormsService {
     this.debug = new DebugRecorder(ws, log);
   }
 
+  /**
+   * Read the page. On a posting's own page (`pageKind: posting`), press its Apply first and read the page that
+   * follows (`pressedApply`): the apply skill did that every time, a turn each. What to do on the next page (a
+   * start choice, a sign-in) stays the agent's.
+   */
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string; session?: string } = {}) {
-    return this.onTab({ tool: "get_form", params: opts }, { tabId: opts.tabId, session: opts.session }, async (t) =>
-      this.view(t, await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000), opts),
-    );
+    return this.onTab({ tool: "get_form", params: opts }, { tabId: opts.tabId, session: opts.session }, async (t) => {
+      const form = await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+      if (form.pageKind !== "posting" || !form.actions.includes("apply")) return this.view(t, form, opts);
+      await this.claim(t);
+      const r = await t.bridge.call(
+        "form.pageAction",
+        { action: "apply", tabId: t.tab.tabId, timing: t.timing },
+        30_000,
+      );
+      await this.logEvent(t, { event: "page-action", action: "apply", ok: r.ok });
+      if (!r.ok) return { ...(await this.view(t, form, opts)), applyFailed: r };
+      const next = await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
+      return { pressedApply: true, ...(await this.view(t, next, opts)) };
+    });
   }
 
   /**
@@ -220,11 +245,14 @@ export class FormsService {
     if (form.pageKind === "review") await this.setStatus(t, "filled");
     if (form.pageKind === "review" || form.lastPage) await this.watchSubmit(t);
     const missing = form.pageKind === "review" ? await this.notAttached(t, "review") : undefined;
-    const checks = await this.checks(t, form);
+    const events = await this.logEvents(t);
+    const checks = await this.checks(t, form, events);
+    if (checks.handoff && t.posting) this.handedOff(t.posting.id, opts.session, checks.handoff, missing?.files);
+    this.rememberLabels(t.tab.tabId, form);
     const siteNotes = this.siteNotes(opts.session, form.adapter);
     return {
       ...(siteNotes ? { siteNotes } : {}),
-      ...leanForm(form, opts),
+      ...markFields(leanForm(form, opts), await this.fieldFacts(t, events)),
       ...(missing ? { notAttached: missing } : {}),
       ...checks,
       ...(t.posting ? { posting: t.posting.id } : {}),
@@ -254,6 +282,50 @@ export class FormsService {
     return notes;
   }
 
+  /** What `markFields` needs: this application's fills and uploads (with a posting credited), and the answer bank. */
+  private async fieldFacts(t: Target, events: LogEvent[]): Promise<FieldFacts> {
+    const answers = await this.profile.answers().catch(() => null);
+    const bank = answers?.exists && answers.valid ? bankIndex(answers.value.entries) : new Map<string, string>();
+    if (!t.posting) return { filled: null, uploaded: new Set(), bank };
+    const filled = new Set(
+      events.filter((e) => e.event === "fill" && e.ok && e.fieldId).map((e) => e.fieldId as string),
+    );
+    const uploaded = new Set(
+      events.filter((e) => e.event === "upload" && e.ok && e.file).map((e) => basename(e.file as string)),
+    );
+    return { filled, uploaded, bank };
+  }
+
+  /** Each field's label as the tab last showed it, so the log (and the hand-off) can name a filled field. */
+  private rememberLabels(tabId: number, form: FormSchema): void {
+    const labels = this.labels.get(tabId) ?? new Map<string, string>();
+    for (const s of form.sections) for (const f of s.fields) labels.set(f.id, f.label);
+    this.labels.set(tabId, labels);
+  }
+
+  /** Called with each application's hand-off, once per change: the panel shows it as a card. */
+  onHandoff(fn: (postingId: string, session: string | undefined, handoff: HandoffCard) => void): void {
+    this.handoffListener = fn;
+  }
+
+  private handedOff(postingId: string, session: string | undefined, h: Handoff, notAttached?: string[]): void {
+    const card: HandoffCard = { ...h, ...(notAttached?.length ? { notAttached } : {}) };
+    const key = JSON.stringify(card);
+    if (this.lastHandoff.get(postingId) === key) return;
+    this.lastHandoff.set(postingId, key);
+    this.handoffListener?.(postingId, session, card);
+  }
+
+  /**
+   * An answer the user gave on an `ask_user` card for an answer-bank entry (the question's `remember`), for this
+   * posting: a sensitive entry is filled only with one (`fill`). In memory, so a restart asks again.
+   */
+  userAnswered(postingId: string, answerId: string): void {
+    const set = this.answeredByUser.get(postingId) ?? new Set<string>();
+    set.add(answerId);
+    this.answeredByUser.set(postingId, set);
+  }
+
   async searchOptions(fieldId: string, query: string, tabId?: number, session?: string) {
     return this.onTab({ tool: "search_options", params: { fieldId, query } }, { tabId, session }, (t) =>
       t.bridge.call("form.searchOptions", { fieldId, query, tabId: t.tab.tabId, timing: t.timing }, 20_000),
@@ -266,7 +338,9 @@ export class FormsService {
     session?: string,
   ): Promise<{ results: FillResult[]; postingBound?: PostingBound; tabHidden?: TabHidden }> {
     return this.onTab({ tool: "fill_fields", params: { fills } }, { tabId, session }, async (t) => {
+      await this.checkSensitive(t, fills);
       await this.claim(t);
+      const labels = this.labels.get(t.tab.tabId);
       const results = await t.bridge.call(
         "form.fill",
         { fills: fills.map(({ fieldId, value }) => ({ fieldId, value })), tabId: t.tab.tabId, timing: t.timing },
@@ -274,9 +348,11 @@ export class FormsService {
       );
       for (const f of fills) {
         const r = results.find((x) => x.fieldId === f.fieldId);
+        const label = labels?.get(f.fieldId);
         await this.logEvent(t, {
           event: "fill",
           fieldId: f.fieldId,
+          ...(label ? { label } : {}),
           value: f.value,
           source: f.source,
           ...(f.answerId ? { answerId: f.answerId } : {}),
@@ -289,6 +365,30 @@ export class FormsService {
         t,
       );
     });
+  }
+
+  /**
+   * Refuse a fill from a `sensitive: true` answer-bank entry unless the user gave it for this application, on a card
+   * (`userAnswered`): the skill's "ask for sensitive answers" rule, which the agent broke by filling the stored
+   * suggestion. Only for a posting credited, since that's what the answers are kept by.
+   */
+  private async checkSensitive(t: Target, fills: { answerId?: string; source: FillSource }[]): Promise<void> {
+    if (!t.posting || !fills.some((f) => f.answerId)) return;
+    const answers = await this.profile.answers().catch(() => null);
+    if (!answers?.exists || !answers.valid) return;
+    const sensitive = new Set(answers.value.entries.filter((e) => e.sensitive).map((e) => e.id));
+    const given = this.answeredByUser.get(t.posting.id) ?? new Set<string>();
+    const unasked = fills
+      .filter((f) => f.answerId && sensitive.has(f.answerId))
+      .filter((f) => f.source !== "user" || !given.has(f.answerId as string))
+      .map((f) => f.answerId as string);
+    if (unasked.length === 0) return;
+    throw new EzError(
+      ErrorCode.BadRequest,
+      `Sensitive, so the user answers it on every application: ${[...new Set(unasked)].join(", ")}. Nothing was filled.`,
+      "Ask on an ask_user card (sensitive: true, remember: { answerId }, the stored answer as proposed), then fill " +
+        "their answer with source user and the answerId.",
+    );
   }
 
   async upload(fieldId: string, path: string, tabId?: number, session?: string) {
@@ -313,6 +413,16 @@ export class FormsService {
       base64: (await readFile(abs)).toString("base64"),
     };
     return this.onTab({ tool: "upload_file", params: { fieldId, path } }, { tabId, session }, async (t) => {
+      // A posting that takes one PDF gets the bundle, never its parts on their own.
+      const own = t.posting ? relative(this.postings.folder(t.posting.id), abs) : "..";
+      if (t.posting?.bundleRequired && /^(resume|cover)\.pdf$/i.test(own)) {
+        throw new EzError(
+          ErrorCode.BadRequest,
+          `This posting takes its documents in one PDF (bundleRequired), so ${own} isn't uploaded on its own.`,
+          "Upload the bundle (bundle_build builds it), or, if the form wants separate files after all, " +
+            "posting_update_meta { bundleRequired: false } first.",
+        );
+      }
       await this.claim(t);
       const result = await t.bridge.call(
         "form.upload",
@@ -426,7 +536,7 @@ export class FormsService {
       if (t.posting) {
         const before = await t.bridge.call("form.get", { tabId: t.tab.tabId, timing: t.timing }, 20_000);
         if (before.pageKind === "step") {
-          leaving = (await this.checks(t, before)).checklist ?? [];
+          leaving = (await this.checks(t, before, await this.logEvents(t))).checklist ?? [];
           await this.logEvent(t, {
             event: "step-check",
             step: before.step?.title,
@@ -798,10 +908,13 @@ export class FormsService {
    * is Submit, also `handoff`, the summary of this application from its log. Only for a posting this tab is
    * credited to, and never failing the call.
    */
-  private async checks(t: Target, form: FormSchema): Promise<{ checklist?: string[]; handoff?: Handoff }> {
+  private async checks(
+    t: Target,
+    form: FormSchema,
+    events: LogEvent[],
+  ): Promise<{ checklist?: string[]; handoff?: Handoff }> {
     if (!t.posting) return {};
     try {
-      const events = await this.logEvents(t);
       const uploaded = new Set(
         events.filter((e) => e.event === "upload" && e.ok && e.file).map((e) => basename(e.file as string)),
       );

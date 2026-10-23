@@ -52,6 +52,32 @@ describe("answer bank", () => {
     await svc.saveAnswers({ age_18_plus: null, gov_official_relationship: null });
   });
 
+  it("remembers a card's answers: the form's wording as a variant, and a new entry for a new question", async () => {
+    const items = [
+      { answerId: "age_18_plus", question: "Are you at least eighteen?", value: "Yes" },
+      { answerId: "Notice period", question: "What is your notice period?", value: "Two weeks" },
+    ];
+    expect(await svc.rememberAnswers(items)).toEqual({
+      ok: true,
+      set: ["age_18_plus", "notice_period"],
+      created: ["notice_period"],
+    });
+    // Again: the entry is found by its id and the wording isn't added twice.
+    await svc.rememberAnswers([{ ...(items[0] as (typeof items)[0]), question: "ARE you at least eighteen" }]);
+    const text = await readFile(join(root, "ws/profile/answers.yaml"), "utf8");
+    expect(text.startsWith("# Screening-question answer bank")).toBe(true);
+    const a = await svc.answers();
+    const entries = a.exists && a.valid ? a.value.entries : [];
+    const age = entries.find((e) => e.id === "age_18_plus");
+    expect(age).toMatchObject({ answer: "Yes" });
+    expect(age?.variants.filter((v) => v === "Are you at least eighteen?")).toHaveLength(1);
+    expect(entries.find((e) => e.id === "notice_period")).toMatchObject({
+      canonical: "What is your notice period?",
+      answer: "Two weeks",
+    });
+    await svc.saveAnswers({ age_18_plus: null, notice_period: null });
+  });
+
   it("answers a question with a profile source from the profile, not as a screening question", async () => {
     await writeFile(
       join(root, "ws/profile/profile.yaml"),

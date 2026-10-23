@@ -156,6 +156,15 @@ export const AnswerEntry = z.object({
 });
 export type AnswerEntry = z.infer<typeof AnswerEntry>;
 
+/** A question's wording without case, punctuation, a required marker or spacing differences. */
+export function normalizeQuestion(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\(required\)|\*/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
 export const AnswersFile = z
   .object({ schemaVersion: z.literal(1), entries: z.array(AnswerEntry) })
   .superRefine((f, ctx) => {

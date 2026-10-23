@@ -6,7 +6,14 @@ import type { Logger } from "../logger.js";
 import { exists, writeFileAtomic } from "../util/fs.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import type { Workspace } from "../workspace/workspace.js";
-import { type AnswerEntry, AnswersFile, missingProfileFields, Profile, ReposFile } from "./schema.js";
+import {
+  type AnswerEntry,
+  AnswersFile,
+  missingProfileFields,
+  normalizeQuestion,
+  Profile,
+  ReposFile,
+} from "./schema.js";
 import { seedAnswers } from "./seed-answers.js";
 
 interface Issue {
@@ -207,6 +214,62 @@ export class ProfileService {
     return { ok: true, set };
   }
 
+  /**
+   * Save answers the user confirmed ("Save for next time" on a card), in place like `saveAnswers`. An entry the
+   * bank has gets the answer, and the form's wording as a variant when it's new; one it hasn't is added, its
+   * question the form's wording (or the card's prompt). Returns the ids saved and the ones created.
+   */
+  rememberAnswers(
+    items: { answerId: string; question: string; value: string }[],
+  ): Promise<{ ok: true; set: string[]; created: string[] } | { ok: false; errors: Issue[] }> {
+    const path = this.ws.path("profile", "answers.yaml");
+    return this.edit(path, async () => {
+      const text = await readFile(path, "utf8").catch(() => null);
+      const doc = parseDocument(text ?? "schemaVersion: 1\nentries: []\n");
+      const entries = doc.toJS()?.entries as AnswerEntry[] | undefined;
+      if (doc.errors.length || !Array.isArray(entries)) {
+        return { ok: false, errors: [{ path: "answers.yaml", message: "profile/answers.yaml can't be read" }] };
+      }
+      const set: string[] = [];
+      const created: string[] = [];
+      for (const item of items) {
+        const value = item.value.trim();
+        if (!value) continue;
+        const i = entries.findIndex((e) => e.id === item.answerId);
+        const e = entries[i];
+        if (e) {
+          // A per-company answer keeps its companies: the confirmed one becomes its default.
+          const at =
+            e.answer && typeof e.answer === "object" ? ["entries", i, "answer", "default"] : ["entries", i, "answer"];
+          doc.setIn(at, value);
+          const known = [e.canonical, ...(e.variants ?? [])].map(normalizeQuestion);
+          if (item.question && !known.includes(normalizeQuestion(item.question))) {
+            e.variants = [...(e.variants ?? []), item.question];
+            doc.setIn(["entries", i, "variants"], doc.createNode(e.variants));
+          }
+          set.push(e.id);
+        } else {
+          const id = answerIdOf(item.answerId);
+          if (entries.some((x) => x.id === id) || item.question.trim().length < 5) continue;
+          const entry = { id, canonical: item.question.trim(), answer: value };
+          entries.push(entry as AnswerEntry);
+          doc.addIn(["entries"], doc.createNode(entry));
+          set.push(id);
+          created.push(id);
+        }
+      }
+      const parsed = AnswersFile.safeParse(doc.toJS());
+      if (!parsed.success) {
+        return {
+          ok: false,
+          errors: parsed.error.issues.map((i) => ({ path: i.path.join(".") || "(root)", message: i.message })),
+        };
+      }
+      await writeFileAtomic(path, doc.toString({ lineWidth: 110 }));
+      return { ok: true, set, created };
+    });
+  }
+
   /** preferences.md by its sections (`## Tone`…); what's under no known heading is kept as `extra`. */
   async preferences(): Promise<Record<PreferenceKey, string> & { extra: string }> {
     const text = await readFile(this.ws.path("profile", "preferences.md"), "utf8").catch(() => "");
@@ -376,4 +439,14 @@ function isAnswered(e: AnswerEntry): boolean {
   if (e.answer === null) return false;
   if (typeof e.answer === "string") return e.answer.trim().length > 0;
   return e.answer.default !== null;
+}
+
+/** An answer id as the bank spells them (lowercase letters, digits and underscores). */
+function answerIdOf(id: string): string {
+  return (
+    id
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "answer"
+  );
 }

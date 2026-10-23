@@ -112,6 +112,8 @@ line by `toolSummary`: the command, the file, the skill; for ezapply's form tool
 "3 fields", `upload_file`: the file's name, `page_action`: the action, `ask_user`: the card's title); any other MCP
 tool's arguments cut to 160 characters),
 `toolDone` (with the start of its error), `card`, `turnEnd` (cost, duration, `interrupted`, error) and `notice`.
+The companion adds events of its own with `AgentService.post`: `handoff`, an application's hand-off
+([forms](../mcp-tools.md#forms)).
 `agent.test.ts` pins the fields on lines shaped as recorded, with the values replaced.
 
 ## Antigravity (`antigravity.ts`)

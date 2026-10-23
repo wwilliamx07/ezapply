@@ -179,6 +179,10 @@ Top to bottom, in an application:
    question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
    wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
    the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
+   An application's **hand-off card** (a `handoff` event in its conversation, `HandoffView` in `cards.tsx`):
+   "Ready for you to submit", with what is attached, approved documents not attached, the answers to check
+   (label, value, source), each step's open warnings and what was removed
+   ([the hand-off](../mcp-tools.md#forms)).
 6. **This tab** (first in the footer): what the window's current tab is to the posting shown (its page, its
    application on a site, including one embedded in a careers page's frame, another posting's application, another
    page; in the general conversation, only

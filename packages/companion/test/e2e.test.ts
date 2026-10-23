@@ -1108,6 +1108,14 @@ describe("form tools over MCP", () => {
       step: { title: "My Information" },
     });
     expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, form: { pageKind: "review" } });
+    // The hand-off is a card in the conversation, once however often the review page is read.
+    const cards = await poll(async () => {
+      const events = await handle.services.agent.history(`${cap.postingId}/fill`);
+      const found = events.filter((e) => e.kind === "handoff");
+      return found.length ? found : undefined;
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ kind: "handoff", attached: ["resume.pdf"], removed: review.handoff.removed });
 
     const active = await callJson(client, "posting_get");
     expect(active.data.status).toBe("filled");
@@ -1165,6 +1173,59 @@ describe("form tools over MCP", () => {
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");
+    await client.close();
+  });
+
+  it("marks prefilled, stale and answer-bank fields, and refuses unasked sensitive answers and a bundle's parts", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    await writeFile(
+      join(dir, "ws", "profile", "answers.yaml"),
+      [
+        "schemaVersion: 1",
+        "entries:",
+        "  - { id: degree_level, canonical: 'Degree level?', answer: Masters }",
+        "  - id: previous_worker",
+        "    canonical: Have you worked for this company before?",
+        "    variants: ['Have you previously worked for Acme?']",
+        "    answer: 'No'",
+        "    sensitive: true",
+        "",
+      ].join("\n"),
+    );
+    const client = await postingClient(cap.postingId);
+    const field = (form: { sections: { fields: { id: string }[] }[] }, id: string) =>
+      form.sections.flatMap((s) => s.fields).find((f) => f.id === id);
+    const form = (await callJson(client, "get_form")).data;
+    expect(field(form, "my-information.skills")).toMatchObject({ prefilled: true });
+    expect(field(form, "application-questions.coverLetter")).toMatchObject({ stale: ["cover.pdf"] });
+    expect(field(form, "application-questions.degreeLevel")).toMatchObject({ bankMatch: "degree_level" });
+    expect(field(form, "application-questions.previousWorker")).toMatchObject({ bankMatch: "previous_worker" });
+    expect(field(form, "my-information.legalName--firstName")).not.toHaveProperty("prefilled");
+
+    // A sensitive answer goes in only as the user gave it, on a card, for this application.
+    const fill = (source: string) =>
+      callJson(client, "fill_fields", {
+        fills: [{ fieldId: "application-questions.previousWorker", value: "No", source, answerId: "previous_worker" }],
+      });
+    expect((await fill("answer-bank")).data.error).toMatchObject({ code: "bad_request" });
+    expect((await fill("user")).data.error.message).toMatch(/previous_worker/);
+    handle.services.forms.userAnswered(cap.postingId, "previous_worker");
+    expect((await fill("user")).data.results).toEqual([{ fieldId: "application-questions.previousWorker", ok: true }]);
+    // What this application filled is no longer marked prefilled.
+    const again = (await callJson(client, "get_form")).data;
+    expect(field(again, "application-questions.previousWorker")).not.toHaveProperty("prefilled");
+
+    // A posting that takes one PDF doesn't get its resume on its own.
+    await callJson(client, "attach_mode_set", { mode: "immediately" });
+    await writeFile(join(dir, "ws", "postings", cap.postingId, "resume.pdf"), "%PDF-1.4 fake");
+    await handle.services.postings.updateMeta(cap.postingId, { bundleRequired: true });
+    const up = await callJson(client, "upload_file", {
+      fieldId: "application-questions.resume",
+      path: `postings/${cap.postingId}/resume.pdf`,
+    });
+    expect(up.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/bundle_build/) });
     await client.close();
   });
 

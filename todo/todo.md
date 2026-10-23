@@ -22,7 +22,7 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
 | — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
-| 1 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~L | — |
+| 1 | [Refactor the skills for agent performance](refactor-skills/overview.md) | — | ~M | — |
 | 2 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | Refactor the skills |
 | 3 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
 | 4 | [Application forms on an employer's own page](employer-page-forms/overview.md) | Medium | M–L | A page saved from a real one |

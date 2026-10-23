@@ -8,14 +8,10 @@ depend on the model. Fields that the site prefills from the resume
 are often left as they came. The skills still name one agent's tools.
 
 **Plan.**
-- Applying: reading a form presses Apply on a posting page and marks prefilled fields, stale files and exact bank
-  matches. Code writes the answers the user confirmed, and the panel shows the hand-off. Nothing is filled without
-  the model.
 - Rewrite each remaining skill to its judgement, in words any agent follows. The example letter moves into the
   setup task that uses it.
 - Code checks what a program can under the agent's own checks: numbers and skills without evidence, missing
-  sources, words the user said never to use, sensitive answers not asked, separate files where one is required,
-  claims the user edited.
+  sources, words the user said never to use, claims the user edited.
 - Measure a tailoring and an application against the token cuts' runs, on both agents, then update the
   references.
 

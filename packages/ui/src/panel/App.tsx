@@ -21,7 +21,7 @@ import {
 } from "@ezapply/protocol";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Banner, Brand, Button, Icon } from "../components/ui.js";
-import { AskCardView, PermissionCardView } from "./cards.js";
+import { AskCardView, HandoffView, PermissionCardView } from "./cards.js";
 import { ChangesCard } from "./changes.js";
 import { Markdown } from "./markdown.js";
 import type { ConnectionState, PanelTransport } from "./transport.js";
@@ -1146,6 +1146,8 @@ function EventView({
     }
     case "notice":
       return <p className={`ez-msg-notice ez-msg-notice-${e.level}`}>{e.text}</p>;
+    case "handoff":
+      return <HandoffView handoff={e} />;
     default:
       return null;
   }

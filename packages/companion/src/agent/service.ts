@@ -244,6 +244,12 @@ export class AgentService {
     );
   }
 
+  /** Add an event of ezapply's own to a conversation (an application's hand-off), as the panel shows it. */
+  post(key: string, event: AgentEvent): void {
+    checkKey(key);
+    this.emit(key, event);
+  }
+
   /** Write a message to the conversation's process, started (or resumed) when none runs. */
   private async write(key: string, message: Untaken): Promise<{ id: string }> {
     const live = await this.liveFor(key);

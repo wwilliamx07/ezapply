@@ -254,8 +254,8 @@ rewrite the file, and it's found again from the capture ([which posting](mcp-too
 One JSON object per line, each with `ts`. Written only for form activity on a tab that may be this posting's
 application ([which posting](mcp-tools.md#forms): its job, the tab's binding, its tenant or its title, or nothing
 saying otherwise):
-- `{ event: "fill", fieldId, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
-  `computed`, `user`, `judgment`
+- `{ event: "fill", fieldId, label?, value, source, answerId?, ok, error? }`, `source` ∈ `profile`, `answer-bank`,
+  `computed`, `user`, `judgment`; `label` is the field's label as the tab's last read showed it
 - `{ event: "step-check", step?, stepIndex?, warnings[] }`: written by `go_next` before it moves, with what
   still looked off on the step (`checklist`); the review page's `handoff.steps` reads the last per step
 - `{ event: "upload", fieldId, file, ok, error? }`

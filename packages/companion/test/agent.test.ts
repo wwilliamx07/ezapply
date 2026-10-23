@@ -842,6 +842,38 @@ describe("ask_user and permission_ask over MCP", () => {
     await c.close();
   });
 
+  it("saves an answer the user chose to remember into the answer bank, and lets it be filled for that posting", async () => {
+    const session = await conversation("p1/fill");
+    const c = await client(session);
+    const { needs, forms } = handle.services;
+    const given: string[] = [];
+    forms.userAnswered = (postingId, answerId) => {
+      given.push(`${postingId}:${answerId}`);
+    };
+    const events = record("p1/fill");
+    await call(c, "ask_user", {
+      title: "Acme, step 3",
+      questions: [
+        {
+          id: "notice",
+          prompt: "How much notice do you need to give?",
+          type: "text",
+          remember: { answerId: "notice_period", question: "Notice period (weeks)" },
+        },
+      ],
+    });
+    needs.answer(needs.list()[0]?.id as string, { notice: { value: "2", remember: true } });
+    const echoed = await waitFor(
+      async () => events.find((e) => e.kind === "text" && e.text.includes("<ezapply-result")) ?? null,
+      5000,
+    );
+    expect((echoed as { text: string }).text).toContain('"savedToAnswerBank":["notice_period"]');
+    expect(given).toEqual(["p1:notice_period"]);
+    const bank = await readFile(join(dir, "ws", "profile", "answers.yaml"), "utf8");
+    expect(bank).toMatch(/id: notice_period\n\s+canonical: Notice period \(weeks\)\n\s+answer: "2"/);
+    await c.close();
+  });
+
   it("delivers a panel conversation's reply typed in the chat, and drops a result once the conversation is reset", async () => {
     const session = await conversation("p1/tailor");
     const c = await client(session);

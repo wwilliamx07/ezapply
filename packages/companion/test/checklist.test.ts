@@ -128,7 +128,9 @@ describe("handoff", () => {
     const h = handoff([
       { event: "fill", fieldId: "mi.first", value: "Jane", source: "profile", ok: true },
       { event: "fill", fieldId: "mi.country", value: "Canada", source: "profile", ok: true },
-      { event: "fill", fieldId: "q.salary", value: "60000", source: "user", ok: true },
+      { event: "fill", fieldId: "q.salary", label: "Expected salary", value: "60000", source: "user", ok: true },
+      { event: "upload", fieldId: "q.resume", file: "postings/p1/resume.pdf", ok: true },
+      { event: "upload", fieldId: "q.cover", file: "postings/p1/cover.pdf", ok: false },
       { event: "fill", fieldId: "q.relocate", value: "No", source: "judgment", ok: true },
       // corrected later by the user: the last fill counts
       { event: "fill", fieldId: "q.relocate", value: "Yes", source: "user", ok: true },
@@ -139,9 +141,10 @@ describe("handoff", () => {
       { event: "step-check", step: "Questions", stepIndex: 3, warnings: ["Resume/CV holds old.pdf"] },
     ]);
     expect(h).toEqual({
+      attached: ["resume.pdf"],
       steps: [{ step: "3", warnings: ["Resume/CV holds old.pdf"] }],
       answersToFlag: [
-        { fieldId: "q.salary", value: "60000", source: "user" },
+        { fieldId: "q.salary", label: "Expected salary", value: "60000", source: "user" },
         { fieldId: "q.relocate", value: "Yes", source: "user" },
       ],
       removed: [{ what: 'q.cover: ["cover.pdf"]', reason: "old" }],

@@ -1,4 +1,5 @@
 import {
+  type AgentEvent,
   type AskAnswer,
   type AskAnswers,
   type AskCard,
@@ -379,4 +380,55 @@ export function PermissionCardView({
       )}
     </section>
   );
+}
+
+type Handoff = Extract<AgentEvent, { kind: "handoff" }>;
+
+/**
+ * An application's hand-off, when its form reaches the review page: what is attached, what to check before
+ * submitting and what was left out. ezapply builds it from the form log; the agent no longer writes it.
+ */
+export function HandoffView({ handoff: h }: { handoff: Handoff }) {
+  const warned = h.steps.filter((s) => s.warnings.length > 0);
+  return (
+    <section className="ez-pcard ez-handoff" aria-label="Ready to submit">
+      <header className="ez-pcard-head">
+        <strong>Ready for you to submit</strong>
+      </header>
+      <p className="ez-pcard-intro">Look over the review page and submit it yourself.</p>
+      {h.attached.length ? <HandoffList title="Attached" items={h.attached} /> : null}
+      {h.notAttached?.length ? <HandoffList title="Approved but not attached" items={h.notAttached} warn /> : null}
+      {h.answersToFlag.length ? (
+        <HandoffList
+          title="Answers to check"
+          items={h.answersToFlag.map((a) => `${a.label ?? a.fieldId}: ${valueText(a.value)} (${a.source})`)}
+        />
+      ) : null}
+      {warned.length ? (
+        <HandoffList title="Warnings" items={warned.flatMap((s) => s.warnings.map((w) => `${s.step}: ${w}`))} warn />
+      ) : null}
+      {h.removed.length ? (
+        <HandoffList title="Removed" items={h.removed.map((r) => (r.reason ? `${r.what}: ${r.reason}` : r.what))} />
+      ) : null}
+    </section>
+  );
+}
+
+function HandoffList({ title, items, warn }: { title: string; items: string[]; warn?: boolean }) {
+  return (
+    <div>
+      <p className="ez-label">{title}</p>
+      <ul className={warn ? "ez-handoff-list ez-handoff-warn" : "ez-handoff-list"}>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function valueText(v: unknown): string {
+  if (Array.isArray(v)) return v.map(String).join(", ");
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  return typeof v === "string" ? v : JSON.stringify(v);
 }

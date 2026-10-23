@@ -62,8 +62,11 @@ export const AskQuestion = z.object({
   sensitive: z.boolean().optional(),
   /** Default true; an optional question can be skipped. */
   required: z.boolean().optional(),
-  /** Offers "Save for next time" into the answer bank, under this answer id. */
-  remember: z.object({ answerId: z.string().min(1).max(200) }).optional(),
+  /**
+   * Offers "Save for next time" into the answer bank, under this answer id; `question` is the form's wording, which
+   * the entry learns as a variant (or starts from, when the bank has no such entry).
+   */
+  remember: z.object({ answerId: z.string().min(1).max(200), question: z.string().max(500).optional() }).optional(),
 });
 export type AskQuestion = z.infer<typeof AskQuestion>;
 
@@ -233,6 +236,22 @@ export const AgentEvent = z.discriminatedUnion("kind", [
   }),
   /** Something the user should know: a retry, a missing tool server, Claude stopping. */
   z.object({ kind: z.literal("notice"), at, level: z.enum(["info", "warn", "error"]), text: z.string() }),
+  /**
+   * An application ready for the user to submit, from its form log when the review page (or a last page) is read:
+   * the files attached, approved ones never attached, what still looked off per step, the answers from the user or
+   * the agent's judgment to look at again, and what was removed.
+   */
+  z.object({
+    kind: z.literal("handoff"),
+    at,
+    attached: z.array(z.string()),
+    notAttached: z.array(z.string()).optional(),
+    steps: z.array(z.object({ step: z.string(), warnings: z.array(z.string()) })),
+    answersToFlag: z.array(
+      z.object({ fieldId: z.string(), label: z.string().optional(), value: z.unknown(), source: z.string() }),
+    ),
+    removed: z.array(z.object({ what: z.string(), reason: z.string().optional() })),
+  }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEvent>;
 

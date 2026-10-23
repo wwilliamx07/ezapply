@@ -63,6 +63,8 @@ export function stepWarnings(form: FormSchema, profile: Profile | null, uploaded
 export interface LogEvent {
   event: string;
   fieldId?: string;
+  /** The field's label when it was filled. */
+  label?: string;
   value?: unknown;
   source?: string;
   ok?: boolean;
@@ -79,17 +81,24 @@ export interface Handoff {
   /** Warnings from the last time each step was left, for steps that still had any. */
   steps: { step: string; warnings: string[] }[];
   /** Answers from the user or your judgment: flag them for a second look. */
-  answersToFlag: { fieldId: string; value: unknown; source: string }[];
+  answersToFlag: { fieldId: string; label?: string; value: unknown; source: string }[];
   /** What was removed: old attachments, entries, rows. */
   removed: { what: string; reason?: string }[];
+  /** The files this application uploaded, by name. */
+  attached: string[];
 }
+
+/** The hand-off as the panel shows it: with the approved documents never attached, on the review page. */
+export type HandoffCard = Handoff & { notAttached?: string[] };
 
 /** The hand-off summary from this posting's log: what the skill's hand-off message lists. */
 export function handoff(events: LogEvent[]): Handoff {
   const lastFill = new Map<string, LogEvent>();
   const steps = new Map<string, string[]>();
   const removed: Handoff["removed"] = [];
+  const attached = new Set<string>();
   for (const e of events) {
+    if (e.event === "upload" && e.ok && e.file) attached.add(e.file.split(/[\\/]/).pop() as string);
     if (e.event === "fill" && e.ok && e.fieldId) lastFill.set(e.fieldId, e);
     if (e.event === "step-check") steps.set(String(e.stepIndex ?? e.step ?? "?"), e.warnings ?? []);
     if (e.event === "remove" && e.ok) {
@@ -107,7 +116,13 @@ export function handoff(events: LogEvent[]): Handoff {
     steps: [...steps].filter(([, w]) => w.length > 0).map(([step, warnings]) => ({ step, warnings })),
     answersToFlag: fills
       .filter((f) => f.source === "user" || f.source === "judgment")
-      .map((f) => ({ fieldId: f.fieldId as string, value: f.value, source: f.source as string })),
+      .map((f) => ({
+        fieldId: f.fieldId as string,
+        ...(f.label ? { label: f.label } : {}),
+        value: f.value,
+        source: f.source as string,
+      })),
     removed,
+    attached: [...attached],
   };
 }

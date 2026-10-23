@@ -490,6 +490,15 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+.ez-handoff-list {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.ez-handoff-warn {
+  color: var(--warn);
+}
 .ez-pcard-head {
   display: flex;
   justify-content: space-between;
