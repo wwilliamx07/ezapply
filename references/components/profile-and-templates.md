@@ -48,13 +48,15 @@ Stored answers to screening questions.
   questions read it. A degree question needs the posting, so a fixed answer copied from the profile would be wrong.
 - `answers_check` validates it (unique ids) and lists unanswered entries. The checklist counts the bank as
   done when every unanswered entry is sensitive.
-- **Saving while filling** (`ezapply-apply`, "Save what got resolved"): when a stored answer matched none of
-  a field's options and the user (or the agent's judgment, then confirmed) picked one, or the user answered a
-  question the bank lacked, the agent offers to save it. It edits the entry that already covers the question:
-  the form's wording goes into `variants`, and the chosen option under `byCompany` when it's that form's own
-  wording (a how-did-you-hear list), else into `answer`. A new entry only for a question nothing covers. An
-  answer the user tells it to save gets `sensitive: false` unless they want to keep being asked. Edits go
-  through the Edit tool, then `answers_check`.
+- **Saving while filling.** An `ask_user` question for a bank entry carries `remember { answerId, question? }`
+  (`question`: the form's wording), and the card offers **Save for next time**. A saved answer is written by code
+  (`ProfileService.rememberAnswers`), in place, keeping comments: an entry the bank has gets the answer (a
+  per-company answer's `default`) and the form's wording in `variants` when it's new; one it hasn't is created
+  with that wording as its `canonical` (or the card's prompt). `get_form`'s `bankMatch` then finds the question by
+  that wording. What stays the agent's (`ezapply-apply`, `save-answers.md`): a chosen option under `byCompany`
+  when it's that form's own wording (a how-did-you-hear list), and `sensitive: false` on an answer the user no
+  longer wants to be asked. *Why:* the agent added new entries itself, a skill page and a file edit per answer
+  for what is a fixed write.
 
   *Why:* a `how_heard` answer worded one way ("School job board") matched nothing on forms that worded the
   option differently ("College/University", or a list of schools), and nothing was saved, so it missed again.

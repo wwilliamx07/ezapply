@@ -179,6 +179,69 @@ export class DocumentsService {
     };
   }
 
+  /**
+   * Apply exact replacements to a .tex file, then compile it. Each `old` must occur exactly once in the text as it is
+   * after the edits before it, and differ from its `new`; otherwise nothing is written and the error names the edit.
+   * Line endings follow the file's, so an edit written with `\n` matches a file saved with `\r\n`. The result is the
+   * compile's, with each changed passage and a line on each side (`changed`), so the agent checks the passage in its
+   * surroundings without reading the file again.
+   *
+   * *Why a tool:* scripted edits (python, sed, PowerShell `-replace`) missed LaTeX's backslashes or corrupted them
+   * (`"\t"` in `"\textbf"` becomes a tab), and an agent's own edit tool isn't the same in every agent. JSON arguments
+   * carry backslashes as they are.
+   */
+  async edit(
+    input: string,
+    edits: { old: string; new: string }[],
+  ): Promise<CompileResult & { changed: ChangedPassage[] }> {
+    const texPath = this.ws.resolveAllowed(input, ROOTS.texSource);
+    if (extname(texPath).toLowerCase() !== ".tex") throw new EzError(ErrorCode.BadRequest, `Not a .tex file: ${input}`);
+    const original = await readFile(texPath, "utf8").catch(() => {
+      throw new EzError(ErrorCode.NotFound, `File not found: ${texPath}`);
+    });
+    const eol = original.includes("\r\n") ? "\r\n" : "\n";
+    const withEol = (s: string) => s.replace(/\r?\n/g, eol);
+    let text = original;
+    const at: [number, number][] = [];
+    edits.forEach((e, i) => {
+      const from = withEol(e.old);
+      const to = withEol(e.new);
+      const n = `Edit ${i + 1}`;
+      if (!from) throw new EzError(ErrorCode.BadRequest, `${n}: old is empty.`);
+      if (from === to) {
+        throw new EzError(ErrorCode.BadRequest, `${n}: new is the same as old.`, "Write the change you meant to make.");
+      }
+      const first = text.indexOf(from);
+      if (first < 0) {
+        throw new EzError(
+          ErrorCode.BadRequest,
+          `${n}: old isn't in the file${i > 0 ? " (after the edits before it)" : ""}. Nothing was changed.`,
+          "Copy old from the .tex as it is now, never from pdf_text or lint (the PDF drops escapes and spacing).",
+        );
+      }
+      if (text.indexOf(from, first + 1) >= 0) {
+        throw new EzError(
+          ErrorCode.BadRequest,
+          `${n}: old occurs more than once. Nothing was changed.`,
+          "Make old longer, with the words around it, so it matches one place.",
+        );
+      }
+      text = text.slice(0, first) + to + text.slice(first + from.length);
+      // The passages changed before move with this edit when they come after it.
+      const delta = to.length - from.length;
+      for (const r of at) {
+        if (r[0] >= first + from.length) {
+          r[0] += delta;
+          r[1] += delta;
+        }
+      }
+      at.push([first, first + to.length]);
+    });
+    await writeFileAtomic(texPath, text);
+    const changed = at.map(([start, end]) => passage(text, start, end));
+    return { ...(await this.compile(texPath)), changed };
+  }
+
   /** latexdiff old vs new, compiled to <new>-diff.pdf. */
   async diff(oldInput: string, newInput: string): Promise<CompileResult & { diffTex: string }> {
     const oldTex = this.ws.resolveAllowed(oldInput, ROOTS.texSource);
@@ -264,6 +327,21 @@ export class DocumentsService {
     }
     return join(".history", id);
   }
+}
+
+/** A passage `tex_edit` changed: its first line number and its lines, with one on each side. */
+export interface ChangedPassage {
+  line: number;
+  text: string;
+}
+
+/** The lines from `start` to `end` in `text` (character offsets), with one line on each side. */
+function passage(text: string, start: number, end: number): ChangedPassage {
+  const lines = text.split(/\r?\n/);
+  const lineOf = (offset: number) => text.slice(0, offset).split("\n").length - 1;
+  const from = Math.max(0, lineOf(start) - 1);
+  const to = Math.min(lines.length - 1, lineOf(Math.max(start, end - 1)) + 1);
+  return { line: from + 1, text: lines.slice(from, to + 1).join("\n") };
 }
 
 /**

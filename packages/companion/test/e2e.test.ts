@@ -851,6 +851,95 @@ describe("document tools over MCP", () => {
     expect(names).not.toContain("pdf_render");
     await client.close();
   });
+
+  async function tailoringPosting() {
+    const r = await handle.services.postings.capture({
+      url: "https://example.com/jobs/1",
+      pageTitle: "Backend Engineer",
+      html: `<h1>Backend Engineer</h1><p>${LONG}</p>`,
+      visibleHtml: `<h1>Backend Engineer</h1><p>${LONG}</p>`,
+      visibleText: `Backend Engineer\n${LONG}`,
+      jsonLd: [],
+      capturedAt: "2026-01-01T00:00:00.000Z",
+      tabId: 5,
+    });
+    await handle.services.postings.updateMeta(r.postingId, { company: "Example Co.", role: "Backend Engineer" });
+    const ws = join(dir, "ws");
+    await mkdir(join(ws, "templates", "resume", "sections"), { recursive: true });
+    await writeFile(
+      join(ws, "templates", "resume", "template.json"),
+      JSON.stringify({ schemaVersion: 1, main: "main.tex", contentFiles: ["sections/exp.tex"] }),
+    );
+    await writeFile(join(ws, "templates", "resume", "main.tex"), "\\input{sections/exp}\n");
+    await writeFile(join(ws, "templates", "resume", "sections", "exp.tex"), "\\item Built things\n");
+    await mkdir(join(ws, "profile"), { recursive: true });
+    await writeFile(
+      join(ws, "profile", "profile.yaml"),
+      "schemaVersion: 1\nidentity: { firstName: Jane, lastName: Doe }\ncontact:\n  email: jane@example.com\n  address: { city: Toronto, country: Canada }\neeo: { gender: Prefer not to say }\n",
+    );
+    return {
+      id: r.postingId,
+      folder: join(ws, "postings", r.postingId),
+      client: await postingClient(r.postingId, "tailor"),
+    };
+  }
+
+  it("document_start copies the template once, sets drafting, and returns the brief", async () => {
+    const { id, folder, client } = await tailoringPosting();
+    const first = (await callJson(client, "document_start", { kind: "resume" })).data;
+    expect(first.document).toMatchObject({
+      path: `postings/${id}/resume.tex`,
+      copied: ["resume.tex", "sections/exp.tex"],
+      attachMode: "after-approval",
+    });
+    expect(first.posting).toMatchObject({ id, company: "Example Co.", role: "Backend Engineer" });
+    expect(first.requirementsMissing).toMatch(/Application requirements/);
+    expect(first.postingText).toContain("payment services");
+    expect(first.profile).toContain("firstName: Jane");
+    expect(first.profile).not.toContain("gender");
+    expect(first.claims).toMatch(/No claims yet/);
+    expect((await handle.services.postings.get(id)).status).toBe("drafting");
+
+    // A revision keeps the tailored copy.
+    await writeFile(join(folder, "sections", "exp.tex"), "\\item Built payment services\n");
+    await writeFile(join(folder, "notes.md"), "## Application requirements\n- Resume only\n");
+    const again = (await callJson(client, "document_start", { kind: "resume" })).data;
+    expect(again.document.existing).toBe(true);
+    expect(again.requirementsMissing).toBeUndefined();
+    expect(again.notes).toContain("Resume only");
+    expect(await readFile(join(folder, "sections", "exp.tex"), "utf8")).toContain("payment services");
+
+    const cover = await callJson(client, "document_start", { kind: "cover" });
+    expect(cover).toMatchObject({ isError: true, data: { error: { code: "not_found" } } });
+    await client.close();
+  });
+
+  it("bundle_build merges the cover letter, the resume and the extras, named and titled, and sets bundleRequired", async () => {
+    const { id, folder, client } = await tailoringPosting();
+    await writeFile(join(folder, "cover.pdf"), await textPdf(["Dear hiring manager"]));
+    await writeFile(join(folder, "resume.pdf"), await textPdf(["Jane Doe", "Experience"]));
+    await mkdir(join(dir, "ws", "library"), { recursive: true });
+    await writeFile(join(dir, "ws", "library", "unofficial_transcript.pdf"), await textPdf(["Transcript"]));
+    const r = (await callJson(client, "bundle_build", { extras: [{ path: "library/unofficial_transcript.pdf" }] }))
+      .data;
+    expect(r).toMatchObject({
+      output: `postings/${id}/Doe_Jane_Example-Co_Application.pdf`,
+      pages: 3,
+      sections: [
+        { label: "Cover Letter", pages: "1-1" },
+        { label: "Resume", pages: "2-2" },
+        { label: "Unofficial transcript", pages: "3-3" },
+      ],
+    });
+    expect(r.warnings).toBeUndefined();
+    const info = await handle.services.documents.info(r.output);
+    expect(info).toMatchObject({ title: "Jane Doe: Application for Backend Engineer", author: "Jane Doe" });
+    expect((await handle.services.postings.get(id)).bundleRequired).toBe(true);
+
+    await rm(join(folder, "resume.pdf"));
+    expect((await callJson(client, "bundle_build", {})).data.error.code).toBe("not_found");
+    await client.close();
+  });
 });
 
 describe("form tools over MCP", () => {
@@ -1036,6 +1125,14 @@ describe("form tools over MCP", () => {
       step: { title: "My Information" },
     });
     expect((await callJson(client, "go_next")).data).toMatchObject({ advanced: true, form: { pageKind: "review" } });
+    // The hand-off is a card in the conversation, once however often the review page is read.
+    const cards = await poll(async () => {
+      const events = await handle.services.agent.history(`${cap.postingId}/fill`);
+      const found = events.filter((e) => e.kind === "handoff");
+      return found.length ? found : undefined;
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ kind: "handoff", attached: ["resume.pdf"], removed: review.handoff.removed });
 
     const active = await callJson(client, "posting_get");
     expect(active.data.status).toBe("filled");
@@ -1093,6 +1190,67 @@ describe("form tools over MCP", () => {
 
     const shot = await client.callTool({ name: "screenshot", arguments: {} });
     expect((shot.content as { type: string }[])[0]?.type).toBe("image");
+    await client.close();
+  });
+
+  it("marks prefilled, stale and answer-bank fields, and refuses unasked sensitive answers and a bundle's parts", async () => {
+    const ext = fakeExtension();
+    await ext.outcome;
+    const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
+    await writeFile(
+      join(dir, "ws", "profile", "answers.yaml"),
+      [
+        "schemaVersion: 1",
+        "entries:",
+        "  - { id: degree_level, canonical: 'Degree level?', answer: Masters }",
+        "  - id: previous_worker",
+        "    canonical: Have you worked for this company before?",
+        "    variants: ['Have you previously worked for Acme?']",
+        "    answer: 'No'",
+        "    sensitive: true",
+        "",
+      ].join("\n"),
+    );
+    const client = await postingClient(cap.postingId);
+    const field = (form: { sections: { fields: { id: string }[] }[] }, id: string) =>
+      form.sections.flatMap((s) => s.fields).find((f) => f.id === id);
+    const form = (await callJson(client, "get_form")).data;
+    expect(field(form, "my-information.skills")).toMatchObject({ prefilled: true });
+    expect(field(form, "application-questions.coverLetter")).toMatchObject({ stale: ["cover.pdf"] });
+    expect(field(form, "application-questions.degreeLevel")).toMatchObject({ bankMatch: "degree_level" });
+    expect(field(form, "application-questions.previousWorker")).toMatchObject({ bankMatch: "previous_worker" });
+    expect(field(form, "my-information.legalName--firstName")).not.toHaveProperty("prefilled");
+
+    // A sensitive answer goes in only as the user gave it, on a card, for this application.
+    const fill = (source: string) =>
+      callJson(client, "fill_fields", {
+        fills: [{ fieldId: "application-questions.previousWorker", value: "No", source, answerId: "previous_worker" }],
+      });
+    expect((await fill("answer-bank")).data.error).toMatchObject({ code: "bad_request" });
+    expect((await fill("user")).data.error.message).toMatch(/previous_worker/);
+    handle.services.forms.userAnswered(cap.postingId, "previous_worker");
+    expect((await fill("user")).data.results).toEqual([{ fieldId: "application-questions.previousWorker", ok: true }]);
+    // An answer of the agent's own judgment that uses a term the user never wants mentioned is flagged.
+    await writeFile(join(dir, "ws", "profile", "preferences.md"), "# Preferences\n\n## Never mention\n\n- Atlantis\n");
+    const judged = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "From Atlantis", source: "judgment" }],
+    });
+    expect(judged.data).toMatchObject({
+      neverMention: [{ fieldId: "my-information.legalName--firstName", terms: ["Atlantis"] }],
+    });
+    // What this application filled is no longer marked prefilled.
+    const again = (await callJson(client, "get_form")).data;
+    expect(field(again, "application-questions.previousWorker")).not.toHaveProperty("prefilled");
+
+    // A posting that takes one PDF doesn't get its resume on its own.
+    await callJson(client, "attach_mode_set", { mode: "immediately" });
+    await writeFile(join(dir, "ws", "postings", cap.postingId, "resume.pdf"), "%PDF-1.4 fake");
+    await handle.services.postings.updateMeta(cap.postingId, { bundleRequired: true });
+    const up = await callJson(client, "upload_file", {
+      fieldId: "application-questions.resume",
+      path: `postings/${cap.postingId}/resume.pdf`,
+    });
+    expect(up.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/bundle_build/) });
     await client.close();
   });
 

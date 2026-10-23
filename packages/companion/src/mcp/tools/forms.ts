@@ -39,11 +39,15 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "true; dropdowns and typeaheads list options on demand; a list too long to send gives `optionCount`, and " +
         "fill_fields still matches its options). Also add buttons with their section, removable " +
         "rows, page actions, errors, `messages` (notices such as upload confirmations, not errors), and " +
-        "`posting` (the posting this is credited to). Call at the start of every step and after changes. " +
+        "`posting` (the posting this is credited to). Marked fields: `prefilled` (a value this application didn't " +
+        "fill: check it like an empty one), `stale` (files it didn't upload), `bankMatch` (the answer bank's entry " +
+        "worded like this question). On a posting's page it presses Apply and reads the next page (`pressedApply`). " +
+        "Call at the start of every step and after changes. " +
         "`timingIssues`: mistakes in the user's autofill-timing.yaml (defaults used for those); tell the user. " +
         "`tabHidden` (here and on other form tools): the application tab is hidden and runs slowly; pass its hint " +
         "to the user once. " +
-        "On the review page, `notAttached`: approved documents never attached. `siteNotes` (the first time a " +
+        "On the review page, `notAttached`: approved documents never attached, and the hand-off is shown to the " +
+        "user as a card. `siteNotes` (the first time a " +
         "site's page is read in this session): what this site does differently; " +
         "follow them for this application.",
       inputSchema: {
@@ -51,7 +55,6 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         section: z.string().optional().describe("Only sections whose id or title contains this."),
         tabId,
       },
-      annotations: { readOnlyHint: true },
     },
     tool(s.log, "get_form", (args: { onlyEmpty?: boolean; section?: string; tabId?: number }) =>
       s.forms.getForm({ ...args, session }),
@@ -86,8 +89,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "`results` per field: { fieldId, ok: true } when the field reads back exactly the value; else the " +
         "read-back, error, the closest options when nothing matched (`optionCount` when there were more), " +
         "`unmatched` (typeahead entries with the options their " +
-        "search showed) and `inexact` (an option the page chose itself: check it). Never passwords, or EEO " +
-        "answers the user hasn't given.",
+        "search showed) and `inexact` (an option the page chose itself: check it). Never passwords. A sensitive " +
+        "answer-bank entry is refused unless the user answered it on a card for this posting (source user, answerId).",
       inputSchema: {
         fills: z
           .array(
@@ -124,7 +127,8 @@ export function registerFormTools(server: McpServer, s: Services, session?: stri
         "file field. Confirms by reading back the newly shown file name. If the field still holds files from a " +
         "previous application (get_form shows them as its value), remove them with remove_items first. " +
         "`notAttached`: documents the user approved for this posting that no upload has attached yet; a field " +
-        "with multiple: true takes them too, even when it's the only file field.",
+        "with multiple: true takes them too, even when it's the only file field. A posting that takes one PDF " +
+        "(bundleRequired) refuses resume.pdf and cover.pdf: upload the bundle.",
       inputSchema: { fieldId: z.string(), path: z.string().describe("Workspace-relative or absolute path."), tabId },
     },
     tool(s.log, "upload_file", ({ fieldId, path, tabId }: { fieldId: string; path: string; tabId?: number }) =>

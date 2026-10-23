@@ -1,14 +1,10 @@
 # Save what got resolved
 
-When a stored answer matched none of the field's options and the user (or your judgment, which the user then
-confirms) picked one, or the user answered a question the bank didn't have, offer to save it, in the same message
-as the hand-off or the question. Saved answers are for the next form, so the user isn't asked again:
-- Edit the entry that already covers the question: put the form's wording in its `variants` and the option chosen
-  under `byCompany` for this company (`{ default, byCompany }`) when it's the form's own wording (a how-did-you-hear
-  list), or as the `answer` when it holds everywhere. A new entry only for a question no entry covers. Never a
-  second entry for the same question.
-- An answer the user tells you to save is meant to be used: set `sensitive: false` unless they say to keep asking.
-- Don't add `source`: it names a profile path an answer is computed from, not who gave it.
-- Edit `answers.yaml` with the Edit tool (not a shell append), then `answers_check`.
-- On an `ask_user` card, `remember: { answerId }` makes this offer: what the user saves comes back in
-  `savedToAnswerBank`, and `toSave` lists the answers the bank has no entry for yet, to add as above.
+When a stored answer matched none of a field's options and the user (or your judgment, then confirmed) picked
+one, or the user answered a question the bank lacks, the answer is for the next form too:
+- On the `ask_user` card, `remember: { answerId, question }` (the form's wording) offers **Save for next time**.
+  What the user saves is written for you (`savedToAnswerBank`): the answer, the wording as a variant, or a new
+  entry. Use the id of the entry that already covers the question; a new id only for a question none covers.
+- Edit `answers.yaml` yourself only for what that doesn't do, then `answers_check`: the option chosen under
+  `byCompany` when it's that form's own wording (a how-did-you-hear list), or `sensitive: false` on an answer the
+  user says to stop asking. Never add `source`: it names a profile path an answer is computed from.

@@ -179,6 +179,10 @@ Top to bottom, in an application:
    question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
    wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
    the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
+   An application's **hand-off card** (a `handoff` event in its conversation, `HandoffView` in `cards.tsx`):
+   "Ready for you to submit", with what is attached, approved documents not attached, the answers to check
+   (label, value, source), each step's open warnings and what was removed
+   ([the hand-off](../mcp-tools.md#forms)).
 6. **This tab** (first in the footer): what the window's current tab is to the posting shown (its page, its
    application on a site, including one embedded in a careers page's frame, another posting's application, another
    page; in the general conversation, only
@@ -186,8 +190,11 @@ Top to bottom, in an application:
 7. **Action buttons**, acting on the chosen posting: **Tailor documents** (the resume, and the cover letter when the posting or the
    preferences call for one), with a menu (opening upwards) for the resume only, the cover letter only, or one PDF;
    **Fill form** on the application's tab, or **Open the application** when the tab isn't it and the posting knows
-   its address. Each button sends its request in words (`REQUESTS`), the same as typing it, so the skills pick it
-   up either way; Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
+   its address. Each button sends its skill by name, then the request in words (`REQUESTS`: `/ezapply-resume …`,
+   `/ezapply-cover-letter …`, `/ezapply-apply …`; one PDF names `bundle_build`, which has no skill), so the agent
+   doesn't match words to a skill. Claude Code under stream-json input and Antigravity both run a message that
+   starts with `/<skill>` as that skill, Antigravity also after the `<ezapply-panel>` block its first message
+   carries (it reads the skill's file). Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
    or while an agent works in the conversation the button goes to: the other one, and every other application,

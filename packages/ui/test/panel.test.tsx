@@ -750,6 +750,25 @@ describe("the conversation", () => {
     expect(screen.getByText(/stopped unexpectedly/)).toBeTruthy();
   });
 
+  it("shows an application's hand-off as a card: attached files, answers to check, warnings and removals", () => {
+    const handoff: AgentEvent = {
+      kind: "handoff",
+      at: AT,
+      attached: ["resume.pdf"],
+      notAttached: ["cover.pdf"],
+      steps: [{ step: "3", warnings: ["Resume/CV holds old.pdf"] }],
+      answersToFlag: [{ fieldId: "q.salary", label: "Expected salary", value: "60000", source: "user" }],
+      removed: [{ what: "work-experience-2", reason: "not in profile" }],
+    };
+    render(<Conversation events={[handoff]} />);
+    const card = screen.getByRole("region", { name: "Ready to submit" });
+    expect(card.textContent).toContain("resume.pdf");
+    expect(card.textContent).toContain("Approved but not attached");
+    expect(screen.getByText("Expected salary: 60000 (user)")).toBeTruthy();
+    expect(screen.getByText("3: Resume/CV holds old.pdf")).toBeTruthy();
+    expect(screen.getByText("work-experience-2: not in profile")).toBeTruthy();
+  });
+
   it("names the agent a message is waiting for", () => {
     render(<Conversation events={[{ kind: "user", at: AT, id: "a", text: "hi", taken: false }]} agent="Antigravity" />);
     expect(screen.getByText("waiting for Antigravity")).toBeTruthy();

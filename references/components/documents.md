@@ -7,7 +7,7 @@ Compiling LaTeX, checking the result, and handling PDFs. `DocumentsService` hold
 
 | Operation | Allowed folders (workspace-relative) |
 |---|---|
-| TeX source (`tex_compile`, `tex_diff`) | `postings/`, `templates/` |
+| TeX source (`tex_compile`, `tex_edit`, `tex_diff`) | `postings/`, `templates/` |
 | Read PDFs (`pdf_text`, `pdf_info`, merge inputs) | `postings/`, `templates/`, `library/` |
 | Write PDFs (merge output, images → PDF, compress output) | `postings/`, `library/` |
 | Images for `pdf_from_images` | `postings/`, `library/` |
@@ -104,6 +104,25 @@ Anything else fails with `path_not_allowed`.
   mechanical. A rendered page image costs about 2.5k tokens of context, re-sent on every later turn of the
   session, two per tailoring, to find what these checks name exactly. Changes to a
   template's look are the user's to ask for.
+- **Content findings** (`content-lint.ts`, added to `lint` by `tex_compile` and `tex_edit`, with a sentence in
+  the hint): what a program can check in a posting's `resume.tex` or `cover.tex` and the content files its
+  template copied, under the skills' own rules, which the agent is told and still slips on. Only lines the
+  tailoring changed are checked, a changed line being one not in the template's copy of that file: the template is
+  the user's own wording. Each finding is `{ kind, file, line, text }`:
+  - `unsourced-number`: a number (thousands separators and leading zeros aside) in no claim, the profile, the
+    posting or the template;
+  - `missing-src`: a resume bullet (a line starting with an `…item` command) with no `% src:` on it or on the
+    comment line just above or below. A cover letter's paragraphs aren't required to carry one;
+  - `unknown-src`: a `% src:` id that is neither a claim id nor a path the profile holds (`work.0.highlights.1`,
+    `work[0]`, with or without `profile.`);
+  - `never-mention`: a term from `preferences.md`'s "Never mention" (one per line or comma-separated, five words
+    at most), matched as a word;
+  - `unbacked-skill`: on the resume, an entry of a labelled list of three or more short items (`Languages:
+    Python, Go, Rust`) that no claim or the profile names; the posting asking for a skill is no evidence of it.
+
+  *Why the changed lines only, and these rules:* the skills said the same ("only numbers in the evidence", a src
+  per bullet) and nothing checked them. Polarity, attestations and the evidence map aren't checked: a pattern
+  would be wrong too often.
 - **Free lines** (`freeLines` in `pdf/lint.ts`): within the limit, how many more lines fit below the last page's
   lowest line, with the bottom margin taken as equal to the space above the highest line and a line as the
   page's median line spacing. Returned on every build within its limit, so "one more line fits" is known
@@ -134,6 +153,10 @@ the last one left sends it). The files are served from the bytes read when the r
 what they saw even if Claude rebuilds meanwhile. Answering records each document with no request and no comment as
 approved, and returns the others with the user's request and comments (`{ page, quote, note }`: the agent gets the
 quoted words, not where they sit on the page).
+
+**A document with missing or unknown sources isn't reviewed** (`checkSources`, before the review opens, from
+`review_documents` and the review that opens itself): a `missing-src` or `unknown-src` finding in its `.tex` is
+`bad_request` naming each file and line. A source the user can't check is no source.
 
 **An underfilled document isn't reviewed** (`checkFilled`). A resume or cover letter (by name, as for the page
 limit) at its page limit whose last page has 3 or more free lines is `bad_request`, naming each file and its free
@@ -175,6 +198,20 @@ three reviews without waiting, and the user's change requests sat in the compani
 been dropped. The skills also say the page is a
 snapshot: after any rebuild, review the changed files again.
 
+**The review opens itself at the end of a tailoring turn** (`reviewAtTurnEnd`, `documents/agent-review.ts`, called
+by the panel's turn-end handler before its notification). When a posting's Documents conversation ends a turn
+without error, in `after-approval`, with no card of that conversation open and no review of that posting open, the
+posting's top-level PDFs that are drafts (neither approved nor last reviewed in their current bytes, and not
+`*-diff.pdf`) go to review together, as `review_documents { files }` from that conversation would open them, and the
+answer comes as its next message. A PDF older than its `.tex` is left out: its last build failed, so it isn't what
+the agent last wrote. A refusal (an underfilled document) goes to the conversation as a delivered result with the
+refusal's hint, once for the same files and reason, so the agent adds evidence or calls `review_documents` with
+`short`. *Why:* the skills told the agent to review each finished document, and turns still ended without it; the
+end of the turn is the step it can't skip. *Why not a failed build or over-limit document held back further:* the
+page shows the page count, and holding documents back is the failure this replaces. `review_documents` stays for
+`short`, `again`, a terminal chat, and the filling conversation, where `upload_file` refuses an unapproved document
+and points to it.
+
 Claude revises the documents with change requests, rebuilds, and reviews the changed ones again. A
 newer review of the same posting replaces an open one (the old page says so), an answered page says so, and
 a review expires after 2 hours, or when the chat ends; an open page hears each of these (Server-Sent Events). Every
@@ -202,6 +239,36 @@ same bytes), and an open review.
 **Only the page approves.** No tool approves a document, and a chat message saying "approved" doesn't: the
 skills ask the user to press it on the page. So a prompt injection in a posting or a form can't approve
 anything either.
+
+## Editing (`tex_edit`)
+`DocumentsService.edit` applies exact replacements in order, each `old` matched once in the text the edits before it
+leave, then compiles. Edits are written in the file's line endings, so one written with `
+` matches a file saved
+with `
+`. Anything wrong (an `old` missing or found twice, one equal to its `new`) refuses the whole call before
+anything is written, naming the edit. The result carries each edited passage with a line on each side, so the
+agent checks it against its neighbours without reading the file again. *Why a tool:* with Python at hand, agents
+edited `.tex` through scripts that dropped or mangled LaTeX's backslashes (`"	"` in `"	extbf"` becomes a tab),
+and each agent's own edit tool is named and shaped differently; JSON arguments carry backslashes as they are, and
+the compile in the same call saves a turn per round.
+
+## Starting a document and the bundle (`tailor.ts`)
+**`document_start`** (`startDocument`) does a document's fixed setup and returns its brief. It copies the template's
+main file and its `contentFiles` into the posting folder (the folder comes first on TeX's search path, so the
+copies are built) only when the document isn't there yet, so a revision keeps its edits, and moves the status
+from `captured` to `drafting`. The brief is the posting's `posting.md`, its `notes.md` (saying when it has no
+`## Application requirements` yet, which the agent writes first), `profile.yaml` without its EEO answers, every
+claim as `claims_list` gives them, and the cover letter's `format.md`. `preferences.md` isn't in it: `EZAPPLY.md`
+imports it into every session. *Why:* the skills began with five to seven reads and copies, the same every time,
+each a turn that re-sent the conversation; the evidence map and everything after stay the agent's.
+
+**`bundle_build`** (`buildBundle`) replaced the `ezapply-bundle` skill, whose steps were fixed: default order
+(cover letter, resume, extras), a rebuild of a `.tex` newer than its PDF, a bookmark label per section ("Cover
+Letter", "Resume", an extra's from its file name), the title and author from the profile and the posting, the file
+name `<Last>_<First>_<Company>_Application.pdf` (each word reduced to letters, digits and hyphens), the checks
+(one page size, a one-page resume) and compression to the limit. It sets `bundleRequired`. Deciding that a
+bundle is needed, the posting's own order and which `library/` files go in stay the agent's; scans go through
+`pdf_from_images` first, and the bundle is reviewed as a new document.
 
 ## Log parsing (`tex/log.ts`)
 `parseTexLog` turns a TeX log (file-line-error style, unwrapped lines) into up to 60 de-duplicated

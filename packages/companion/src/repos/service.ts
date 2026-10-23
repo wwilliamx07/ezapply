@@ -10,6 +10,10 @@ import { installHint } from "../util/install-hints.js";
 import { KeyedQueue } from "../util/keyed-queue.js";
 import { run, which } from "../util/proc.js";
 import type { Workspace } from "../workspace/workspace.js";
+import { type Component, componentsOver, type IndexMode, ignoredPath, indexMode } from "./index-plan.js";
+
+/** claims.yaml as it was at the last repo_sync, beside it (`snapshotClaims`). */
+const CLAIMS_AT_SYNC = ".claims-at-sync.yaml";
 
 /** knowledge/<key>/meta.json */
 const KnowledgeMeta = z.object({
@@ -67,6 +71,12 @@ interface SyncResult {
   /** Ids of claims whose `files` include a changed path (or a folder holding one): the claims to re-check. */
   affectedClaims: string[];
   fileCount: number;
+  /** What to do (`index-plan.ts`): from `indexedSha` and `changedSince` without its ignored paths. */
+  mode: IndexMode;
+  /** How many changed paths were left out of `changedSince` as lock, vendored or generated files. */
+  ignored?: number;
+  /** For a full index or a rebuild: the folders the depth policy splits (`componentsOver`). */
+  components?: Component[];
 }
 
 /** What `repo_diff` returns at most, so one call can't flood the context. */
@@ -175,10 +185,16 @@ export class RepoService {
       changedSince = [];
     }
     await setReadOnly(dir, true);
+    const all = changedSince;
+    if (changedSince) changedSince = changedSince.filter((c) => !ignoredPath(c.path));
+    const ignored = all && changedSince ? all.length - changedSince.length : 0;
+    const mode = indexMode(meta !== null, changedSince);
+    await this.snapshotClaims(fullName);
 
     const files = (await this.git([], ["-C", dir, "ls-files"])).split(/\r?\n/).filter(Boolean);
-    this.log.info({ repo: fullName, headSha, files: files.length }, "repo synced");
+    this.log.info({ repo: fullName, headSha, files: files.length, mode }, "repo synced");
     return {
+      mode,
       repo: fullName,
       path: dir,
       headSha,
@@ -191,7 +207,49 @@ export class RepoService {
           )
         : [],
       fileCount: files.length,
+      ...(ignored ? { ignored } : {}),
+      ...(mode === "full" || mode === "rebuild" ? { components: await componentsOver(dir, files) } : {}),
     };
+  }
+
+  /**
+   * Keep claims.yaml as it is at the sync (`.claims-at-sync.yaml` beside it), so `claims_check` can tell what an
+   * index run changed in a claim the user edited.
+   */
+  private async snapshotClaims(fullName: string): Promise<void> {
+    const text = await readFile(join(this.knowledgePath(fullName), "claims.yaml"), "utf8").catch(() => null);
+    if (text !== null) await writeFile(join(this.knowledgePath(fullName), CLAIMS_AT_SYNC), text, "utf8");
+  }
+
+  /**
+   * The claims marked `user_edited` at the last sync that the file no longer has as they were: an index run may
+   * not reword the user's own claims (the skill asks, and a re-index still could). Compared on claim, skills and
+   * impact.
+   */
+  private async userEditsChanged(
+    fullName: string,
+    claims: z.infer<typeof Claim>[],
+  ): Promise<{ path: string; message: string }[]> {
+    const text = await readFile(join(this.knowledgePath(fullName), CLAIMS_AT_SYNC), "utf8").catch(() => null);
+    if (text === null) return [];
+    const before = ClaimsFile.safeParse(parseDocument(text).toJS());
+    if (!before.success) return [];
+    const errors: { path: string; message: string }[] = [];
+    for (const old of before.data.claims.filter((c) => c.user_edited)) {
+      const i = claims.findIndex((c) => c.id === old.id);
+      const now = claims[i];
+      const same =
+        now?.user_edited &&
+        now.claim === old.claim &&
+        now.impact === old.impact &&
+        JSON.stringify(now.skills) === JSON.stringify(old.skills);
+      if (same) continue;
+      errors.push({
+        path: now ? `claims.${i}` : "claims",
+        message: `${old.id} is the user's own (user_edited) and was ${now ? "changed" : "removed"}: put it back as it was, and ask the user before changing it`,
+      });
+    }
+    return errors;
   }
 
   /** Ids of claims that cite one of `paths`, or a folder holding one. A claims.yaml that doesn't parse gives []. */
@@ -357,7 +415,7 @@ export class RepoService {
   async checkClaims(fullName: string): Promise<ClaimsCheck> {
     const loaded = await this.loadClaims(fullName);
     if ("errors" in loaded) return { valid: false, claims: 0, errors: loaded.errors };
-    const errors: { path: string; message: string }[] = [];
+    const errors = await this.userEditsChanged(fullName, loaded.claims);
     const ids = new Set<string>();
     for (const [i, c] of loaded.claims.entries()) {
       if (ids.has(c.id)) errors.push({ path: `claims.${i}.id`, message: `duplicate id ${c.id}` });
@@ -442,6 +500,18 @@ export class RepoService {
     }
     if (blocks.length === 0) return "No claims yet: no repo has been indexed (the ezapply-index-repo skill).";
     return `${count} claims from knowledge/*/claims.yaml\n\n${blocks.join("\n\n")}`;
+  }
+
+  /** Every indexed repo's claims, parsed, for the documents' checks; a claims.yaml that doesn't parse is skipped. */
+  async claimRecords(): Promise<{ id: string; claim: string; skills: string[]; impact: string | null }[]> {
+    const keys = (await readdir(this.ws.path("knowledge")).catch(() => [] as string[])).filter((k) => k.includes("__"));
+    const out: { id: string; claim: string; skills: string[]; impact: string | null }[] = [];
+    for (const key of keys) {
+      const loaded = await this.loadClaims(key.replace("__", "/"));
+      if ("claims" in loaded)
+        for (const { id, claim, skills, impact } of loaded.claims) out.push({ id, claim, skills, impact });
+    }
+    return out;
   }
 
   /** Every repo with a knowledge folder, whether or not it's still selected (`claims_list` reads them all). */

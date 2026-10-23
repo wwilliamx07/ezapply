@@ -373,6 +373,42 @@ describe("tex_compile engine choice", () => {
     expect(ran).toEqual(["pdflatex", "lualatex", "latexmk"]);
   });
 
+  it("tex_edit applies exact edits in the file's line endings, then compiles, or changes nothing", async () => {
+    await mkdir(join(root, "postings/p4"), { recursive: true });
+    const path = join(root, "postings/p4/resume.tex");
+    const src = "\\begin{itemize}\r\n\\item \\textbf{Built} a parser\r\n\\item Wrote tests\r\n\\end{itemize}\r\n";
+    await writeFile(path, src);
+    const r = await docs.edit("postings/p4/resume.tex", [
+      { old: "\\item Wrote tests", new: "\\item Wrote tests\n\\item Ran CI" },
+      { old: "\\textbf{Built}", new: "\\textbf{Designed}" },
+    ]);
+    expect(await readFile(path, "utf8")).toBe(
+      "\\begin{itemize}\r\n\\item \\textbf{Designed} a parser\r\n\\item Wrote tests\r\n\\item Ran CI\r\n\\end{itemize}\r\n",
+    );
+    expect(r.changed).toEqual([
+      { line: 2, text: "\\item \\textbf{Designed} a parser\n\\item Wrote tests\n\\item Ran CI\n\\end{itemize}" },
+      { line: 1, text: "\\begin{itemize}\n\\item \\textbf{Designed} a parser\n\\item Wrote tests" },
+    ]);
+    expect(ran).toHaveLength(1);
+
+    const now = await readFile(path, "utf8");
+    for (const [edits, message] of [
+      [[{ old: "\\item Ran CI", new: "\\item Ran CI" }], /Edit 1: new is the same as old/],
+      [[{ old: "\\item", new: "x" }], /Edit 1: old occurs more than once/],
+      [
+        [
+          { old: "Ran CI", new: "Ran builds" },
+          { old: "Ran CI", new: "y" },
+        ],
+        /Edit 2: old isn't in the file \(after the edits before it\)/,
+      ],
+    ] as const) {
+      await expect(docs.edit("postings/p4/resume.tex", [...edits])).rejects.toMatchObject({ message });
+    }
+    expect(await readFile(path, "utf8")).toBe(now);
+    await expect(docs.edit("profile/profile.yaml", [{ old: "a", new: "b" }])).rejects.toThrow();
+  });
+
   it("fails instead of falling back when the named engine is missing or unknown", async () => {
     vi.spyOn(ENGINES.pdflatex, "available").mockResolvedValue(false);
     await writeFile(join(root, "postings/p3/a.tex"), `% !TEX program = pdflatex\n${src}`);

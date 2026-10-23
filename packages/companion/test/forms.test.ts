@@ -68,7 +68,7 @@ function forms(bridge: ExtensionBridge, ws: Workspace = workspaceAt()) {
         : (bridge.call as (m: string, p: unknown, t?: number) => Promise<unknown>)(method, params, timeoutMs),
   } as unknown as ExtensionBridge;
   const reviews = { pending: () => false } as never;
-  const profile = { profile: async () => ({ exists: false }) } as never;
+  const profile = { profile: async () => ({ exists: false }), answers: async () => ({ exists: false }) } as never;
   return new FormsService(ws, postings, shown, reviews, profile, createLogger({ toFile: false, level: "silent" }));
 }
 
@@ -208,6 +208,47 @@ describe("autofill-timing.yaml", () => {
       expect(loaded.timing).toEqual(STANDARD_WAITS);
       expect(loaded.issues[0]).toMatch(/couldn't be read, so the defaults are used/);
     });
+  });
+});
+
+describe("get_form on a posting's page", () => {
+  /** A tab showing a posting with an Apply button, whose press leads to the application's first step. */
+  function postingBridge(pressOk = true) {
+    const methods: string[] = [];
+    let applied = false;
+    const page = (pageKind: string, actions: string[]) => ({
+      adapter: "workday",
+      tabId: 7,
+      url: tab(7).url,
+      pageKind,
+      sections: [],
+      addButtons: [],
+      actions,
+      errors: [],
+    });
+    const call = async (method: string) => {
+      if (method === "browser.status") return { extensionVersion: "1", tabs: [tab(7)] };
+      methods.push(method);
+      if (method === "form.pageAction") {
+        applied = pressOk;
+        return pressOk ? { ok: true } : { ok: false, error: "no Apply button" };
+      }
+      return applied ? page("step", []) : page("posting", ["apply"]);
+    };
+    return { bridge: { call } as unknown as ExtensionBridge, methods };
+  }
+
+  it("presses Apply and returns the page that follows", async () => {
+    const b = postingBridge();
+    const form = await forms(b.bridge).getForm({ tabId: 7 });
+    expect(form).toMatchObject({ pressedApply: true, pageKind: "step" });
+    expect(b.methods).toEqual(["form.get", "form.pageAction", "form.get"]);
+  });
+
+  it("returns the posting's page with the failure when the press fails", async () => {
+    const form = await forms(postingBridge(false).bridge).getForm({ tabId: 7 });
+    expect(form).toMatchObject({ pageKind: "posting", applyFailed: { ok: false } });
+    expect(form).not.toHaveProperty("pressedApply");
   });
 });
 

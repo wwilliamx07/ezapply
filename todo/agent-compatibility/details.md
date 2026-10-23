@@ -40,8 +40,6 @@ What `AgentService` and the workspace rely on, as Claude Code gives it, and what
   `ezapply` finds each agent's executable with `findCommand`, and `doctor` lists the agents found.
 - **`ezapply init`:** the MCP entry into `.codex/config.toml` and `opencode.json`, and the permission rules in
   each one's format (the python and `repo-cache/` denies, `debug/` reads).
-- **The skills and `EZAPPLY.md`:** name no Claude Code tool (the Edit tool, `Agent` subagents, `ToolSearch`,
-  "Claude Code defers ezapply's tools"). This is why the item waits for "Refactor the skills".
 - **The panel:** cost shown as tokens where the agent gives no cost (Antigravity's shows none now).
 - **`workspace_check` and `doctor`:** "agent file" checks the chosen agent's instructions file (`AGENTS.md` for
   every agent but Claude Code).

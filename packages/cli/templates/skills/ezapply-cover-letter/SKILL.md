@@ -1,86 +1,35 @@
 ---
 name: ezapply-cover-letter
-description: Write or revise a cover letter for the job posting using the user's cover letter template, profile, preferences and project knowledge. Use when the user asks for a cover letter or changes to one.
+description: Write or revise a cover letter for a job posting.
 ---
 
 # Cover letter
 
-## Inputs
-- `posting_get` → `posting.md`. Note the company, the role, and what the team or product actually does.
-- `## Application requirements` in `postings/<id>/notes.md` (write it first if missing, see EZAPPLY.md):
-  word or page limits, who to address, reference numbers, questions the letter must answer, whether a
-  letter is wanted at all.
-- `profile/profile.yaml`. The user's preferences (tone, emphasis, never mention) are already in your context.
-- `postings/<id>/notes.md` if the **ezapply-resume** skill already produced the evidence map. Otherwise do a
-  quick version: the top requirements and the matching claims, from the claims (`claims_list`, if not already
-  called in this session).
-- Template: `templates/cover/` main file (`template.json` names it). If there is none, ask the user to run
-  `ezapply init`, which installs the default.
-- `templates/cover/format.md` if it exists: the structure taken from the user's example letter.
+1. **Start.** `document_start { kind: "cover" }` sets up `cover.tex` and returns the posting, `notes.md`, the
+   profile, every claim and `coverFormat` (the structure of the user's example letter, when there is one). With
+   `requirementsMissing`, write `## Application requirements` first (EZAPPLY.md): word or page limits, who to
+   address, questions the letter must answer, whether a letter is wanted at all. Use the resume's evidence map in
+   `notes.md` if it's there; else note the top requirements and the claims that back them.
+2. **Write the body** (between `% BODY START` and `% BODY END` when the template has them), and fill the
+   placeholders: company, role, date, the addressee if the posting names one. The placeholder body only marks
+   where the letter goes. Unless `coverFormat` sets another structure:
+   - **Opening** (2–3 sentences): the role and a concrete, true reason this company or team interests the user,
+     from the posting. No clichés ("I am writing to express…", "passionate").
+   - **One paragraph per project or role**, strongest first, each tying one or two requirements to what the user
+     built and how. Everything about one project in its paragraph. Mirror the posting's words only where true.
+   - **Close** (1–2 sentences): what they'd bring, and availability to talk.
+3. **Rules:** no skill or result without evidence; never mention gaps apologetically; the user's preferences set
+   the tone and what never to mention. A `% src:` comment beside each paragraph with the claim ids it uses. Escape
+   LaTeX specials in text from the posting.
+4. **Edit and fit** with `tex_edit { path, edits }`: a round's changes in one call, each `old` copied from the
+   `.tex` as it is. One full page (`freeLines` 0–2) unless the requirements or `coverFormat` set another length:
+   fill it with more evidence (a further project, more on how something was built), never filler; when the
+   evidence runs out first, the letter stays short. Then fix the rest of `lint`. Keep the `% !TEX program` line.
+5. **Read the body once** as the hiring manager would: cut filler and repeated claims.
+6. **Report** the angle in 2–3 lines and end your turn: the review opens by itself in the after-approval mode.
+   Call `review_documents` yourself only for a letter meant to be shorter (`short`, with the reason: a length in
+   the requirements, `coverFormat` or the preferences, the user's words, or the evidence that ran out), one
+   already approved (`again`), or outside the panel.
 
-## Write `postings/<id>/cover.tex`
-Copy the template main file (and any `contentFiles` from `template.json`, at the same relative paths), fill
-its placeholders (company, role, date, addressee if the posting names one), and write the body (between the
-`% BODY START` / `% BODY END` markers when the template has them). The placeholder body only marks where the
-letter goes; its paragraph count isn't the letter's. The structure is:
-1. **Opening (2–3 sentences):** the specific role and a concrete, true reason this company or team
-   interests the user, drawn from the posting. No clichés ("I am writing to express…", "passionate").
-2. **One evidence paragraph per project or role**, strongest first: each ties one or two requirements to it,
-   citing what the user built and how, from claims or profile. Mirror the posting's language only where true.
-   Everything about one project or role goes in its paragraph: never split it across two. Add the next
-   strongest until the page is full (usually two or three, sometimes four).
-3. **Close (1–2 sentences):** what they'd bring, and availability to talk.
-
-If `format.md` exists, follow its structure (paragraph count, salutation, sign-off, subject line, length)
-instead of the defaults above. The evidence rules below still apply.
-
-Constraints:
-- One full page (`freeLines` 0–2), unless the posting or `format.md` sets another length. Fill it with more
-  of the evidence (a further project or result, more on how the user built something), never with filler.
-  When the evidence runs out first, the letter stays short.
-- No skills or results without evidence. Never mention gaps apologetically.
-- Put a `% src:` comment beside each paragraph listing the claim ids used.
-- Escape LaTeX specials in anything taken from the posting.
-
-## Editing `cover.tex`
-- **Use the Edit tool**, never a script (`python`, `sed`, PowerShell `-replace`): scripted edits miss LaTeX's
-  backslashes or corrupt them. Copy each `old_string` from the source as you last read it, never from `pdf_text`
-  or `lint`, and make each change in one edit.
-- **One message per round:** the round's Edits, then `tex_compile` in the same message. Then reread the changed
-  paragraphs whole and fix what doesn't fit (a repeated claim, one project split across paragraphs) in the next
-  round.
-- Keep the template's `% !TEX program` line: don't switch engines to fit the page.
-
-## Build and check
-`tex_compile { path }` (must be one page; fix the first error first, then what `lint` lists, never from page
-images; `underfilled` or `freeLines` above 2 means add evidence, before fixing a short line) → read the body
-once as the hiring manager would, between the markers. Cut filler and repeated claims.
-
-`review_documents` refuses a letter with 3 or more free lines. Pass `short: [{ file, reason }]` only when it's
-meant to be shorter, with the reason: a length in `notes.md` or `format.md`, a line in `profile/preferences.md`,
-the user's words, or the evidence that ran out (and what you left out).
-
-## Build from an example
-When the user gives a sample letter whose format they like:
-1. `template_import_example { sourcePath }` with its absolute path. Word files: ask for a PDF export first.
-2. Read it: `pdf_info { path }` (page size) and `pdf_text { path, pages? }` for a PDF, or the image or text
-   file directly. What the text can't tell you (font, margins), ask the user or keep the template's.
-3. Rework `templates/cover/cover.tex` to reproduce its **format**: page size and margins, font family
-   and size (the closest available), header layout and contact line, date and addressee block, subject
-   line, salutation, paragraph spacing or indents, and the sign-off. Keep the `\newcommand` fields and
-   the `% BODY START` / `% BODY END` markers. Fill the identity fields from the profile.
-4. Write `templates/cover/format.md`: a short list of the structure to follow in every letter
-   (paragraph count and roles, salutation form, sign-off, typical length). Describe it; don't quote it.
-5. `template_set_main { kind: "cover", main }` and `tex_compile`. `open_file { path }` the PDF and ask the
-   user to compare it with the example; adjust what they point out until they approve.
-
-Never reuse the example's sentences, claims or voice in the user's letters. Only its format carries over.
-Tone comes from the user's preferences.
-
-## Report and iterate
-Reply with a 2–3 line summary of the angle taken, plus the path, then follow the attach mode
-(`posting_get` → `documents.attachMode`): in `after-approval` (the default), `review_documents { files }` it
-(with the resume if that's ready and not yet approved); in `immediately` it's ready to attach (`open_file` only
-when asked). Handle tweaks ("more concise", "mention X"), from chat or the review page, by editing, recompiling,
-reporting in one line (from `pdf_text { path, sinceReviewed: true }` after a review), and reviewing again in
-`after-approval`. Every build is saved in `.history/`, so earlier versions can be restored on request.
+**Changes the user asks for:** edit, rebuild, and report in one line from `pdf_text { path, sinceReviewed: true }`.
+Every build is kept in `.history/`, so an earlier version can be restored.

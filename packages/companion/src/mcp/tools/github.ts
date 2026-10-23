@@ -171,7 +171,10 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       description:
         "Clone or update a selected repo into repo-cache/<owner>__<name>/ (read-only). Returns the cache path, HEAD " +
         "sha, the last indexed sha, changedSince (each file changed since then with lines added/removed; [] = " +
-        "current; null = no usable earlier index) and affectedClaims (ids of claims citing a changed path). Read " +
+        "current; null = no usable earlier index; lock, vendored and generated files left out, counted in ignored), " +
+        "affectedClaims (ids of claims citing a changed path), and mode: current, reindex (from the diff), full " +
+        "(never indexed) or rebuild (the indexed commit is gone); for full and rebuild, components (folders over the " +
+        "depth policy, with files and lines). Read " +
         "changes with repo_diff, files with your own Read/Grep/Glob. Never modify, build or run anything in the cache.",
       inputSchema: { repo: z.string().describe("owner/name") },
     },
@@ -232,7 +235,8 @@ export function registerGitHubTools(server: McpServer, s: Services): void {
       title: "Check claims",
       description:
         "Validate knowledge/<owner>__<name>/claims.yaml: schema, unique ids, and that every path in a claim's files " +
-        "exists in the cached repo. Run after writing or editing claims.",
+        "exists in the cached repo, and that no claim the user edited (user_edited) changed since repo_sync. Run after " +
+        "writing or editing claims.",
       inputSchema: { repo: z.string() },
       annotations: { readOnlyHint: true },
     },

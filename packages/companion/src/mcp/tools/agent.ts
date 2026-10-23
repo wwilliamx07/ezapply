@@ -1,4 +1,4 @@
-import { AskQuestion, type AskSpec, askSpecProblems, ErrorCode, EzError } from "@ezapply/protocol";
+import { AskQuestion, type AskSpec, askSpecProblems, ErrorCode, EzError, postingConversation } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Services } from "../../services.js";
@@ -19,7 +19,7 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
         "Put all of one step's questions in one call. Each question: id, prompt, type single | multi | text; options " +
         "for single and multi (allowOther adds a free-text Other); proposed fills in your suggestion (any question, " +
         "sensitive ones too) with why saying where it came from; sensitive flags it; required: false lets it be " +
-        "skipped; remember { answerId } offers saving the answer to the answer bank. Returns { done: true, answers: " +
+        "skipped; remember { answerId, question? } offers saving the answer to the answer bank (question: the form's wording). Returns { done: true, answers: " +
         "{ <id>: { value, other?, remember? } | { skipped } } }, { replied, message } when the user wrote in the " +
         "chat instead, { done: false, askId } when nothing came yet (call ask_user { askId } to keep waiting), or " +
         "{ noPanel } when no panel is open (ask in chat instead). In the panel it returns { pending } at once: end " +
@@ -53,7 +53,7 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
           // A panel conversation's answer is on its way as a message.
           if (conversation && s.needs.isOpen(args.askId)) return pending(args.askId);
           const spec = s.needs.spec(args.askId);
-          return outcome(s, args.askId, await s.needs.waitAsk(args.askId, timeoutMs), spec);
+          return outcome(s, args.askId, await s.needs.waitAsk(args.askId, timeoutMs), spec, conversation, session);
         }
         if (!args.title || !args.questions) {
           throw new EzError(
@@ -81,13 +81,13 @@ export function registerAgentTools(server: McpServer, s: Services, session?: str
             conversation,
             { tool: "ask_user", id: card.id },
             s.needs.settledAsk(card.id).then(async (o) => ({
-              value: await outcome(s, card.id, o, spec),
+              value: await outcome(s, card.id, o, spec, conversation, session),
               label: "replied" in o ? `Your reply to ${spec.title}` : `Answers to ${spec.title}`,
             })),
           );
           return pending(card.id);
         }
-        return outcome(s, card.id, await s.needs.waitAsk(card.id, timeoutMs), spec);
+        return outcome(s, card.id, await s.needs.waitAsk(card.id, timeoutMs), spec, conversation, session);
       },
     ),
   );
@@ -139,7 +139,9 @@ async function outcome(
   s: Services,
   askId: string,
   o: Awaited<ReturnType<Services["needs"]["waitAsk"]>>,
-  spec?: AskSpec,
+  spec: AskSpec | undefined,
+  conversation: string | undefined,
+  session: string | undefined,
 ): Promise<object> {
   if (!o) return { done: false, askId, hint: "Not answered yet: call ask_user { askId } to keep waiting." };
   if ("replied" in o) {
@@ -149,33 +151,32 @@ async function outcome(
       hint: "The user answered in the chat instead of the card: act on their message.",
     };
   }
-  // "Save for next time" on an answer bank entry is written here; one the bank doesn't have yet is the agent's to
-  // add, as the ezapply-answers skill does.
-  const toSave: { questionId: string; answerId: string; value: string | string[] }[] = [];
+  // Answers for answer-bank entries: a sensitive one may be filled now that the user gave it, and "Save for next
+  // time" is written here, a new entry included.
+  const postingId = await postingOf(s, conversation, session);
+  const toSave: { answerId: string; question: string; value: string }[] = [];
   for (const q of spec?.questions ?? []) {
     const a = o.answers[q.id];
-    if (q.remember && a && "value" in a && a.remember)
-      toSave.push({ questionId: q.id, answerId: q.remember.answerId, value: a.value });
+    if (!q.remember || !a || !("value" in a)) continue;
+    if (postingId) s.forms.userAnswered(postingId, q.remember.answerId);
+    if (a.remember) {
+      const value = Array.isArray(a.value) ? a.value.join(", ") : a.value;
+      toSave.push({ answerId: q.remember.answerId, question: q.remember.question ?? q.prompt, value });
+    }
   }
-  let saved: string[] = [];
-  if (toSave.length > 0) {
-    const r = await s.profile
-      .saveAnswers(
-        Object.fromEntries(toSave.map((t) => [t.answerId, Array.isArray(t.value) ? t.value.join(", ") : t.value])),
-      )
-      .catch(() => null);
-    saved = r?.ok ? r.set : [];
-  }
-  const notSaved = toSave.filter((t) => !saved.includes(t.answerId));
+  const r = toSave.length ? await s.profile.rememberAnswers(toSave).catch(() => null) : null;
+  const saved = r?.ok ? r.set : [];
+  const notSaved = toSave.filter((t) => !saved.includes(t.answerId) && !saved.includes(t.answerId.toLowerCase()));
   return {
     done: true,
     answers: o.answers,
     ...(saved.length ? { savedToAnswerBank: saved } : {}),
-    ...(notSaved.length
-      ? {
-          toSave: notSaved,
-          hint: "The user asked to save these, and the answer bank has no entry for them yet: add them to profile/answers.yaml.",
-        }
-      : {}),
+    ...(notSaved.length ? { notSaved: notSaved.map((t) => t.answerId) } : {}),
   };
+}
+
+/** The posting a card's answers are for: its panel conversation's, or the terminal chat's active one. */
+async function postingOf(s: Services, conversation: string | undefined, session: string | undefined) {
+  if (conversation) return postingConversation(conversation)?.postingId;
+  return s.postings.resolve(undefined, session).catch(() => undefined);
 }

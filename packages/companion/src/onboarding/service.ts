@@ -84,11 +84,21 @@ const HOW: Record<OnboardTaskKind, string> = {
   "fill-cover-identity":
     "Set the cover template's \\myname and \\mycontact from profile/profile.yaml, then tex_compile { path } it.",
   "restyle-cover":
-    "Restyle the cover template to match the resume's fonts and header (the ezapply-cover-letter skill), then " +
-    "tex_compile { path } it.",
+    "Restyle the cover template's look to match the resume template's: its font family and size, and its header " +
+    "(name and contact line). Change only the styling, keeping the \\newcommand fields and the % BODY START / % BODY " +
+    "END markers. Edit with tex_edit { path, edits }, which compiles.",
   "cover-from-example":
-    "params.file is in the workspace (library/…): template_import_example { sourcePath } with its absolute path, " +
-    "then follow Build from an example in the ezapply-cover-letter skill.",
+    "params.file is the user's example letter, in the workspace (library/…): template_import_example { sourcePath } " +
+    "with its absolute path. Read it (pdf_info { path } for its page size and pdf_text { path, pages? } for a PDF; " +
+    "an image or text file directly); what the text can't tell (font, margins) ask on an ask_user card or keep the " +
+    "template's. Rework templates/cover/cover.tex to reproduce its format: page size and margins, the closest font " +
+    "and size, the header and contact line, the date and addressee block, subject line, salutation, paragraph " +
+    "spacing or indents, sign-off. Keep the \\newcommand fields and the % BODY START / % BODY END markers, and fill " +
+    "the identity fields from the profile. Write templates/cover/format.md: a short list of the structure every " +
+    "letter follows (paragraph count and roles, salutation, sign-off, typical length), described, never quoted. " +
+    'template_set_main { kind: "cover", main } and tex_compile { path }; then ask the user to compare the PDF with ' +
+    "the example (open_file { path }) and adjust what they point out. Never carry the example's sentences, claims " +
+    "or voice into the user's letters: only its format.",
 };
 
 const TaskBody = z.object({
