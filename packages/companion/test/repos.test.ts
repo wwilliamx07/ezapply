@@ -95,6 +95,8 @@ describe("RepoService", () => {
     expect(r.fileCount).toBe(3);
     expect(r.indexedSha).toBeNull();
     expect(r.changedSince).toBeNull();
+    // Too small to split into components.
+    expect(r).toMatchObject({ mode: "full", components: [] });
     await expect(writeFile(join(r.path, "README.md"), "tampered")).rejects.toThrow();
   });
 
@@ -169,11 +171,14 @@ describe("RepoService", () => {
     await commit(
       "Jane Doe",
       "123+jane@users.noreply.github.com",
-      { "src/limiter.ts": "a\nB\nc\nd\ne\n", "docs/guide.md": "guide\nmore\n" },
+      { "src/limiter.ts": "a\nB\nc\nd\ne\n", "docs/guide.md": "guide\nmore\n", "package-lock.json": "{}\n" },
       "tweak",
     );
     const r = await repos.sync("jane/proj", "public-url");
     expect(r.indexedSha).not.toBe(r.headSha);
+    // The lock file can't change a fact: left out, and counted.
+    expect(r).toMatchObject({ mode: "reindex", ignored: 1 });
+    expect(r).not.toHaveProperty("components");
     expect(r.changedSince).toEqual([
       { path: "docs/guide.md", added: 1, removed: 0 },
       { path: "src/limiter.ts", added: 2, removed: 1 },
@@ -188,7 +193,30 @@ describe("RepoService", () => {
     await expect(repos.diff("jane/proj", ["../x"])).rejects.toMatchObject({ code: "bad_request" });
 
     await repos.markIndexed("jane/proj");
-    expect(await repos.sync("jane/proj", "public-url")).toMatchObject({ changedSince: [], affectedClaims: [] });
+    expect(await repos.sync("jane/proj", "public-url")).toMatchObject({
+      mode: "current",
+      changedSince: [],
+      affectedClaims: [],
+    });
+  });
+
+  it("refuses a change to a claim the user edited, against claims.yaml as it was at the sync", async () => {
+    const dir = repos.knowledgePath("jane/proj");
+    const claims = (claim: string, edited: boolean) =>
+      `schemaVersion: 1\nrepo: jane/proj\nclaims:\n  - id: rate-limiter\n    claim: ${claim}\n    files: [src/]\n` +
+      `    confidence: high\n    user_edited: ${edited}\n`;
+    await writeFile(join(dir, "claims.yaml"), claims("Built a sliding-window rate limiter", true));
+    await repos.sync("jane/proj", "public-url");
+    await writeFile(join(dir, "claims.yaml"), claims("Designed a distributed rate limiter", true));
+    expect(await repos.checkClaims("jane/proj")).toMatchObject({
+      valid: false,
+      errors: [{ path: "claims.0", message: expect.stringMatching(/rate-limiter is the user's own/) }],
+    });
+    // Unmarking it is a change too.
+    await writeFile(join(dir, "claims.yaml"), claims("Built a sliding-window rate limiter", false));
+    expect((await repos.checkClaims("jane/proj")).valid).toBe(false);
+    await writeFile(join(dir, "claims.yaml"), claims("Built a sliding-window rate limiter", true));
+    expect((await repos.checkClaims("jane/proj")).valid).toBe(true);
   });
 
   it("refuses a diff before the repo is indexed", async () => {

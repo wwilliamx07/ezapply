@@ -17,6 +17,7 @@ import {
 import { isFormSite, SITES, siteInfo } from "@ezapply/sites";
 import { SITE_NOTES } from "@ezapply/sites/notes";
 import type { ExtensionBridge } from "../bridge/server.js";
+import { neverMentioned } from "../documents/content-lint.js";
 import type { ReviewService } from "../documents/review.js";
 import type { Logger } from "../logger.js";
 import type { PostingsService } from "../postings/service.js";
@@ -336,7 +337,12 @@ export class FormsService {
     fills: { fieldId: string; value: FillValue; source: FillSource; answerId?: string }[],
     tabId?: number,
     session?: string,
-  ): Promise<{ results: FillResult[]; postingBound?: PostingBound; tabHidden?: TabHidden }> {
+  ): Promise<{
+    results: FillResult[];
+    neverMention?: { fieldId: string; terms: string[] }[];
+    postingBound?: PostingBound;
+    tabHidden?: TabHidden;
+  }> {
     return this.onTab({ tool: "fill_fields", params: { fills } }, { tabId, session }, async (t) => {
       await this.checkSensitive(t, fills);
       await this.claim(t);
@@ -360,11 +366,34 @@ export class FormsService {
           ...(r?.error ? { error: r.error } : {}),
         });
       }
+      const flagged = await this.neverMentionIn(fills);
       return annotate(
-        { results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)) },
+        {
+          results: results.map((r) => leanFillResult(r, fills.find((f) => f.fieldId === r.fieldId)?.value)),
+          ...(flagged.length
+            ? {
+                neverMention: flagged,
+                hint: "These answers use terms preferences.md says never to mention: reword them and fill again.",
+              }
+            : {}),
+        },
         t,
       );
     });
+  }
+
+  /**
+   * Answers of the agent's own judgment that use a term from preferences.md's "Never mention": the preference
+   * reached the agent only as text in its context, and nothing checked it.
+   */
+  private async neverMentionIn(fills: { fieldId: string; value: FillValue; source: FillSource }[]) {
+    const judged = fills.filter((f) => f.source === "judgment" && typeof f.value === "string" && f.value.trim());
+    if (judged.length === 0) return [];
+    const section = (await this.profile.preferences().catch(() => null))?.neverMention ?? "";
+    if (!section.trim()) return [];
+    return judged
+      .map((f) => ({ fieldId: f.fieldId, terms: neverMentioned(section, f.value as string) }))
+      .filter((f) => f.terms.length > 0);
   }
 
   /**

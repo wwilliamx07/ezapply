@@ -104,6 +104,25 @@ Anything else fails with `path_not_allowed`.
   mechanical. A rendered page image costs about 2.5k tokens of context, re-sent on every later turn of the
   session, two per tailoring, to find what these checks name exactly. Changes to a
   template's look are the user's to ask for.
+- **Content findings** (`content-lint.ts`, added to `lint` by `tex_compile` and `tex_edit`, with a sentence in
+  the hint): what a program can check in a posting's `resume.tex` or `cover.tex` and the content files its
+  template copied, under the skills' own rules, which the agent is told and still slips on. Only lines the
+  tailoring changed are checked, a changed line being one not in the template's copy of that file: the template is
+  the user's own wording. Each finding is `{ kind, file, line, text }`:
+  - `unsourced-number`: a number (thousands separators and leading zeros aside) in no claim, the profile, the
+    posting or the template;
+  - `missing-src`: a resume bullet (a line starting with an `…item` command) with no `% src:` on it or on the
+    comment line just above or below. A cover letter's paragraphs aren't required to carry one;
+  - `unknown-src`: a `% src:` id that is neither a claim id nor a path the profile holds (`work.0.highlights.1`,
+    `work[0]`, with or without `profile.`);
+  - `never-mention`: a term from `preferences.md`'s "Never mention" (one per line or comma-separated, five words
+    at most), matched as a word;
+  - `unbacked-skill`: on the resume, an entry of a labelled list of three or more short items (`Languages:
+    Python, Go, Rust`) that no claim or the profile names; the posting asking for a skill is no evidence of it.
+
+  *Why the changed lines only, and these rules:* the skills said the same ("only numbers in the evidence", a src
+  per bullet) and nothing checked them. Polarity, attestations and the evidence map aren't checked: a pattern
+  would be wrong too often.
 - **Free lines** (`freeLines` in `pdf/lint.ts`): within the limit, how many more lines fit below the last page's
   lowest line, with the bottom margin taken as equal to the space above the highest line and a line as the
   page's median line spacing. Returned on every build within its limit, so "one more line fits" is known
@@ -134,6 +153,10 @@ the last one left sends it). The files are served from the bytes read when the r
 what they saw even if Claude rebuilds meanwhile. Answering records each document with no request and no comment as
 approved, and returns the others with the user's request and comments (`{ page, quote, note }`: the agent gets the
 quoted words, not where they sit on the page).
+
+**A document with missing or unknown sources isn't reviewed** (`checkSources`, before the review opens, from
+`review_documents` and the review that opens itself): a `missing-src` or `unknown-src` finding in its `.tex` is
+`bad_request` naming each file and line. A source the user can't check is no source.
 
 **An underfilled document isn't reviewed** (`checkFilled`). A resume or cover letter (by name, as for the page
 limit) at its page limit whose last page has 3 or more free lines is `bad_request`, naming each file and its free

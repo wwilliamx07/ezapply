@@ -18,6 +18,12 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   `bankMatch` fields, refuses a sensitive answer the user didn't give for the posting and a bundle's parts; the
   hand-off is a card built from the log, and a saved answer is written by code. The agent kept missing them, or
   spent turns on them ([forms](mcp-tools.md#forms)).
+- **Code checks what a program can under the agent's own checks:** numbers and skills without evidence, missing or
+  unknown `% src:` ids (which also hold back the review), never-mention terms in documents and judged answers,
+  changes to claims the user edited. Rules the agent was told and still broke
+  ([documents](components/documents.md#compile-compile), [knowledge base](components/knowledge-base.md#checks)).
+- **The workspace denies the Explore and Plan subagents**, which don't load `EZAPPLY.md`, instead of asking the agent
+  not to use them ([workspace](components/workspace.md#claude-code-settings)).
 - **The setup page installs TeX and fills the cover's name and contact itself.** Both are the same every time,
   with nothing to judge, so an agent turn added only a wait; the system asks for permission to install
   ([ui](components/ui.md#installing-tex)).

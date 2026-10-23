@@ -2,6 +2,7 @@ import { diffPages, ErrorCode, EzError } from "@ezapply/protocol";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { openReviewFor } from "../../documents/agent-review.js";
+import { checkSources, withContentLint } from "../../documents/content-lint.js";
 import type { DocumentReason } from "../../documents/review.js";
 import { type BundleInput, buildBundle, startDocument } from "../../documents/tailor.js";
 import type { Services } from "../../services.js";
@@ -21,15 +22,17 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
         "checked against the page limit, *cover*/*letter* files against one page; over it, `overflow` gives the " +
         "lines past it and their text. Within it, `freeLines` is how many more lines fit on the last page, and " +
         "`lint` lists layout problems: a word or two alone on a bullet's last line, right-aligned dates out of " +
-        "line, 3+ free lines at the limit, text off the page. Successful builds are snapshotted to .history/. Engine: the file's " +
+        "line, 3+ free lines at the limit, text off the page; in a posting's resume or cover letter, changed lines with " +
+        "a number no evidence holds, a bullet without % src or an unknown src id, a never-mention term, a skill " +
+        "nothing backs. Successful builds are snapshotted to .history/. Engine: the file's " +
         `\`% !TEX program\` comment, else tex.engine (engine, engineFrom say which). ${PATH_NOTE}`,
       inputSchema: {
         path: z.string().describe("The .tex file."),
         maxPages: z.number().int().min(1).optional().describe("Override the page limit check for this document."),
       },
     },
-    tool(s.log, "tex_compile", ({ path, maxPages }: { path: string; maxPages?: number }) =>
-      s.documents.compile(path, maxPages === undefined ? {} : { maxPages }),
+    tool(s.log, "tex_compile", async ({ path, maxPages }: { path: string; maxPages?: number }) =>
+      withContentLint(s, path, await s.documents.compile(path, maxPages === undefined ? {} : { maxPages })),
     ),
   );
 
@@ -71,8 +74,8 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
           .max(40),
       },
     },
-    tool(s.log, "tex_edit", ({ path, edits }: { path: string; edits: { old: string; new: string }[] }) =>
-      s.documents.edit(path, edits),
+    tool(s.log, "tex_edit", async ({ path, edits }: { path: string; edits: { old: string; new: string }[] }) =>
+      withContentLint(s, path, await s.documents.edit(path, edits)),
     ),
   );
 
@@ -289,7 +292,7 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
         "if the user says it's approved in chat, ask them to press it on the page. Write your report before " +
         "calling. done: false means no answer yet: ask whether they saw the page, then call with reviewId to wait " +
         "again. In the panel it returns { pending } at once: end your turn, and the answer comes as your next " +
-        "message. A resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
+        "message. A document with a changed bullet lacking % src, or an unknown src id, is refused; a resume or cover letter with 3+ free lines on its last page is refused unless `short` names it " +
         "with the reason it's meant to be shorter; a document already approved as it is, unless `again` does.",
       inputSchema: {
         files: z
@@ -350,6 +353,7 @@ export function registerDocumentTools(server: McpServer, s: Services, session?: 
           return { ...review, pending: review.reviewId, hint: PENDING_HINT };
         }
         // The page names who gets the answer: Claude Code in a terminal.
+        await checkSources(s, files as string[]);
         const review = await s.reviews.open(files as string[], { short, again }, "Claude Code");
         const openedIn = await s.opener.url(review.url).catch(() => null);
         if (!openedIn) {

@@ -76,7 +76,7 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
       permissions: {
         ...perms,
         allow: union(perms.allow, ["mcp__ezapply"]),
-        deny: union(perms.deny, [...REPO_CACHE_DENY, ...DEBUG_READ_DENY, ...SCRIPT_EDIT_DENY]),
+        deny: union(perms.deny, [...REPO_CACHE_DENY, ...DEBUG_READ_DENY, ...SCRIPT_EDIT_DENY, ...SUBAGENT_DENY]),
       },
     };
   });
@@ -239,6 +239,12 @@ const SCRIPT_EDIT_DENY = ["Bash(python:*)", "Bash(python3:*)", "Bash(py:*)"].fla
   // The panel's shell is PowerShell on Windows without Git Bash (`panelShell`).
   r.replace("Bash", "PowerShell"),
 ]);
+
+/**
+ * Claude Code's built-in Explore and Plan subagents don't load CLAUDE.md, so they read postings without EZAPPLY.md's
+ * rules on untrusted text. Denied, a delegated read goes to a general-purpose subagent, which does.
+ */
+const SUBAGENT_DENY = ["Agent(Explore)", "Agent(Plan)"];
 
 const IMPORT_LINE = "@EZAPPLY.md";
 /** Antigravity's inline include (its bare `@path` only names a file); `EZAPPLY.md`'s own `@` import is Claude Code's. */

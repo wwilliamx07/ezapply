@@ -135,7 +135,8 @@ already held. The rule is in `EZAPPLY.md` too, so it holds whichever skill is ru
   subfolder, since parent `CLAUDE.md` files load), re-reads the project-root `CLAUDE.md` after
   compaction, and loads it into general-purpose subagents. It's inside the working directory, so there is no
   external-import prompt.
-- The built-in **Explore** and **Plan** subagents skip `CLAUDE.md`. The MCP server's instructions, which
+- The built-in **Explore** and **Plan** subagents skip `CLAUDE.md`, so the workspace's settings deny them
+  ([settings](#claude-code-settings)): a delegated read goes to a general-purpose subagent, which loads it. The MCP server's instructions, which
   every session and subagent gets while the server is connected, therefore repeat the rules that must never
   be missing (untrusted content, application requirements, never submit) and give the absolute path of
   `EZAPPLY.md` with "Read it if it isn't in your context".
@@ -204,7 +205,9 @@ shapes too.
   the debug records hold the user's filled values and pages, are for working on ezapply, and would only cost
   the applying agent context; and `Bash` and `PowerShell` (the panel's shell on Windows without Git Bash) for
   `python`, `python3` and `py`: nothing in the workspace needs
-  Python, and the agent used it to script `.tex` edits ([why not](#the-agent-file-ezapplymd)). `autoMemoryEnabled: false` is added
+  Python, and the agent used it to script `.tex` edits ([why not](#the-agent-file-ezapplymd)); and `Agent(Explore)`,
+  `Agent(Plan)`, the subagents that don't load `EZAPPLY.md` (Claude Code checks a subagent launch against
+  `Agent(<type>)` rules). `autoMemoryEnabled: false` is added
   when the file doesn't set it (a value the user set is kept): Claude Code's auto memory loads a memory index
   and instructions for writing memories into every session, and has Claude spend turns writing notes. Here
   those notes would duplicate what the workspace already holds (profile, answer bank, preferences,

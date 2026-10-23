@@ -1213,6 +1213,14 @@ describe("form tools over MCP", () => {
     expect((await fill("user")).data.error.message).toMatch(/previous_worker/);
     handle.services.forms.userAnswered(cap.postingId, "previous_worker");
     expect((await fill("user")).data.results).toEqual([{ fieldId: "application-questions.previousWorker", ok: true }]);
+    // An answer of the agent's own judgment that uses a term the user never wants mentioned is flagged.
+    await writeFile(join(dir, "ws", "profile", "preferences.md"), "# Preferences\n\n## Never mention\n\n- Atlantis\n");
+    const judged = await callJson(client, "fill_fields", {
+      fills: [{ fieldId: "my-information.legalName--firstName", value: "From Atlantis", source: "judgment" }],
+    });
+    expect(judged.data).toMatchObject({
+      neverMention: [{ fieldId: "my-information.legalName--firstName", terms: ["Atlantis"] }],
+    });
     // What this application filled is no longer marked prefilled.
     const again = (await callJson(client, "get_form")).data;
     expect(field(again, "application-questions.previousWorker")).not.toHaveProperty("prefilled");

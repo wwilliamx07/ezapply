@@ -50,7 +50,9 @@ can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
 
 ## Checks
 - **`claims_check`** validates the schema, unique ids, and that every path in a claim's `files` (a file or a
-  folder) exists in the cached repo and stays inside it. Returns `{ valid, claims, errors[] }`.
+  folder) exists in the cached repo and stays inside it. A claim marked `user_edited` in `claims.yaml` as it was at
+  the last `repo_sync` (`.claims-at-sync.yaml`) must still be there unchanged, marked: an index run may not
+  reword or drop the user's own claim. Returns `{ valid, claims, errors[] }`.
 - **`knowledge_mark_indexed`** refuses unless `claims_check` passes, rewrites old-form claims as `files`, then
   writes `meta.json` with the cached HEAD commit, file count and depth policy. Later `repo_sync` calls report
   only what changed since.

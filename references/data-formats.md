@@ -368,6 +368,9 @@ salutation, sign-off, subject line, length). No quoted text.
 ### `knowledge/<owner>__<name>/claims.yaml`
 `{ schemaVersion: 1, repo, claims: [ { id (kebab-case), claim (≥10 chars), skills[], impact (string|null), files[] (≥1, repo paths: files or folders), confidence (high|medium), user_edited } ] }`
 
+`.claims-at-sync.yaml` beside it is `claims.yaml` as it was at the last `repo_sync`, which `claims_check` compares
+`user_edited` claims with; written over at every sync.
+
 The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is still read (each entry as its
 `path`) and is rewritten as `files` by the next `knowledge_mark_indexed`; `schemaVersion` stayed 1
 ([why files](components/knowledge-base.md#claims-claimsyaml)).

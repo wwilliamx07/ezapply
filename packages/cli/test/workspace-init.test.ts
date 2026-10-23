@@ -66,7 +66,9 @@ describe("Claude Code config", () => {
     const path = join(config.workspace, ".claude", "settings.json");
     const read = async () => JSON.parse(await readFile(path, "utf8"));
     expect(await read()).toMatchObject({ autoMemoryEnabled: false, enabledMcpjsonServers: ["ezapply"] });
-    expect((await read()).permissions.deny).toEqual(expect.arrayContaining(["Bash(python:*)", "Edit(/repo-cache/**)"]));
+    expect((await read()).permissions.deny).toEqual(
+      expect.arrayContaining(["Bash(python:*)", "Edit(/repo-cache/**)", "Agent(Explore)", "Agent(Plan)"]),
+    );
 
     await writeFile(path, JSON.stringify({ ...(await read()), autoMemoryEnabled: true, model: "opus" }));
     await initWorkspace(config);

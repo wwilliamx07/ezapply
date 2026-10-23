@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { EzError, postingConversation } from "@ezapply/protocol";
 import type { Services } from "../services.js";
+import { checkSources } from "./content-lint.js";
 import type { DocumentReason } from "./review.js";
 
 /**
@@ -15,6 +16,7 @@ export async function openReviewFor(
   files: string[],
   reasons: { short?: DocumentReason[]; again?: DocumentReason[] } = {},
 ) {
+  await checkSources(s, files);
   const review = await s.reviews.open(files, reasons, s.agent.agentName(conversation));
   const openedIn = await s.opener.url(review.url).catch(() => null);
   s.agent.deliverLater(
