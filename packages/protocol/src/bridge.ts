@@ -8,11 +8,11 @@ import { CapturePayload, CaptureResult, SiteId } from "./postings.js";
 /**
  * Wire protocol between the browser extension and the companion (WebSocket, JSON text frames).
  *
- * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema.
- * Both sides refuse to talk across versions and tell the user which side to update. A new site is no such change:
+ * Bump PROTOCOL_VERSION on any breaking change to the envelope or to a method's schema, including a new variant of
+ * a union the receiving side parses (an older receiver rejects it). Both sides refuse to talk across versions and tell the user which side to update. A new site is no such change:
  * `hello` carries the extension's sites, and the companion refuses an extension that knows other sites than it does.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 
 /** WebSocket close codes used by the companion. */
 export const CloseCode = {

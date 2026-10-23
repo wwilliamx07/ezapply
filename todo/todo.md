@@ -21,17 +21,18 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 | — | [The panel's agent stops when ezapply's tools aren't connected yet](mcp-not-ready/overview.md) | High | S | — |
 | — | [CI timeouts on Windows](ci-timeouts/overview.md) | Low | S | — |
 | — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' live run in `references/status.md` |
-| — | [A harness that runs the user flows](flow-harness/overview.md) | — | ~L | — |
-| 1 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
-| 2 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M–L | — |
-| 3 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
-| 4 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
-| 5 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
-| 6 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | — |
-| 7 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
-| 8 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 9 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
-| 10 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| 1 | [An adapter harness: local clones of real application forms](adapter-harness/overview.md) | — | L | — |
+| 2 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
+| 3 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M | The adapter harness |
+| 4 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
+| 5 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
+| 6 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
+| 7 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | — |
+| 8 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
+| 9 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
+| 10 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
+| 11 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
+| — | [A UI fuzzer with a map of the UI](ui-fuzzer/overview.md) | — | ~L | — |
 | — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
 | — | [Lint for broken Markdown links and stale comments](repo-lint/overview.md) | Low | S | — |
 | — | [Remove the upgrade shims](remove-upgrade-shims/overview.md) | — | ~S | No older install left (any time after that) |
@@ -39,7 +40,9 @@ Greenhouse application embedded in a careers page; then an Oracle run.
 Why this order:
 - **Bugs first**, in the table's order: the agent stopping at its first tool call breaks a session outright; the
   rest cost turns or quality on every run.
-- **The agent's footing first.** The claims are what documents are written from, so their spec pays off on every
+- **The adapter harness first:** every later adapter change, and every new site, is tested on a clone instead of
+  waiting for the user's next real application.
+- **The agent's footing next.** The claims are what documents are written from, so their spec pays off on every
   later tailoring.
 - **Employer's own forms beyond plain HTML** waits for a saved careers page whose application is its own form,
   with no frame: its widgets decide what's worth reading.
@@ -51,11 +54,12 @@ Why this order:
 - **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, CI timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
   touch, A writing spec for claims, Compatibility with various agents.
-- **Adapter building:** Agents that try to break a new adapter, Employer's own forms beyond plain HTML.
+- **Adapter building:** The adapter harness, Agents that try to break a new adapter, Employer's own forms beyond
+  plain HTML.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`), so the manager reads and extends those; it adds no database. Tracker, Job
   search, Job alerts, Auto mode.
-- **Upkeep:** Remove the upgrade shims, A harness that runs the user flows, Lint for broken Markdown links and stale
+- **Upkeep:** Remove the upgrade shims, A UI fuzzer with a map of the UI, Lint for broken Markdown links and stale
   comments.

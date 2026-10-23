@@ -40,6 +40,10 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **The setup page has no chat.** Questions and changes no button covers go to the panel's general conversation,
   which already is one; the page's previews follow the PDF's build time, so the agent's work there shows on the page
   ([ui](components/ui.md#what-each-step-does)).
+- **Adapters are tested on clones, played by a stand-in.** A clone keeps the site's own front end and its
+  server's answers, and one generic engine answers by each request's kind, so a fill runs the site's real scripts
+  offline; a fill run injects the built adapter as the extension does, without the extension and companion, which
+  don't change with a site ([harness](harness.md)).
 - **No daemon.** The companion lives inside `./ezapply` and ends with it. Nothing runs in the
   background, so there is nothing to start, stop or keep secure while the user isn't applying
   ([architecture](architecture.md#processes-and-lifecycle)).
@@ -162,6 +166,11 @@ What's built but hasn't run live, and what to check first. Each site's page list
   tested with stubs. Check on each site: the confirmation page is recognised by `pageKind` and lands on the
   application's host (an embedded form's frame included); the background keeps polling while the tab sits on the
   review page; a report made while `ezapply` was closed arrives on the next start.
+
+- **The adapter harness** ([harness](harness.md)), run on its hand-written site only. Clone a public Greenhouse
+  posting first: it opens offline looking as it did, the explorer reaches every field, list and conditional
+  section, the proposed description (made into `greenhouse/clone.ts`) answers the held-out path, and a fill run
+  reaches the hand-off. What it finds that the explorer or the engine can't handle goes to the todo.
 
 - **Employer's own forms** ([sites](components/sites.md#employers-own-forms-generic)), built and tested on
   synthetic pages only. Check on a real careers page with a frameless form: the right form is picked, every

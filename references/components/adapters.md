@@ -339,8 +339,8 @@ into the page's main world as the extension does, and calls the adapter's method
 - **No bot-protection workarounds.** A site that blocks headless browsers or shows a challenge (SmartRecruiters'
   DataDome, iCIMS) is built from pages the user saves from a real session instead.
 
-The script hardcodes this machine's paths, so it stays out of the repo until the todo's "Agents that try to
-break a new adapter" gives it a home.
+The script hardcodes this machine's paths, so it stays out of the repo. [The adapter harness](../harness.md)
+replaces it, under the same rules; no site has been cloned with it yet.
 
 **Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's
 system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the

@@ -160,7 +160,9 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   with "not an application page" rather than landing anywhere else; it strips `debug` and answers without a trace
   (the companion's record notes it), and an older companion strips the response's `debug`.
 - Anything else that changes a message or a method's schema: bump `PROTOCOL_VERSION`. Old and new sides
-  then refuse each other with a hint naming the side to rebuild.
+  then refuse each other with a hint naming the side to rebuild. That includes a new variant of a union the
+  receiving side parses, such as an `AgentEvent` kind: unlike an unknown field it isn't stripped, and an older
+  receiver rejects the whole message over it (`panel.conversation` fails on one unknown event).
 - A new site: no bump. `SiteId` is a string, so neither side rejects a message for naming a site, and `hello`
   compares the two sides' sites instead: an extension and a companion built with different sites refuse each other
   at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know. (As an enum, it

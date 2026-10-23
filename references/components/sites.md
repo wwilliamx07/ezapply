@@ -30,6 +30,7 @@ packages/sites/                 @ezapply/sites
     definition/                 site.ts, main.ts (the bundle entry), and its own widgets, pages, selectors
     notes.ts                    its notes for the agent
     reader.ts                   its posting reader, where it has one
+    clone.ts                    its description for the adapter harness, once it has been cloned ([harness](../harness.md))
     test/                       its URL rules, its saved pages read, its behavioural tests and golden schemas,
                                 page.ts (the page the conformance test checks it on)
     fixtures/                   its saved, scrubbed pages
@@ -37,6 +38,7 @@ packages/sites/                 @ezapply/sites
   src/registry.ts               SITES, in detection order, GENERIC beside them, and what asks it
   src/definitions.ts            SITE_DEFINITIONS and GENERIC_DEFINITION: the extension's side
   src/notes.ts, src/readers.ts  SITE_NOTES, POSTING_READERS: the companion's side
+  src/clones.ts                 CLONE_DESCRIPTIONS and their shape: the adapter harness's side
   test/                         what every site must pass (conformance), and the shared test helpers
 packages/engine/                @ezapply/engine: the adapter engine and its drivers (src/widgets/)
 ```
@@ -55,7 +57,7 @@ packages/engine/                @ezapply/engine: the adapter engine and its driv
   (`SiteInfo`), the waits' (`Timing`, `STANDARD_WAITS`) and `HOST_PERMISSIONS`, and knows no site: the wire takes a site
   as a string ([protocol](protocol.md#bridge-handshake)).
 - **Two builds.** The companion runs under Node, so `tsc` builds the registry, the notes and the readers to `dist/`
-  (the package's exports: `.`, `./notes`, `./readers`); the definitions are left out of it and stay source, which
+  (the package's exports: `.`, `./notes`, `./readers`, `./clones`); the definitions are left out of it and stay source, which
   `esbuild` bundles from TypeScript (`extension/build.mjs` builds `src/<site>/definition/main.ts` for each of `SITES`
   and `GENERIC`).
   `tsconfig.definitions.json` typechecks everything with the browser's types. The engine is source only (its exports

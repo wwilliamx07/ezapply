@@ -15,6 +15,10 @@
     "./readers": {
       "types": "./dist/readers.d.ts",
       "default": "./dist/readers.js"
+    },
+    "./clones": {
+      "types": "./dist/clones.d.ts",
+      "default": "./dist/clones.js"
     }
   },
   "scripts": {

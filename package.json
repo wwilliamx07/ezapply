@@ -17,17 +17,20 @@
   "scripts": {
     "setup": "npm install && npm run build && node packages/cli/dist/main.js init",
     "build": "tsc -b packages/protocol packages/sites packages/companion packages/cli && npm run build -w @ezapply/extension && npm run build -w @ezapply/ui",
-    "typecheck": "tsc -b packages/protocol packages/sites packages/companion packages/cli && tsc -p tsconfig.tests.json && npm run typecheck -w @ezapply/engine && npm run typecheck -w @ezapply/sites && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
+    "typecheck": "tsc -b packages/protocol packages/sites packages/companion packages/cli && tsc -p tsconfig.tests.json && tsc -p scripts/harness && npm run typecheck -w @ezapply/engine && npm run typecheck -w @ezapply/sites && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
     "test": "npm run build && vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ezapply": "node packages/cli/dist/main.js"
+    "ezapply": "node packages/cli/dist/main.js",
+    "clone": "node scripts/harness/clone.ts",
+    "fill": "node scripts/harness/fill.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.13.6",
+    "playwright": "^1.64.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1",
-    "@testing-library/react": "^16.3.3"
+    "vitest": "^5.0.1"
   }
 }

@@ -13,6 +13,8 @@ import { SITES } from "../src/registry.js";
 
 const PACKAGES = join(import.meta.dirname, "..", "..");
 const OTHERS = ["protocol", "engine", "companion", "cli", "extension", "ui"];
+/** The adapter harness: generic too, a site's part of it being its `clone.ts`. */
+const HARNESS = join(PACKAGES, "..", "scripts", "harness");
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -78,10 +80,10 @@ describe("site knowledge", () => {
     expect(code(text)).toBe(`const a = ${template}; \n const c = /three/i.test(d) ? 4 / e : "five";`);
   });
 
-  it("stays in the sites' directories: no other package's source names a site", () => {
+  it("stays in the sites' directories: no other package's source, nor the harness, names a site", () => {
     const names = new RegExp(`\\b(${SITES.map((s) => s.id).join("|")})\\b`, "i");
     const found: string[] = [];
-    const files = OTHERS.flatMap((pkg) => sources(join(PACKAGES, pkg, "src")));
+    const files = [...OTHERS.flatMap((pkg) => sources(join(PACKAGES, pkg, "src"))), ...sources(HARNESS)];
     expect(files.length).toBeGreaterThan(100);
     for (const file of files) {
       for (const line of code(readFileSync(file, "utf8")).split("\n")) {

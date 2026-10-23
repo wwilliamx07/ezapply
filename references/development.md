@@ -14,6 +14,8 @@ ezapply/
   .github/workflows/ci.yml
   .claude/                  Claude Code for this repo: skills/garden/ (see "Conventions")
   test/                     checks on the reference itself (references.test.ts)
+  scripts/harness/          the adapter harness: clones of real application forms, fill runs → harness.md
+  .clones/                  the harness's clones and browser profile (git-ignored)
   packages/
     protocol/               shared schemas            → components/protocol.md
     engine/                 the adapter engine and shared widget drivers (sources only) → components/adapters.md
@@ -43,8 +45,8 @@ each site's bundle). The sites package also keeps each site's tests beside it, i
   aren't hooks, so `useHookAtTopLevel` is off for `packages/engine/` and `packages/sites/`.
 - **Line endings:** `.gitattributes` pins LF everywhere (Biome rejects CRLF). On Windows, a working tree
   checked out with CRLF is renormalized with `git rm --cached -r . && git reset --hard` (on a clean tree).
-- **Vitest** runs every `packages/*/test/**/*.test.{ts,tsx}`, each site's `packages/sites/src/*/test/**/*.test.ts`
-  and the repo's own `test/**/*.test.ts` (20 s default
+- **Vitest** runs every `packages/*/test/**/*.test.{ts,tsx}`, each site's `packages/sites/src/*/test/**/*.test.ts`,
+  the harness's `scripts/*/test/**/*.test.ts` and the repo's own `test/**/*.test.ts` (20 s default
   timeout). A test that needs a DOM says so in its first line (`// @vitest-environment jsdom`); the UI's component
   tests use Testing Library.
 
@@ -55,9 +57,10 @@ each site's bundle). The sites package also keeps each site's tests beside it, i
 | `npm run setup` | `npm install`, build, `ezapply init` |
 | `npm run build` | tsc build of protocol, sites, companion, cli; then the extension bundles and the UI package's pages |
 | `npm test` | build, then vitest |
-| `npm run typecheck` | all packages (the engine, the sites' definitions, the extension and UI with their own `tsconfig.json`) and `tsconfig.tests.json` (tests) |
+| `npm run typecheck` | all packages (the engine, the sites' definitions, the extension and UI with their own `tsconfig.json`) `tsconfig.tests.json` (tests) and `scripts/harness` |
 | `npm run lint` / `npm run format` | Biome check / write |
 | `npm run ezapply -- <cmd>` | run the CLI |
+| `npm run clone -- <posting-url>` / `npm run fill -- <site>` | clone a site's application / fill its clone ([harness](harness.md#commands)) |
 
 ## Tests
 Each package's tests are in its `test/` (and each site's in `packages/sites/src/<site>/test/`), a file per area, named after it (`forms.test.ts`, `checklist.test.ts`).
@@ -75,6 +78,7 @@ repeat them and fall behind.
 | Site knowledge | `sites/test/knowledge.test.ts` | No other package's source names a site (comments aside): what a site does differently stays in its directory |
 | URL rules | `sites/src/<site>/test/url.test.ts` | The site's postings and applications by URL, tenant and job, and pages that look close but aren't |
 | UI | `ui/test/*.test.tsx` | Components and pages under jsdom, with Testing Library |
+| The adapter harness | `scripts/harness/test/` | The stand-in, what a clone keeps and the proposed description, without a browser; then the whole harness on a hand-written site, which skips without a browser or a built extension ([harness](harness.md#tests)) |
 | The reference | `test/references.test.ts` | Links and anchors in `references/`, `todo/` and the `CLAUDE.md` files resolve; the [index](README.md) lists every page; every registered MCP tool has its row in [mcp-tools.md](mcp-tools.md), and no row names a tool that isn't registered; every registry site has its page under [components/sites/](components/sites.md), titled with its directory; every shipped skill is named in [workspace.md](components/workspace.md) |
 
 Tests that need TeX are skipped when no engine is installed (CI's `tex` job sets `EZAPPLY_REQUIRE_TEX=1`,
@@ -119,8 +123,8 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 ## Conventions
 - **Keep `references/` current** in the same change (see [CLAUDE.md](CLAUDE.md)).
 - **Rules beside what they govern.** The root `CLAUDE.md` holds only the rules for the whole repo; a directory's own
-  conventions are in its `CLAUDE.md`: `references/`, `todo/`, `packages/sites/`, `packages/companion/` and
-  `packages/cli/`. Claude Code loads one when it works in that folder, so the rules reach an agent that went
+  conventions are in its `CLAUDE.md`: `references/`, `todo/`, `packages/sites/`, `packages/companion/`,
+  `packages/cli/` and `scripts/harness/`. Claude Code loads one when it works in that folder, so the rules reach an agent that went
   straight there without reading here first, and the root file stays short in every session. Keep them short; a
   rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
   is different: it's the user's workspace file, shipped by `ezapply init`.)
@@ -199,7 +203,7 @@ Compare a debugged run's timings with other debugged runs only. Turn it off (`ez
 - **Add a bridge method:** schema in `protocol/src/forms.ts` (or `bridge.ts`) → add to `ExtensionApi` /
   `CompanionApi` → implement the handler on the serving side (type errors until you do; for a form method
   that's `extension/src/background/forms.ts` and the handler map in `companion/test/e2e.test.ts`) → decide
-  whether it's additive or needs a `PROTOCOL_VERSION` bump. A new site needs none (`hello` carries the site
+  whether it's additive or needs a `PROTOCOL_VERSION` bump ([changing the protocol](components/protocol.md#changing-the-protocol)). A new site needs none (`hello` carries the site
   ids), and a changed adapter needs none of its own: the build stamps `ADAPTER_VERSION` with a hash of the bundle.
 - **Change a stored format:** bump its `schemaVersion`, add a migration run by `ezapply init`, update
   [data-formats.md](data-formats.md).

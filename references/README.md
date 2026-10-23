@@ -13,6 +13,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 |---|---|
 | A site's adapter, or why a fill failed | That site's page under [components/sites/](components/sites.md) (its directory is `packages/sites/src/<site>/`), [adapters.md](components/adapters.md), what its next live run checks in [status.md](status.md#not-yet-verified-for-real) |
 | A new job site | [building-adapters.md](building-adapters.md), then the above |
+| Cloning a site, or testing an adapter change on its clone | [harness.md](harness.md) |
 | A live run's results (debug mode) | [Debugging a live run](development.md#debugging-a-live-run-debug-mode) |
 | An MCP tool | Its group in [mcp-tools.md](mcp-tools.md), the service's component page, [How to…](development.md#how-to) |
 | The form tools' logic (tab choice, which posting, the checklist) | [Forms](mcp-tools.md#forms), [companion.md](components/companion.md) |
@@ -56,6 +57,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 | [security.md](security.md) | Threat model and the controls against each threat |
 | [development.md](development.md) | Repo layout, build, tests, CI, conventions, how to extend |
 | [building-adapters.md](building-adapters.md) | Adding a job site: the process, what goes where (registry, definition, site notes), drivers, tests, checking it live |
+| [harness.md](harness.md) | The adapter harness: cloning a site's application, the stand-in for its server, the checks a clone passes, fill runs |
 | [status.md](status.md) | The decisions log, what still needs a live run, known issues, open questions |
 
 ## Reading order
