@@ -94,13 +94,50 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
     report.updated.push(`${oldSettings} (removed: the extension keeps the agent settings)`);
   }
   await initAntigravity(root, skillsSrc, report, opts.antigravityHome);
+  await initCodex(root, report);
   await writeLauncher(root, report);
   return report;
 }
 
+const CODEX_BEGIN = "# ezapply:begin (written by `ezapply init`, which replaces this block)";
+const CODEX_END = "# ezapply:end";
+
+/**
+ * Codex run by hand in the workspace: ezapply's server in `.codex/config.toml`, which Codex reads once the user
+ * trusts the folder. `AGENTS.md` and `.agents/skills/` are Antigravity's too (above). The panel's Codex doesn't need
+ * this file: it gives the server in the thread's config ([agent](../../../references/components/agent.md#codex-codexts)).
+ * The server's tools run unasked (Codex asks for every MCP call otherwise), with a timeout past a TeX build's. Only the
+ * block between ezapply's markers is ours; the rest of the file is kept as the user wrote it.
+ */
+async function initCodex(root: string, report: InitReport): Promise<void> {
+  const path = join(root, ".codex", "config.toml");
+  const block = [
+    CODEX_BEGIN,
+    "[mcp_servers.ezapply]",
+    // A JSON string is a TOML basic string: quotes and backslashes (Windows paths) escaped alike.
+    `command = ${JSON.stringify(process.execPath)}`,
+    `args = [${JSON.stringify(CLI_MAIN)}, "mcp"]`,
+    'default_tools_approval_mode = "approve"',
+    "tool_timeout_sec = 3600",
+    CODEX_END,
+  ].join("\n");
+  const existed = await exists(path);
+  const current = existed ? await readFile(path, "utf8") : "";
+  const start = current.indexOf(CODEX_BEGIN);
+  const end = current.indexOf(CODEX_END, start);
+  const next =
+    start >= 0 && end >= 0
+      ? `${current.slice(0, start)}${block}${current.slice(end + CODEX_END.length)}`
+      : `${current}${current && !current.endsWith("\n") ? "\n" : ""}${current ? "\n" : ""}${block}\n`;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFileAtomic(path, next);
+  (existed ? report.updated : report.created).push(path);
+}
+
 /**
  * What the Antigravity CLI reads in the workspace, beside Claude Code's: `AGENTS.md` (the user's, including
- * `EZAPPLY.md` and the preferences, as `CLAUDE.md` imports them), the skills in `.agents/skills/`, and ezapply's
+ * `EZAPPLY.md` and the preferences, as `CLAUDE.md` imports them), the skills in `.agents/skills/` (Codex reads both
+ * too, though not what `AGENTS.md` includes), and ezapply's
  * server in `.agents/mcp_config.json`. Its permissions live only in the user's own settings, where headless runs deny
  * every MCP tool and file write not allowed: so, when that CLI is installed, ezapply's tools and writes inside the
  * workspace are allowed there, and writes into `repo-cache/` denied.

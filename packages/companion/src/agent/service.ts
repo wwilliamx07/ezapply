@@ -36,6 +36,8 @@ const Conversation = z.object({
   /** The agent's own id for the session, when it names its sessions itself (Antigravity). */
   agentSessionId: z.string().optional(),
   totalCostUsd: z.number().optional(),
+  /** The session's tokens so far, from an agent that reports no cost (Codex). */
+  totalTokens: z.number().optional(),
   /** Sessions ended by Reset, newest last; `claude --resume <id>` still opens them. */
   earlier: z.array(Session).default([]),
 });
@@ -65,8 +67,8 @@ interface AgentServiceOptions {
   needs: NeedsYou;
   log: Logger;
   /**
-   * The coding agents installed (Claude Code's is `claudeBackend`, Antigravity's `antigravityBackend`); without one
-   * the agent is unavailable (tests, or none installed).
+   * The coding agents installed (Claude Code's is `claudeBackend`, Antigravity's `antigravityBackend`, Codex's
+   * `codexBackend`); without one the agent is unavailable (tests, or none installed).
    */
   backends?: Partial<Record<AgentKind, AgentBackend>>;
   env?: NodeJS.ProcessEnv;
@@ -100,7 +102,7 @@ interface Live {
 }
 
 /**
- * The agent behind the panel: the coding agent chosen in the panel (Claude Code or Antigravity), headless, one process per conversation (a posting's two, tailoring its
+ * The agent behind the panel: the coding agent chosen in the panel (Claude Code, Antigravity or Codex), headless, one process per conversation (a posting's two, tailoring its
  * documents and filling its application, or the general one), relaying what it does as events. Conversations run side by side, as many as the user starts: each
  * works on its own posting (the tools resolve it from the session, `PostingsService.ownPosting`), and a form tab is bound to one posting.
  *
@@ -338,12 +340,16 @@ export class AgentService {
     return events.slice(-limit);
   }
 
-  /** The session's spend so far (Claude Code's estimate), when known. */
-  async cost(key: string): Promise<number | undefined> {
+  /** The session's spend so far (Claude Code's estimate), or its tokens (an agent that reports no cost), when known. */
+  async usage(key: string): Promise<{ totalCostUsd?: number; totalTokens?: number }> {
     await this.upgrade();
-    // A turn's cost is written as it ends: read it after that write.
+    // A turn's usage is written as it ends: read it after that write.
     await this.fileWrites;
-    return (await this.readFile()).conversations[key]?.totalCostUsd;
+    const c = (await this.readFile()).conversations[key];
+    return {
+      ...(c?.totalCostUsd !== undefined ? { totalCostUsd: c.totalCostUsd } : {}),
+      ...(c?.totalTokens !== undefined ? { totalTokens: c.totalTokens } : {}),
+    };
   }
 
   /** What conversations run with: the extension's settings for the agent in use (`effectiveSettings`). */
@@ -352,8 +358,8 @@ export class AgentService {
   }
 
   /**
-   * Each agent's models the panel offers beyond its fixed ones: Antigravity's, from `agy models`, listed the first
-   * time they're asked for (it fetches them, so it takes a moment); the state changes once they're in.
+   * Each agent's models the panel offers beyond its fixed ones: Antigravity's (`agy models`) and Codex's
+   * (`model/list`), listed the first time they're asked for (it fetches them, so it takes a moment); the state changes once they're in.
    */
   models(): Partial<Record<AgentKind, AgentModelOption[]>> {
     for (const k of this.agents()) {
@@ -378,7 +384,7 @@ export class AgentService {
    * calls); a refusal comes back as a notice. Effort has no switch Claude Code was seen to honour, so the process
    * ends (now if idle, without waiting for its exit, else after its turn) and the next message resumes the session
    * with the new `--effort`; so does any change for an agent that takes no switches (`AgentBackend.switches`), and a
-   * change of agent.
+   * change of agent. An agent that takes all three per turn (Codex) switches the effort too (`setEffort`).
    */
   async setPrefs(prefs: AgentPrefs): Promise<AgentSettings> {
     const before = this.settings();
@@ -393,8 +399,11 @@ export class AgentService {
         l.switching.set(l.process.setPermissionMode(next.permissionMode), `permission mode to ${next.permissionMode}`);
       if (switches && modelChanged && next.model)
         l.switching.set(l.process.setModel(next.model), `model to ${next.model}`);
+      const effortChanged = next.effort !== before.effort;
+      const effortSwitch = switches && effortChanged && l.process.setEffort;
+      if (effortSwitch) l.switching.set(effortSwitch.call(l.process, next.effort), `effort to ${next.effort}`);
       const restart = !switches && (modeChanged || modelChanged);
-      if (restart || next.effort !== before.effort || next.agent !== before.agent) {
+      if (restart || (effortChanged && !effortSwitch) || next.agent !== before.agent) {
         if (l.busy) l.restartAfterTurn = true;
         // Not awaited: the panel shows the change at once, and the next message waits for the exit instead.
         else void this.closeLive(l.key);
@@ -511,6 +520,10 @@ export class AgentService {
       settings,
       ...(part ? { part } : {}),
       ...(this.opts.env ? { env: this.opts.env } : {}),
+      approve: async (req) => {
+        const d = await this.opts.needs.permission(req, key);
+        return d.behavior === "allow" ? { behavior: "allow" } : d;
+      },
       onItem: (item) => this.onItem(live, item),
       onExit: (code, tail) => this.onExit(live, code, tail),
     });
@@ -560,9 +573,9 @@ export class AgentService {
         const event = l.stopping ? { ...item.event, interrupted: true } : item.event;
         l.stopping = false;
         this.emit(l.key, event);
-        if (event.totalCostUsd !== undefined) {
-          const cost = event.totalCostUsd;
-          void this.updateFile((f) => withCost(f, l.key, l.sessionId, cost));
+        if (event.totalCostUsd !== undefined || event.totalTokens !== undefined) {
+          const usage = { totalCostUsd: event.totalCostUsd, totalTokens: event.totalTokens };
+          void this.updateFile((f) => withUsage(f, l.key, l.sessionId, usage));
         }
         if (l.restartAfterTurn && !l.busy && this.live.get(l.key) === l) {
           l.restartAfterTurn = false;
@@ -727,10 +740,18 @@ function withAgentSession(f: ConversationsFile, key: string, sessionId: string, 
   return { ...f, conversations: { ...f.conversations, [key]: { ...c, agentSessionId: id } } };
 }
 
-function withCost(f: ConversationsFile, key: string, sessionId: string, cost: number): ConversationsFile {
+function withUsage(
+  f: ConversationsFile,
+  key: string,
+  sessionId: string,
+  usage: { totalCostUsd?: number | undefined; totalTokens?: number | undefined },
+): ConversationsFile {
   const c = f.conversations[key];
   if (!c || c.sessionId !== sessionId) return f;
-  return { ...f, conversations: { ...f.conversations, [key]: { ...c, totalCostUsd: cost } } };
+  const next = { ...c };
+  if (usage.totalCostUsd !== undefined) next.totalCostUsd = usage.totalCostUsd;
+  if (usage.totalTokens !== undefined) next.totalTokens = usage.totalTokens;
+  return { ...f, conversations: { ...f.conversations, [key]: next } };
 }
 
 /** A posting's conversation (`<posting id>/<part>`, the id a plain folder name) or the general one. */
@@ -743,6 +764,6 @@ function unavailable(): EzError {
   return new EzError(
     ErrorCode.BadRequest,
     "No coding agent is available to ezapply.",
-    "Install Claude Code (https://claude.com/claude-code) or the Antigravity CLI, and start ezapply again.",
+    "Install Claude Code (https://claude.com/claude-code), the Antigravity CLI or Codex, and start ezapply again.",
   );
 }

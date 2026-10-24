@@ -176,8 +176,10 @@ Top to bottom, in an application:
    checkboxes with Other, a text field or box), the suggestion filled in and marked ("suggested"; a sensitive
    question is flagged and may have one too), `why` under it, "(optional)" ones skippable, **Save for next time**
    where offered; **Send answers** checks the answers first (`askAnswerProblems`, each problem under its
-   question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what Claude
-   wants to do (run a command, write or edit a file, fetch a page, or the tool's input as JSON), its description,
+   question), and **Reply in chat instead** sends words in place of the answers. An **approval card**: what the agent
+   wants to do, named as the one asking ("Codex wants to run a command"; Claude Code for a terminal chat's): run a
+   command, write or edit a file (Codex's patch shows its files and diff), fetch a page, get more access, or the
+   tool's input as JSON; its description,
    the command or the file and the change whole in a scrollable box, and **Allow**, **Deny**, **Deny with a reason**.
    An application's **hand-off card** (a `handoff` event in its conversation, `HandoffView` in `cards.tsx`):
    "Ready for you to submit", with what is attached, approved documents not attached, the answers to check
@@ -194,7 +196,8 @@ Top to bottom, in an application:
    `/ezapply-cover-letter …`, `/ezapply-apply …`; one PDF names `bundle_build`, which has no skill), so the agent
    doesn't match words to a skill. Claude Code under stream-json input and Antigravity both run a message that
    starts with `/<skill>` as that skill, Antigravity also after the `<ezapply-panel>` block its first message
-   carries (it reads the skill's file). Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
+   carries (it reads the skill's file); for Codex, ezapply adds the skill to the message as an input item
+   ([agent](agent.md#how-ezapply-drives-codex)). Fill form names the tab (`tabId`). Tailor documents goes to the posting's Documents conversation
    and Fill form to its Application one, whichever is shown, and the panel switches to it; typing goes to the
    conversation shown. They're disabled, with why in their title, without a posting
    or while an agent works in the conversation the button goes to: the other one, and every other application,
@@ -209,20 +212,21 @@ Top to bottom, in an application:
    in this conversation and the box is empty (typing still sends: the message waits for the agent); a line above
    it with what the agent is doing in this conversation, named as the one in use ("Starting Antigravity…", "Claude
    Code is working…", messages waiting), then what it's doing elsewhere at the same time (one conversation named,
-   "Also working on Acme: Developer · Application…", more counted), or that no agent is available (neither CLI was found when ezapply
+   "Also working on Acme: Developer · Application…", more counted), or that no agent is available (none was found when ezapply
    started). The panel's other lines that name the agent (busy titles, Reset's and a document delete's
    confirmations, a queued message's "waiting for …") name the one in use too.
-9. **Settings line:** the agent (Claude Code or Antigravity, only when both are installed), the permission mode
-   (for Claude Code Ask first, Accept edits, Auto, Plan only, Don't ask; for Antigravity Plan only and Don't ask;
-   what each does in its title), the model (Claude Code's Fable, Opus, Sonnet, Haiku; Antigravity's "Default
-   model" and the ones ezapply listed), and for Claude Code the effort (Low to Max; Antigravity's models name
-   their level), each agent's own. The extension keeps them
+9. **Settings line:** the agent (Claude Code, Antigravity or Codex, only when more than one is installed), the
+   permission mode (for Claude Code and Codex Ask first, Accept edits, Auto, Plan only, Don't ask; for Antigravity
+   Plan only and Don't ask; what each does for that agent in its title), the model (Claude Code's Fable, Opus,
+   Sonnet, Haiku; Antigravity's and Codex's "Default model" and the ones ezapply listed), and for Claude Code and
+   Codex the effort (Low to Max; Antigravity's models name their level), each agent's own. The extension keeps them
    (`transport.prefs`, `savePrefs`, a `prefs` push when another panel changes them), so they show as the panel
    opens, before ezapply answers, and a change shows at once; ezapply applies them to the running conversation
    ([agent](agent.md#permission-mode-model-and-effort)). What they come to is `effectiveSettings`, with the agents
    installed from the state (until it's read, the chosen one). Then the conversation's cost so far (the amount,
-   its title saying what it is). It stays one row at any panel width: each select is as wide as its chosen option
-   (`field-sizing: content`), and in Chrome's narrowest panel the agent, Antigravity's model and Claude Code's
+   its title saying what it is), or its tokens from an agent that reports no cost (Codex: "12k tokens"); each turn's
+   end in the conversation shows its own the same way. It stays one row at any panel width: each select is as wide as its chosen option
+   (`field-sizing: content`), and in Chrome's narrowest panel the agent, a listed model and the
    effort are cut short, never the mode or Claude Code's model.
 
 Updates: an event for the conversation shown is added (a message's newer state replaces it: `withEvent`); a tool's
@@ -445,7 +449,7 @@ gets one (`agentIn` in the page's state):
 
 The page shows each task (queued, running, done with the agent's note, failed). Wherever it speaks of the agent
 (the task lines, its pane, the buttons that ask it), it uses `agentName` from the page's state: the agent the panel
-uses (Claude Code or Antigravity, `AgentService.agentName`), or Claude Code in a terminal. The step texts in the
+uses (Claude Code, Antigravity or Codex, `AgentService.agentName`), or Claude Code in a terminal. The step texts in the
 table above say "Claude" for short.
 
 ### Installing TeX

@@ -1,10 +1,10 @@
-import type { AgentPermissionMode, AgentSettings, ConversationPart } from "@ezapply/protocol";
+import type { AgentEffort, AgentPermissionMode, AgentSettings, ConversationPart } from "@ezapply/protocol";
 import type { StreamItem } from "./stream.js";
 
 /**
  * The coding agent behind the panel, as `AgentService` sees it: something that starts one conversation's session
- * in the workspace and reports what it does as `StreamItem`s. Claude Code's is `claudeBackend` (`process.ts`);
- * other agents' backends read their own protocol into the same items.
+ * in the workspace and reports what it does as `StreamItem`s. Claude Code's is `claudeBackend` (`process.ts`),
+ * Antigravity's `antigravityBackend`, Codex's `codexBackend`; each reads its own protocol into the same items.
  */
 export interface AgentBackend {
   /** The agent's name as the panel's notices say it ("Claude Code stopped unexpectedly…"). */
@@ -44,8 +44,20 @@ export interface AgentSessionOptions {
   /** A posting's conversation: which part, for its line of the system prompt. */
   part?: ConversationPart;
   env?: NodeJS.ProcessEnv;
+  /**
+   * An approval the agent asks of the client itself (Codex), shown as the panel's approval card; resolves with the
+   * user's decision, a deny's `message` being what the agent is told. Claude Code asks through `permission_ask` instead.
+   */
+  approve?: (req: ApprovalRequest) => Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }>;
   onItem: (item: StreamItem) => void;
   onExit: (code: number | null, stderrTail: string) => void;
+}
+
+/** What an approval card shows: the tool, what it would run or change, and the agent's reason. */
+export interface ApprovalRequest {
+  toolName: string;
+  input: unknown;
+  description?: string;
 }
 
 /** One conversation's running agent: messages in, items out through `onItem`, `onExit` once when it ends. */
@@ -58,6 +70,8 @@ export interface AgentSession {
   /** Switch mid-session. Returns the request's id, answered by a `controlResponse` item. */
   setPermissionMode(mode: AgentPermissionMode): string;
   setModel(model: string): string;
+  /** Switch the effort mid-session, when the agent can (Codex, from its next turn); without, the process restarts. */
+  setEffort?(effort: AgentEffort): string;
   /** End it once idle; kill it if it hasn't exited after `graceMs`. */
   close(graceMs?: number): Promise<void>;
   /** End it at once, with whatever it started. */

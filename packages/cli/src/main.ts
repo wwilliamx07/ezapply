@@ -126,15 +126,16 @@ async function cmdInit(args: string[]): Promise<number> {
 /** ezapply for the side panel: the companion in this process, the chosen agent started headless by it when needed. */
 async function cmdPanel(): Promise<number> {
   const config = await requireConfig();
-  const [{ createLogger, findAntigravity, findClaude }, { hostPanel }, { guardProcess, quietProcess }] =
+  const [{ createLogger, findAntigravity, findClaude, findCodex }, { hostPanel }, { guardProcess, quietProcess }] =
     await Promise.all([import("@ezapply/companion"), import("./panel.js"), import("./quiet.js")]);
   const claude = findClaude();
   const antigravity = findAntigravity();
-  if (!claude && !antigravity) {
+  const codex = findCodex();
+  if (!claude && !antigravity && !codex) {
     process.stderr.write(
-      "Neither Claude Code nor the Antigravity CLI (agy) is on PATH. Install one " +
-        "(https://code.claude.com/docs, https://antigravity.google/docs/cli), or point EZAPPLY_CLAUDE or " +
-        "EZAPPLY_ANTIGRAVITY at it.\n",
+      "None of Claude Code, the Antigravity CLI (agy) or Codex is on PATH. Install one " +
+        "(https://code.claude.com/docs, https://antigravity.google/docs/cli, https://developers.openai.com/codex), " +
+        "or point EZAPPLY_CLAUDE, EZAPPLY_ANTIGRAVITY or EZAPPLY_CODEX at it.\n",
     );
     return 1;
   }
@@ -145,6 +146,7 @@ async function cmdPanel(): Promise<number> {
     config,
     ...(claude ? { claude } : {}),
     ...(antigravity ? { antigravity } : {}),
+    ...(codex ? { codex } : {}),
     extensionDir: EXTENSION_DIR,
     log,
     onStarted: () => quietProcess(log),

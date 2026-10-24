@@ -29,7 +29,7 @@ then an Oracle run.
 | 4 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
 | 5 | [Everything happens in the browser](browser-only/overview.md) | — | ~XL | — |
 | 6 | [The side panel's later parts](side-panel-later-parts/overview.md) | Medium | M–L | — |
-| 7 | [Compatibility with various agents](agent-compatibility/overview.md) | Medium | L | — |
+| 7 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
 | 8 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
 | 9 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
 | 10 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
@@ -55,7 +55,7 @@ Why this order:
 
 - **Bugs:** The panel's agent stops when ezapply's tools aren't connected yet, CI timeouts on Windows.
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
-  touch, A writing spec for claims, Compatibility with various agents.
+  touch, A writing spec for claims, Compatibility with opencode.
 - **Adapter building:** The adapter harness, Agents that try to break a new adapter, Employer's own forms beyond
   plain HTML.
 - **The browser as the only interface:** Everything happens in the browser, The side panel's later parts.

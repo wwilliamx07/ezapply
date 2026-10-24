@@ -303,6 +303,24 @@ export function permissionBody(card: PermissionCard): { title: string; lines: { 
       };
     case "WebFetch":
       return { title: "Fetch a web page", lines: [{ text: s("url") ?? "" }] };
+    // Codex's approvals (`codex.ts`): a command, a patch to files, more access than its sandbox gives.
+    case "Shell":
+      return {
+        title: "Run a command",
+        lines: [{ text: s("command") ?? "" }, ...(s("cwd") ? [{ label: "In", text: s("cwd") ?? "" }] : [])],
+      };
+    case "Patch": {
+      const files = Array.isArray(i.files) ? i.files.filter((f): f is string => typeof f === "string") : [];
+      return {
+        title: files.length > 1 ? "Edit files" : "Edit a file",
+        lines: [
+          { label: files.length > 1 ? "Files" : "File", text: files.join("\n") || (s("file_path") ?? "") },
+          ...(s("diff") ? [{ label: "Changes", text: s("diff") ?? "" }] : []),
+        ],
+      };
+    }
+    case "Permissions":
+      return { title: "Get more access", lines: [{ text: JSON.stringify(i.permissions ?? {}, null, 2) }] };
     default:
       return { title: `Use ${card.toolName}`, lines: [{ text: JSON.stringify(card.input, null, 2) }] };
   }
@@ -311,10 +329,13 @@ export function permissionBody(card: PermissionCard): { title: string; lines: { 
 export function PermissionCardView({
   card,
   label,
+  agent = "Claude",
   onDecide,
 }: {
   card: PermissionCard;
   label?: string;
+  /** Who asks ("Claude Code", "Codex"). */
+  agent?: string;
   onDecide: (allow: boolean, reason?: string) => Promise<void>;
 }) {
   const body = permissionBody(card);
@@ -335,7 +356,9 @@ export function PermissionCardView({
   return (
     <section className="ez-pcard ez-pcard-perm" aria-label={`Approve: ${body.title}`}>
       <header className="ez-pcard-head">
-        <strong>Claude wants to {body.title.toLowerCase()}</strong>
+        <strong>
+          {agent} wants to {body.title.toLowerCase()}
+        </strong>
         {label ? <span className="ez-muted">{label}</span> : null}
       </header>
       {card.description ? <p className="ez-pcard-intro">{card.description}</p> : null}

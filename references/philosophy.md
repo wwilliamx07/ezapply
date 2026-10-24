@@ -9,7 +9,7 @@ user decides and submits.
 
 1. **The user's coding agent is the only agent.** ezapply has no agent loop of its own. It exposes tools over MCP,
    and a workspace of files and skills that tell the agent how to use them, and runs the agent headless (Claude
-   Code, or the Antigravity CLI) so the user works with it in the extension's side panel: the requests, the chat,
+   Code, the Antigravity CLI or Codex) so the user works with it in the extension's side panel: the requests, the chat,
    the agent's questions and its requests for approval are all there ([agent](components/agent.md)). Two more pages are for what is reading or form-filling
    rather than judgment: reviewing documents, and setting up. What a page needs judgment for goes to Claude, as a
    task the user sees it do. No page runs an agent of its own.

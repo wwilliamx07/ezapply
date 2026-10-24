@@ -1,4 +1,6 @@
 import {
+  AGENT_EFFORT,
+  AGENT_MODES,
   AgentEffort,
   type AgentEvent,
   AgentKind,
@@ -53,12 +55,35 @@ const MODES: Record<AgentPermissionMode, { label: string; what: string }> = {
   plan: { label: "Plan only", what: "Claude reads and plans, and changes nothing" },
   dontAsk: { label: "Don't ask", what: "Only what the workspace allows runs; anything else is denied without asking" },
 };
-/** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
-const ANTIGRAVITY_MODES: Partial<Record<AgentPermissionMode, { label: string; what: string }>> = {
-  dontAsk: { label: "Don't ask", what: "Antigravity runs its commands and edits without asking" },
-  plan: { label: "Plan only", what: "Antigravity reads and plans, and changes nothing" },
+/**
+ * Each agent's modes as the panel names them (`AGENT_MODES` says which it offers). Antigravity's: headless, nobody
+ * can approve a call, so it runs every call unasked, or only plans. Codex's run in its sandbox, which lets it edit and
+ * run commands in the workspace; what would go beyond it is what asks.
+ */
+const AGENT_MODE_LABELS: Record<AgentKind, Partial<Record<AgentPermissionMode, { label: string; what: string }>>> = {
+  claude: MODES,
+  antigravity: {
+    dontAsk: { label: "Don't ask", what: "Antigravity runs its commands and edits without asking" },
+    plan: { label: "Plan only", what: "Antigravity reads and plans, and changes nothing" },
+  },
+  codex: {
+    default: {
+      label: "Ask first",
+      what: "Codex asks on the panel before its edits and any command that isn't a plain read",
+    },
+    acceptEdits: {
+      label: "Accept edits",
+      what: "Edits and commands inside the workspace go ahead; Codex asks before going beyond it",
+    },
+    auto: { label: "Auto", what: "Codex's reviewer decides what may go beyond the workspace, and asks for the rest" },
+    plan: { label: "Plan only", what: "Codex reads and plans, and changes nothing" },
+    dontAsk: {
+      label: "Don't ask",
+      what: "Only what the workspace's sandbox allows runs; anything else fails without asking",
+    },
+  },
 };
-const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity" };
+const AGENTS: Record<AgentKind, string> = { claude: "Claude Code", antigravity: "Antigravity", codex: "Codex" };
 const MODELS: Record<AgentModel, string> = {
   fable: "Fable",
   opus: "Opus",
@@ -634,6 +659,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
                       ? labelOf(c.conversation)
                       : "From a terminal chat"
                 }
+                agent={c.conversation ? agentName : AGENTS.claude}
                 transport={transport}
                 fail={fail}
               />
@@ -682,7 +708,7 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
             <AgentSettingsBar
               settings={settings}
               agents={installed}
-              antigravityModels={agent?.models.antigravity}
+              listed={agent?.models}
               disabled={agent?.status === "unavailable"}
               onChange={changeSettings}
             />
@@ -690,6 +716,10 @@ export function PanelApp({ transport }: { transport: PanelTransport }) {
           {!home && conv?.totalCostUsd !== undefined ? (
             <p className="ez-panel-cost" title="What this conversation has cost so far">
               ${conv.totalCostUsd.toFixed(2)}
+            </p>
+          ) : !home && conv?.totalTokens !== undefined ? (
+            <p className="ez-panel-cost" title="The tokens this conversation has used so far">
+              {tokens(conv.totalTokens)}
             </p>
           ) : null}
         </div>
@@ -1010,11 +1040,14 @@ function DocState({ state }: { state: PanelConversation["documents"][number]["st
 function CardView({
   card,
   label,
+  agent,
   transport,
   fail,
 }: {
   card: Card;
   label?: string;
+  /** Who asks for an approval: the panel's agent, or Claude Code for a terminal chat's. */
+  agent: string;
   transport: PanelTransport;
   fail: (err: unknown) => void;
 }) {
@@ -1035,6 +1068,7 @@ function CardView({
   return (
     <PermissionCardView
       card={card}
+      agent={agent}
       {...(label ? { label } : {})}
       onDecide={async (allow, reason) => {
         await transport
@@ -1063,13 +1097,19 @@ export function Conversation({ events, agent = AGENTS.claude }: { events: AgentE
   if (events.length === 0) {
     return <p className="ez-panel-empty">Nothing here yet. Use the buttons below, or ask anything.</p>;
   }
-  // Each turn's cost: the session's total so far, less the turn before's.
-  const costs = new Map<number, number>();
+  // Each turn's cost (or tokens, from an agent that gives no cost): the session's total so far, less the turn before's.
+  const costs = new Map<number, string>();
   let lastCost: number | undefined;
+  let lastTokens: number | undefined;
   events.forEach((e, n) => {
-    if (e.kind !== "turnEnd" || e.totalCostUsd === undefined) return;
-    costs.set(n, lastCost !== undefined ? e.totalCostUsd - lastCost : e.totalCostUsd);
-    lastCost = e.totalCostUsd;
+    if (e.kind !== "turnEnd") return;
+    if (e.totalCostUsd !== undefined) {
+      costs.set(n, `$${(lastCost !== undefined ? e.totalCostUsd - lastCost : e.totalCostUsd).toFixed(2)}`);
+      lastCost = e.totalCostUsd;
+    } else if (e.totalTokens !== undefined) {
+      costs.set(n, tokens(lastTokens !== undefined ? e.totalTokens - lastTokens : e.totalTokens));
+      lastTokens = e.totalTokens;
+    }
   });
   return (
     <section className="ez-convo" aria-label="Conversation" aria-live="polite">
@@ -1090,7 +1130,8 @@ function EventView({
 }: {
   event: AgentEvent;
   done: Map<string, Extract<AgentEvent, { kind: "toolDone" }>>;
-  cost?: number;
+  /** The turn's cost or tokens, as shown. */
+  cost?: string;
   /** The agent's name, for a message it hasn't taken yet. */
   agent: string;
 }) {
@@ -1140,7 +1181,7 @@ function EventView({
       return (
         <p className={e.ok || e.interrupted ? "ez-msg-note" : "ez-msg-note ez-msg-error"}>
           {what}
-          {cost !== undefined ? ` · $${cost.toFixed(2)}` : ""}
+          {cost !== undefined ? ` · ${cost}` : ""}
         </p>
       );
     }
@@ -1171,7 +1212,7 @@ function AgentLine({
   const here = agent.conversations.find((c) => c.conversation === selected);
   const others = busyConversations(state).filter((c) => c.conversation !== selected);
   if (agent.status === "unavailable")
-    text = `No agent is available: neither ${AGENTS.claude} nor ${AGENTS.antigravity} was found when ezapply started.`;
+    text = `No agent is available: none of ${AGENTS.claude}, ${AGENTS.antigravity} or ${AGENTS.codex} was found when ezapply started.`;
   else if (here?.status === "starting") text = `Starting ${name}…`;
   else if (here?.status === "working") text = `${name} is working…`;
   if (here && here.queued > 0) text += ` ${here.queued} waiting.`;
@@ -1188,33 +1229,35 @@ function AgentLine({
 
 /**
  * The agent, and its own permission mode, model and effort: kept by the extension, and applied by ezapply to the
- * running conversation (Claude Code's mode and model at once, the rest from its next message). The agent is offered
- * only when more than one is installed. Antigravity has two modes (headless, it runs what its rules allow, or plans)
- * and the models `agy models` lists, or its own default; no effort, since its models name their level.
+ * running conversation (Claude Code's mode and model at once, Codex's all three from its next turn, the rest from the
+ * next message). The agent is offered only when more than one is installed. Each agent shows its own modes
+ * (`AGENT_MODES`); Claude Code its model aliases, the others the models they list, or their own default; an effort
+ * where the agent takes one (`AGENT_EFFORT`): Antigravity's models name their level.
  */
 function AgentSettingsBar({
   settings,
   agents,
-  antigravityModels,
+  listed,
   disabled,
   onChange,
 }: {
   settings: AgentSettings;
   agents: AgentKind[];
-  antigravityModels?: { id: string; label: string }[];
+  /** The models Antigravity and Codex list, once ezapply has them. */
+  listed?: Partial<Record<AgentKind, { id: string; label: string }[]>>;
   disabled: boolean;
   onChange: (change: Partial<AgentSettings>) => void;
 }) {
-  const claude = settings.agent === "claude";
-  const modes = claude ? MODES : ANTIGRAVITY_MODES;
+  const agent = settings.agent;
+  const claude = agent === "claude";
+  const modes = AGENT_MODE_LABELS[agent];
   // The chosen model shows before the list is in (or once it's no longer listed), by its id.
-  const listed = antigravityModels ?? [];
-  const antigravity =
-    settings.model && !claude && !listed.some((m) => m.id === settings.model)
-      ? [...listed, { id: settings.model, label: settings.model }]
-      : listed;
-  // Antigravity runs anything but Plan only as Don't ask.
-  const mode = claude || settings.permissionMode === "plan" ? settings.permissionMode : "dontAsk";
+  const own = listed?.[agent] ?? [];
+  const models =
+    settings.model && !claude && !own.some((m) => m.id === settings.model)
+      ? [...own, { id: settings.model, label: settings.model }]
+      : own;
+  const mode = settings.permissionMode;
   return (
     <>
       {agents.length > 1 ? (
@@ -1222,7 +1265,7 @@ function AgentSettingsBar({
           className="ez-select ez-select-sm ez-select-gives"
           aria-label="Agent"
           title="The coding agent. Changing it starts a new conversation from the next message."
-          value={settings.agent}
+          value={agent}
           disabled={disabled}
           onChange={(e) => onChange({ agent: AgentKind.parse(e.target.value) })}
         >
@@ -1241,14 +1284,16 @@ function AgentSettingsBar({
         disabled={disabled}
         onChange={(e) => onChange({ permissionMode: AgentPermissionMode.parse(e.target.value) })}
       >
-        {AgentPermissionMode.options.map((m) => {
-          const label = modes[m];
-          return label ? (
-            <option key={m} value={m} title={label.what}>
-              {label.label}
-            </option>
-          ) : null;
-        })}
+        {AgentPermissionMode.options
+          .filter((m) => AGENT_MODES[agent].includes(m))
+          .map((m) => {
+            const label = modes[m];
+            return label ? (
+              <option key={m} value={m} title={label.what}>
+                {label.label}
+              </option>
+            ) : null;
+          })}
       </select>
       {claude ? (
         <select
@@ -1268,21 +1313,20 @@ function AgentSettingsBar({
         <select
           className="ez-select ez-select-sm ez-select-gives"
           aria-label="Model"
-          title="Antigravity's model. Applies from the next message."
+          title={`${AGENTS[agent]}'s model. Applies from the next message.`}
           value={settings.model ?? ""}
           disabled={disabled}
           onChange={(e) => onChange({ model: e.target.value || undefined })}
         >
           <option value="">Default model</option>
-          {antigravity.map((m) => (
+          {models.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>
           ))}
         </select>
       )}
-      {/* Antigravity's models carry their own level ("Gemini 3.8 Flash (High)"), so it has no effort to choose. */}
-      {claude ? (
+      {AGENT_EFFORT[agent] ? (
         <select
           className="ez-select ez-select-sm ez-select-gives"
           aria-label="Effort"
@@ -1300,6 +1344,13 @@ function AgentSettingsBar({
       ) : null}
     </>
   );
+}
+
+/** Tokens in a few characters: "850 tokens", "12.3k tokens", "1.2M tokens". */
+export function tokens(n: number): string {
+  if (n < 1000) return `${n} tokens`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k tokens`;
+  return `${(n / 1_000_000).toFixed(1)}M tokens`;
 }
 
 function ChatBar({

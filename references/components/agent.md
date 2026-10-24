@@ -1,31 +1,33 @@
 # The agent behind the panel (`companion/src/agent/`)
 
 The companion runs the user's coding agent headless and relays what it does, so the user can work with it from the
-extension's side panel instead of a terminal. The agent is Claude Code or the Antigravity CLI (`agy`), chosen in
-the panel ([below](#permission-mode-model-and-effort)); either is still the only agent: the same CLI, login,
+extension's side panel instead of a terminal. The agent is Claude Code, the Antigravity CLI (`agy`) or Codex, chosen
+in the panel ([below](#permission-mode-model-and-effort)); each is still the only agent: the same CLI, login,
 workspace, `EZAPPLY.md`, skills and MCP server as running it in the workspace by hand (for Claude Code without the
 user's own setup, [below](#the-process-processts)); the companion only starts it, writes the user's messages to it
 and reads what it does.
 
 It runs under `ezapply` ([cli](cli.md#ezapply-panelts)), which passes the agents it finds to the companion
-(`CompanionOptions.claude`, `.antigravity`; `ezapply` won't start with neither). A companion with none (tests) has
+(`CompanionOptions.claude`, `.antigravity`, `.codex`; `ezapply` won't start with none). A companion with none (tests) has
 an `unavailable` agent: `AgentService.state()` says so, and so does the panel.
 
 **The agent behind an interface.** `AgentService` drives an `AgentBackend` (`backend.ts`), not an agent's CLI
 itself: a backend starts one conversation's `AgentSession` (send, interrupt, switch the mode or model, close,
 kill) and reports what it does as the `StreamItem`s of [the stream](#the-stream-streamts). Claude Code's is
 `claudeBackend` (`process.ts`), whose sessions are `AgentProcess`es; Antigravity's is `antigravityBackend`
-([below](#antigravity-antigravityts)). Both run their CLI through `LineProcess` (`child.ts`: JSON lines in, lines
+([below](#antigravity-antigravityts)), Codex's `codexBackend` ([below](#codex-codexts)). Each runs its CLI through
+`LineProcess` (`child.ts`: JSON lines in, lines
 out, the stderr tail, closing and killing the tree). The backend's `name` is what the panel's notices call the
 agent ("Claude Code stopped unexpectedly"). *Why:* so each agent reads its own protocol into the same items, while
-the conversations, cards and history stay one service's. Codex and opencode are still to add ("Compatibility with
-various agents" in `todo/`).
+the conversations, cards and history stay one service's. opencode is still to add ("Compatibility with
+opencode" in `todo/`).
 
 | Path | Role |
 |---|---|
-| `agent/backend.ts` | `AgentBackend` and `AgentSession`: what the service needs of a coding agent (above) |
+| `agent/backend.ts` | `AgentBackend` and `AgentSession`: what the service needs of a coding agent (above), and `ApprovalRequest`, an approval an agent asks of the client itself |
 | `agent/child.ts` | `AgentCommand` and `findCommand` (an agent's CLI on PATH or named by a variable); `LineProcess` |
 | `agent/antigravity.ts` | `antigravityBackend`, `AntigravityProcess`, `antigravityArgs`, `ANTIGRAVITY_PROMPT`, `AntigravityReader` (its stream-json into stream items), `findAntigravity` |
+| `agent/codex.ts` | `codexBackend`, `CodexProcess` (one conversation's app server, over a JSON-RPC layer), `CODEX_ARGS`, `codexPolicy`, `codexInstructions`, `codexServers`, `codexInput`, `CodexReader` (its notifications into stream items), `codexModels`, `findCodex` |
 | `agent/process.ts` | `claudeBackend`; `AgentProcess`: one conversation's Claude Code process, messages in, stream items out; `agentArgs`; `PANEL_PROMPT` and `PART_PROMPTS`; `findClaude` (also used by `ezapply`); `PERMISSION_TOOL`; `sessionId` ([sessions](companion.md#sessions); `SESSION_ENV` and `SESSION_HEADER` are in `endpoints.ts`) |
 | `agent/panel.ts` | `PanelService`: the side panel's methods (state, a conversation with its posting and documents, what a tab is, send, answers) and the updates pushed to it ([below](#the-panels-side-panelts)) |
 | `agent/stream.ts` | `readStreamLine`: a line of stream-json into events for the panel; `toolSummary` |
@@ -181,6 +183,90 @@ What it does that Claude Code doesn't, as observed with `agy` 1.4 on Windows. Ea
   `duration_seconds` doesn't; the panel shows no cost.
   `antigravity.test.ts` pins these against `agy-stream-stub.mjs`, whose lines are shaped as recorded.
 
+## Codex (`codex.ts`)
+`codex` (`EZAPPLY_CODEX` if set, else on PATH) as `codex app-server` (`CODEX_ARGS`) in the workspace: one long-lived
+process per conversation, JSON-RPC over stdio. *Why the app server:* `codex exec` runs one prompt per process and
+can't ask for approval; the app server takes messages for the whole conversation, steers one into a running turn,
+stops a turn, and sends each approval to the client to decide, which suits the panel better than Claude Code's print
+mode does. Verified with Codex 0.163 on Windows and a stand-in MCP server named `ezapply`, through `AgentService`; not
+yet with ezapply's own tools ([status](../status.md#not-yet-verified-for-real)).
+
+### What Codex does
+As observed with Codex 0.163. Each shapes something below.
+- **The user's own setup loads unless turned off.** A thread's `config.mcp_servers` is merged into the user's
+  `config.toml`, not put in its place, so their MCP servers start too; their plugins bring skills (a document skill
+  among them), MCP servers and connectors (`apps`). Each server of the user's is turned off by name
+  (`mcp_servers.<name>.enabled = false`); plugins and connectors by `--disable plugins --disable apps`. With that,
+  a one-message turn starts at about 13k tokens instead of 16k. The user's `notify` program would run at each turn's
+  end: `-c notify=[]`. Its own system skills still load.
+- **Every MCP call asks for approval** unless the server's `default_tools_approval_mode` is `approve`; where
+  nobody can approve (`approvalPolicy: never`) the call fails ("requires approval").
+- **An MCP call times out after 60 seconds** by default (`tool_timeout_sec`); a call held 150 seconds with a longer
+  timeout was answered.
+- **A stdio server gets only some of the environment**, so `EZAPPLY_SESSION` is given in the server's `env`.
+- **`AGENTS.md` is read, but not what it includes** (the `@[…](…)` lines are Antigravity's syntax), and the skills in
+  `.agents/skills/` are found as the repo's. A skill runs from a `skill` input item.
+- **A message steered into a running turn is taken in it** (`turn/steer` with the turn's id), even while an MCP call
+  runs: Codex goes on working beside the call.
+- **Its decline carries no reason:** the model reads "rejected by user".
+- **Its sandbox is enforced on Windows:** `workspace-write` lets commands write in the workspace and fails a write
+  outside it; `read-only` fails both.
+- **`turn/interrupt` ends the turn at once** (`interrupted`), even mid-call, and the process takes the next message.
+- **`thread/resume` reopens a thread in a new process** with its context; an id it doesn't have fails ("no rollout
+  found"). Closing stdin ends an idle process.
+- **It reports tokens, not cost:** `thread/tokenUsage/updated`'s `total` is the thread's so far, every request's
+  input counted again (a three-call turn was about 100k).
+
+### How ezapply drives Codex
+- **Booting** (`CodexProcess`): `initialize`; `config/read` for the names of the user's MCP servers; then
+  `thread/start`, or `thread/resume` with the conversation's thread id, with the mode's policy, the model, the
+  effort, the developer instructions and the servers (`codexServers`): the user's off, ezapply's from the
+  workspace's `.mcp.json` with its session in `env`, its tools approved and a 3600-second timeout (a TeX build or
+  a repo sync runs past 60). A thread that can't be resumed ends the process without a session, so the service
+  starts a new one ([below](#conversations-servicets)). Messages sent meanwhile wait for the thread.
+- **It names its threads.** The thread's id is the conversation's `agentSessionId`, as Antigravity's conversation
+  is; ezapply's session id goes to the relay.
+- **Instructions** (`codexInstructions`): the thread's developer instructions hold `PANEL_PROMPT` and the part's
+  line, the workspace's rules Codex has no setting for (`CODEX_RULES`: `repo-cache/` read-only, no `debug/` reads,
+  no Python for edits, which Claude Code's permission rules hold), then `EZAPPLY.md` and `profile/preferences.md`,
+  as `CLAUDE.md` imports them for Claude Code. They're read when the process starts.
+- **Each message** is a `turn/start`, or a `turn/steer` into the running turn (a `turn/start` if that turn just
+  ended). A message that starts with a skill's name (`/ezapply-resume …`, as the panel's buttons write) also carries
+  that skill as an input item when `.agents/skills/` has it (`codexInput`). Its taking is the `userMessage` item.
+- **Mode, model and effort go with every `turn/start`,** so a change applies from the next turn in the same process
+  (`setPermissionMode`, `setModel`, `setEffort` only record it, and are answered at once). How each mode runs
+  (`codexPolicy`):
+
+  | Panel mode | Approval policy | Reviewer | Sandbox |
+  |---|---|---|---|
+  | Ask first | `untrusted`: every edit, and every command but a known read, asks | the user | workspace-write |
+  | Accept edits | `on-request`: edits and commands in the workspace go ahead; going beyond it asks | the user | workspace-write |
+  | Auto | `on-request` | Codex's automatic reviewer | workspace-write |
+  | Plan only | `never` | | read-only |
+  | Don't ask | `never`: what the sandbox doesn't allow fails | | workspace-write |
+
+  A Plan only turn's message is preceded by `PLAN_LINE`: the read-only sandbox doesn't stop ezapply's own tools.
+- **Approvals are Codex's own requests,** no MCP tool between: `item/commandExecution/requestApproval` (the
+  command as Codex parsed it, not the shell around it), `item/fileChange/requestApproval` (the files and diff from
+  the change's `item/started`) and `item/permissions/requestApproval` (more access) become approval cards through
+  `AgentSessionOptions.approve` ([cards](#cards-needsts)), named `Shell`, `Patch` and `Permissions`. Allowed is
+  `accept` (a permission request gets what it asked for, for the turn), denied is `decline`; since a decline carries
+  no reason, the deny's message ("The user denied this in the ezapply panel: …") is steered into that turn, word for
+  word (verified live), as ezapply's own message, not taken as one of the user's. An MCP server's elicitation is
+  declined, and Codex's own question tool is answered with nothing: questions go on `ask_user` cards.
+- **Stop** is `turn/interrupt` for the running turn.
+- **Its stream** (`CodexReader`): `item/started` and `item/completed` for messages (`agentMessage`'s text once
+  complete), commands (`Shell`, by the parsed command; an exit code but 0 is a failure with the output's end),
+  file changes (`Patch`, by the files), MCP calls (ezapply's named as Claude Code names them, so `toolSummary`
+  folds them alike), web searches, subagents and images; `mcpServer/startupStatus/updated` for ezapply's server,
+  reported as an `init` once it's `ready` (as `connected`) or `failed`, or at once as not configured when
+  `.mcp.json` has none; `thread/tokenUsage/updated`; `error` with `willRetry` as a notice; `turn/completed` as the
+  turn's end, with the thread's tokens so far (`totalTokens`). Reasoning, deltas and the rest are skipped, and so
+  are other threads' (subagents'). `codex.test.ts` pins these against `codex-app-server-stub.mjs`, whose messages
+  are shaped as recorded.
+- **Its models** are `model/list`'s (not the hidden ones), listed by a short-lived app server the first time the
+  panel's state is read, as Antigravity's are.
+
 ## Conversations (`service.ts`)
 Two per posting, keyed `<posting id>/tailor` (its documents) and `<posting id>/fill` (its application), and one
 `general`. **Why two per posting:** tailoring and filling are separate work, whichever the user starts first, and
@@ -207,7 +293,7 @@ In a panel conversation, `ask_user` and `review_documents` open their card or re
 hint }` at once; the hint (`PENDING_HINT`), `EZAPPLY.md` and the panel's prompts say to end the turn. When the user
 answers, `deliverLater(key, { tool, id }, result)` sends the result to the conversation as a message:
 `<ezapply-result tool="…" id="…">` around the JSON the blocking call would have returned. It starts the next turn,
-or joins the running one (Claude Code takes it in the turn, Antigravity as the next), and resumes the conversation's
+or joins the running one (Claude Code and Codex take it in the turn, Antigravity as the next), and resumes the conversation's
 process if it has ended. The panel shows a note instead of the block: the message's `user` event carries
 `delivery: true` and a label ("Answers to <card title>", "Your reply to …", "Your review", "The review expiring").
 What settles: an ask answered or replied to (`NeedsYou.settledAsk`), a review answered or expired
@@ -248,7 +334,8 @@ the old one goes to `earlier` (kept for `claude --resume`; the newest 50). What'
 `notes.md`, approvals, the form log); the conversation doesn't. **A session that can't be resumed** (Claude Code
 exits before answering, its transcript gone) is replaced by a new one once, with the waiting messages sent again
 and a notice. Claude Code stopping mid-turn is a notice with the first line it wrote to stderr. The first `init`
-of a Claude Code process is checked for the `ezapply` MCP server (Antigravity's doesn't list MCP servers): anything but `connected` is an error notice ("Run `ezapply
+of a Claude Code process is checked for the `ezapply` MCP server, and so is Codex's report of it (Antigravity's
+doesn't list MCP servers): anything but `connected` is an error notice ("Run `ezapply
 init` in the workspace, then Reset this conversation"), since the agent would have none of its tools.
 
 **Forget** (`forgetPosting(id)`, when the panel deletes a posting) ends the process of either of the posting's
@@ -267,14 +354,18 @@ and changed; read back through the companion, they showed only once it answered,
 the companion had to write a file to keep what the browser already could. What a conversation runs with is
 `effectiveSettings(prefs, installed)` (`AgentSettings`), the same in the panel and the companion: the chosen agent's
 choice, or its defaults (`DEFAULT_AGENT_CHOICES`: Claude Code with Auto, Sonnet and medium effort; Antigravity with
-Don't ask, its own default model and medium effort) for one never chosen.
+Don't ask, its own default model and medium effort; Codex with Auto, its own default model and medium effort) for one
+never chosen.
 
-**The agent** (`claude` or `antigravity`) is offered only when both are installed (`PanelState.agent.agents`); a
-chosen agent not installed runs as the first that is, its choice kept for when it is. A session is with one agent:
-each conversation records its `agent`, and a message to one whose session was with the other starts a new session
-(the old one to `earlier`) with a notice. A change ends the running process like effort (below). Antigravity's
-conversations show its two modes (Don't ask, Plan only) and its models, and no effort: its models name their level.
-Its stored choice keeps an effort all the same (`AgentChoice` is one shape for every agent), which nothing reads.
+**The agent** (`claude`, `antigravity` or `codex`) is offered only when more than one is installed
+(`PanelState.agent.agents`); a chosen agent not installed runs as the first that is, its choice kept for when it is.
+A session is with one agent: each conversation records its `agent`, and a message to one whose session was with
+another starts a new session (the old one to `earlier`) with a notice. A change ends the running process like effort
+(below). Each agent offers its own modes (`AGENT_MODES`) and, where it takes one, an effort (`AGENT_EFFORT`).
+Antigravity's conversations show its two modes (Don't ask, Plan only) and its models, and no effort: its models name
+their level. Its stored choice keeps an effort all the same (`AgentChoice` is one shape for every agent), which
+nothing reads. Codex offers all five modes, run through its approval policy and sandbox
+([how](#how-ezapply-drives-codex)), its models and the five efforts.
 
 | Mode | The panel says | Does |
 |---|---|---|
@@ -284,14 +375,18 @@ Its stored choice keeps an effort all the same (`AgentChoice` is one shape for e
 | `plan` | Plan only | Claude reads and plans, and changes nothing |
 | `dontAsk` | Don't ask | Only what the rules allow runs; anything else is denied without asking |
 
+The panel says what each does for the agent in use: for Codex, the workspace's sandbox stands where Claude Code's
+rules do (Accept edits lets it edit and run commands inside the workspace; Auto has Codex's reviewer decide what goes
+beyond it).
+
 Claude Code's models: the aliases `fable`, `opus`, `sonnet` (default), `haiku`, each the latest of its family
 (`sonnet` is Sonnet 5.5 with Claude Code 2.1). Antigravity's depend on the account, so the companion lists them with
 `agy models` the first time the panel's state is read (it fetches them, so they come a moment later, as a state
 change) and offers them as `PanelState.agent.models.antigravity`, beside "Default model" (no `--model`); a chosen
-one shows by its id until the list is in. Effort, Claude Code's only: `low`, `medium` (default), `high`, `xhigh`,
-`max` (`--effort`). Stored settings are read field by field (`readAgentPrefs`), so one an older build kept that's no
+one shows by its id until the list is in. Codex's are listed the same way (`model/list`, `models.codex`). Effort,
+Claude Code's (`--effort`) and Codex's (each turn's `effort`): `low`, `medium` (default), `high`, `xhigh`, `max`. Stored settings are read field by field (`readAgentPrefs`), so one an older build kept that's no
 longer offered falls back to its default alone, and a choice an agent can't take (a Claude model that isn't an
-alias, an Antigravity mode it doesn't offer) runs as its default.
+alias, a mode the agent doesn't offer) runs as its default.
 *Not offered:* `bypassPermissions`. Postings are untrusted text, and the approval cards are what stands between
 a prompt injected into one and a command run on the user's machine; Claude Code also refuses to switch a session to
 it unless it was launched with `--dangerously-skip-permissions`. A Claude model's full name isn't offered either: the
@@ -305,7 +400,8 @@ kept and applies when the conversation next starts. **Effort from the next messa
 `set_effort`, and its `apply_flag_settings { effortLevel }` is accepted but wasn't seen to change how much a turn
 thinks, so the process ends (at once when idle, after its turn while it works) and the next message resumes the
 session with the new `--effort` (or, for a new agent, starts its new one); so does any change for Antigravity,
-which takes no switches. The change answers without waiting for that exit (Claude Code can take seconds to end):
+which takes no switches. Codex takes all three with each turn, so a change of any of them goes to the running process
+(`setEffort` too) and applies from its next turn, without a restart. The change answers without waiting for that exit (Claude Code can take seconds to end):
 the next process starts once it has, so two never hold one session. The same settings given again (on a
 reconnection) change nothing. Processes start with the settings as flags.
 
@@ -324,8 +420,10 @@ suggestion came from, and nothing is filled until the user sends the card. A pan
 delivered as a message ([above](#results-as-messages)); a terminal chat's, given while nothing waits, are kept and
 read once by the next wait. **Approvals** (`permission_ask`): a card with the tool, its input and Claude's
 description; the decision resolves the waiting call, allow with the input unchanged, deny with "The user denied
-this in the ezapply panel: <reason>"; no answer in 10 minutes is a deny. There's no "always allow": the workspace's
-permission rules are the only standing approvals.
+this in the ezapply panel: <reason>"; no answer in 10 minutes is a deny. An agent that asks the client itself
+(Codex) gets the same card through `AgentSessionOptions.approve`, with the same decision and deny message
+([Codex](#how-ezapply-drives-codex)). The card names the agent asking ("Codex wants to run a command"). There's no
+"always allow": the workspace's permission rules are the only standing approvals.
 
 A question from a Claude Code run by hand in the workspace (no session header) gets a card only when a panel watches the cards (`watch()`); otherwise `ask_user` says to
 ask in chat, and `permission_ask` denies. A panel conversation's question always gets a card. Settled cards are
@@ -341,11 +439,11 @@ own and no web page can reach it.
 |---|---|
 | `panel.watch { open }` | How many panels are open, sent by the extension on every change and on connecting. While more than none, cards are shown (`NeedsYou.watch`) and updates pushed; the extension disconnecting ends it |
 | `panel.state` | `PanelState`: the agent's status (working while any conversation is) and each running conversation's (`agent.conversations`: status, messages waiting), the 20 newest postings and any older one a card waits on or an agent is in, the open cards, and setup (`workspace_check`'s required steps left; kept 30 s, as it runs TeX and GitHub checks) |
-| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost, and for either of a posting's conversations its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes; `attached` when an approved one has an upload in the form log; only PDFs at the top of the posting's folder), and a review waiting on the user |
+| `panel.conversation { key }` | `PanelConversation`: the session's events (`history`), its cost (or its tokens, `totalTokens`, from an agent that reports no cost), and for either of a posting's conversations its card (company, role, site, status, deadline, up to six bullet lines under `## Application requirements` in `notes.md`, the application's address), its PDFs with where each stands (`draft`, `review`, `approved`, `changes`, `attached`: `ReviewService.documentStates` by their bytes; `attached` when an approved one has an upload in the form log; only PDFs at the top of the posting's folder), and a review waiting on the user |
 | `panel.tab { tabId, url, title, site, frames?, postingId? }` | What the tab is to the posting open in the panel (none in the general conversation): its page (`posting`), its application (`application`, by `matchPosting` as the form tools decide), another posting's (`other-application`), an application not known to be its (`unconfirmed-application`), another page, or no web page. A form is the page's own on a form site, or a form site's frame in it (`frames`: a careers page embedding Greenhouse), told by the frame's URL as the form tools tell it, so a careers page around the form never makes it "another page"; the posting's own page is its application when a form frame is in it, or on a site whose posting page is its form (`postingIsForm`: Greenhouse's board, not Workday's posting page). Of several forms, the posting's wins |
 | `panel.send { key, text }` | The user's message to a conversation (`general`, or a posting's `tailor` or `fill`; a posting's must still exist) |
 | `panel.stop { key }`, `panel.reset { key }` | Stop the conversation's turn (the others go on); a new session for the conversation |
-| `panel.settings AgentPrefs` | The extension's agent settings, on every connection and change ([above](#permission-mode-model-and-effort)); returns what conversations now run with. `panel.state` carries the agents installed (`agent.agents`) and Antigravity's models (`agent.models`) |
+| `panel.settings AgentPrefs` | The extension's agent settings, on every connection and change ([above](#permission-mode-model-and-effort)); returns what conversations now run with. `panel.state` carries the agents installed (`agent.agents`) and Antigravity's and Codex's models (`agent.models`) |
 | `panel.answer { cardId, answers }`, `panel.reply { cardId, message }`, `panel.permission { cardId, allow, reason? }` | A card's answers (checked against its questions), a reply in words instead, an approval's decision |
 | `panel.markSubmitted { postingId }` | The user submitted the application and the confirmation page went unseen: the posting moves to `submitted` (forward only) and `form-log.jsonl` gets `marked-submitted` (`FormsService.submitted`) |
 | `panel.markOpen { postingId }` | A submitted posting isn't: back to its status before ([postings](postings.md#status)), logged as `marked-open` (`FormsService.reopen`). Nothing for a posting not `submitted` |
@@ -377,3 +475,6 @@ update this…"; [companion](companion.md#acting-on-a-change-workspaceupdates)).
   card. The first answer settles it; the other gets "No open approval" (or question), and its panel drops the card
   with the next update. Whether a second window should say more than that.
 - Cost is Claude Code's estimate; whether to warn before a turn of a long-resumed session.
+- Codex's tokens count each request's whole input again, cached or not, so a long turn shows far more than it
+  costs; whether to show fresh input and output instead. Its system skills (image generation, skill installer…)
+  still load in the panel's threads; whether a setting turns them off.

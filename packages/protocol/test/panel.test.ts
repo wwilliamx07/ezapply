@@ -156,6 +156,20 @@ describe("the agent settings", () => {
     expect(effectiveSettings(p, both)).toEqual({ agent: "antigravity", permissionMode: "dontAsk", effort: "max" });
   });
 
+  it("gives Codex every mode, its own default model, and an effort", () => {
+    const installed = ["claude", "codex"] as const;
+    let p = changeAgentPrefs(DEFAULT_AGENT_PREFS, installed, { agent: "codex" });
+    expect(effectiveSettings(p, installed)).toEqual({ agent: "codex", permissionMode: "auto", effort: "medium" });
+    p = changeAgentPrefs(p, installed, { permissionMode: "default", model: "gpt-x", effort: "max" });
+    expect(effectiveSettings(p, installed)).toEqual({
+      agent: "codex",
+      permissionMode: "default",
+      model: "gpt-x",
+      effort: "max",
+    });
+    expect(readAgentPrefs(JSON.parse(JSON.stringify(p)))).toEqual(p);
+  });
+
   it("reads stored settings field by field, so one an older build kept falls back alone", () => {
     expect(readAgentPrefs(undefined)).toEqual(DEFAULT_AGENT_PREFS);
     expect(

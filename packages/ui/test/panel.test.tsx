@@ -419,6 +419,32 @@ describe("the side panel", () => {
     expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("model-b");
   });
 
+  it("offers Codex's five modes, its listed models and an effort, and its tokens so far", async () => {
+    const t = fakeTransport({
+      state: state({
+        agent: { ...state().agent, agents: ["claude", "codex"], models: { codex: [{ id: "gpt-x", label: "GPT X" }] } },
+      }),
+      prefs: { agent: "codex", choices: {} },
+      conv: conversation({ totalTokens: 12_345 }),
+    });
+    render(<PanelApp transport={t.transport} />);
+    const mode = (await screen.findByRole("combobox", { name: "Permission mode" })) as HTMLSelectElement;
+    expect([...mode.options].map((o) => o.textContent)).toEqual([
+      "Ask first",
+      "Accept edits",
+      "Auto",
+      "Plan only",
+      "Don't ask",
+    ]);
+    expect(mode.value).toBe("auto");
+    const model = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect([...model.options].map((o) => o.textContent)).toEqual(["Default model", "GPT X"]);
+    fireEvent.change(screen.getByRole("combobox", { name: "Effort" }), { target: { value: "high" } });
+    expect(t.saved.at(-1)).toEqual({ agent: "codex", choices: { codex: { permissionMode: "auto", effort: "high" } } });
+    await openApp();
+    expect(await screen.findByText("12k tokens")).toBeTruthy();
+  });
+
   it("says when ezapply isn't running or the extension isn't paired, and disables the rest", async () => {
     const off = fakeTransport({ conn: { state: "disconnected", reason: "refused" } });
     const { unmount } = render(<PanelApp transport={off.transport} />);
@@ -726,6 +752,27 @@ describe("question drafts", () => {
       { label: "With", text: "y" },
     ]);
   });
+
+  it("shows Codex's approvals: a command where it runs, a patch's files and changes", () => {
+    const base = { id: "p", kind: "permission" as const, createdAt: AT };
+    expect(permissionBody({ ...base, toolName: "Shell", input: { command: "git push", cwd: "/ws" } })).toEqual({
+      title: "Run a command",
+      lines: [{ text: "git push" }, { label: "In", text: "/ws" }],
+    });
+    expect(
+      permissionBody({
+        ...base,
+        toolName: "Patch",
+        input: { file_path: "a.tex", files: ["a.tex", "b.tex"], diff: "+x" },
+      }),
+    ).toEqual({
+      title: "Edit files",
+      lines: [
+        { label: "Files", text: "a.tex\nb.tex" },
+        { label: "Changes", text: "+x" },
+      ],
+    });
+  });
 });
 
 describe("the conversation", () => {
@@ -748,6 +795,16 @@ describe("the conversation", () => {
     expect(screen.getByText("Done · $0.25")).toBeTruthy();
     expect(screen.getByText("Done · $0.15")).toBeTruthy();
     expect(screen.getByText(/stopped unexpectedly/)).toBeTruthy();
+  });
+
+  it("shows each turn's tokens from an agent that reports no cost", () => {
+    const events: AgentEvent[] = [
+      { kind: "turnEnd", at: AT, ok: true, totalTokens: 850 },
+      { kind: "turnEnd", at: AT, ok: true, totalTokens: 25_850 },
+    ];
+    render(<Conversation events={events} />);
+    expect(screen.getByText("Done · 850 tokens")).toBeTruthy();
+    expect(screen.getByText("Done · 25k tokens")).toBeTruthy();
   });
 
   it("shows an application's hand-off as a card: attached files, answers to check, warnings and removals", () => {

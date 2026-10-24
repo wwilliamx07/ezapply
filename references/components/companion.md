@@ -26,7 +26,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `bridge/server.ts` | `ExtensionBridge`: WebSocket endpoint, handshake, pinning, pairing window, RPC to the extension; `onConnectionChange` (the side panel's watch ends with the connection) |
 | `bridge/pairing.ts` | `startPairing` (open the pairing window, optionally forgetting the paired extension) and `extensionFolders` (what to load, and whether it's built): shared by `extension_pair` and the onboarding page |
 | `onboarding/service.ts` | `OnboardingService`: the onboarding page's session, routes and actions, its state (from `workspace_check` and the services), the agent's task queue behind `onboarding`, and the watch that tells an open page what changed elsewhere; `skipReason` (repos not suggested) → [ui](ui.md#the-onboarding-page-onboard) |
-| `agent/` | `AgentService` (the panel's conversations, an agent process per conversation, side by side), the agents' backends (Claude Code's `AgentProcess` and `findClaude`, Antigravity's `AntigravityProcess` and `findAntigravity`), `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user), `PanelService` (the side panel's `panel.*` methods and the updates pushed to it) → [agent](agent.md) |
+| `agent/` | `AgentService` (the panel's conversations, an agent process per conversation, side by side), the agents' backends (Claude Code's `AgentProcess` and `findClaude`, Antigravity's `AntigravityProcess` and `findAntigravity`, Codex's `CodexProcess` and `findCodex`), `readStreamLine`, `NeedsYou` (the agent's questions and approvals waiting on the user), `PanelService` (the side panel's `panel.*` methods and the updates pushed to it) → [agent](agent.md) |
 | `ui/assets.ts` | `UiAssets`: the UI package's files at `/ui/`, each page's HTML shell, `UI_CSP`, the base stylesheet's address → [ui](ui.md#serving-companionsrcuiassetsts) |
 | `ui/session.ts` | What the pages share: the token traded for a cookie (`presentedToken`, `pageCookie`, `tokenOk`), `sameOrigin`, `readJsonBody`, `sendJson`, `EventStreams` (Server-Sent Events) → [ui](ui.md#how-a-page-talks-to-the-companion) |
 | `status.ts` | `workspaceStatus`: the readiness checklist behind `workspace_check` |
@@ -60,7 +60,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
    and `OnboardingService`; seed `profile/answers.yaml` if it doesn't exist.
 3. Build the bridge with the pairing code, the pinned id, `onPaired` / `onForgotten`, which persist the pairing,
    the handlers for `posting.capture`, `posting.submitted` (`FormsService.submitted`) and the side panel's `panel.*` methods, and `onConnectionChange`. Build
-   `NeedsYou` and `AgentService` (with the agents the `claude` and `antigravity` options give), and `PanelService`, whose
+   `NeedsYou` and `AgentService` (with the agents the `claude`, `antigravity` and `codex` options give), and `PanelService`, whose
    pushes go to the extension only while it's connected.
 4. Build `FormsService` over postings and the bridge, and the HTTP server; listen on
    `config.host:config.port` (port 0 picks a free one, for tests). A taken port rejects with `EADDRINUSE`,
@@ -76,7 +76,7 @@ would be undone the next time an extension paired.
 
 Options: `config`, `log`, `saveConfig` (tests: receives the whole new config instead of the file update),
 `appDataDir`, `secrets` (keychain by default), `opener` (by default `createDesktopOpener` with the browser
-the bridge reports; tests stub it), `claude` and `antigravity` (the agents the side panel can run: `ezapply` passes those it finds; tests mostly don't),
+the bridge reports; tests stub it), `claude`, `antigravity` and `codex` (the agents the side panel can run: `ezapply` passes those it finds; tests mostly don't),
 `extensionDir` (so `extension_pair` can name the build folders), `reconnectGraceMs` (tests), and GitHub test
 hooks.
 

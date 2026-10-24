@@ -50,6 +50,25 @@ describe("Antigravity config", () => {
   });
 });
 
+describe("Codex config", () => {
+  it("writes ezapply's server in its own block of .codex/config.toml, keeping the user's lines", async () => {
+    await initWorkspace(config);
+    const path = join(config.workspace, ".codex", "config.toml");
+    const first = await readFile(path, "utf8");
+    expect(first).toContain("[mcp_servers.ezapply]");
+    expect(first).toContain(`command = ${JSON.stringify(process.execPath)}`);
+    expect(first).toContain('default_tools_approval_mode = "approve"');
+    expect(first).toMatch(/args = \[".*main\.js", "mcp"\]/);
+
+    await writeFile(path, `model = "my-model"\n\n${first}\n[mcp_servers.mine]\ncommand = "mine"\n`);
+    await initWorkspace(config);
+    const again = await readFile(path, "utf8");
+    expect(again.startsWith('model = "my-model"\n\n# ezapply:begin')).toBe(true);
+    expect(again.endsWith('[mcp_servers.mine]\ncommand = "mine"\n')).toBe(true);
+    expect(again.match(/\[mcp_servers\.ezapply\]/g)).toHaveLength(1);
+  });
+});
+
 describe("Claude Code config", () => {
   it("runs ezapply over stdio, with no token in the workspace", async () => {
     await initWorkspace(config);

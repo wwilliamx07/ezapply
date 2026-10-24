@@ -12,8 +12,8 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **The review opens itself when a tailoring turn ends** with new documents, instead of the skills asking the
   agent to; turns still ended without it. A failed build's PDF is left out, nothing else is held back
   ([documents](components/documents.md#review-before-attaching)).
-- **The panel's buttons name their skill** (`/ezapply-resume …`), which Claude Code and Antigravity both run as the
-  skill, so the agent doesn't match the words to one ([ui](components/ui.md#the-side-panel-srcpanel)).
+- **The panel's buttons name their skill** (`/ezapply-resume …`), which Claude Code, Antigravity and Codex all run as
+  the skill, so the agent doesn't match the words to one ([ui](components/ui.md#the-side-panel-srcpanel)).
 - **Code does the fixed parts of applying:** `get_form` presses a posting's Apply, marks `prefilled`, `stale` and
   `bankMatch` fields, refuses a sensitive answer the user didn't give for the posting and a bundle's parts; the
   hand-off is a card built from the log, and a saved answer is written by code. The agent kept missing them, or
@@ -73,12 +73,18 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   ([agent](components/agent.md#conversations-servicets)).
 - **No active posting.** A call's posting is the one it names, else its conversation's; the general conversation and
   a terminal chat name it, and form calls without one credit nothing ([which posting](mcp-tools.md#postings)).
-- **The agent behind an interface.** The panel's service drives an agent backend, Claude Code's or Antigravity's, so
+- **The agent behind an interface.** The panel's service drives an agent backend, Claude Code's, Antigravity's or Codex's, so
   each agent reads its own protocol without touching the conversations, cards or history
   ([agent](components/agent.md)).
 - **Antigravity without approvals.** Its headless mode can't ask anyone, and on the user's allow rules alone every
   command was denied and ended the turn, so Don't ask runs it with its skip-permissions flag, accepting that a
   prompt injected through a posting isn't checked ([agent](components/agent.md#antigravity-antigravityts)).
+- **Codex through its app server,** not `codex exec`: one process holds the conversation, steers a message into a
+  running turn, and sends each approval to the panel ([agent](components/agent.md#codex-codexts)).
+- **Codex's approvals are its own, with the deny's reason steered in.** A decline carries no reason, so the user's
+  message follows it into the turn ([agent](components/agent.md#how-ezapply-drives-codex)).
+- **The user's own Codex setup is turned off in the panel:** their MCP servers, plugins, connectors and notify
+  program, which a thread's settings merge with rather than replace ([agent](components/agent.md#what-codex-does)).
 - **The user's answers start the agent's next turn.** In the panel, `ask_user` and `review_documents` return at once
   and the answer comes as a message: a call held for the user timed out (Antigravity cuts any MCP call at 3 minutes)
   and left the answer unread ([agent](components/agent.md#results-as-messages)).
@@ -185,14 +191,20 @@ What's built but hasn't run live, and what to check first. Each site's page list
   follows the skills as written for any agent. Also that no console window flashes when it
   starts (its auto-updater turned off, verified with `agy` alone), and that switching agents in the panel shows at
   once with the next message starting the new one.
+- **Codex behind the panel** with ezapply itself ([agent](components/agent.md#codex-codexts)). Its app server was
+  run live through `AgentService` with a stand-in MCP server named `ezapply`: skills, instructions, an approved MCP
+  call, an approval card and its deny, a mode switch, Stop, resume and token usage. Check: a posting tailored and a
+  form filled from the panel with ezapply's own tools, that the skills are followed as written, that a TeX build or
+  repo sync past 60 seconds is answered, that `ezapply init`'s `.codex/config.toml` works for `codex` run in the
+  workspace by hand, and that Codex's models list in the panel and a chosen one runs.
 - **Answers delivered as messages** ([agent](components/agent.md#results-as-messages)), tested with the Claude Code
-  stub. Check, under both agents: after `review_documents` or `ask_user` returns `pending` the agent ends its turn
+  stub. Check, under each agent: after `review_documents` or `ask_user` returns `pending` the agent ends its turn
   rather than checking again or going on with the step; a review left open past 10 minutes and answered then
   starts the next turn, which reads the `<ezapply-result>` block and acts on it; the panel shows the note, not the
   block; the turn-end notification says the documents are ready to review.
 - **A stopped setup task** ([ui](components/ui.md#the-agents-side-tasks)), tested with the Claude Code stub. Check:
   Stop on a setup task in the panel's general conversation turns its line on the setup page to "Stopped before it
-  finished" under both agents, and the page names Antigravity when it's the one in use, as the review page does
+  finished" under each agent, and the page names Antigravity when it's the one in use, as the review page does
   (its button reads "Send to Antigravity").
 - **Turn-end notifications** ([extension](components/extension.md#notifications-notifyts)), tested with stubs of
   Chrome's API. Check: a notification when a turn ends or a card opens with the browser in the background or the

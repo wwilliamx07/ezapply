@@ -181,13 +181,14 @@ removed on any write. Both keys are optional, so adding them needed no `schemaVe
 ### `agent/`
 The side panel's conversations ([agent](components/agent.md)), written by the companion only.
 - `conversations.json`: `{ schemaVersion: 1, conversations: { "<posting id>/tailor | <posting id>/fill | general": { sessionId, startedAt,
-  agent?, started, agentSessionId?, totalCostUsd?, earlier[] { sessionId, startedAt, endedAt? } } } }`. `agent`
-  (`claude` or `antigravity`; absent, from before there was a choice, is `claude`) is the agent the session is
+  agent?, started, agentSessionId?, totalCostUsd?, totalTokens?, earlier[] { sessionId, startedAt, endedAt? } } } }`.
+  `agent` (`claude`, `antigravity` or `codex`; absent, from before there was a choice, is `claude`) is the agent the session is
   with. `sessionId` is ezapply's id for the session: the Claude Code session the conversation's process starts
-  (`--session-id`) or, once `started` (the agent answered once), resumes. `agentSessionId` is Antigravity's own id
-  for it, which a later process continues (`--conversation`). `totalCostUsd` is the session's spend so far, Claude
-  Code's estimate. `agent` and `agentSessionId` are optional, so a file without them still parses at
-  `schemaVersion` 1. Reset moves the session to
+  (`--session-id`) or, once `started` (the agent answered once), resumes. `agentSessionId` is Antigravity's or Codex's own id
+  for it (a conversation, a thread), which a later process continues (`--conversation`, `thread/resume`).
+  `totalCostUsd` is the session's spend so far, Claude Code's estimate; `totalTokens` its tokens so far, from Codex,
+  which reports no cost. `agent`, `agentSessionId` and `totalTokens` are optional, so a file without them still
+  parses at `schemaVersion` 1. Reset moves the session to
   `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
   empty. A key that's a bare posting id is an older build's one conversation per posting: the companion moves it
   to `<posting id>/tailor`, with its logs, once per run
@@ -377,6 +378,6 @@ The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),
-and `agentPrefs`: the panel's agent settings, `{ agent, choices: { claude?, antigravity? } }`, each
+and `agentPrefs`: the panel's agent settings, `{ agent, choices: { claude?, antigravity?, codex? } }`, each
 choice `{ permissionMode, model?, effort }` (`AgentPrefs`, [agent](components/agent.md#permission-mode-model-and-effort)).
 Read field by field (`readAgentPrefs`): one missing or not offered any more takes its default on its own.

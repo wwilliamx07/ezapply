@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { EzError, postingConversation } from "@ezapply/protocol";
 import { antigravityBackend } from "./agent/antigravity.js";
 import type { AgentCommand } from "./agent/child.js";
+import { codexBackend } from "./agent/codex.js";
 import { NeedsYou } from "./agent/needs.js";
 import { PanelService } from "./agent/panel.js";
 import { type ClaudeCommand, claudeBackend } from "./agent/process.js";
@@ -50,9 +51,10 @@ export interface CompanionOptions {
   ui?: UiAssets;
   /** Override how long a fresh companion waits for the paired extension to reconnect (tests). */
   reconnectGraceMs?: number;
-  /** Claude Code and the Antigravity CLI, the agents the panel can run; with neither it is unavailable (tests). */
+  /** Claude Code, the Antigravity CLI and Codex, the agents the panel can run; with none it is unavailable (tests). */
   claude?: ClaudeCommand;
   antigravity?: AgentCommand;
+  codex?: AgentCommand;
   /** Test hooks: GitHub endpoints and git clone URL. */
   github?: { webBase?: string; apiBase?: string; cloneUrl?: (fullName: string) => string };
 }
@@ -191,6 +193,7 @@ export async function startCompanion(opts: CompanionOptions): Promise<CompanionH
     backends: {
       ...(opts.claude ? { claude: claudeBackend(opts.claude) } : {}),
       ...(opts.antigravity ? { antigravity: antigravityBackend(opts.antigravity) } : {}),
+      ...(opts.codex ? { codex: codexBackend(opts.codex) } : {}),
     },
   });
   // A posting's panel conversation works on its own posting, whichever is active.

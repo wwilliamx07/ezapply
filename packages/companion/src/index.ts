@@ -1,5 +1,6 @@
 export { findAntigravity } from "./agent/antigravity.js";
 export type { AgentCommand } from "./agent/child.js";
+export { findCodex } from "./agent/codex.js";
 export { type ClaudeCommand, findClaude } from "./agent/process.js";
 export { defaultWorkspaceConfig, WorkspaceConfig } from "./config/workspace.js";
 export { DEBUG_DIR } from "./forms/debug.js";

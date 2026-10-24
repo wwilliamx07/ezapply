@@ -20,9 +20,10 @@ ezapply-home/
   .claude/settings.json    enables the ezapply server, allows its tools, denies writes to repo-cache/,
                            reads of debug/ and running python
   .claude/skills/          ezapply-index-repo, -resume, -cover-letter, -apply, -answers
-  AGENTS.md                the user's own notes for Antigravity; includes EZAPPLY.md and the preferences
-  .agents/skills/          the same skills, where Antigravity reads them
+  AGENTS.md                the user's own notes for Antigravity and Codex; includes EZAPPLY.md and the preferences
+  .agents/skills/          the same skills, where Antigravity and Codex read them
   .agents/mcp_config.json  Antigravity → `node <cli>/main.js mcp`
+  .codex/config.toml       Codex run by hand → `node <cli>/main.js mcp` (ezapply's block; the rest is the user's)
   profile/                 profile.yaml, answers.yaml, preferences.md, repos.yaml
   templates/resume/        the user's LaTeX resume + template.json
   templates/cover/         cover letter template + template.json (+ example/, format.md)
@@ -227,7 +228,18 @@ What the Antigravity CLI reads, written by `init` beside Claude Code's (`initAnt
   without it (Plan only, or `agy` run by hand); whether the flag still honours the `repo-cache` deny isn't verified
   ([status](../status.md#not-yet-verified-for-real)).
 
+## Codex
+Codex reads `AGENTS.md` and `.agents/skills/` (above), though not the files `AGENTS.md` includes: that syntax is
+Antigravity's. `init` also writes ezapply's server into `.codex/config.toml` (`initCodex`), between
+`# ezapply:begin` and `# ezapply:end` lines it replaces on every run, keeping the rest of the file: its tools approved
+(`default_tools_approval_mode = "approve"`; Codex asks for every MCP call otherwise) and a one-hour timeout (60
+seconds by default, short of a TeX build). Codex reads a project's `.codex/config.toml` only once the user trusts the
+folder, so this is for Codex run by hand there. The panel's Codex needs none of it: it gives the server, the
+instructions (`EZAPPLY.md`, the preferences) and the rules in the thread itself ([agent](agent.md#codex-codexts)).
+Codex has no setting for Claude Code's denies (`repo-cache/` writes, `debug/` reads, python), so the panel's
+instructions state them, and its sandbox keeps commands to the workspace.
+
 ## Ownership
 | Managed by ezapply (refreshed by `init`) | The user's (never overwritten) |
 |---|---|
-| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` and `.agents/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json` and `.agents/mcp_config.json`, ezapply's entries in `.claude/settings.json`, `mcp(ezapply/*)` and the workspace's `write_file` rules in Antigravity's settings | `CLAUDE.md` and `AGENTS.md` (beyond the include lines), `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |
+| `EZAPPLY.md`, the `ezapply` launcher, `templates/.synced/` (written by the companion), `.claude/skills/*` and `.agents/skills/*` (ezapply's skills), the `ezapply` entry in `.mcp.json` and `.agents/mcp_config.json`, ezapply's block in `.codex/config.toml`, ezapply's entries in `.claude/settings.json`, `mcp(ezapply/*)` and the workspace's `write_file` rules in Antigravity's settings | `CLAUDE.md` and `AGENTS.md` (beyond the include lines), the rest of `.codex/config.toml`, `profile/`, `templates/` (the default cover template is only installed into an empty folder), `library/`, `knowledge/`, `postings/`, `ezapply.config.json` values the user changed, `autofill-timing.yaml` |

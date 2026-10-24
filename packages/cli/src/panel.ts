@@ -14,9 +14,10 @@ interface HostPanelOptions {
   config: AppConfig;
   /** The extension package folder, so extension_pair can say what to load. */
   extensionDir?: string;
-  /** The agents the panel can run (at least one): Claude Code and the Antigravity CLI. */
+  /** The agents the panel can run (at least one): Claude Code, the Antigravity CLI and Codex. */
   claude?: ClaudeCommand;
   antigravity?: AgentCommand;
+  codex?: AgentCommand;
   log: Logger;
   /** Where the lines for the user go (stdout). */
   say?: (line: string) => void;
@@ -30,8 +31,8 @@ interface HostPanelOptions {
 }
 
 /**
- * `ezapply`: the companion in this process, for the extension's side panel, with the panel's agent (Claude Code or
- * the Antigravity CLI) run headless by the companion when the panel needs it
+ * `ezapply`: the companion in this process, for the extension's side panel, with the panel's agent (Claude Code,
+ * the Antigravity CLI or Codex) run headless by the companion when the panel needs it
  * ([agent](../../../references/components/agent.md)). Nothing runs in the terminal but this: it prints where to go
  * and stops on Ctrl+C. It is the only process the companion runs in, and the port closes when it stops.
  */
@@ -70,6 +71,7 @@ async function startHosted(opts: HostPanelOptions): Promise<CompanionHandle | st
       log: opts.log,
       ...(opts.claude ? { claude: opts.claude } : {}),
       ...(opts.antigravity ? { antigravity: opts.antigravity } : {}),
+      ...(opts.codex ? { codex: opts.codex } : {}),
       ...(opts.extensionDir ? { extensionDir: opts.extensionDir } : {}),
       ...(opts.companion?.appDataDir ? { appDataDir: opts.companion.appDataDir } : {}),
       ...(opts.companion?.saveConfig ? { saveConfig: opts.companion.saveConfig } : {}),

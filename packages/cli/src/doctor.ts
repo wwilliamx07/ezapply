@@ -4,6 +4,9 @@ import {
   appConfigPath,
   appDir,
   createLogger,
+  findAntigravity,
+  findClaude,
+  findCodex,
   GitHubService,
   githubDetail,
   installCommand,
@@ -75,6 +78,19 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
   } else if (!checks.some((c) => c.name === "config")) {
     add("config", false, "missing (run ezapply init)");
   }
+
+  // The panel runs whichever of these is chosen and installed: one is enough.
+  const agents = [
+    ["Claude Code", findClaude()],
+    ["Antigravity", findAntigravity()],
+    ["Codex", findCodex()],
+  ] as const;
+  const found = agents.flatMap(([name, c]) => (c ? [`${name} (${c.file})`] : []));
+  add(
+    "agents",
+    found.length > 0,
+    found.length > 0 ? found.join(", ") : "none on PATH (install Claude Code, agy or Codex)",
+  );
 
   // The review page (and the companion's other pages) come from the UI package's build.
   const ui = new UiAssets();

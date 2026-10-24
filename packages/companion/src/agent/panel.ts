@@ -132,9 +132,9 @@ export class PanelService {
 
   async conversation(key: string): Promise<PanelConversation> {
     const s = this.s();
-    const [events, totalCostUsd] = await Promise.all([s.agent.history(key), s.agent.cost(key)]);
+    const [events, usage] = await Promise.all([s.agent.history(key), s.agent.usage(key)]);
     if (key === GENERAL_CONVERSATION) {
-      return { key, documents: [], events, ...(totalCostUsd !== undefined ? { totalCostUsd } : {}) };
+      return { key, documents: [], events, ...usage };
     }
     const id = postingOf(key);
     const meta = await s.postings.get(id);
@@ -154,7 +154,7 @@ export class PanelService {
       documents,
       ...(review ? { review } : {}),
       events,
-      ...(totalCostUsd !== undefined ? { totalCostUsd } : {}),
+      ...usage,
     };
   }
 

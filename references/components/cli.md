@@ -15,7 +15,7 @@ workspace launcher (`./ezapply`, or `.\ezapply` on Windows, written by `init`), 
 | `init [--workspace <dir>] [--port <n>]` | Write `~/.ezapply/config.json` and create or refresh the workspace; print the next steps |
 | `mcp` | Claude Code's MCP server: a stdio relay to the companion inside `ezapply`. Nothing else may write to stdout |
 | `debug on\|off\|report [dir]\|clean\|export` | Debug mode (`debug.ts`). `on` and `off` set `debug.enabled` in the workspace's `ezapply.config.json`, keeping everything else. `report` prints `debugReport` for a session under `debug/` (default: the newest): calls by tool, the slowest calls, time with the tab hidden, failed calls, failed fields by error, and from the adapter's trace the slowest fields and waits, waits that ran to their maximum, slow paths taken (named branches, React handlers called directly), the page's errors and failed requests, what was saved at failures, and calls with no trace (an extension built before it). `export <session\|latest> <NNNN> [before\|after\|fail-<fieldId>]` writes a test fixture candidate from a saved page (`debugExport`, [below](#debug-export)). `clean` deletes `debug/`. It lives here rather than in a repo script because it reads the user's workspace ([format](../data-formats.md#debugdate-postingid-companionsrcformsdebugts)) |
-| `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), whether ezapply is running, protocol version, extension connected and paired, whether the browser pages are built, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
+| `doctor` | Check Node, config, workspace, the agent file (`CLAUDE.md` imports `EZAPPLY.md`), the agents installed, whether ezapply is running, protocol version, extension connected and paired, whether the browser pages are built, GitHub, TeX engine, and optional latexdiff and Ghostscript ([below](#doctor-doctorts)) |
 
 `npm run setup` (in the repo) = `npm install && npm run build && ezapply init`. An ezapply that's running keeps
 the build it started with; `init` says to stop it and start it again.
@@ -78,6 +78,8 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
    `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, ezapply's allow and deny
    rules in its `settings.json` ([which, and why](workspace.md#antigravity)). Tests pass no settings folder, so they
+   **Codex's** (`initCodex`): ezapply's server in its own block of `.codex/config.toml`, replaced on every run, the
+   rest of the file kept ([workspace](workspace.md#codex)).
    never touch the real one.
 11. **Launcher** (`writeLauncher`): `ezapply.cmd` on Windows (`@echo off` then `"<node>" "<main.js>" %*`), `ezapply`
    elsewhere (`#!/bin/sh` then `exec "<node>" "<main.js>" "$@"`, mode 755), rewritten every time. So
@@ -119,13 +121,14 @@ How the user runs ezapply: `hostPanel`, with no command. It and the tests are th
 
 1. Needs `config.json` (else "run `ezapply init`") and an agent: Claude Code (`EZAPPLY_CLAUDE` if set, else the
    first `claude.exe`, `claude.cmd` or `claude.bat` on PATH on Windows, or `claude` elsewhere: `findClaude`, the
-   companion's), the Antigravity CLI (`EZAPPLY_ANTIGRAVITY`, else `agy` the same way: `findAntigravity`), or both.
-   With neither, "Neither Claude Code nor the Antigravity CLI (agy) is on PATH" and exit 1.
+   companion's), the Antigravity CLI (`EZAPPLY_ANTIGRAVITY`, else `agy` the same way: `findAntigravity`), Codex
+   (`EZAPPLY_CODEX`, else `codex`: `findCodex`), or several. With none, "None of Claude Code, the Antigravity CLI
+   (agy) or Codex is on PATH" and exit 1.
 2. Install the crash guard (`guardProcess` in `quiet.ts`): `uncaughtException` and `unhandledRejection` are
    logged and the process carries on. Otherwise a bug in companion code would end ezapply and take Claude's
    tools and the extension's connection with it; every error the companion can expect is already caught per
    request.
-3. `startCompanion` in this process, with the agents found passed as `CompanionOptions.claude` and `.antigravity` for the panel's agent
+3. `startCompanion` in this process, with the agents found passed as `CompanionOptions.claude`, `.antigravity` and `.codex` for the panel's agent
    ([agent](agent.md)) and `extensionDir` = `packages/extension` so `extension_pair` can give the build paths.
    If the port is taken (`EADDRINUSE`), look at what answers `/health` there:
    - `name: "ezapply"`: another `ezapply` → "ezapply is already running in another terminal". One companion
@@ -158,7 +161,8 @@ Ghostscript its own. GitHub is read through `GitHubService.status()`, so a damag
 logged out instead of crashing, and it fails only on a port mismatch. ezapply not running is fine (doctor is
 often run while it's stopped); while it runs, its version, the protocol version (a mismatch says to stop ezapply
 and start it again) and whether the extension is connected are added. `pages` fails when the UI package
-isn't built (`UiAssets.built()`: its `manifest.json`), since the review and setup pages need it.
+isn't built (`UiAssets.built()`: its `manifest.json`), since the review and setup pages need it. `agents` lists
+the coding agents `ezapply` would find (`findClaude`, `findAntigravity`, `findCodex`) and fails only with none.
 
 ## `debug export`
 `ezapply debug export <session|latest> <NNNN> [before|after|fail-<fieldId>]` (`companion/src/forms/debug-export.ts`)
@@ -181,6 +185,6 @@ the user looks at it before it's copied to the site's `fixtures/` in `packages/s
 
 ## Shipped templates (`packages/cli/templates/`)
 - `workspace/EZAPPLY.md`: the agent file → [workspace.md](workspace.md#the-agent-file-ezapplymd)
-- `workspace/CLAUDE.md`, `workspace/AGENTS.md`: the user's stubs for Claude Code and Antigravity
+- `workspace/CLAUDE.md`, `workspace/AGENTS.md`: the user's stubs for Claude Code, and for Antigravity and Codex
 - `skills/*/SKILL.md` (and `ezapply-apply`'s supporting files): the [skills](workspace.md#skills-claudeskills)
 - `cover/`: the default cover letter → [profile-and-templates.md](profile-and-templates.md#the-default-cover-letter)

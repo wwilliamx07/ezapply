@@ -337,7 +337,7 @@ describe("the agent service", () => {
     const history = await agent.history("2026-01-01_acme_dev/fill");
     expect(history.map((e) => e.kind)).toEqual(["user", "text", "turnEnd"]);
     expect(history[0]).toMatchObject({ taken: true });
-    expect(await agent.cost("2026-01-01_acme_dev/fill")).toBe(0.01);
+    expect(await agent.usage("2026-01-01_acme_dev/fill")).toEqual({ totalCostUsd: 0.01 });
   });
 
   it("runs a process per conversation side by side, and Stop ends only its own conversation's turn", async () => {

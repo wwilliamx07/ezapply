@@ -231,6 +231,8 @@ export const AgentEvent = z.discriminatedUnion("kind", [
     ok: z.boolean(),
     interrupted: z.boolean().optional(),
     totalCostUsd: z.number().optional(),
+    /** The session's tokens so far, where the agent reports tokens and no cost (Codex). */
+    totalTokens: z.number().optional(),
     durationMs: z.number().optional(),
     error: z.string().optional(),
   }),
@@ -270,20 +272,30 @@ export type AgentPermissionMode = z.infer<typeof AgentPermissionMode>;
 /** Claude Code's models: an alias for the latest of a family. */
 export const AgentModel = z.enum(["fable", "opus", "sonnet", "haiku"]);
 export type AgentModel = z.infer<typeof AgentModel>;
-/** How hard the agent thinks (Claude Code's and `agy`'s `--effort`). */
+/** How hard the agent thinks (Claude Code's `--effort`, Codex's reasoning effort). */
 export const AgentEffort = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type AgentEffort = z.infer<typeof AgentEffort>;
 /**
  * The coding agent behind the panel. Antigravity (its CLI, `agy`) has no permission modes the panel can offer
- * besides Plan only and Don't ask (its calls run without approval), and its own models.
+ * besides Plan only and Don't ask (its calls run without approval), and its own models; Codex has every mode,
+ * through its approval policy and sandbox, and its own models.
  */
-export const AgentKind = z.enum(["claude", "antigravity"]);
+export const AgentKind = z.enum(["claude", "antigravity", "codex"]);
 export type AgentKind = z.infer<typeof AgentKind>;
-/** Antigravity's modes: headless, nobody can approve a call, so it runs every call unasked, or only plans. */
-const ANTIGRAVITY_PERMISSION_MODES: AgentPermissionMode[] = ["dontAsk", "plan"];
 /**
- * What one agent runs with. `model` is one of `AgentModel` for Claude Code, and one `agy models` lists for
- * Antigravity; none is the agent's own default.
+ * The modes each agent offers. Antigravity's: headless, nobody can approve a call, so it runs every call unasked, or
+ * only plans.
+ */
+export const AGENT_MODES: Record<AgentKind, readonly AgentPermissionMode[]> = {
+  claude: AgentPermissionMode.options,
+  antigravity: ["dontAsk", "plan"],
+  codex: AgentPermissionMode.options,
+};
+/** Whether the panel offers an effort for the agent: Antigravity's models carry their own level. */
+export const AGENT_EFFORT: Record<AgentKind, boolean> = { claude: true, antigravity: false, codex: true };
+/**
+ * What one agent runs with. `model` is one of `AgentModel` for Claude Code, and one the agent lists for Antigravity
+ * (`agy models`) and Codex (`model/list`); none is the agent's own default.
  */
 const AgentChoice = z.object({
   permissionMode: AgentPermissionMode,
@@ -294,6 +306,7 @@ export type AgentChoice = z.infer<typeof AgentChoice>;
 export const DEFAULT_AGENT_CHOICES: Record<AgentKind, AgentChoice> = {
   claude: { permissionMode: "auto", model: "sonnet", effort: "medium" },
   antigravity: { permissionMode: "dontAsk", effort: "medium" },
+  codex: { permissionMode: "auto", effort: "medium" },
 };
 /**
  * The agent settings the user chose in the panel: the agent, and each agent's own mode, model and effort, so
@@ -302,7 +315,11 @@ export const DEFAULT_AGENT_CHOICES: Record<AgentKind, AgentChoice> = {
  */
 export const AgentPrefs = z.object({
   agent: AgentKind,
-  choices: z.object({ claude: AgentChoice.optional(), antigravity: AgentChoice.optional() }),
+  choices: z.object({
+    claude: AgentChoice.optional(),
+    antigravity: AgentChoice.optional(),
+    codex: AgentChoice.optional(),
+  }),
 });
 export type AgentPrefs = z.infer<typeof AgentPrefs>;
 export const DEFAULT_AGENT_PREFS: AgentPrefs = { agent: "claude", choices: {} };
@@ -335,7 +352,7 @@ export function readAgentPrefs(raw: unknown): AgentPrefs {
 /**
  * The settings conversations run with: the chosen agent when it's installed (else the first that is), with its own
  * choice, or the defaults for one never chosen. A choice the agent can't take falls back: a Claude model that isn't
- * an alias, an Antigravity mode it doesn't offer.
+ * an alias, a mode the agent doesn't offer (`AGENT_MODES`).
  */
 export function effectiveSettings(prefs: AgentPrefs, installed: readonly AgentKind[]): AgentSettings {
   const agent = installed.includes(prefs.agent) ? prefs.agent : (installed[0] ?? prefs.agent);
@@ -351,7 +368,7 @@ export function effectiveSettings(prefs: AgentPrefs, installed: readonly AgentKi
   }
   return {
     agent,
-    permissionMode: ANTIGRAVITY_PERMISSION_MODES.includes(c.permissionMode) ? c.permissionMode : d.permissionMode,
+    permissionMode: AGENT_MODES[agent].includes(c.permissionMode) ? c.permissionMode : d.permissionMode,
     ...(c.model ? { model: c.model } : {}),
     effort: c.effort,
   };
@@ -387,6 +404,8 @@ export const PanelPosting = z.object({
 });
 export type PanelPosting = z.infer<typeof PanelPosting>;
 
+const ModelOption = z.object({ id: z.string(), label: z.string() });
+
 export const PanelState = z.object({
   agent: z.object({
     /** Working while any conversation is. */
@@ -395,8 +414,8 @@ export const PanelState = z.object({
     conversations: z.array(z.object({ conversation: z.string(), status: AgentStatus, queued: z.number() })),
     /** The agents installed, which the panel offers. */
     agents: z.array(AgentKind),
-    /** Antigravity's models (`agy models`), once listed; Claude Code's are `AgentModel`. */
-    models: z.object({ antigravity: z.array(z.object({ id: z.string(), label: z.string() })).optional() }),
+    /** Antigravity's (`agy models`) and Codex's (`model/list`) models, once listed; Claude Code's are `AgentModel`. */
+    models: z.object({ antigravity: z.array(ModelOption).optional(), codex: z.array(ModelOption).optional() }),
   }),
   /** The newest postings, and any older one a card waits on or an agent is in: the panel's list. */
   postings: z.array(PanelPosting),
@@ -422,6 +441,8 @@ export const PanelConversation = z.object({
   review: z.object({ reviewId: z.string(), files: z.array(z.string()) }).optional(),
   events: z.array(AgentEvent),
   totalCostUsd: z.number().optional(),
+  /** The session's tokens so far, from an agent that reports no cost (Codex). */
+  totalTokens: z.number().optional(),
 });
 export type PanelConversation = z.infer<typeof PanelConversation>;
 

@@ -1,11 +1,11 @@
 # ezapply workspace
 
-<!-- Managed by ezapply: overwritten by `ezapply init`. Put your own notes in CLAUDE.md (AGENTS.md for Antigravity). -->
+<!-- Managed by ezapply: overwritten by `ezapply init`. Put your own notes in CLAUDE.md (AGENTS.md for Antigravity and Codex). -->
 
 This is the user's ezapply workspace: their profile, base documents, project knowledge, and one folder per
 job posting. You tailor documents and fill applications with the `ezapply` MCP tools and the skills (in
-`.claude/skills/`, or `.agents/skills/` for Antigravity): use the matching skill for each task. Tool calls here
-and in the skills are written `tool { parameter, optional? }`: use exactly those parameter names. The tools work
+`.claude/skills/`, or `.agents/skills/` for Antigravity and Codex): use the matching skill for each task. Tool calls
+here and in the skills are written `tool { parameter, optional? }`: use exactly those parameter names. The tools work
 while `ezapply` runs; if a tool says it isn't running, tell the user to start it.
 
 ## Setup and errors
