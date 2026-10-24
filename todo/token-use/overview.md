@@ -8,8 +8,8 @@ conversation's file reads. Deferred: it isn't clear yet whether reading it late 
 that the bank holds, answers matched by meaning rather than by the one the agent looked up).
 
 **Plan.**
-- After the token cuts' live run, decide from it whether the bank's read is still worth
-  cutting.
+- After the token cuts' and the skills refactor's live runs, decide from them whether the bank's read is still
+  worth cutting.
 - If so, change the apply skill's first step and the agent file's "read the answer bank before asking", and compare a
   run's tokens and questions asked with one before.
 

@@ -2,7 +2,7 @@
 
 - What it looks like in Claude Code's transcript: the turn's first call is `ToolSearch { query: "ezapply
   posting_get" }`, its result is that error, and a `deferred_tools_delta` with the ezapply tools follows
-  in the same second. The companion logs `agent: Claude Code exited mid-turn` with code 1.
+  in the same second. The companion logs `agent: exited mid-turn` with code 1.
 - `system/init` (`agent/stream.ts`) carries `mcp_servers[] { name, status }`, but it comes at the start of a turn,
   after the message has gone, so it can't be used to hold the message back. It can tell a retry was the cause.
 - The full error: "Claude Code stopped unexpectedly: MCP tool mcp__ezapply__permission_ask (passed via

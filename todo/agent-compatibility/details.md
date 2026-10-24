@@ -35,14 +35,15 @@ What `AgentService` and the workspace rely on, as Claude Code gives it, and what
   Approvals from Codex and opencode become the same approval cards (`NeedsYou`) without `permission_ask`, so
   `AgentSessionOptions` gains a way to raise a card and wait for its decision. `AgentKind` gains `codex` and
   `opencode`.
-- **`AgentSettings`:** each backend says which modes, models and efforts it has, and the panel shows those rather
-  than the Claude-or-Antigravity cases it has now; a setting another agent doesn't have falls back to its default.
+- **`AgentSettings`:** each backend says which modes and efforts it has, as it already may list its models
+  (`AgentBackend.models`), and the panel shows those rather than the Claude-or-Antigravity cases it has now; a setting another agent doesn't have falls back to its default.
   `ezapply` finds each agent's executable with `findCommand`, and `doctor` lists the agents found.
 - **`ezapply init`:** the MCP entry into `.codex/config.toml` and `opencode.json`, and the permission rules in
   each one's format (the python and `repo-cache/` denies, `debug/` reads).
 - **The panel:** cost shown as tokens where the agent gives no cost (Antigravity's shows none now).
-- **`workspace_check` and `doctor`:** "agent file" checks the chosen agent's instructions file (`AGENTS.md` for
-  every agent but Claude Code).
+- **`workspace_check` and `doctor`:** "agent file" (`agentFileStatus`) checks only that `CLAUDE.md` imports
+  `EZAPPLY.md`, even with Antigravity chosen; it should check the chosen agent's instructions file (`AGENTS.md`
+  for every agent but Claude Code).
 
 ## Order
 

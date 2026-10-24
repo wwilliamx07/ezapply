@@ -8,7 +8,10 @@
 - The conversation key names its posting, and a conversation never works on another, so the rules are per
   process.
 - Writes the tools make (`posting_update_meta`, `tex_compile`'s PDF, `pdf_merge`) are the companion's and stay
-  checked by `Workspace.resolveAllowed`; only Claude Code's own Edit/Write/NotebookEdit/Bash are in scope here.
+  checked by `Workspace.resolveAllowed`; only Claude Code's own Edit, Write and shell (Bash, or PowerShell where
+  Git Bash is missing: `panelShell`) are in scope here.
+- Antigravity takes no per-process settings: its permissions live only in the user's own settings
+  (`components/agent.md`), so its conversations need another way, or keep today's rules.
 - The workspace's `Read(/debug/**)` deny already makes Claude Code refuse some `cd … && cat …` commands (a `cd` it
   can't resolve, then a read a deny rule might cover); check new deny rules for the same effect before adding them.
 - Note the rules in `security.md`'s table.

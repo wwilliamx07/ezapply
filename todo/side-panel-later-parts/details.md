@@ -8,8 +8,8 @@ has started `./ezapply` in a terminal, and two things still leave it for a tab: 
   asks to start the companion when it isn't running. A process the user didn't start in a terminal, which the "no
   daemon" choice in `references/architecture.md` argued against; weigh it then.
 - **The review in the panel,** if a narrow PDF viewer turns out usable.
-- **Pointing at a field:** an item of the fill's hand-off that scrolls the form to its field and outlines it (an
-  adapter call).
+- **Pointing at a field:** an item on the panel's hand-off card (a field to check, or one the agent couldn't
+  fill) that scrolls the form to its field and outlines it (an adapter call).
 
 **References when built:** `architecture.md`, `components/extension.md`, `components/ui.md`, `components/cli.md`,
 `security.md`, `status.md`.

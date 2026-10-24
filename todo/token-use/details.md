@@ -11,6 +11,10 @@ workspace with `--output-format json` gives the starting context's size from its
 - Before the cuts, `answers.yaml` (3.3k) read at a filling conversation's start was re-read on every later call.
 - **The risk.** "Read the answer bank before asking" is in `EZAPPLY.md` because an agent once asked two questions
   the bank already held (`references/components/workspace.md`). Reading it late has to keep that from recurring:
-  look an entry up before every `ask_user` card, not only when a hint is missing.
+  look an entry up before every `ask_user` card, not only when a hint is missing. `get_form`'s `bankMatch` already
+  names the entry for a question worded exactly like one in the bank; a question worded otherwise still needs the
+  bank read to match by meaning.
+- Where the read is asked for: step 1 of `ezapply-apply`'s "Before starting", and "How the user works" in
+  `EZAPPLY.md`.
 - **What to compare:** a run's tokens, and the questions it asked that the bank held, against a run that read the
   bank first.

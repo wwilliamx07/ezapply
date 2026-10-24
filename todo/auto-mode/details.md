@@ -4,15 +4,16 @@
 it at the review step, so that applying is the user checking it and pressing Submit.
 
 **How.**
-- **The agent:** the alerts job, on new matches above a score, starts Claude Code headless (`claude -p`) in the
-  workspace with an `ezapply-auto` skill. Claude Code stays the only agent; ezapply gains a trigger, not a loop.
+- **The agent:** the alerts job, on new matches above a score, starts the panel's agent (Claude Code or
+  Antigravity, as the user chose) headless in the workspace with an `ezapply-auto` skill, as the companion already
+  starts each posting's conversations. ezapply gains a trigger, not a loop of its own.
 - **Per match:** capture, tailor the resume and cover letter with the existing skills, compile and check. Anything
   the agent would ask about (a sensitive or unanswered question, a gap in the evidence, a document it isn't sure
   of) goes into a queue rather than being guessed.
 - **Filling:** a browser the companion starts for this (its own profile, with the extension loaded and the user's
   sessions on the sites), filling through the same tools and adapters up to the review step, never past it. A tab in
   a truly headless browser can't be handed to the user, so it runs as a window kept in the background.
-- **The queue** (the tracker's page or the `ezapply-status` skill): each application ready to submit, with its
+- **The queue** (the panel's list of applications, its Needs you group): each application ready to submit, with its
   documents to approve on the review page, its questions to answer, and the tab to open. Submit stays the user's
   press; the guard is unchanged.
 - **Limits:** a daily cap, a minimum match score, and nothing for an employer already applied to.

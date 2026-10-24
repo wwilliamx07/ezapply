@@ -7,4 +7,4 @@ reminders from the tracker.
 
 **Plan.**
 - A command registers (or removes) an OS scheduler job running the job search's deterministic pass.
-- New matches go to a file and an OS notification; the next start lists them first.
+- New matches go to a file and an OS notification; the panel shows them on its next start.

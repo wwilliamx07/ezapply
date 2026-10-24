@@ -9,4 +9,4 @@ still take the user to a tab.
 **Plan.** Each on its own:
 - A native messaging host that starts the companion (weighed against the "no daemon" choice).
 - The review in the panel, if a narrow PDF viewer is usable.
-- A hand-off item that scrolls the form to its field and outlines it.
+- An item on the hand-off card that scrolls the form to its field and outlines it.

@@ -7,6 +7,6 @@ review step, so applying is the user checking it and pressing Submit.
 
 **Plan.**
 - Change the philosophy first; keep the honesty rules as hard as now.
-- The alerts job starts Claude Code headless with an auto skill on strong matches.
+- The alerts job starts the panel's agent headless with an auto skill on strong matches.
 - Per match: capture, tailor, fill in a companion-started browser up to review; questions go to a queue.
-- A queue view of applications ready to submit; limits on volume and score.
+- Applications ready to submit wait in the panel's list; limits on volume and score.

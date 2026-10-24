@@ -5,8 +5,8 @@ page: a list to pick from, each captured as a posting with one word.
 
 **How.**
 - **Sources are the boards' public job lists**, per registry site: Greenhouse's Job Board API, Lever's postings
-  API, Ashby's public job board API, Workday's careers-site JSON, Oracle's requisitions REST. Each registry entry
-  gains an optional `listJobs(tenant)` in a companion module (`search/`), so a new site covers itself. No scraping of
+  API, Ashby's public job board API, Workday's careers-site JSON, Oracle's requisitions REST. A companion module
+  (`search/`) gains a `listJobs(tenant)` per registry site (`packages/sites`), so a new site covers itself. No scraping of
   LinkedIn, Indeed or other aggregators: their terms forbid it and they block headless clients; the live-check
   rule against bot-protection workarounds holds here too.
 - **Which employers:** a watch list in the profile (`profile/watchlist.yaml`: company, site, tenant), seeded from

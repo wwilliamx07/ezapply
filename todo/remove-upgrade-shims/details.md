@@ -5,7 +5,8 @@ The shims:
 - `init`'s `ezapply.config.json` upgrades (`migrateWorkspaceConfig`): `tex.engine: latexmk` → `auto`,
   `debug.autofill` → `debug.enabled`, and dropping `forms.focusBrowser` and `context.restartOnCapture`;
 - `init` backing up a pre-split 0.1 `CLAUDE.md` to `CLAUDE.md.bak`, and removing the bare-named skills of earlier
-  versions (`LEGACY_SKILLS`), and removing the panel's old `agent/settings.json`;
+  versions (`LEGACY_SKILLS`) and the skills no longer shipped (`RETIRED_SKILLS`: `ezapply-repos`,
+  `ezapply-onboard`, `ezapply-bundle`), and removing the panel's old `agent/settings.json`;
 - claims in the old `evidence` form read as `files`, and rewritten by `knowledge_mark_indexed`
   (`companion/src/repos/service.ts`);
 - a template imported before `sourceHash` compared with its workspace copy file by file
