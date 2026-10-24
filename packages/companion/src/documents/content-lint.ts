@@ -17,7 +17,7 @@ import type { TemplateKind } from "../templates/service.js";
  * - `unbacked-skill`: on the resume, an entry of a changed labelled list (`Languages: Python, Go, Rust`, the skills
  *   line) that no claim or the profile names. The posting asking for a skill is no evidence of it.
  */
-export interface ContentIssue {
+interface ContentIssue {
   kind: "unsourced-number" | "missing-src" | "unknown-src" | "never-mention" | "unbacked-skill";
   /** The file, relative to the posting folder, and the line (1-based). */
   file: string;

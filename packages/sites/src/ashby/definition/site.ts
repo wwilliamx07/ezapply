@@ -23,7 +23,7 @@ import { siteInfo } from "../../registry.js";
  * `data-field-path` (its id) and a `label[for]`; text inputs and textareas, Yes/No
  * toggle buttons, radio and checkbox groups, a location field that suggests places as you type, and file inputs.
  * Built from a live application page and checked on one live (filling, never submitting). Uploads send
- * the file to Ashby at once, so they weren't tried live. See references/components/sites.md.
+ * the file to Ashby at once, so they weren't tried live. See references/components/sites/ashby.md.
  */
 
 const SEL = {

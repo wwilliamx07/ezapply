@@ -66,8 +66,8 @@ function dateParts(c: HTMLElement): ("MM" | "DD" | "YYYY")[] {
 
 /**
  * Enter one date part the way a person does: click it, type the digits, leave it. Live Workday's parts take
- * digits in their key handlers and keep the value in their own state; setting the input's value (what this
- * did before) showed the digits while Workday still called the field empty, however often it was repeated.
+ * digits in their key handlers and keep the value in their own state; setting the input's value showed the
+ * digits while Workday still called the field empty, however often it was repeated.
  * When typing leaves the part without the value (a plain input that ignores synthetic keys), the value is set
  * directly as a last resort.
  */

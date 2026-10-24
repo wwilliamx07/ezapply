@@ -22,7 +22,7 @@ import { attachmentDriver, picklistDriver, picklistFieldName, radioGroupDriver }
  * the sections' titles do. The background lists are rows of fields, added with Add and removed with Remove.
  *
  * Built from a saved application of a signed-in candidate (the profile and two lists filled from an earlier one) and
- * the page's own scripts. See references/components/sites.md.
+ * the page's own scripts. See references/components/sites/successfactors.md.
  */
 
 const SEL = {

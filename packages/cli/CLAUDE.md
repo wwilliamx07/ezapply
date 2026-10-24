@@ -11,7 +11,7 @@ user's workspace, its agent file and the skills.
 - **Name every change to a skill's or `EZAPPLY.md`'s size** in the change's report: they cost context in every
   session.
 - **Skills are named `ezapply-<name>`** (folder and `name:`), so they can't shadow a Claude Code command. Renaming
-  one adds the old name to `LEGACY_SKILLS` in `src/workspace-init.ts`, so `init` removes the old copy.
+  or retiring one adds the old name to `RETIRED_SKILLS` in `src/workspace-init.ts`, so `init` removes the old copy.
 - **Skills and `EZAPPLY.md` never name a job site.** What a site needs reaches the agent as schema facts or the
   site's notes (`references/building-adapters.md`, "Principles").
 - **Call shapes** in skills (`tool { parameter, optional? }`) are checked against the registered tools by

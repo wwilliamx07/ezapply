@@ -213,8 +213,7 @@ export class FormsService {
 
   /**
    * Read the page. On a posting's own page (`pageKind: posting`), press its Apply first and read the page that
-   * follows (`pressedApply`): the apply skill did that every time, a turn each. What to do on the next page (a
-   * start choice, a sign-in) stays the agent's.
+   * follows (`pressedApply`). What to do on the next page (a start choice, a sign-in) stays the agent's.
    */
   async getForm(opts: { tabId?: number; onlyEmpty?: boolean; section?: string; session?: string } = {}) {
     return this.onTab({ tool: "get_form", params: opts }, { tabId: opts.tabId, session: opts.session }, async (t) => {
@@ -383,8 +382,7 @@ export class FormsService {
   }
 
   /**
-   * Answers of the agent's own judgment that use a term from preferences.md's "Never mention": the preference
-   * reached the agent only as text in its context, and nothing checked it.
+   * Answers of the agent's own judgment that use a term from preferences.md's "Never mention".
    */
   private async neverMentionIn(fills: { fieldId: string; value: FillValue; source: FillSource }[]) {
     const judged = fills.filter((f) => f.source === "judgment" && typeof f.value === "string" && f.value.trim());

@@ -409,7 +409,7 @@ type Handoff = Extract<AgentEvent, { kind: "handoff" }>;
 
 /**
  * An application's hand-off, when its form reaches the review page: what is attached, what to check before
- * submitting and what was left out. ezapply builds it from the form log; the agent no longer writes it.
+ * submitting and what was left out. ezapply builds it from the form log.
  */
 export function HandoffView({ handoff: h }: { handoff: Handoff }) {
   const warned = h.steps.filter((s) => s.warnings.length > 0);

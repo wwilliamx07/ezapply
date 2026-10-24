@@ -1,7 +1,7 @@
 # Browser extension (`packages/extension`)
 
 A Manifest V3 extension for Chrome 120+ and other Chromium browsers. Its toolbar button opens the **side panel**, where the user
-works with ezapply ([below](#the-side-panel)); Alt+Shift+P sets the posting without it. Otherwise it quietly
+works with ezapply ([below](#the-side-panel)); Alt+Shift+P captures the page without it. Otherwise it quietly
 carries out the form reads, fills and uploads the companion asks for, on the application pages of every site in
 the [registry](sites.md#the-registry): Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby,
 Phenom, Dayforce and SAP SuccessFactors, each told by what its pages show. It has no popup; documents are reviewed
@@ -22,7 +22,7 @@ on the companion's review page.
 | `src/background/frames.ts` | [Telling a page's site](#telling-a-pages-site-framests): `pageSite` (runs in the page: the first site whose signature its document matches), `tabSite` (a tab's own page), `tabSites` (a tab and its frames on a form site), `frameSite`, and `frameUrl` |
 | `src/background/access.ts` | `askForAccess`: a form call that finds its page's origin withheld opens `grant.html` (or brings it forward) and waits for the grant ([access](#access-to-websites)) |
 | `src/grant/grant.ts`, `static/grant.html` | The access window: names the host that needed it, and its **Allow access** click makes the `permissions.request` (`originsFrom`: `<all_urls>` or host patterns only, from its URL) |
-| `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, active label, the agent settings ([agent settings](#the-agent-settings)) |
+| `src/background/settings.ts` | Typed wrapper over `storage.local`: settings, connection state, pending capture, the agent settings ([agent settings](#the-agent-settings)) |
 | `src/background/badge.ts` | Toolbar badge and tooltip, with the number of cards waiting in the panel (`setCardsWaiting`) |
 | `src/background/notify.ts` | [Notifications](#notifications-notifyts): each open panel's visibility, `showNotification`, and the click that brings the window forward |
 | `src/env.d.ts` | Stylesheet imports (the panel's) for TypeScript |
@@ -149,7 +149,7 @@ the click or the shortcut's handler (`permissions.request` needs the user's gest
 without asking; [access](#access-to-websites))
 → once that's settled, inject `capturePage` into every frame the extension may read → pick the frame that holds
 the posting → tell that frame's site ([telling a page's site](#telling-a-pages-site-framests)), sent as `site`
-unless it's none → send `posting.capture` (60 s timeout) → save the "Company: Role" label and flash ✓. Not
+unless it's none → send `posting.capture` (60 s timeout) → flash ✓ with "Captured: Company: Role". Not
 connected: store the capture as pending (only the latest is kept; badge `…`) and send it on the next connection.
 Pages that can't be captured, or failures, flash `!` with the reason in the tooltip. Details of what's captured:
 [postings.md](postings.md).

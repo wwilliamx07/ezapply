@@ -62,25 +62,24 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
 7. **`.mcp.json`**: the `ezapply` server entry is set to
    `{ type: "stdio", command: <node>, args: [<dist/main.js>, "mcp"] }`; other servers are kept.
 8. **`.claude/settings.json`**: merged so `enabledMcpjsonServers` includes `ezapply` (no approval prompt),
-   `permissions.allow` includes `mcp__ezapply`, `permissions.deny` includes Edit, Write and NotebookEdit
-   on `repo-cache/**`, Read on `debug/**` and Bash and PowerShell for `python`, `python3` and `py`, and `autoMemoryEnabled` is `false` unless the user set it
-   ([why](workspace.md#claude-code-settings)).
+   `permissions.allow` includes `mcp__ezapply`, `permissions.deny` includes ezapply's deny rules, and
+   `autoMemoryEnabled` is `false` unless the user set it (the rules and why:
+   [workspace](workspace.md#claude-code-settings)).
 9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Then
    the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
    their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
-   skill with one of those names is kept and reported. Skills ezapply no longer ships (`RETIRED_SKILLS`:
-   `ezapply-repos`, since the setup page chooses repos, and `ezapply-onboard`, since the Workspace changes card
-   does its triage) are removed the same way from `.claude/skills/` and
-   `.agents/skills/`: the copy only adds and overwrites, so an earlier init's copy would otherwise stay and run.
+   skill with one of those names is kept and reported. Skills ezapply no longer ships (`RETIRED_SKILLS`, each
+   with what replaced it) are removed the same way from `.claude/skills/` and `.agents/skills/`: the copy only
+   adds and overwrites, so an earlier init's copy would otherwise stay and run.
    Also `agent/settings.json`, where an earlier version kept the panel's agent settings, is removed: the
    extension keeps them now ([agent](agent.md#permission-mode-model-and-effort)).
 10. **Antigravity's files** (`initAntigravity`): `AGENTS.md` (the user's) created as a stub including `EZAPPLY.md`
    and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
    `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, ezapply's allow and deny
    rules in its `settings.json` ([which, and why](workspace.md#antigravity)). Tests pass no settings folder, so they
+   never touch the real one.
    **Codex's** (`initCodex`): ezapply's server in its own block of `.codex/config.toml`, replaced on every run, the
    rest of the file kept ([workspace](workspace.md#codex)).
-   never touch the real one.
 11. **Launcher** (`writeLauncher`): `ezapply.cmd` on Windows (`@echo off` then `"<node>" "<main.js>" %*`), `ezapply`
    elsewhere (`#!/bin/sh` then `exec "<node>" "<main.js>" "$@"`, mode 755), rewritten every time. So
    `ezapply` runs from the workspace without the CLI on PATH: a global `npm link` needs write access to

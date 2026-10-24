@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "icons": "node icons.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@ezapply/protocol": "0.1.0",

@@ -9,7 +9,7 @@ This page says how to build one and what goes where.
 ## Principles
 
 **1. Generic everywhere, specific in one place.** The tool descriptions, the apply skill, `EZAPPLY.md`, the MCP
-server's instructions and the companion's planning never name a site. Everything a site does differently lives in
+server's instructions and the companion's code never name a site. Everything a site does differently lives in
 its directory, `packages/sites/src/<site>/` ([the package](components/sites.md#the-package)), and no other package's
 source names it (`sites/test/knowledge.test.ts` checks):
 

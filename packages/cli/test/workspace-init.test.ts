@@ -154,8 +154,8 @@ describe("skills", () => {
     expect(names).not.toContain("ezapply-onboard");
     for (const n of names.filter((n) => n.startsWith("ezapply-"))) {
       const md = await readFile(join(skills(), n, "SKILL.md"), "utf8");
-      // The frontmatter is `name` and a one-line `description`, closed by `---` on its own line. A reflow once
-      // wrapped the description and joined the closing `---` to it, which is no frontmatter at all.
+      // The frontmatter is `name` and a one-line `description`, closed by `---` on its own line: a wrapped
+      // description joins the closing `---` to it, which is no frontmatter at all.
       expect(md).toMatch(new RegExp(`^---\\nname: ${n}\\ndescription: [^\\n]{40,}\\n---\\n`));
     }
   });

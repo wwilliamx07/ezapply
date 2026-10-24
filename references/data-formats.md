@@ -162,7 +162,7 @@ each session's first record and every 50 records.
 `{ schemaVersion: 1, synced?: { resume?: { hash, at }, profileIdentity?: { hash, at }, library?: { "<library/… path>": { hash, at } } }, deferred?: { repos?: { "<owner>/<name>": { until, at } } } }`.
 
 An `activePostingId` written by an earlier version is ignored and dropped at the next write; nothing needed it
-migrated, since there's no active posting any more ([which posting](mcp-tools.md#postings)).
+migrated, since there is no active posting ([which posting](mcp-tools.md#postings)).
 
 `synced` is what the workspace check ([companion](components/companion.md#keeping-the-workspace-current-workspace_changes))
 compares against: `resume`, the hash of the resume template's main file and content files when the profile was
@@ -175,7 +175,7 @@ by the companion only (on first sight, or when the user updates the change or ke
 `deferred.repos` holds the repos whose new commits the user put off (**Put off** on
 a `repo-pushed` change): `until` (ISO time; at most 90 days after `at`) and `at`, when it was put off. Until then
 the repo isn't checked. Re-indexing or deselecting the repo removes its entry, and entries past `until` are
-removed on any write. Both keys are optional, so adding them needed no `schemaVersion` bump. Writes to
+removed on any write. Both keys are optional, so a file without them parses at `schemaVersion` 1. Writes to
 `state.json` run one at a time.
 
 ### `agent/`
@@ -194,7 +194,7 @@ The side panel's conversations ([agent](components/agent.md)), written by the co
   to `<posting id>/tailor`, with its logs, once per run
   ([agent](components/agent.md#conversations-servicets)); the keys changed, not the shape, so `schemaVersion`
   stayed 1.
-- No `settings.json` any more: the agent settings are the extension's ([below](#extension-storage)). One an
+- There is no `settings.json`: the agent settings are the extension's ([below](#extension-storage)). One an
   older build wrote is removed by `ezapply init`, and read by nothing before that.
 - `<conversation>/<sessionId>.jsonl` (a posting's under `<posting id>/tailor/` or `<posting id>/fill/`): the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
   the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
@@ -344,7 +344,7 @@ the main file's folder; tailored copies need them beside the copied main file. R
 and `template_set_main`.
 
 `importedFrom`: the absolute folder, or single `.tex` file, the template was imported from. Never a Claude
-scratchpad now (`template_import` refuses one); an older one pointing there is reported as `template-untracked`,
+scratchpad (`template_import` refuses one); an older one pointing there is reported as `template-untracked`,
 and marking that done removes `importedFrom` and `sourceHash`.
 
 `sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and

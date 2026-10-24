@@ -14,7 +14,7 @@ chat turn is spent on it. What needs judgment stays the agent's ([onboarding](#t
 Everything else happens in the side panel ([philosophy](../philosophy.md)).
 
 **Why React.** A template string with one inline script is enough for a form and a Send button, as the
-companion's own pages are. The viewer (pages, highlights, comments, a diff) and onboarding (eleven steps, forms,
+companion's own pages are. The viewer (pages, highlights, comments, a diff) and onboarding (steps, forms,
 the agent's progress arriving live) are state a component tree handles and string templates don't. **Why esbuild:** the
 extension already builds with it; no dev server or framework build is needed.
 
@@ -122,7 +122,7 @@ scrolls: a tinted card with a chat icon, "General" and what it's doing (what it 
 it's for), a **Working** pill and a **Stop** button while the agent is in it, and a **Needs you** pill (the card
 turns amber) while a card waits in it. It is never one of the groups. **Why:** it isn't an application, it has no
 posting, status or documents, and a row that moved between the groups looked like one and was hard to find again.
-Rejected: a row last under Other (the old layout; it looked like an application); a pinned plain row with company
+Rejected: a row last under Other (it looked like an application); a pinned plain row with company
 avatars on the applications (less distinct, more change to every row); a chat box in the list's footer (two chat
 boxes that look alike, this one and an application's); tabs for Applications and General (the tabs rejected
 above); a Chat button in the header (the header is already full at 320 px). The cost is the card's height on every

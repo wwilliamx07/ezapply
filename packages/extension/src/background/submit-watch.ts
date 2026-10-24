@@ -16,13 +16,13 @@ interface Watch {
   since: number;
 }
 
-export interface SubmitReport {
+interface SubmitReport {
   postingId: string;
   url: string;
   at: string;
 }
 
-export interface SubmitWatchDeps {
+interface SubmitWatchDeps {
   /** The URL of an application in the tab on its confirmation page on `host`, if there is one. */
   confirmationIn(tabId: number, host: string): Promise<string | undefined>;
   /** Tell the companion; throws when it can't be reached. */

@@ -45,4 +45,4 @@ never submitting ([how the boards were verified](../sites.md#what-was-verified-a
   `go_next` refusing Submit. Two fixes came from it: react-select chosen through `onChange` (synthetic clicks
   don't open it without page focus) and read from the current fiber.
 
-**Not yet tried:** the confirmation page, and a real application.
+**Not yet tried:** the confirmation page.

@@ -192,11 +192,6 @@ kbd {
   width: 32px;
   padding: 0;
 }
-.ez-btn-lg {
-  min-height: 42px;
-  padding: 8px 20px;
-  font-size: 1rem;
-}
 
 /* ---- fields --------------------------------------------------------------------------------------- */
 .ez-field {
@@ -263,14 +258,6 @@ kbd {
 .ez-badge-warn {
   background: var(--warn-soft);
   color: var(--warn);
-}
-.ez-badge-danger {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-.ez-badge-accent {
-  background: var(--accent-soft);
-  color: var(--accent-text);
 }
 
 .ez-card {

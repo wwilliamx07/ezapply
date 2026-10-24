@@ -11,9 +11,9 @@ import { loadClone } from "../lib/store.ts";
 import { TEST_URL, testDescription, testServer } from "./site/server.ts";
 
 /**
- * The whole harness on the hand-written site, in Playwright's Chromium: cloned through the generic adapter's built
- * bundle, checked, and filled from its clone. Skips where Chromium (`npx playwright install chromium`) or the built
- * extension isn't there, as in CI.
+ * The whole harness on the hand-written site, in a Chromium browser: cloned through the generic adapter's built
+ * bundle, checked, and filled from its clone. Skips without a
+ * browser (`hasBrowser`) or the built extension.
  */
 const bundle = join(import.meta.dirname, "..", "..", "..", "packages", "extension", "dist", "generic-main.js");
 const runnable = hasBrowser() && existsSync(bundle);

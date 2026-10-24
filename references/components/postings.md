@@ -1,7 +1,7 @@
 # Postings (`companion/src/postings/`)
 
-A posting is a job page the user captured with **Capture**. Each one gets a folder, and one posting at
-a time is **active**: the default context for every request.
+A posting is a job page the user captured with **Capture**. Each one gets a folder; a call works on the posting it
+names, else its conversation's ([which posting](../mcp-tools.md#postings)).
 
 ## Capture (`PostingsService.capture`)
 Captures and metadata updates are serialized (one at a time) so two quick clicks can't race.
@@ -25,8 +25,7 @@ Captures and metadata updates are serialized (one at a time) so two quick clicks
 5. **Metadata merge**: on a re-capture, the stored company, role, requisition, location, deadline,
    `bundleRequired` and status win over fresh extraction, which only fills gaps, so what Claude corrected stays.
    The URL, page title, site and tab are the new capture's. The tenant is read from the URL
-   and Claude never sets it, so a fresh reading replaces an older one (that's how postings saved while
-   myworkdaysite tenants were misread as `wd5` get fixed).
+   and Claude never sets it, so a fresh reading replaces an older one.
    **The application** (below) is looked for in the page; a re-capture keeps one the user set, else takes what
    the page now shows, else keeps the old one.
 6. Listeners (`onChange`) hear of it, so the panel's list follows; the extension flashes "Captured: company: role".
@@ -80,7 +79,7 @@ Which application a posting is tied to, so the form tools can tell its tab from 
   never count.
 - **Else a job the page's URL names for an embedded board** (`hostPageJob`: Greenhouse's `gh_jid` on a
   company's careers page), `host-page-job`, with no tenant.
-- **Postings captured earlier** get it from `capture/raw.html` the first time they're active in a form call
+- **Postings captured earlier** get it from `capture/raw.html` the first time a form call is about them
   (`application(id)`), and it's saved; one with nothing found isn't searched again until the companion restarts,
   its `reqId` changes or it's captured again.
 - **Later:** the first form call that changes a page stores the tab's (`bound`), and `tab_bind

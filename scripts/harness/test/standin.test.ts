@@ -5,7 +5,7 @@ import { normalise, type RawExchange } from "../clone/normalise.ts";
 import { propose } from "../clone/propose.ts";
 import type { Exchange } from "../lib/store.ts";
 import { StandIn, type StandInRequest, tokenPlaceholder } from "../standin/engine.ts";
-import { TEST_SITE, TEST_URL, testDescription, testServer } from "./site/server.ts";
+import { TEST_SITE, testDescription, testServer } from "./site/server.ts";
 
 const get = (path: string): StandInRequest => ({ method: "GET", url: `${TEST_SITE}${path}`, headers: {} });
 const post = (path: string, body: unknown, headers: Record<string, string> = {}): StandInRequest => ({
@@ -235,6 +235,5 @@ describe("the proposed description", () => {
     expect(kinds["/api/save"]).toMatchObject({ kind: "save", method: "POST" });
     expect(kinds["/api/countries"]?.kind).toBe("static");
     expect(kinds["/apply"]).toBeUndefined();
-    expect(TEST_URL).toContain("/apply");
   });
 });

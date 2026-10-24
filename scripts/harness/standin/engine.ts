@@ -11,7 +11,7 @@ export interface StandInRequest {
   body?: Buffer;
 }
 
-export interface StandInResponse {
+interface StandInResponse {
   status: number;
   headers: Record<string, string>;
   body: Buffer;
@@ -21,7 +21,7 @@ export interface StandInResponse {
   endpoint: string;
 }
 
-export interface StandInOptions {
+interface StandInOptions {
   /** 0 answers at once, 1 as recorded, higher for a slower network. */
   latency?: number;
   /** For drawing a recorded time; Math.random by default. */
@@ -34,7 +34,7 @@ export interface StandInOptions {
 }
 
 /** What the stand-in refused, which fails a run. */
-export interface Problem {
+interface Problem {
   kind: "unknown" | "submit" | "token";
   method: string;
   url: string;
@@ -291,7 +291,7 @@ export function parseBody(req: StandInRequest): Record<string, unknown> {
 }
 
 /** A part of a request (`RequestPart`). */
-export function part(req: StandInRequest, p: RequestPart): unknown {
+function part(req: StandInRequest, p: RequestPart): unknown {
   const dot = p.indexOf(".");
   const [where, name] = dot < 0 ? [p, ""] : [p.slice(0, dot), p.slice(dot + 1)];
   const u = new URL(req.url);
@@ -346,7 +346,7 @@ export function setAt(v: unknown, path: string, value: unknown): unknown {
 }
 
 /** Whether a result's label matches the typed text by the site's rule. */
-export function matches(label: string, text: string, spec: Pick<EndpointSpec, "match" | "caseSensitive">): boolean {
+function matches(label: string, text: string, spec: Pick<EndpointSpec, "match" | "caseSensitive">): boolean {
   if (!text) return true;
   const l = spec.caseSensitive ? label : label.toLowerCase();
   const t = spec.caseSensitive ? text : text.toLowerCase();

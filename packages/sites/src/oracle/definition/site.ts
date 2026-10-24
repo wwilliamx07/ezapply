@@ -27,7 +27,7 @@ import { confirmRemoval, ORACLE_WIDGETS } from "./widgets.js";
  * Oracle Recruiting Cloud (Candidate Experience, on Oracle Cloud hosts and employers' own domains): one page with
  * every section, or one section per page; form rows (`.input-row`) with cx-select lists, pills, native radios, date
  * lists and attachment buttons; work, education, languages and licenses added through inline forms with a Save,
- * shown afterwards as tiles and timeline entries. See references/components/sites.md.
+ * shown afterwards as tiles and timeline entries. See references/components/sites/oracle.md.
  */
 export const oracle: SiteDefinition = {
   info: siteInfo("oracle") as NonNullable<ReturnType<typeof siteInfo>>,

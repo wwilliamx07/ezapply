@@ -9,7 +9,7 @@ import { loadClone } from "../lib/store.ts";
 
 type Schema = Omit<FormSchema, "tabId">;
 
-export interface FillOptions {
+interface FillOptions {
   latency: number;
   headed?: boolean;
   log: (line: string) => void;
@@ -17,7 +17,7 @@ export interface FillOptions {
   desc?: CloneDescription;
 }
 
-export interface FillReport {
+interface FillReport {
   ok: boolean;
   clone: string;
   /** Where the screenshots, traces and this report are. */

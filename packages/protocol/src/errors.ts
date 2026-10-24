@@ -13,7 +13,7 @@ export const ErrorCode = {
   NotFound: "not_found",
   NoPosting: "no_posting",
   PathNotAllowed: "path_not_allowed",
-  /** The application tab belongs to another posting than the active one: nothing that changes the page runs. */
+  /** The application tab belongs to another posting than the call's: nothing that changes the page runs. */
   PostingMismatch: "posting_mismatch",
   Internal: "internal",
 } as const;

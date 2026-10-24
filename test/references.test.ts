@@ -20,7 +20,7 @@ function markdownIn(dir: string): string[] {
 /** Every Markdown file an agent working on the repo reads: the README, the references, the todo and the CLAUDE.md files. */
 function repoDocs(): string[] {
   const nested = markdownIn(join(ROOT, "packages")).filter(
-    (p) => p.endsWith("CLAUDE.md") && !p.includes(`${join("cli", "templates")}`),
+    (p) => p.endsWith("CLAUDE.md") && !p.includes(join("cli", "templates")),
   );
   return [
     join(ROOT, "CLAUDE.md"),

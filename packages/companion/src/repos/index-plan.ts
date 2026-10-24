@@ -3,8 +3,7 @@ import { join } from "node:path";
 
 /**
  * What a sync means for the index: `current` (nothing that can change a fact changed), `reindex` (update from the
- * diff), `full` (never indexed) or `rebuild` (indexed at a commit that's gone, after a force-push: index anew). The
- * skill chose this from `indexedSha` and `changedSince` itself, the same way every time.
+ * diff), `full` (never indexed) or `rebuild` (indexed at a commit that's gone, after a force-push: index anew).
  */
 export type IndexMode = "current" | "reindex" | "full" | "rebuild";
 
@@ -45,7 +44,7 @@ export function ignoredPath(path: string): boolean {
 }
 
 /** The depth policy recorded in meta.json, as numbers. */
-export const SPLIT = { files: 15, lines: 2000, depth: 3 };
+const SPLIT = { files: 15, lines: 2000, depth: 3 };
 
 export interface Component {
   path: string;
@@ -55,8 +54,8 @@ export interface Component {
 
 /**
  * The folders, to depth 3, with more than 15 files or 2k lines (the paths `ignoredPath` drops left out): the ones
- * the depth policy splits into components of their own. The skill counted these with Glob and wc; naming and
- * grouping them stays its work. A file over 2 MB or with a NUL byte in its start counts as a file without lines.
+ * the depth policy splits into components of their own; naming and grouping them is the skill's work.
+ * A file over 2 MB or with a NUL byte in its start counts as a file without lines.
  */
 export async function componentsOver(root: string, files: string[]): Promise<Component[]> {
   const by = new Map<string, Component>();

@@ -33,7 +33,7 @@ const TemplateMeta = z.object({
    */
   sourceHash: z.string().optional(),
 });
-export type TemplateMeta = z.infer<typeof TemplateMeta>;
+type TemplateMeta = z.infer<typeof TemplateMeta>;
 
 const AUX_FILE = /\.(aux|log|out|toc|fls|fdb_latexmk|synctex\.gz|xdv|bbl|blg|bcf|run\.xml|nav|snm)$/i;
 const SKIP_DIRS = new Set([".git", ".build", ".history", ".previews", "node_modules", "__MACOSX"]);

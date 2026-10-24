@@ -25,7 +25,7 @@ const KnowledgeMeta = z.object({
   fileCount: z.number().int().optional(),
   depthPolicy: z.string().default(">15 source files or >2k LOC per component → subfolder, max depth 3"),
 });
-export type KnowledgeMeta = z.infer<typeof KnowledgeMeta>;
+type KnowledgeMeta = z.infer<typeof KnowledgeMeta>;
 
 /** knowledge/<key>/claims.yaml */
 const Claim = z.preprocess(

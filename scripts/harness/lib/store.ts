@@ -28,7 +28,7 @@ export interface Exchange {
 }
 
 /** What `clone.json` records about a clone. */
-export interface CloneMeta {
+interface CloneMeta {
   site: string;
   /** The posting or application the clone started from. */
   url: string;

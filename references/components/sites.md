@@ -12,7 +12,7 @@ API, extraction, filling, option matching, moving, the submit guard, the waits, 
 - [Oracle Recruiting Cloud](sites/oracle.md): one page or one section per page, items saved through
   inline forms; a list and date of its own, split the same way.
 - Three hosted job boards, [Greenhouse](sites/greenhouse.md), [Lever](sites/lever.md) and
-  [Ashby](sites/ashby.md) (about 150 lines each), whose applications are **one page with Submit at the end**: no
+  [Ashby](sites/ashby.md), whose applications are **one page with Submit at the end**: no
   steps, rows or inline forms, `next` always refuses (Submit is the only way on), `back` has nowhere to go, and the
   schema says `lastPage: true`, so the agent fills the page and hands over to the user
   ([the hand-off](../flows.md#7-filling-the-application-fill-out-the-application)).
@@ -194,7 +194,7 @@ whose application is also behind a candidate account, was built from such a page
 - **Messages** (`singlePageMessages`): `go_next` says the whole application is on this page and the user reviews it
   and presses Submit.
 - **Hints** for the fields every board asks: name, email, phone, links. Lever's and Ashby's name is one field;
-  its hint `identity.fullName` makes the planner join first, middle and last name. A location hint is
+  its hint is `identity.fullName`, the profile's name as one value. A location hint is
   `contact.address.city`, filled with the adapter's own (loose) match like every city: a city alone can match
   several places, and then nothing is chosen and the suggestions go back to the agent.
 

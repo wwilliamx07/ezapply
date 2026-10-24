@@ -32,7 +32,7 @@ const ACTIONS = {
  * Workday (`*.myworkdayjobs.com`, `*.myworkdaysite.com`): a multi-step application with a progress bar, fields in
  * `formField-*` containers keyed by automation id, listbox dropdowns, prompts, split dates, and rows (work
  * history, education, languages, websites) added with Add and deleted with their own Delete button. See
- * references/components/sites.md.
+ * references/components/sites/workday.md.
  */
 export const workday: SiteDefinition = {
   info: siteInfo("workday") as NonNullable<ReturnType<typeof siteInfo>>,

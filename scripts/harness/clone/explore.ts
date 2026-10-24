@@ -23,7 +23,7 @@ export interface Coverage {
   notes: string[];
 }
 
-export interface ExploreOptions {
+interface ExploreOptions {
   adapter: Adapter;
   recorder: Recorder;
   quiet: () => Promise<void>;
@@ -88,7 +88,7 @@ export async function explore(o: ExploreOptions): Promise<Coverage> {
   };
   const fieldsOf = (f: Schema) => f.sections.flatMap((s) => s.fields);
 
-  /** Fills one field, and in explore mode tries what it can do first. Returns the fields that answer opened. */
+  /** Fills one field, and in explore mode tries what it can do first. */
   const handle = async (field: Field, depth: number): Promise<void> => {
     if (field.kind === "file" && !o.desc?.explorer?.uploads) {
       passed.add(field.id);

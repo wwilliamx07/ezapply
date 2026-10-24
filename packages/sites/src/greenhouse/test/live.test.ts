@@ -27,7 +27,7 @@ describe("live Greenhouse application (job-boards.greenhouse.io)", () => {
       required: true,
       hint: { profileKey: "identity.firstName" },
     });
-    // react-select lists, the phone's country among them; options come from list_options.
+    // react-select lists, the phone's country among them; their options load only when opened or searched.
     expect(f["application.country"]).toMatchObject({ kind: "dropdown", optionsLazy: true, label: "Country" });
     expect(f["application.phone"]).toMatchObject({ kind: "text", hint: { profileKey: "contact.phone.number" } });
     expect(f["application.resume-cv"]).toMatchObject({ kind: "file", label: "Resume/CV", required: true });

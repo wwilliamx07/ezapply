@@ -610,7 +610,7 @@ describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't c
     ]);
   });
 
-  it("opens a dropdown after list_options read another, and leaves no list open", async () => {
+  it("opens a dropdown after listOptions read another, and leaves no list open", async () => {
     expect((await api.listOptions(id("formField-degreeLevel"))).map((o) => o.label)).toEqual([
       "Undergraduate",
       "Masters",
@@ -631,7 +631,7 @@ describe("dropdowns that behave as live ones (no aria-expanded, Escape doesn't c
     });
     afterEach(() => api.setTiming(null));
 
-    it("fills a dropdown whose options list_options just read", async () => {
+    it("fills a dropdown whose options listOptions just read", async () => {
       expect(await api.listOptions(id("formField-degreeLevel"))).toHaveLength(3);
       const [r] = await api.fill([{ fieldId: id("formField-degreeLevel"), value: "Masters" }]);
       expect(r).toMatchObject({ ok: true, readBack: "Masters" });

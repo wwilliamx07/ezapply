@@ -38,7 +38,6 @@ const HelloMessage = z.object({
    */
   sites: z.array(SiteId).max(256).optional(),
 });
-export type HelloMessage = z.infer<typeof HelloMessage>;
 
 const WelcomeMessage = z.object({
   kind: z.literal("welcome"),
@@ -47,13 +46,11 @@ const WelcomeMessage = z.object({
   /** Sent when the extension paired without a code, for it to store and present from then on. */
   pairingToken: z.string().optional(),
 });
-export type WelcomeMessage = z.infer<typeof WelcomeMessage>;
 
 const RejectMessage = z.object({
   kind: z.literal("reject"),
   error: ErrorPayload,
 });
-export type RejectMessage = z.infer<typeof RejectMessage>;
 
 const PingMessage = z.object({ kind: z.literal("ping"), t: z.number() });
 const PongMessage = z.object({ kind: z.literal("pong"), t: z.number() });

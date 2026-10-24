@@ -77,7 +77,7 @@ repeat them and fall behind.
 | Conformance | `sites/test/conformance.test.ts` | Every registry site has its directory, its files and its place in each list, and, on the page its `test/page.ts` builds, answers the adapter API the same way |
 | Site knowledge | `sites/test/knowledge.test.ts` | No other package's source names a site (comments aside): what a site does differently stays in its directory |
 | URL rules | `sites/src/<site>/test/url.test.ts` | The site's postings and applications by URL, tenant and job, and pages that look close but aren't |
-| UI | `ui/test/*.test.tsx` | Components and pages under jsdom, with Testing Library |
+| UI | `ui/test/` | Components and pages under jsdom, with Testing Library |
 | The adapter harness | `scripts/harness/test/` | The stand-in, what a clone keeps and the proposed description, without a browser; then the whole harness on a hand-written site, which skips without a browser or a built extension ([harness](harness.md#tests)) |
 | The reference | `test/references.test.ts` | Links and anchors in `references/`, `todo/` and the `CLAUDE.md` files resolve; the [index](README.md) lists every page; every registered MCP tool has its row in [mcp-tools.md](mcp-tools.md), and no row names a tool that isn't registered; every registry site has its page under [components/sites/](components/sites.md), titled with its directory; every shipped skill is named in [workspace.md](components/workspace.md) |
 

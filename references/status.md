@@ -103,7 +103,7 @@ Each gives the choice and the reason in a line or two; the linked page has the d
 - **The extension holds every site** (`<all_urls>`) so it can tell a page's site by its body, wherever the
   employer hosts it ([access](components/extension.md#access-to-websites)).
 - **One adapter change per live run,** so a slowdown or failure points at one change; live filling once got several
-  times slower after a batch of unverified changes ([development](development.md)).
+  times slower after a batch of unverified changes ([development](development.md#conventions)).
 - **Build sites from what was seen.** Every selector comes from a saved page or the site's own scripts; iCIMS,
   SmartRecruiters, Taleo and BrassRing wait for pages saved from a real application, since ezapply doesn't work
   around bot checks ([sites](components/sites.md#why-these-three)).
@@ -232,8 +232,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 - **The sites package:** the bundles were compared and hold the same code, and every test passes. Not
   yet seen live: the extension's `hello` with its site ids accepted by the companion (and a stale extension refused
-  with "Site mismatch"); a posting's company on a provider's host (now from the registry's `providerHosts` and
-  `company`: a Dayforce posting's company now comes from its title or JSON-LD, not the host); and an embedded
+  with "Site mismatch"); a posting's company on a provider's host (from the registry's `providerHosts` and
+  `company`: a Dayforce posting's company comes from its title or JSON-LD, not the host); and an embedded
   board's frame recognised by the same hosts when access to websites is withheld.
 
 - **The token cuts:** one live Workday application used `go_next`'s and `add_repeatable`'s `form`
@@ -309,12 +309,12 @@ What's built but hasn't run live, and what to check first. Each site's page list
 - **A posting's two conversations** with the real Claude Code: the tailoring one leaves forms alone and the filling
   one leaves the documents' writing to the other, each sending the user to the other's button; and an older
   workspace's conversation showing under Documents.
-- **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Fixed since and not re-run:
+- **Workday and Oracle on the engine:** Workday ran on it twice at the earlier speed. Not yet run live:
   the row Delete (found on a saved step), multi-selects that unticked Workday's own tick, a hierarchical prompt's
   category menu read as search results, `tab.screenshot` with `<all_urls>`, and on Oracle the address and school
   lists' late search ([workday](components/sites/workday.md), [oracle](components/sites/oracle.md#oracle-what-was-verified)).
   Run once with debug mode off: its timings must match the earlier runs' before the adapter trace is trusted. If
-  it's slower, suspect first the adapter trace's calls, then two retries brought back after a revert
+  it's slower, suspect first the adapter trace's calls, then two retries
   (`openListboxRetrying`, and `back()` seeing a move by step index), then the row Delete; every site's `page.job`
   adds no wait and runs only on reads.
 - **Workday's and Oracle's drivers on the shared ones:** equal golden schemas and behaviour tests.

@@ -28,12 +28,9 @@ Every site, and what it does differently, is in [sites](sites.md): [Workday](sit
 their own beside `site.ts` in `definition/`), Greenhouse, Lever, Ashby, Phenom and Dayforce (a `site.ts` each, on shared drivers), and
 SAP SuccessFactors (a `site.ts`, with its picklist and attachment drivers in `widgets.ts`).
 
-**Why one engine.** The Workday and Oracle adapters were about 1,600 lines each, and most of each repeated the
-other: the API, ids, sections, rows, errors and notices, the fill loop, next and back, the guard. What really
-differs per site is the markup and a few widgets. Greenhouse, Lever and Ashby are 160 to 170 lines each; Phenom,
-with steps and rows, about 420; Dayforce, with steps, records, Personal Information's own form and phone numbers
-read as two fields, about 490; SuccessFactors, one page with rows and documents, about 330, plus about 440 of
-drivers for its own framework's widgets.
+**Why one engine.** Written whole, each adapter repeats the others: the API, ids, sections, rows, errors and
+notices, the fill loop, next and back, the guard. What really differs per site is the markup and a few widgets, so
+a definition holds only those, and a one-page board's is a few hundred lines at most.
 
 **Why TypeScript, not data.** A definition is code: typed, able to hold a small function where a selector isn't
 enough, tested like code, and bundled with the extension. It's never fetched remotely: Manifest V3 forbids
@@ -88,7 +85,7 @@ the page re-extracts, and an unknown id fails with "call get_form again". No cal
   "Filled, but the page reports: …". With `waitForStaleErrors`, fields filled but still showing an error get up to
   `afterFieldMaxMs` for it to clear first (Oracle's lists, seen live).
 - **`listOptions`:** the driver's `list`, else the options the field shows. No bridge method or tool reaches it
-  (`list_options` was removed: listing before filling cost a turn each time); the site tests read a field's
+  ([a miss is the query](../status.md#decisions)); the site tests read a field's
   options through it. **`searchOptions`:** the driver's `search`, else `messages.noSearch`.
 - **`upload`:** builds a `File` from the companion's base64 in the page's own window and hands it to the driver.
 - **`remove`:** the driver's `remove`; a text, textarea or number field without one is cleared, its driver filling it with `""`, and done only when it reads back empty; else `messages.cantRemove(kind)`.
@@ -131,9 +128,6 @@ so a loose pick is seen, and nothing fills without the model ([status](../status
 | `selectDriver({ settled? })` | A native `<select>`; an option with an empty value ("Select...") is the placeholder, not a choice. `settled` (Phenom): for a React list that puts the old value back at once and takes the new one a moment later, set it past React's tracker and wait for the read-back, without calling React's handler (which by then reads the old value) |
 | `radioDriver({ label?, fallback? })`, `checkboxDriver({ fallback? })`, `checkboxGroupDriver({ label?, fallback? })` | By their own labels (`choiceLabel`, or the site's `label`). When pressing the input didn't change it, `fallback` says what's next: its label takes the click (a hidden input; the default), React's `onChange` gets the state wanted (`"react"`, Workday), or nothing (`"none"`, Oracle's checkboxes). The group fills exactly the options named and removes some |
 | `dateInputDriver()` | Native `date` and `month` inputs, `YYYY-MM-DD` or `YYYY-MM` |
-
-The text, select, checkbox and date drivers take the control itself as the container as well as an element
-holding it, so a definition that finds bare controls (the generic one) needs no wrapper for each.
 | `monthPickerDriver()` (`datepicker.ts`) | A react-datepicker that picks a month (`MM/YYYY`; date parts `MM`, `YYYY`), driven through its calendar because its input takes no typing: opened from the input, the year chosen from the header's list (else stepped to with its arrows), the month pressed. A year the list lacks is refused with the years on offer, a disabled month as outside the dates the page allows |
 | `reactSelectDriver()` (`react-select.ts`) | react-select, through its own props ([below](#react-select-through-its-props)) |
 | `antSelectDriver()` (`antd-select.ts`) | Ant Design's Select, through rc-select's context ([below](#ant-designs-select-through-rc-selects-context)) |
@@ -141,6 +135,9 @@ holding it, so a definition that finds bare controls (the generic one) needs no 
 | `comboboxDriver({ input?, options?, value? })` (`combobox.ts`) | A search-as-you-type field (a location): types the value, waits for suggestions that differ from those before, chooses the match. No match → `unmatched` with the suggestions. By default the input is `role=combobox` and the suggestions the `role=option`s of its listbox |
 | `ui5DatePickerDriver()` (`ui5-datepicker.ts`) | A UI5 Web Components date picker (SuccessFactors' dates), whatever tag an app registers it under (`[ui5-date-picker]`): its `value` set in its `format-pattern` (`MM/dd/yyyy`; date parts from it), then the `change` event the component fires, with `{ value, valid }`, which is what an app hears ([sites](sites/successfactors.md)). A date without the day the pattern asks for, a read-only picker and a pattern with month names are refused |
 | `fileDriver({ input?, names, entries?, dropZone?, reactDrop?, removeButton?, confirmRemoval?, multiple? })` (`file.ts`) | A file input (often hidden behind "Attach"): a `File` in a `DataTransfer` on the input; if the page shows nothing within `uploadMs`, a drop on the field (or the site's `dropZone`, through its React `onDrop` first with `reactDrop`). Done only when the page shows a **new** file of that name: one more of that name, or, with `entries`, an element that wasn't there before, so a same-named file the page replaces counts. A field with neither an input nor a drop zone that already holds a file says to remove it first. Removed by its own button, confirming a dialog when the site gives `confirmRemoval` |
+
+The text, select, checkbox and date drivers take the control itself as the container as well as an element
+holding it, so a definition that finds bare controls (the generic one) needs no wrapper for each.
 
 **The combobox types a key too.** Lever's location field searches on keyup, not on input (seen live): setting
 the value found nothing. The driver sets the value, then sends the last character as a key event. When a search
@@ -230,8 +227,8 @@ results 100 ms, uploads 200 and 250 ms, a step's fields 150 ms) keep it.
 **Why every wait is tunable.** Live Workday fills once ran slowly (dropdowns about 2.5 to 3 s each, a 15-dropdown
 step in 49 s). Most waits end as soon as their condition holds, but some cost their full length on every field when
 the page never goes quiet or a check never matches, and which ones wasn't measured. The file lets a wait be shortened
-without a rebuild, to see what breaks. Six dropdown waits set to 200 ms (from 1 to 2 s) ran four live
-applications on Workday and Oracle, 128 fills, with no dropdown failing to open, so those are the defaults.
+without a rebuild, to see what breaks. Six dropdown waits set to 200 ms (from 1 to 2 s) were verified on live
+Workday and Oracle applications with no dropdown failing to open, so those are the defaults.
 
 ## Debug mode: the adapter trace
 With [debug mode](../development.md#debugging-a-live-run-debug-mode) on, every adapter call records what
@@ -268,9 +265,9 @@ beside the result, never in it, and the companion writes it into the call's reco
 
 **Where it's recorded.** Every driver goes through the engine's helpers (`dom.ts`): `press`, `key`,
 `setNativeValue`, `typeChar`, `blur`, `callReact`, `waitFor`, `settle`, `sleep`, `matchOption`. They report to the
-trace, so the fillers didn't change for most of it; `api.ts` records the fields, and the fillers add only their
+trace, so the fillers need nothing of their own for most of it; `api.ts` records the fields, and the fillers add only their
 named branches and listbox notes. Without debug every reporting function returns at once and nothing is installed:
-a call runs as it did before. Checked on the behavioural fixture: the same six-field Workday fill took the same
+a call runs as without the trace. Checked on the behavioural fixture: the same six-field Workday fill took the same
 time with debug on and off (within a few ms of 3.5 s over six runs each).
 
 **Naming waits without touching every call site.** A wait's length is passed as `T.<name>` (`T.dropdownOpenMs`). While debug is on,

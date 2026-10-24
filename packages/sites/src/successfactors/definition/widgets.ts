@@ -9,7 +9,7 @@ import type { FillValue, OptionInfo } from "@ezapply/protocol";
  * is, the attachment fields and the radio groups of its questions. juic keeps each component in
  * `juic.Component._registry` under the id its markup starts with (`141:` for `141:_input`), and its markup calls it
  * through `juic.fire(id, method, event)`. Built from the page's own scripts, a saved application and a live run
- * (references/components/sites.md).
+ * (references/components/sites/successfactors.md).
  */
 
 interface PicklistOption {

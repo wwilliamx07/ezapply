@@ -25,7 +25,7 @@ import { siteInfo } from "../../registry.js";
  *
  * Built from a saved Candidate Info page (a new candidate's, before anything was added) and, for what that page
  * doesn't show (the questionnaire, records, their read mode and delete dialog, the Submit step), from the portal's own
- * scripts. See references/components/sites.md.
+ * scripts. See references/components/sites/dayforce.md.
  */
 
 const SEL = {

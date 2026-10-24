@@ -217,7 +217,7 @@ export async function writeLauncher(root: string, report: InitReport, platform =
 const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter", "bundle", "apply", "answers"];
 /**
  * Skills ezapply no longer ships: the copy step only adds and overwrites, so an earlier init's copy would stay and
- * keep running. Choosing repos is the setup page's step; what's out of date is the panel's Workspace changes card.
+ * keep running.
  */
 const RETIRED_SKILLS: Record<string, string> = {
   "ezapply-repos": "the setup page chooses repos",

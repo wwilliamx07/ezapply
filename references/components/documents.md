@@ -242,13 +242,11 @@ anything either.
 
 ## Editing (`tex_edit`)
 `DocumentsService.edit` applies exact replacements in order, each `old` matched once in the text the edits before it
-leave, then compiles. Edits are written in the file's line endings, so one written with `
-` matches a file saved
-with `
-`. Anything wrong (an `old` missing or found twice, one equal to its `new`) refuses the whole call before
+leave, then compiles. Edits are written in the file's line endings, so one written with `\n` matches a file saved
+with `\r\n`. Anything wrong (an `old` missing or found twice, one equal to its `new`) refuses the whole call before
 anything is written, naming the edit. The result carries each edited passage with a line on each side, so the
 agent checks it against its neighbours without reading the file again. *Why a tool:* with Python at hand, agents
-edited `.tex` through scripts that dropped or mangled LaTeX's backslashes (`"	"` in `"	extbf"` becomes a tab),
+edited `.tex` through scripts that dropped or mangled LaTeX's backslashes (`"\t"` in `"\textbf"` becomes a tab),
 and each agent's own edit tool is named and shaped differently; JSON arguments carry backslashes as they are, and
 the compile in the same call saves a turn per round.
 
@@ -262,7 +260,7 @@ claim as `claims_list` gives them, and the cover letter's `format.md`. `preferen
 imports it into every session. *Why:* the skills began with five to seven reads and copies, the same every time,
 each a turn that re-sent the conversation; the evidence map and everything after stay the agent's.
 
-**`bundle_build`** (`buildBundle`) replaced the `ezapply-bundle` skill, whose steps were fixed: default order
+**`bundle_build`** (`buildBundle`) does the bundle's fixed steps: default order
 (cover letter, resume, extras), a rebuild of a `.tex` newer than its PDF, a bookmark label per section ("Cover
 Letter", "Resume", an extra's from its file name), the title and author from the profile and the posting, the file
 name `<Last>_<First>_<Company>_Application.pdf` (each word reduced to letters, digits and hyphens), the checks

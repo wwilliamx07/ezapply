@@ -18,9 +18,8 @@ description: Write or revise a cover letter for a job posting.
    - **One paragraph per project or role**, strongest first, each tying one or two requirements to what the user
      built and how. Everything about one project in its paragraph. Mirror the posting's words only where true.
    - **Close** (1–2 sentences): what they'd bring, and availability to talk.
-3. **Rules:** no skill or result without evidence; never mention gaps apologetically; the user's preferences set
-   the tone and what never to mention. A `% src:` comment beside each paragraph with the claim ids it uses. Escape
-   LaTeX specials in text from the posting.
+3. **Rules:** never mention gaps apologetically. A `% src:` comment beside each paragraph with the claim ids it
+   uses. Escape LaTeX specials in text from the posting.
 4. **Edit and fit** with `tex_edit { path, edits }`: a round's changes in one call, each `old` copied from the
    `.tex` as it is. One full page (`freeLines` 0–2) unless the requirements or `coverFormat` set another length:
    fill it with more evidence (a further project, more on how something was built), never filler; when the

@@ -153,7 +153,7 @@ describe("profile", () => {
   it("rejects bad dates", async () => {
     await writeFile(
       join(root, "ws/profile/profile.yaml"),
-      "schemaVersion: 1\nidentity: { firstName: J, lastName: D }\ncontact: { email: j@x.com, address: { city: A, country: B } }\nwork:\n  - { company: A, title: B, start: June 2024, end: null }\n",
+      "schemaVersion: 1\nidentity: { firstName: J, lastName: D }\ncontact: { email: jane@example.com, address: { city: A, country: B } }\nwork:\n  - { company: A, title: B, start: June 2024, end: null }\n",
     );
     const check = await svc.checkProfile();
     expect(check.errors?.[0]).toMatchObject({ path: "work.0.start", message: "use YYYY-MM" });

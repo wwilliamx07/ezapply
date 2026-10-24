@@ -165,7 +165,6 @@ reads `kind`, `saved`, `lastPage` and `job` instead of the site's name, so a new
   receiver rejects the whole message over it (`panel.conversation` fails on one unknown event).
 - A new site: no bump. `SiteId` is a string, so neither side rejects a message for naming a site, and `hello`
   compares the two sides' sites instead: an extension and a companion built with different sites refuse each other
-  at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know. (As an enum, it
-  needed a bump for every new site.)
+  at the handshake, before a `browser.status` could list a tab of a site one of them doesn't know.
 - New method: add it to `CompanionApi` or `ExtensionApi`; the serving side gets a type error until its
   handler exists.

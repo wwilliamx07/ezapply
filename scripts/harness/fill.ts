@@ -19,5 +19,5 @@ const report = await fillRun(dir, {
   headed: !!values.headed,
   log: (line) => console.log(line),
 });
-console.log(JSON.stringify({ ...report, ok: report.ok }, null, 2));
+console.log(JSON.stringify(report, null, 2));
 process.exitCode = report.ok ? 0 : 1;

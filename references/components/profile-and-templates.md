@@ -85,9 +85,9 @@ are on the TeX search path, so the copies find class and style files.
 tailoring could only change the bullets by editing the template, which is forbidden. `contentFiles` lists
 them (`findContentFiles`): every `.tex` file reached through `\input`, `\include` or `\subfile` outside
 comments, directly or through each other, that exists inside the template, as paths relative to the main
-file's folder (packages like `\input{glyphtounicode}` aren't in the template, so they're left out). The
-skills copy them into the posting folder at the same relative paths beside the copied main file; the posting
-folder comes first on the search path, so the copies win. Recorded by `template_import` and
+file's folder (packages like `\input{glyphtounicode}` aren't in the template, so they're left out).
+`document_start` copies them into the posting folder at the same relative paths beside the copied main file; the
+posting folder comes first on the search path, so the copies win. Recorded by `template_import` and
 `template_set_main`. (Flattening the document into one file was the alternative; copying keeps the user's
 file structure, so a diff against the template stays readable.)
 

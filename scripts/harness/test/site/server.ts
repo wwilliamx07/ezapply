@@ -21,7 +21,7 @@ const REGIONS: Record<string, string[]> = {
   FR: ["Bretagne", "Normandie"],
   NZ: [],
 };
-export const SCHOOLS = [
+const SCHOOLS = [
   "Atlantic College",
   "Bay State University",
   "Central Institute of Technology",
@@ -44,7 +44,7 @@ const json = (status: number, v: unknown) => ({
   body: Buffer.from(JSON.stringify(v)),
 });
 
-export interface SiteResponse {
+interface SiteResponse {
   status: number;
   headers: Record<string, string>;
   body: Buffer;

@@ -24,7 +24,7 @@ import { siteInfo } from "../../registry.js";
  * in a frame): the posting and a one-page application, Submit at the end. Text fields sit in `.text-input-wrapper`s,
  * lists in `.select__container`s (react-select), files in `.file-upload`s (hidden inputs behind "Attach"), choices in
  * fieldsets; prompts are labels tied by `for`. Built from the live pages of four boards and checked on
- * one live (filling, never submitting). See references/components/sites.md.
+ * one live (filling, never submitting). See references/components/sites/greenhouse.md.
  */
 
 const SEL = {

@@ -1,7 +1,7 @@
 import { resolveTiming, STANDARD_WAITS, type Timing } from "@ezapply/protocol/timing";
 
 /**
- * The waits in use, in ms. The site owns them: its registry entry (`@ezapply/protocol/sites`) gives their values,
+ * The waits in use, in ms. The site owns them: its registry entry (`@ezapply/sites`) gives their values,
  * set with `useSiteWaits` when the adapter is created. The companion sends the user's overrides from
  * `autofill-timing.yaml` with every call, already resolved against the same site's waits; `setTiming` applies
  * them before the call runs, so each call uses what the file says now and a call without them uses the site's

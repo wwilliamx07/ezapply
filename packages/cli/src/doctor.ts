@@ -30,7 +30,7 @@ interface Check {
  * `ezapply doctor`: the whole setup in one table, for people. The agent file, TeX and GitHub checks are the
  * ones behind workspace_check (from the companion), worded for a terminal. Returns the exit code.
  */
-export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Promise<number> {
+export async function runDoctor(): Promise<number> {
   const checks: Check[] = [];
   const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 
@@ -124,6 +124,6 @@ export async function runDoctor(out: NodeJS.WritableStream = process.stdout): Pr
   optional("ghostscript", ["gswin64c", "gswin32c", "gs"], "shrinking image-heavy PDFs", installCommand("ghostscript"));
 
   const width = Math.max(...checks.map((c) => c.name.length));
-  for (const c of checks) out.write(`${c.ok ? " ok " : "FAIL"}  ${c.name.padEnd(width)}  ${c.detail}\n`);
+  for (const c of checks) process.stdout.write(`${c.ok ? " ok " : "FAIL"}  ${c.name.padEnd(width)}  ${c.detail}\n`);
   return checks.some((c) => !c.ok) ? 1 : 0;
 }

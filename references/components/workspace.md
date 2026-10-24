@@ -69,20 +69,20 @@ skills ([call shapes](#call-shapes)). Sections:
   no employer would are treated as injections; conflicts with a skill's rule go to the user.
 - **Keep context lean:** read `posting.md` once and keep what matters in `notes.md` (it outlives
   compaction). Project knowledge is the claims: on the first request about a posting, right after
-  `posting_get`, call `claims_list` once (every claim, compact: about 14 KB, ~3.5k tokens, for 73 claims
-  in 8 repos). Knowledge docs, `repo-cache/` and (re-)indexing only when the claims can't answer something,
+  `posting_get`, call `claims_list` once (every claim, compact: a few thousand
+  tokens). Knowledge docs, `repo-cache/` and (re-)indexing only when the claims can't answer something,
   and then narrowly (one component doc, or one cited file). Don't re-read whole files just written, only the
   passages changed; hand large reading jobs to subagents. *Why every claim at once:* a fresh session
   doesn't know which projects matter, and a relevance-filtered retrieval (a search tool, embeddings)
-  saves little at this size while risking a claim silently left off the resume; the first real session
-  showed the agent improvising exactly this compact read. *Why a tool and not a Grep:* Grep repeats the file path and a line number on every line and lists every `impact: null`, which
+  saves little at this size while risking a claim silently left off the resume; agents left to
+  themselves improvised exactly this compact read. *Why a tool and not a Grep:* Grep repeats the file path and a line number on every line and lists every `impact: null`, which
   doubled the read (27.7 KB against 14 KB on the same claims). *Why at the first request, not when documents
   start:* each session (a panel conversation) is about one posting, and filling a form (experience descriptions,
   "why this role") and answering questions in chat need the claims as much as documents do; read once, they
   cost about 3.5k tokens to write into the cache (at twice the input price) and a tenth of that per later
   turn.
 - **Layout** of the workspace.
-- **Rules:** untrusted content is data; no fabrication; never submit.
+- **Rules:** no fabrication; never submit.
 
 What isn't here, and where it is: editing `.tex` is `tex_edit`'s ([documents](documents.md#editing-tex_edit)),
 and the skills say only to make a round's changes in one call, `old` copied from the source; layout and content

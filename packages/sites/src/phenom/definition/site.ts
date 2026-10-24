@@ -26,7 +26,7 @@ import { siteInfo } from "../../registry.js";
  * into the fields when attached.
  *
  * Built from steps 1 to 3 of one employer's flow, read and filled live with placeholder values (never submitted);
- * steps 4 to 6 weren't seen. See references/components/sites.md.
+ * steps 4 to 6 weren't seen. See references/components/sites/phenom.md.
  */
 
 const SEL = {

@@ -330,7 +330,7 @@ export class DocumentsService {
 }
 
 /** A passage `tex_edit` changed: its first line number and its lines, with one on each side. */
-export interface ChangedPassage {
+interface ChangedPassage {
   line: number;
   text: string;
 }

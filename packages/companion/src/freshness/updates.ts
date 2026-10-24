@@ -279,12 +279,12 @@ export class WorkspaceUpdates {
 }
 
 /** The name the letter is signed with. */
-export function coverName(p: Profile): string {
+function coverName(p: Profile): string {
   return texEscape(`${p.identity.preferredName ?? p.identity.firstName} ${p.identity.lastName}`);
 }
 
 /** The letter's contact line, as ezapply's default template lays it out: place, email, phone, links. */
-export function coverContact(p: Profile): string {
+function coverContact(p: Profile): string {
   const place = [p.contact.address.city, p.contact.address.region].filter(Boolean).join(", ");
   const links = [p.links.linkedin, p.links.github, p.links.portfolio]
     .filter((u): u is string => Boolean(u))

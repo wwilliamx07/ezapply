@@ -11,7 +11,7 @@ import { type Coverage, explore } from "./explore.ts";
 import { normalise, timingSummary } from "./normalise.ts";
 import { proposalSource, propose } from "./propose.ts";
 
-export interface CloneOptions {
+interface CloneOptions {
   headed: boolean;
   log: (line: string) => void;
   /** The site's description; by default the site's `clone.ts`, if it has one. */

@@ -59,7 +59,7 @@ export interface EndpointSpec {
 }
 
 /** A token the site issues in a response and expects back on later requests (a CSRF token). */
-export interface TokenSpec {
+interface TokenSpec {
   name: string;
   /** Where it's issued: group 1 of this pattern, in a response body or header. */
   issued: RegExp;

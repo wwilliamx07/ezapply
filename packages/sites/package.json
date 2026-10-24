@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.definitions.json --noEmit"
+    "typecheck": "tsc -p tsconfig.definitions.json"
   },
   "dependencies": {
     "@ezapply/engine": "0.1.0",

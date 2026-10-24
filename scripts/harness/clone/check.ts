@@ -2,7 +2,7 @@ import type { CloneDescription } from "@ezapply/sites/clones";
 import type { Clone, Exchange } from "../lib/store.ts";
 import { at, StandIn, setAt, toRequest } from "../standin/engine.ts";
 
-export interface CheckResult {
+interface CheckResult {
   pass: Exchange["pass"];
   total: number;
   same: number;

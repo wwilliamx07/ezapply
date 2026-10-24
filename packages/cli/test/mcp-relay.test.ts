@@ -111,7 +111,7 @@ describe("ezapply mcp relay", () => {
   }
 
   it("never sends a request twice once the companion received it, even when the connection breaks", async () => {
-    const companion = await stubCompanion((_req, res) => res.socket?.destroy()); // e.g. the chat ended mid-call
+    const companion = await stubCompanion((_req, res) => res.socket?.destroy()); // e.g. ezapply stopped mid-call
     const r = relay(companion.url);
     const res = await r.send({ id: 1, method: "tools/call" });
     expect(res).toMatchObject({ id: 1, error: { message: expect.stringMatching(/may or may not have run/) } });

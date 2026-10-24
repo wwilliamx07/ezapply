@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type Variant = "default" | "primary" | "ghost" | "danger";
-type Size = "sm" | "md" | "lg" | "icon";
+type Size = "sm" | "md" | "icon";
 
 export function Button({
   variant = "default",
@@ -14,7 +14,6 @@ export function Button({
     "ez-btn",
     variant !== "default" && `ez-btn-${variant}`,
     size === "sm" && "ez-btn-sm",
-    size === "lg" && "ez-btn-lg",
     size === "icon" && "ez-btn-icon",
     className,
   ]
@@ -23,7 +22,7 @@ export function Button({
   return <button type={type} className={cls} {...rest} />;
 }
 
-export function Badge({ tone, children }: { tone?: "ok" | "warn" | "danger" | "accent"; children: ReactNode }) {
+export function Badge({ tone, children }: { tone?: "ok" | "warn"; children: ReactNode }) {
   return <span className={tone ? `ez-badge ez-badge-${tone}` : "ez-badge"}>{children}</span>;
 }
 
@@ -148,12 +147,6 @@ const PATHS: Record<string, ReactNode> = {
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   stop: <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" />,
   chevronDown: <path d="M6 9l6 6 6-6" />,
-  target: (
-    <>
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="3" />
-    </>
-  ),
   wand: (
     <>
       <path d="M5 19L15.5 8.5" />

@@ -12,7 +12,7 @@ import { pdfCompress, pdfInfo } from "./pdf/toolkit.js";
 const REQUIREMENTS = /^##\s+Application requirements\s*$/m;
 
 /** Each document's file in the posting folder. */
-export const DOCUMENT_FILE: Record<TemplateKind, string> = { resume: "resume.tex", cover: "cover.tex" };
+const DOCUMENT_FILE: Record<TemplateKind, string> = { resume: "resume.tex", cover: "cover.tex" };
 
 /**
  * Set a posting's resume or cover letter up and hand back what writing it draws on, in one call. The skills had the

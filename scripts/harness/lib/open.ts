@@ -7,7 +7,7 @@ import { StandIn } from "../standin/engine.ts";
 import { launch, quietness, serve } from "./browser.ts";
 import type { Clone } from "./store.ts";
 
-export interface OpenClone {
+interface OpenClone {
   context: BrowserContext;
   page: Page;
   standIn: StandIn;

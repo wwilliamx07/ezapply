@@ -1,7 +1,7 @@
 import { describeHunk, diffWords, type TextChange, tokenizePages } from "@ezapply/protocol/textdiff";
 
 /** A stretch of a page's text (`LoadedPage.text`), 0-based page. */
-export interface TextSpan {
+interface TextSpan {
   page: number;
   start: number;
   end: number;

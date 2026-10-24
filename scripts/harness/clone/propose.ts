@@ -3,7 +3,7 @@ import type { Clone, Exchange } from "../lib/store.ts";
 import { at, parseBody, toRequest } from "../standin/engine.ts";
 
 /** One proposed endpoint: a description entry with what it was guessed from. */
-export interface Proposal {
+interface Proposal {
   name: string;
   kind: EndpointKind;
   method: string;
@@ -127,7 +127,7 @@ function varyingParts(list: Exchange[]): string[] {
 }
 
 /** A URL as a pattern: its query dropped, ids in its path (numbers, uuids, long hex) made wildcards. */
-export function urlPattern(url: string): string {
+function urlPattern(url: string): string {
   const u = new URL(url);
   const path = u.pathname
     .split("/")

@@ -30,7 +30,7 @@ import { siteInfo } from "../../registry.js";
  * `.application-label`; native inputs, selects, radio and checkbox groups; a location field that suggests places as
  * you type. Built from a live application page and checked on one live (filling, never submitting).
  * The resume input sends the file to Lever to read at once, so it wasn't tried live. See
- * references/components/sites.md.
+ * references/components/sites/lever.md.
  */
 
 const SEL = {

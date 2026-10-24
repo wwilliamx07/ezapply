@@ -19,7 +19,7 @@ Continue, a review page.
 | `widgets.ts` | `WORKDAY_WIDGETS`, in the order a field's kind is decided: file, date, prompt, dropdown, then the shared radio, checkbox group, checkbox, textarea, password, number and text drivers (labels by `optionLabel`, React's `onChange` as the fallback) |
 | `dropdown.ts`, `typeahead.ts`, `date.ts` | Workday's own widgets (below) |
 | `remove.ts` | Taking chips and attached files off (`removeItems`), confirming a delete dialog (`confirmRemoval`, the rows' too) |
-| `selectors.ts` | Every Workday string of the adapter: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS` (`legalNameFirstName` → `identity.firstName`) |
+| `selectors.ts` | Every Workday string of the adapter: `data-automation-id` hooks (several candidates each, since tenants and releases vary) and `PROFILE_HINTS` (`legalnamefirstname` → `identity.firstName`) |
 | `reader.ts` (beside `definition/`) | The posting reader (`readWorkdayPosting`, in `POSTING_READERS`): Workday's posting pages carry no JSON-LD worth reading and their title is the role alone, so the capture takes the description, role, location and requisition from the posting hooks `registry.ts` shares with the adapter (`WORKDAY_POSTING`) |
 
 **Page kinds** (`detectPage`), in order: **confirmation** (a confirmation element, or, with no progress bar and no

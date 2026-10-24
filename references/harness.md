@@ -52,7 +52,8 @@ page), `offline.png`, `coverage.json`, `proposed-clone.ts`, and `runs/<time>/` f
    up to 15 minutes, for the user to sign in. On each step it:
    - fills every text field with an obviously fake value (`lib/profile.ts`, by the field's hint, else its prompt);
    - opens every list; where a list has nothing until typed in, searches it: the empty text, then every letter,
-     then two and three letters after each prefix whose results filled a page, until nothing new comes back, and
+     then a letter more after each prefix whose results filled a page, until nothing new comes back or
+     `--max-queries` runs out, and
      works out the matching rule (prefix, word, contains) from what came back;
    - picks each answer of a choice in turn (up to 12, `explorer.maxAnswers`), and fills the fields an answer opens
      before the next answer closes them;
@@ -86,15 +87,8 @@ What each of the site's requests does, by URL pattern, in `CLONE_DESCRIPTIONS` (
 which has the full shape). A request no endpoint matches is answered only from the saved front end, by its exact
 method, URL (cache busters aside) and body.
 
-| Kind | The stand-in answers a request it hasn't seen exactly |
-|---|---|
-| `static`, `list`, `nested-list`, `validate` | By the parts in `key` (a list's parent, a page number) when it has one; else not at all |
-| `search` | With the saved dataset (every result any recorded search returned) filtered by the typed text with the site's rule, cut to the largest page seen, in a recorded answer's shape |
-| `save` | As recorded, keeping what was sent |
-| `step` | With the recorded way on when every `required` part is present, else with the recorded refusal |
-| `upload` | Accepts any file |
-| `beacon` | Empty, never compared |
-| `submit` | Never: seeing one fails the run |
+Each endpoint's kind (`EndpointKind`, in the same file) decides how the stand-in answers a request it hasn't seen
+exactly; a `submit` is never answered, and seeing one fails the run.
 
 A request seen exactly gets its recorded answers in the order the site gave them, so a list read before and after a
 save comes back as it did. Parts of an answer that differ every time (timestamps, ids) are named in `volatile`, and

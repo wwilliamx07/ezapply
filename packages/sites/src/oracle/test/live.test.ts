@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { extractPage } from "../../../test/adapters.js";
+import { extractPage, fieldsOf } from "../../../test/adapters.js";
 import { oracle } from "../definition/site.js";
 
 const extract = (doc: Document, url: string) => extractPage(oracle, doc, url);
@@ -14,9 +14,6 @@ const load = (name: string, url: string) => {
 };
 
 const JOB = "https://jobs.umbrella.example/en/sites/CX_1/job/10001";
-const fieldsOf = (s: ReturnType<typeof load>) =>
-  Object.fromEntries(s.sections.flatMap((x) => x.fields).map((f) => [f.id, f]));
-
 describe("live Oracle snapshots", () => {
   it("recognises a job page and its Apply action", () => {
     expect(load("oracle-posting", JOB)).toMatchObject({

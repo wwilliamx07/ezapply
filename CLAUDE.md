@@ -3,7 +3,7 @@
 ## Each directory's rules and important facts are in its own `CLAUDE.md`
 
 This file holds the rules for the whole repo. A directory with more specific conventions (how its files are
-written, kept and maintained) has them in a `CLAUDE.md` of its own. Put directory's rules in its `CLAUDE.md`, not here, and read it before changing that directory.
+written, kept and maintained) has them in a `CLAUDE.md` of its own. Put a directory's rules in its `CLAUDE.md`, not here, and read it before changing that directory.
 If something should be known about a directory before it is touched, add it to the `CLAUDE.md`
 of that directory. Create one if it doesn't exist.
 

@@ -1,5 +1,6 @@
 /**
- * `npm run clone -- <posting-url> [--headless]`: clones a posting's application into `.clones/<site>/<id>/`.
+ * `npm run clone -- <posting-url> [--headless] [--max-queries <n>]`: clones a posting's application into
+ * `.clones/<site>/<id>/`.
  * `npm run clone -- --check <site|clone-id>`: checks a clone again, after its site's description changed.
  */
 import { parseArgs } from "node:util";
