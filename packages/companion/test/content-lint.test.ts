@@ -94,7 +94,8 @@ describe("the content lint", () => {
 
   it("adds its findings to a build's lint and hint", async () => {
     await resume(["\\resumeItem{Wrote 7 ledgers} % src: rate-limiter"]);
-    const r = await withContentLint(s, "postings/p1/resume.tex", { ok: true, lint: [{ kind: "short-line" }] });
+    const build: { ok: boolean; lint: object[]; hint?: string } = { ok: true, lint: [{ kind: "short-line" }] };
+    const r = await withContentLint(s, "postings/p1/resume.tex", build);
     expect(r.lint).toEqual([
       { kind: "short-line" },
       { kind: "unsourced-number", file: "resume.tex", line: 6, text: "7" },
