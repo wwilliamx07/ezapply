@@ -224,17 +224,12 @@ export class TemplateService {
   }
 
   /**
-   * The folder or file an imported template came from, as it is now: its hash next to the one recorded, and
-   * for a template imported before `sourceHash` existed, whether it still matches the workspace copy. Null
+   * The folder or file an imported template came from, as it is now: its hash next to the one recorded. Null
    * for a template that wasn't imported; `unreadable` when the source is gone or can't be listed.
    */
   async sourceState(
     kind: TemplateKind,
-  ): Promise<
-    | null
-    | { from: string; unreadable: string }
-    | { from: string; hash: string; recorded: string | null; matchesCopy?: boolean }
-  > {
+  ): Promise<null | { from: string; unreadable: string } | { from: string; hash: string; recorded: string | null }> {
     const meta = await this.templateMeta(kind);
     if (!meta?.importedFrom) return null;
     const from = meta.importedFrom;
@@ -245,14 +240,7 @@ export class TemplateService {
       const code = (err as NodeJS.ErrnoException).code;
       return { from, unreadable: code === "ENOENT" ? "not found" : (err as Error).message };
     }
-    const hash = await hashFiles(source.root, source.files);
-    if (meta.sourceHash) return { from, hash, recorded: meta.sourceHash };
-    return {
-      from,
-      hash,
-      recorded: null,
-      matchesCopy: await this.copyMatches(kind, meta.main, source.root, source.files),
-    };
+    return { from, hash: await hashFiles(source.root, source.files), recorded: meta.sourceHash ?? null };
   }
 
   /** Record that templates/<kind>/ is current with its source as it hashes now. */
@@ -307,22 +295,6 @@ export class TemplateService {
       out.push(doc);
     }
     return out;
-  }
-
-  /**
-   * Whether every file in the source is in templates/<kind>/ unchanged. The `% !TEX program` line an
-   * import may add to the main file is left out of the comparison.
-   */
-  private async copyMatches(kind: TemplateKind, main: string, from: string, files: string[]): Promise<boolean> {
-    for (const f of files) {
-      const [src, copy] = await Promise.all([
-        readFile(join(from, f), "utf8").catch(() => null),
-        readFile(this.ws.path("templates", kind, f), "utf8").catch(() => null),
-      ]);
-      if (src === null || copy === null) return false;
-      if (f === main ? !sameAsCopy(src, copy) : normText(src) !== normText(copy)) return false;
-    }
-    return true;
   }
 
   async templateMeta(kind: TemplateKind): Promise<TemplateMeta | null> {

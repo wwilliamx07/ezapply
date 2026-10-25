@@ -418,24 +418,6 @@ describe("the agent service", () => {
     ).rejects.toThrow();
   });
 
-  it("moves an older build's one conversation per posting to the posting's tailoring conversation", async () => {
-    const said: AgentEvent = { kind: "user", at: AT, id: "m1", text: "earlier", taken: true };
-    await mkdir(join(dir, "agent", "p1"), { recursive: true });
-    await writeFile(
-      join(dir, "agent", "conversations.json"),
-      JSON.stringify({ schemaVersion: 1, conversations: { p1: { sessionId: "s-old", startedAt: AT, started: true } } }),
-    );
-    await writeFile(
-      join(dir, "agent", "p1", "s-old.jsonl"),
-      `${JSON.stringify(said)}
-`,
-    );
-    make();
-    expect(await agent.history("p1/tailor")).toEqual([said]);
-    const file = JSON.parse(await readFile(join(dir, "agent", "conversations.json"), "utf8"));
-    expect(Object.keys(file.conversations).sort()).toEqual(["general", "p1/tailor"]);
-  });
-
   it("always has the general conversation, which resets before its first message too", async () => {
     make();
     expect(await agent.history("general")).toEqual([]);

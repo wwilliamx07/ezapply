@@ -209,9 +209,8 @@ Compare a debugged run's timings with other debugged runs only. Turn it off (`ez
   [data-formats.md](data-formats.md).
 - **Change a skill or `EZAPPLY.md`:** edit `packages/cli/templates/`; users get it with `ezapply init`.
   A new skill is named `ezapply-<name>` (folder and `name:`), never a bare word, so it can't shadow a
-  Claude Code command or be overridden by a user's skill. Renaming one means adding the old name to
-  `LEGACY_SKILLS` in `workspace-init.ts` so `init` removes the old copy; removing one adds it to
-  `RETIRED_SKILLS` there.
+  Claude Code command or be overridden by a user's skill. Renaming or removing one adds the old name to
+  `RETIRED_SKILLS` in `workspace-init.ts` so `init` removes the old copy.
   `EZAPPLY.md` is in every session's context: keep it near 100 lines, add only rules that apply to every
   task, and put procedures in skills. Rules that must hold even without it (Explore/Plan subagents) also go
   in the MCP server instructions (`mcp/server.ts`).

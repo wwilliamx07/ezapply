@@ -20,9 +20,7 @@ A running companion writes only the pairing fields, into the file as it is at th
 ezapply runs survive. A file that isn't valid JSON or doesn't match the schema is reported with what to do (fix
 it, or delete it and run `ezapply init`), not as a stack trace.
 
-**From older builds.** When there's no `config.json`, loading the config renames an older build's `daemon.json`
-to it, so the tokens and pairing carry over; keys the schema doesn't know (`idleTimeoutMinutes`) are dropped on
-the next write. Nothing reads a `daemon-state.json` beside it, and it can be deleted.
+Keys the schema doesn't know are dropped on the next write.
 
 ### `github-app.json` (`companion/src/github/service.ts`)
 `{ schemaVersion: 1, appId?, slug, clientId, htmlUrl, owner?, createdAt, origin?, localBaseUrl? }`: the public
@@ -62,12 +60,8 @@ dropped.
 ```
 Every field has a default; a missing file means all defaults. `debug.markup` (also read for every call, a bad value falling back to `"failures"`) says which of the page's
 markup debug mode saves: `"failures"` before each call and at every field that fails, `"always"` after each call
-too, `"none"` never (the adapter's trace is still recorded). Unknown keys are dropped when the file is read, so
-`ezapply init` upgrades an older build's file (`migrateWorkspaceConfig` in `cli/src/workspace-init.ts`), leaving
-anything the user changed: `debug.autofill` becomes `debug.enabled` (left alone, it would turn debug mode off
-without a word; a `debug.enabled` already set wins); `forms.focusBrowser` and `context.restartOnCapture`, which
-nothing reads, are removed (with their object, when it holds nothing else); an untouched
-`tex.engine: "latexmk"` becomes `"auto"`, since latexmk fails on MiKTeX without Perl. `tex.engine` applies only to `.tex` files
+too, `"none"` never (the adapter's trace is still recorded). Unknown keys are dropped when the file is read.
+`tex.engine` applies only to `.tex` files
 without a `% !TEX program = pdflatex|xelatex|lualatex|tectonic` comment in their first 20 lines; the
 comment wins ([documents](components/documents.md#tex-engines-texenginests)). `latexmkFlags` apply only
 when latexmk runs, which a comment never selects.
@@ -190,12 +184,8 @@ The side panel's conversations ([agent](components/agent.md)), written by the co
   which reports no cost. `agent`, `agentSessionId` and `totalTokens` are optional, so a file without them still
   parses at `schemaVersion` 1. Reset moves the session to
   `earlier` (the newest 50), where `claude --resume <id>` still opens it. A file that doesn't parse is treated as
-  empty. A key that's a bare posting id is an older build's one conversation per posting: the companion moves it
-  to `<posting id>/tailor`, with its logs, once per run
-  ([agent](components/agent.md#conversations-servicets)); the keys changed, not the shape, so `schemaVersion`
-  stayed 1.
-- There is no `settings.json`: the agent settings are the extension's ([below](#extension-storage)). One an
-  older build wrote is removed by `ezapply init`, and read by nothing before that.
+  empty.
+- There is no `settings.json`: the agent settings are the extension's ([below](#extension-storage)).
 - `<conversation>/<sessionId>.jsonl` (a posting's under `<posting id>/tailor/` or `<posting id>/fill/`): the session's events, one `AgentEvent` per line (`protocol/src/panel.ts`):
   the user's messages (written again when Claude takes one), Claude's text, tool calls folded to one line, a tool's
   error, settled cards, each turn's end with its cost, notices. A line cut short by a crash is skipped.

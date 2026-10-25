@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { BrowserInfo } from "@ezapply/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadAppConfig, updateAppConfig } from "../src/config/app.js";
-import { WorkspaceConfig } from "../src/config/workspace.js";
+import { updateAppConfig } from "../src/config/app.js";
 import { rotateLog } from "../src/logger.js";
 import { type FindBrowserDeps, findBrowser, parseRegistryDefault } from "../src/util/browser.js";
 import { KeyedQueue } from "../src/util/keyed-queue.js";
@@ -230,31 +229,5 @@ describe("updateAppConfig", () => {
     const next = await updateAppConfig((c) => ({ ...c, pairedExtensionId: "a".repeat(32) }), base, path);
     expect(next).toMatchObject({ port: 18000, pairedExtensionId: "a".repeat(32) });
     expect(JSON.parse(await readFile(path, "utf8")).port).toBe(18000);
-  });
-
-  it("moves an earlier build's daemon.json to config.json, keeping the pairing and dropping the idle timeout", async () => {
-    const dir = await mkdtemp(join(root, "legacy-"));
-    const old = {
-      schemaVersion: 1,
-      host: "127.0.0.1",
-      port: 17373,
-      mcpToken: "t".repeat(43),
-      pairingToken: "ABCD-EFGH-JKLM-NPQR",
-      pairedExtensionId: "a".repeat(32),
-      workspace: join(root, "ws"),
-      idleTimeoutMinutes: 15,
-    };
-    await writeFile(join(dir, "daemon.json"), JSON.stringify(old));
-    const config = await loadAppConfig(join(dir, "config.json"));
-    expect(config).toMatchObject({ pairedExtensionId: "a".repeat(32), port: 17373 });
-    expect(config).not.toHaveProperty("idleTimeoutMinutes");
-    expect((await readdir(dir)).sort()).toEqual(["config.json"]);
-    expect(await loadAppConfig(join(dir, "missing", "config.json"))).toBeNull();
-  });
-});
-
-describe("WorkspaceConfig", () => {
-  it("drops the old forms.focusBrowser rather than failing on it", () => {
-    expect(WorkspaceConfig.parse({ schemaVersion: 1, forms: { focusBrowser: "off" } })).not.toHaveProperty("forms");
   });
 });

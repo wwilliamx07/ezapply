@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { ErrorCode, EzError } from "@ezapply/protocol";
@@ -26,9 +26,6 @@ export type AppConfig = z.infer<typeof AppConfig>;
 
 export const DEFAULT_PORT = 17373;
 
-/** The config's name in earlier builds, which ran the companion as a background daemon. */
-const LEGACY_CONFIG_FILE = "daemon.json";
-
 export function appDir(): string {
   return process.env.EZAPPLY_APP_DIR ?? join(homedir(), ".ezapply");
 }
@@ -53,24 +50,14 @@ export function newPairingToken(): string {
   return out;
 }
 
-/**
- * The config, or null when there is none. A damaged file fails with what to do, not a stack trace. A config
- * from a build that called it daemon.json is moved to config.json first, so the pairing carries over.
- */
+/** The config, or null when there is none. A damaged file fails with what to do, not a stack trace. */
 export async function loadAppConfig(path = appConfigPath()): Promise<AppConfig | null> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    const legacy = join(dirname(path), LEGACY_CONFIG_FILE);
-    if (legacy === path) return null;
-    try {
-      await rename(legacy, path);
-    } catch {
-      return null;
-    }
-    return loadAppConfig(path);
+    return null;
   }
   let json: unknown;
   try {

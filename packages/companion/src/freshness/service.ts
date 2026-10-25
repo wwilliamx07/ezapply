@@ -407,19 +407,11 @@ export class FreshnessService {
         notChecked.push({ what: `templates/${kind}`, reason: `${src.from}: ${src.unreadable}` });
         continue;
       }
-      if (src.recorded === null && src.matchesCopy) {
-        // Imported before the hash was recorded, and still the same: record it, nothing to report.
-        await this.templates.setSourceHash(kind, src.hash);
-        continue;
-      }
       if (src.recorded === src.hash) continue;
       changes.push({
         id: `template-source:${kind}@${src.hash}`,
         kind: "template-source",
-        summary:
-          src.recorded === null
-            ? `The ${kind} template's source (${src.from}) differs from the copy in templates/${kind}/.`
-            : `The ${kind} template's source (${src.from}) changed since it was imported.`,
+        summary: `The ${kind} template's source (${src.from}) changed since it was imported.`,
         detail:
           "Update re-imports it from its source and builds it (the current copy moves to templates/.old/); keeping " +
           "the copy (a fix made in the workspace) marks it done.",

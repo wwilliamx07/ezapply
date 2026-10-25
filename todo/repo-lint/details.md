@@ -1,8 +1,7 @@
 # Lint for broken Markdown links and stale comments: details
 
 - A first pass with the stale-name rule over `packages/*/src` hits only ids from employers' pages (a Dayforce
-  control id, SuccessFactors widget names, Phenom job ids): that's what the allowlist is for. Comments on the upgrade
-  shims are current until "Remove the upgrade shims" deletes their code.
+  control id, SuccessFactors widget names, Phenom job ids): that's what the allowlist is for.
 - A name only in comments, with no code using it, is the strongest sign; a name used in another package counts as
   existing.
 - The skills' tool names and call shapes stay with `cli/test/skill-calls.test.ts`; the checker doesn't repeat it.

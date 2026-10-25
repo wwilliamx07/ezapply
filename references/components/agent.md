@@ -278,9 +278,7 @@ though it may show the ones there for review and attach them; each tells the use
 for the rest. The filling line also says the form's own text (experience descriptions, free-text answers) is its
 to tailor: without that, Claude read "doesn't write documents" as covering them and pasted the profile's
 highlights unchanged. The first time the service reads its file in a run, `general` gets its record if it has none (a new,
-unstarted session), so it's always there for the panel to show and reset, even in a workspace that never used it.
-An older build kept one conversation per posting under the bare id; on that same first read, such a conversation becomes the posting's tailoring one, its logs moved to
-`<posting id>/tailor/`, so its history stays in the panel. Sending:
+unstarted session), so it's always there for the panel to show and reset, even in a workspace that never used it. Sending:
 - starts the conversation's process when none runs, with `--resume` once Claude Code has had its session (it
   answered once: `started`), else `--session-id`;
 - **while a card of that conversation is open, answers the card instead,** as typing does at Claude Code's own

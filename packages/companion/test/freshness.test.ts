@@ -271,22 +271,6 @@ describe("FreshnessService: templates and profile", () => {
     );
   });
 
-  it("records the hash of a template imported before it existed when the source still matches", async () => {
-    const file = ws.path("templates", "resume", "template.json");
-    const { sourceHash: _, ...old } = JSON.parse(await readFile(file, "utf8"));
-    await writeFile(file, JSON.stringify(old));
-    // The import added a `% !TEX program` line to the copy (\pdfgentounicode): that's not a difference.
-    expect(await readFile(ws.path("templates", "resume", "resume.tex"), "utf8")).toMatch(/^% !TEX program = pdflatex/);
-    expect((await service().changes()).changes).toEqual([]);
-    expect((await templates.templateMeta("resume"))?.sourceHash).toMatch(/^[0-9a-f]{12}$/);
-
-    await writeFile(file, JSON.stringify(old));
-    await writeFile(join(src, "resume.tex"), "\\documentclass{article}\n\\begin{document}\n\\end{document}\n");
-    const [change] = (await service().changes()).changes;
-    expect(change?.summary).toMatch(/differs from the copy/);
-    await templates.setSourceHash("resume", (change?.id ?? "").split("@")[1] ?? "");
-  });
-
   it("lists a source folder that's gone under notChecked", async () => {
     const file = ws.path("templates", "resume", "template.json");
     const meta = JSON.parse(await readFile(file, "utf8"));

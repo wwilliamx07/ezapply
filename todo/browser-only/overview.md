@@ -7,4 +7,3 @@
 **Plan.**
 - List what still needs the user to talk to the agent or use a terminal.
 - Move each into the browser (the side panel, the setup and review pages).
-- "The side panel's later parts" is one piece of this.

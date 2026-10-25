@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { appendFile, mkdir, readFile, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   type AgentEvent,
   AgentKind,
@@ -126,7 +126,7 @@ export class AgentService {
   /** Each agent's models, listed once (`AgentBackend.models`), when it has a list. */
   private readonly modelLists = new Map<AgentKind, Promise<AgentModelOption[]>>();
   private readonly listedModels: Partial<Record<AgentKind, AgentModelOption[]>> = {};
-  private upgraded: Promise<void> | null = null;
+  private generalReady: Promise<void> | null = null;
   /** Each conversation's last process asked to end, until it has: the next one starts after it, so two never share a session. */
   private readonly closing = new Map<string, Promise<void>>();
 
@@ -191,7 +191,7 @@ export class AgentService {
 
   /** The conversation a Claude Code session belongs to, when it's one of the panel's. */
   async conversationOf(sessionId: string): Promise<string | undefined> {
-    await this.upgrade();
+    await this.ensureGeneral();
     for (const l of this.live.values()) if (l.sessionId === sessionId) return l.key;
     const file = await this.readFile();
     return Object.entries(file.conversations).find(([, c]) => c.sessionId === sessionId)?.[0];
@@ -203,7 +203,7 @@ export class AgentService {
     const body = text.trim();
     if (!body) throw new EzError(ErrorCode.BadRequest, "The message is empty.");
     if (!this.available) throw unavailable();
-    await this.upgrade();
+    await this.ensureGeneral();
     // While a card of this conversation is open, the message answers it, as typing does at Claude Code's own
     // prompts: a question's reply (delivered as its result), or a deny whose reason is the message (the agent sits
     // in the permission call meanwhile, and a message would wait for it).
@@ -281,7 +281,7 @@ export class AgentService {
    */
   async reset(key: string): Promise<void> {
     checkKey(key);
-    await this.upgrade();
+    await this.ensureGeneral();
     this.kill(key);
     this.opts.needs.withdraw(key);
     const { agent } = await this.settings();
@@ -291,12 +291,12 @@ export class AgentService {
 
   /**
    * Forget a posting's conversations for good (the posting was deleted): their process ends, their open cards are
-   * withdrawn, and their records and logs go (with a single conversation an older build kept under the bare id).
+   * withdrawn, and their records and logs go.
    */
   async forgetPosting(postingId: string): Promise<void> {
     if (!postingConversation(`${postingId}/tailor`))
       throw new EzError(ErrorCode.BadRequest, `Not a posting: ${postingId}`);
-    const keys = new Set([postingId, `${postingId}/tailor`, `${postingId}/fill`]);
+    const keys = new Set([`${postingId}/tailor`, `${postingId}/fill`]);
     for (const key of keys) {
       this.kill(key);
       this.opts.needs.withdraw(key);
@@ -312,7 +312,7 @@ export class AgentService {
   /** A conversation's events so far (its current session), oldest first; a message's latest state wins. */
   async history(key: string, limit = 500): Promise<AgentEvent[]> {
     checkKey(key);
-    await this.upgrade();
+    await this.ensureGeneral();
     const c = (await this.readFile()).conversations[key];
     if (!c) return [];
     let raw: string;
@@ -342,7 +342,7 @@ export class AgentService {
 
   /** The session's spend so far (Claude Code's estimate), or its tokens (an agent that reports no cost), when known. */
   async usage(key: string): Promise<{ totalCostUsd?: number; totalTokens?: number }> {
-    await this.upgrade();
+    await this.ensureGeneral();
     // A turn's usage is written as it ends: read it after that write.
     await this.fileWrites;
     const c = (await this.readFile()).conversations[key];
@@ -424,37 +424,18 @@ export class AgentService {
 
   // ---- internals ----
 
-  /**
-   * Once per run: the general conversation gets its record if it has none, so it's always there to show and reset.
-   * And an older build kept one conversation per posting, under the bare posting id. It becomes the posting's
-   * tailoring conversation, its logs moved to `<posting>/tailor/`, so its history stays in the panel.
-   */
-  private upgrade(): Promise<void> {
-    this.upgraded ??= (async () => {
-      if (!(await this.readFile()).conversations[GENERAL_CONVERSATION]) {
-        const { agent } = await this.settings();
-        await this.updateFile((f) =>
-          f.conversations[GENERAL_CONVERSATION] ? f : renewed(f, GENERAL_CONVERSATION, agent),
-        );
-      }
-      const bare = Object.keys((await this.readFile()).conversations).filter(
-        (k) => k !== GENERAL_CONVERSATION && !k.includes("/") && postingConversation(`${k}/tailor`),
+  /** Once per run: the general conversation gets its record if it has none, so it's always there to show and reset. */
+  private ensureGeneral(): Promise<void> {
+    this.generalReady ??= (async () => {
+      if ((await this.readFile()).conversations[GENERAL_CONVERSATION]) return;
+      const { agent } = await this.settings();
+      await this.updateFile((f) =>
+        f.conversations[GENERAL_CONVERSATION] ? f : renewed(f, GENERAL_CONVERSATION, agent),
       );
-      for (const id of bare) {
-        const dir = this.opts.workspace.path(AGENT_DIR, id);
-        const logs = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".jsonl"));
-        await mkdir(join(dir, "tailor"), { recursive: true });
-        for (const n of logs) await rename(join(dir, n), join(dir, "tailor", n));
-        await this.updateFile((f) => {
-          const { [id]: old, ...rest } = f.conversations;
-          const key = `${id}/tailor`;
-          return { ...f, conversations: old && !rest[key] ? { ...rest, [key]: old } : rest };
-        });
-      }
     })().catch((err) =>
-      this.opts.log.warn({ err: (err as Error).message }, "agent: could not move older conversations"),
+      this.opts.log.warn({ err: (err as Error).message }, "agent: could not record the general conversation"),
     );
-    return this.upgraded;
+    return this.generalReady;
   }
 
   /** The conversation's running process, or one started for it (once, however many sends wait on it). */

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppConfig, agentFileStatus } from "@ezapply/companion";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { initWorkspace, writeLauncher } from "../src/workspace-init.js";
+import { initWorkspace, RETIRED_SKILLS, writeLauncher } from "../src/workspace-init.js";
 
 let root: string;
 let config: AppConfig;
@@ -160,19 +160,8 @@ describe("skills", () => {
     }
   });
 
-  it("removes ezapply's old bare-named skills but keeps the user's own", async () => {
-    await mkdir(join(skills(), "resume"), { recursive: true });
-    await writeFile(join(skills(), "resume", "SKILL.md"), "---\nname: resume\n---\n1. `posting_active`\n");
-    await mkdir(join(skills(), "apply"), { recursive: true });
-    await writeFile(join(skills(), "apply", "SKILL.md"), "---\nname: apply\n---\nMy own apply notes.\n");
-
-    const report = await initWorkspace(config);
-    await expect(stat(join(skills(), "resume"))).rejects.toThrow();
-    expect(await readFile(join(skills(), "apply", "SKILL.md"), "utf8")).toContain("My own apply notes.");
-    expect(report.updated.some((u) => u.includes("renamed to ezapply-resume"))).toBe(true);
-  });
-
   it("removes a retired skill an earlier init copied, for both agents, but keeps a user's skill of that name", async () => {
+    RETIRED_SKILLS["ezapply-repos"] = "the setup page chooses repos";
     const agents = join(config.workspace, ".agents", "skills");
     for (const dir of [skills(), agents]) {
       await mkdir(join(dir, "ezapply-repos"), { recursive: true });
@@ -187,19 +176,7 @@ describe("skills", () => {
     await writeFile(join(skills(), "ezapply-repos", "SKILL.md"), "---\nname: ezapply-repos\n---\nMine.\n");
     await initWorkspace(config);
     expect(await readFile(join(skills(), "ezapply-repos", "SKILL.md"), "utf8")).toContain("Mine.");
-  });
-});
-
-describe("the agent settings an older build kept", () => {
-  it("are removed, since the extension keeps them now; the conversations stay", async () => {
-    const agent = join(config.workspace, "agent");
-    await mkdir(agent, { recursive: true });
-    await writeFile(join(agent, "settings.json"), JSON.stringify({ schemaVersion: 1, effort: "high" }));
-    await writeFile(join(agent, "conversations.json"), "{}");
-    const report = await initWorkspace(config);
-    await expect(stat(join(agent, "settings.json"))).rejects.toThrow();
-    expect(await readFile(join(agent, "conversations.json"), "utf8")).toBe("{}");
-    expect(report.updated.some((u) => u.includes("the extension keeps the agent settings"))).toBe(true);
+    delete RETIRED_SKILLS["ezapply-repos"];
   });
 });
 
@@ -232,42 +209,5 @@ describe("autofill-timing.yaml", () => {
     const report = await initWorkspace(config);
     expect(report.kept).toContain(path);
     expect(await readFile(path, "utf8")).toBe("scale: 0.5\n");
-  });
-});
-
-describe("ezapply.config.json", () => {
-  it("carries debug mode's old switch (debug.autofill) over to debug.enabled, keeping the rest", async () => {
-    await initWorkspace(config);
-    const path = join(config.workspace, "ezapply.config.json");
-    const cur = JSON.parse(await readFile(path, "utf8"));
-    await writeFile(path, JSON.stringify({ ...cur, debug: { autofill: true, markup: "always" } }));
-    const report = await initWorkspace(config);
-    expect(report.updated).toContain(`${path} (debug.autofill → debug.enabled (on))`);
-    expect(JSON.parse(await readFile(path, "utf8")).debug).toEqual({ enabled: true, markup: "always" });
-    // Once moved, nothing more to do; a debug.enabled already set wins over a stale old switch.
-    expect((await initWorkspace(config)).updated).not.toContain(expect.stringContaining("debug.autofill"));
-    await writeFile(path, JSON.stringify({ ...cur, debug: { autofill: true, enabled: false } }));
-    await initWorkspace(config);
-    expect(JSON.parse(await readFile(path, "utf8")).debug).toEqual({ enabled: false });
-  });
-
-  it("removes forms.focusBrowser, which focus emulation replaced", async () => {
-    await initWorkspace(config);
-    const path = join(config.workspace, "ezapply.config.json");
-    const cur = JSON.parse(await readFile(path, "utf8"));
-    await writeFile(path, JSON.stringify({ ...cur, forms: { focusBrowser: "off" } }));
-    const report = await initWorkspace(config);
-    expect(report.updated).toContain(`${path} (forms.focusBrowser removed (focus emulation replaced it))`);
-    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty("forms");
-  });
-
-  it("removes context.restartOnCapture, which only `ezapply chat` read", async () => {
-    await initWorkspace(config);
-    const path = join(config.workspace, "ezapply.config.json");
-    const cur = JSON.parse(await readFile(path, "utf8"));
-    await writeFile(path, JSON.stringify({ ...cur, context: { restartOnCapture: false } }));
-    const report = await initWorkspace(config);
-    expect(report.updated).toContain(`${path} (context.restartOnCapture removed (\`ezapply chat\` is gone))`);
-    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty("context");
   });
 });

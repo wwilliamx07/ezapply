@@ -28,27 +28,16 @@ const KnowledgeMeta = z.object({
 type KnowledgeMeta = z.infer<typeof KnowledgeMeta>;
 
 /** knowledge/<key>/claims.yaml */
-const Claim = z.preprocess(
-  // Claims used to cite `evidence: [{ path, lines?, sha?, hash? }]`; read that as its paths.
-  (raw) => {
-    if (!raw || typeof raw !== "object" || "files" in raw || !("evidence" in raw)) return raw;
-    const { evidence, ...rest } = raw as { evidence: unknown };
-    return {
-      ...rest,
-      files: Array.isArray(evidence) ? evidence.map((e) => (e as { path?: unknown })?.path) : evidence,
-    };
-  },
-  z.object({
-    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
-    claim: z.string().min(10),
-    skills: z.array(z.string()).default([]),
-    impact: z.string().nullable().default(null),
-    /** Repo paths (files or folders) that show the claim: what a re-index checks when they change. */
-    files: z.array(z.string().min(1)).min(1),
-    confidence: z.enum(["high", "medium"]),
-    user_edited: z.boolean().default(false),
-  }),
-);
+const Claim = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "kebab-case"),
+  claim: z.string().min(10),
+  skills: z.array(z.string()).default([]),
+  impact: z.string().nullable().default(null),
+  /** Repo paths (files or folders) that show the claim: what a re-index checks when they change. */
+  files: z.array(z.string().min(1)).min(1),
+  confidence: z.enum(["high", "medium"]),
+  user_edited: z.boolean().default(false),
+});
 const ClaimsFile = z.object({ schemaVersion: z.literal(1), repo: z.string(), claims: z.array(Claim) });
 
 /** One file changed since the last index; `added`/`removed` are null for a binary file. */
@@ -395,7 +384,6 @@ export class RepoService {
         JSON.stringify(claims.errors.slice(0, 5)),
       );
     }
-    await this.migrateEvidence(fullName);
     const meta: KnowledgeMeta = {
       schemaVersion: 1,
       repo: fullName,
@@ -430,21 +418,6 @@ export class RepoService {
       }
     }
     return { valid: errors.length === 0, claims: loaded.claims.length, errors };
-  }
-
-  /** Rewrite claims still in the old `evidence` form as `files`, keeping the file's comments and layout. */
-  private async migrateEvidence(fullName: string): Promise<void> {
-    const file = join(this.knowledgePath(fullName), "claims.yaml");
-    const doc = parseDocument(await readFile(file, "utf8"));
-    const parsed = ClaimsFile.parse(doc.toJS());
-    let changed = false;
-    for (const [i, c] of parsed.claims.entries()) {
-      if (!doc.hasIn(["claims", i, "evidence"])) continue;
-      doc.deleteIn(["claims", i, "evidence"]);
-      doc.setIn(["claims", i, "files"], doc.createNode(c.files, { flow: true }));
-      changed = true;
-    }
-    if (changed) await writeFile(file, doc.toString({ lineWidth: 0 }), "utf8");
   }
 
   private async loadClaims(

@@ -44,7 +44,6 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
     `${JSON.stringify(defaultWorkspaceConfig(), null, 2)}\n`,
     report,
   );
-  await migrateWorkspaceConfig(join(root, "ezapply.config.json"), report);
   // The user's to tune; every setting starts commented out, so defaults changed in a later build still apply.
   await writeIfMissing(join(root, TIMING_FILE), timingFileTemplate(), report);
 
@@ -86,13 +85,7 @@ export async function initWorkspace(config: AppConfig, opts: InitOptions = {}): 
     await cp(skillsSrc, join(root, ".claude", "skills"), { recursive: true, force: true });
     report.updated.push(".claude/skills/");
   }
-  await removeLegacySkills(join(root, ".claude", "skills"), report);
-  // The panel's agent settings were kept here before the extension kept them; nothing reads this any more.
-  const oldSettings = join(root, "agent", "settings.json");
-  if (await exists(oldSettings)) {
-    await rm(oldSettings, { force: true });
-    report.updated.push(`${oldSettings} (removed: the extension keeps the agent settings)`);
-  }
+  await removeRetiredSkills(join(root, ".claude", "skills"), report);
   await initAntigravity(root, skillsSrc, report, opts.antigravityHome);
   await initCodex(root, report);
   await writeLauncher(root, report);
@@ -209,30 +202,12 @@ export async function writeLauncher(root: string, report: InitReport, platform =
 }
 
 /**
- * ezapply's skills before 0.2 had bare names that clashed with Claude Code: a project `resume` skill replaces
- * the built-in /resume, and a personal skill of the same name overrides a project one. They're now
- * `ezapply-<name>`. Remove an old folder only when its SKILL.md uses ezapply's tools, so a skill of the
- * user's own that happens to share a name is kept.
+ * Skills ezapply no longer ships, each with why: the copy step only adds and overwrites, so an earlier init's copy
+ * would stay and keep running. A renamed or retired skill goes here.
  */
-const LEGACY_SKILLS = ["onboard", "repos", "index-repo", "resume", "cover-letter", "bundle", "apply", "answers"];
-/**
- * Skills ezapply no longer ships: the copy step only adds and overwrites, so an earlier init's copy would stay and
- * keep running.
- */
-const RETIRED_SKILLS: Record<string, string> = {
-  "ezapply-repos": "the setup page chooses repos",
-  "ezapply-onboard": "the setup page and the panel's Workspace changes card do it",
-  "ezapply-bundle": "bundle_build builds the bundle",
-};
+export const RETIRED_SKILLS: Record<string, string> = {};
 const EZAPPLY_TOOL =
   /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check|workspace_changes)\b/;
-
-async function removeLegacySkills(skillsDir: string, report: InitReport): Promise<void> {
-  for (const name of LEGACY_SKILLS) {
-    await removeIfOurs(join(skillsDir, name), `renamed to ezapply-${name}`, report);
-  }
-  await removeRetiredSkills(skillsDir, report);
-}
 
 async function removeRetiredSkills(skillsDir: string, report: InitReport): Promise<void> {
   for (const [name, why] of Object.entries(RETIRED_SKILLS)) await removeIfOurs(join(skillsDir, name), why, report);
@@ -290,13 +265,6 @@ const AGENTS_IMPORT = "@[EZAPPLY.md](EZAPPLY.md)\n@[preferences](profile/prefere
 async function ensureClaudeMd(path: string, report: InitReport): Promise<void> {
   if (await ensureImport(path, IMPORT_LINE, report)) return;
   const current = await readFile(path, "utf8");
-  if (current.startsWith("# ezapply workspace")) {
-    // Written by ezapply 0.1 before the managed/user split: keep a backup, replace with the stub.
-    await writeFileAtomic(`${path}.bak`, current);
-    await writeFileAtomic(path, await readFile(join(TEMPLATES, "workspace", "CLAUDE.md"), "utf8"));
-    report.updated.push(`${path} (previous version saved as CLAUDE.md.bak)`);
-    return;
-  }
   await writeFileAtomic(path, `${IMPORT_LINE}\n\n${current}`);
   report.updated.push(`${path} (added ${IMPORT_LINE} import)`);
 }
@@ -332,44 +300,6 @@ async function installDefaultCoverTemplate(dest: string, report: InitReport): Pr
   }
   await cp(join(TEMPLATES, "cover"), dest, { recursive: true });
   report.created.push(`${dest} (default cover letter template)`);
-}
-
-/** Upgrade untouched defaults written by older versions. Anything the user changed is left alone. */
-async function migrateWorkspaceConfig(path: string, report: InitReport): Promise<void> {
-  const raw = JSON.parse(await readFile(path, "utf8")) as {
-    tex?: Record<string, unknown>;
-    debug?: Record<string, unknown>;
-    forms?: Record<string, unknown>;
-    context?: Record<string, unknown>;
-  };
-  const changes: string[] = [];
-  const tex = raw.tex;
-  // 0.1 defaulted to latexmk, which fails on MiKTeX without Perl; "auto" falls back to xelatex.
-  if (tex && tex.engine === "latexmk" && tex.timeoutSeconds === undefined) {
-    tex.engine = "auto";
-    changes.push("tex.engine: latexmk → auto");
-  }
-  // Debug mode's switch was debug.autofill until it became debug.enabled. The config schema drops keys it
-  // doesn't know, so an old switch left in place turns debug mode off without a word.
-  const debug = raw.debug;
-  if (debug && "autofill" in debug) {
-    if (debug.enabled === undefined && typeof debug.autofill === "boolean") debug.enabled = debug.autofill;
-    delete debug.autofill;
-    changes.push(`debug.autofill → debug.enabled (${debug.enabled === true ? "on" : "off"})`);
-  }
-  // forms.focusBrowser brought the browser window to the front before a call; focus emulation replaced it.
-  if (raw.forms && Object.keys(raw.forms).every((k) => k === "focusBrowser")) {
-    delete raw.forms;
-    changes.push("forms.focusBrowser removed (focus emulation replaced it)");
-  }
-  // context.restartOnCapture restarted the terminal's Claude on a new posting under `ezapply chat`, which is gone.
-  if (raw.context && Object.keys(raw.context).every((k) => k === "restartOnCapture")) {
-    delete raw.context;
-    changes.push("context.restartOnCapture removed (`ezapply chat` is gone)");
-  }
-  if (changes.length === 0) return;
-  await writeJsonAtomic(path, raw);
-  report.updated.push(`${path} (${changes.join("; ")})`);
 }
 
 function union(a: string[] | undefined, b: string[]): string[] {

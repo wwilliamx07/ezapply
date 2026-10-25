@@ -37,9 +37,7 @@ claims:
 tailoring works from the claim text), so line ranges would cost tokens to write and re-verify for no use, and a
 hash of the cited lines would flag any edit under a claim, reformatting included, without saying whether the
 claim still holds. What a re-index needs is which claims a change might affect, and file paths answer that:
-`repo_sync` lists the claims whose `files` include a changed path (`affectedClaims`). Claims in the older
-`evidence: [{ path, lines, hash }]` form are still read (each entry as its `path`) and are rewritten as `files`
-by the next `knowledge_mark_indexed`, keeping the file's comments; `schemaVersion` is 1 for both.
+`repo_sync` lists the claims whose `files` include a changed path (`affectedClaims`).
 
 ## Reading them
 `claims_list` returns every repo's claims as compact text (`RepoService.allClaims`): the repo once as a

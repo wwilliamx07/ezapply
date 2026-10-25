@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -124,23 +124,9 @@ describe("RepoService", () => {
     // A folder counts as a path.
     await writeFile(join(dir, "claims.yaml"), claims("[src/]"));
     expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [] });
-  });
 
-  it("reads claims in the old evidence form, and rewrites them as files when marking indexed", async () => {
-    const dir = repos.knowledgePath("jane/proj");
-    await writeFile(
-      join(dir, "claims.yaml"),
-      "# written by the index skill\nschemaVersion: 1\nrepo: jane/proj\nclaims:\n  - id: rate-limiter\n" +
-        "    claim: Implemented a sliding-window rate limiter\n    evidence:\n" +
-        '      - { path: src/limiter.ts, lines: "1-3", hash: 0123456789ab }\n    confidence: high\n',
-    );
-    expect(await repos.checkClaims("jane/proj")).toEqual({ valid: true, claims: 1, errors: [] });
-    const meta = await repos.markIndexed("jane/proj");
-    expect(meta.indexedSha).toMatch(/^[0-9a-f]{40}$/);
-    const migrated = await readFile(join(dir, "claims.yaml"), "utf8");
-    expect(migrated).toMatch(/^# written by the index skill/);
-    expect(migrated).toContain("files: [ src/limiter.ts ]");
-    expect(migrated).not.toMatch(/evidence|hash|lines/);
+    await writeFile(join(dir, "claims.yaml"), claims("[src/limiter.ts]"));
+    expect((await repos.markIndexed("jane/proj")).indexedSha).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it("lists every claim compactly: repo once, id and claim, impact only when there is one", async () => {
@@ -149,7 +135,7 @@ describe("RepoService", () => {
     await writeFile(
       join(other, "claims.yaml"),
       "schemaVersion: 1\nrepo: acme/app\nclaims:\n  - id: payments\n    claim: >-\n      Integrated Stripe\n      Checkout\n" +
-        '    impact: "$20k processed"\n    evidence:\n      - path: a.ts\n    confidence: high\n',
+        '    impact: "$20k processed"\n    files: [a.ts]\n    confidence: high\n',
     );
     const broken = repos.knowledgePath("acme/broken");
     await mkdir(broken, { recursive: true });

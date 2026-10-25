@@ -46,18 +46,16 @@ the resolve hook in `test/module-log.mjs`, so a top-level import of the index ca
 Idempotent. User-owned files are never overwritten; ezapply-managed ones are refreshed.
 
 1. **`config.json`**: port (flag, existing, or 17373), and existing MCP token, pairing code and pinned id
-   kept; new random ones otherwise. Workspace defaults to `~/ezapply-home`. Written with mode 0600. An earlier
-   build's `daemon.json` is moved to `config.json` when the config is loaded (so the pairing carries over).
+   kept; new random ones otherwise. Workspace defaults to `~/ezapply-home`. Written with mode 0600.
 2. **Folders**: `WORKSPACE_DIRS` (`profile`, `templates/resume`, `templates/cover`, `library`, `knowledge`,
    `postings`, `repo-cache`, `.claude/skills`).
-3. **`ezapply.config.json`** if missing, then its upgrades from older builds (`migrateWorkspaceConfig`: untouched
-   old defaults, renamed and removed settings; each, and why, in
-   [data-formats](../data-formats.md#ezapplyconfigjson-companionsrcconfigworkspacets)). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
+3. **`ezapply.config.json`** if missing
+   ([data-formats](../data-formats.md#ezapplyconfigjson-companionsrcconfigworkspacets)). **`autofill-timing.yaml`** if missing (`timingFileTemplate`): every wait
    commented out at its default, so a default changed in a later build still applies to an untouched line.
 4. **`EZAPPLY.md`** (managed, always rewritten) from `templates/workspace/EZAPPLY.md`, with `{{EZAPPLY}}`
    replaced by `node "<absolute path of dist/main.js>"` so Claude can run the commands.
 5. **`CLAUDE.md`** (the user's): created as a stub that imports `@EZAPPLY.md`; an existing one gets the import
-   line added; a pre-split 0.1 file is backed up to `CLAUDE.md.bak` and replaced.
+   line added.
 6. **Default cover letter template** into `templates/cover/` only if that folder holds nothing but dotfiles.
 7. **`.mcp.json`**: the `ezapply` server entry is set to
    `{ type: "stdio", command: <node>, args: [<dist/main.js>, "mcp"] }`; other servers are kept.
@@ -65,14 +63,11 @@ Idempotent. User-owned files are never overwritten; ezapply-managed ones are ref
    `permissions.allow` includes `mcp__ezapply`, `permissions.deny` includes ezapply's deny rules, and
    `autoMemoryEnabled` is `false` unless the user set it (the rules and why:
    [workspace](workspace.md#claude-code-settings)).
-9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Then
-   the bare-named skills of earlier versions (`onboard`, `resume`, `apply`…) are removed, but only when
-   their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`, `workspace_check`…); a user's own
-   skill with one of those names is kept and reported. Skills ezapply no longer ships (`RETIRED_SKILLS`, each
-   with what replaced it) are removed the same way from `.claude/skills/` and `.agents/skills/`: the copy only
-   adds and overwrites, so an earlier init's copy would otherwise stay and run.
-   Also `agent/settings.json`, where an earlier version kept the panel's agent settings, is removed: the
-   extension keeps them now ([agent](agent.md#permission-mode-model-and-effort)).
+9. **Skills**: `templates/skills/*` copied to `.claude/skills/` (overwriting ezapply's own skills). Skills
+   ezapply no longer ships (`RETIRED_SKILLS`, each with why; none at present) are removed from `.claude/skills/`
+   and `.agents/skills/`, but only when their `SKILL.md` uses an ezapply tool (`posting_active`, `tex_compile`,
+   `workspace_check`…); a user's own skill of that name is kept and reported. The copy only adds and overwrites,
+   so an earlier init's copy would otherwise stay and run.
 10. **Antigravity's files** (`initAntigravity`): `AGENTS.md` (the user's) created as a stub including `EZAPPLY.md`
    and the preferences, or an existing one given those lines; the skills copied to `.agents/skills/`; the
    `ezapply` server in `.agents/mcp_config.json`; and, when `~/.gemini/antigravity-cli/` exists, ezapply's allow and deny
