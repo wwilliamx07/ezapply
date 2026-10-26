@@ -34,7 +34,6 @@ then an Oracle run.
 | 10 | [Auto mode](auto-mode/overview.md) | High if trusted, else Low | XL | Tracker, job search, alerts; a change to `philosophy.md` |
 | — | [A UI fuzzer with a map of the UI](ui-fuzzer/overview.md) | — | ~L | — |
 | — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
-| — | [Lint for broken Markdown links and stale comments](repo-lint/overview.md) | Low | S | — |
 
 Why this order:
 - **Bugs first**, in the table's order: they cost turns or quality on every run.
@@ -60,5 +59,4 @@ Why this order:
   `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
   adds no database. Tracker, Job
   search, Job alerts, Auto mode.
-- **Upkeep:** A UI fuzzer with a map of the UI, Lint for broken Markdown links and stale
-  comments.
+- **Upkeep:** A UI fuzzer with a map of the UI.

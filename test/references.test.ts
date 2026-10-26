@@ -1,13 +1,23 @@
-// The parts of references/CLAUDE.md's rules a test can check: links and anchors resolve,
-// the index lists every page, and every MCP tool, site and skill has its place in the reference.
+// The parts of references/CLAUDE.md's rules a test can check: links and anchors resolve in every tracked Markdown
+// file, the index lists every page, and every MCP tool, site and skill has its place in the reference.
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { WORKSPACE_DIRS } from "../packages/companion/src/workspace/workspace.js";
 import { SITES } from "../packages/sites/src/registry.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const REFS = join(ROOT, "references");
+const WORKSPACE_TEMPLATE = join(ROOT, "packages", "cli", "templates", "workspace");
+
+/** A link in a workspace template may name a user file the workspace's folders hold; it isn't in the repo. */
+function inWorkspaceDirs(file: string, target: string): boolean {
+  if (dirname(file) !== WORKSPACE_TEMPLATE) return false;
+  const rel = relative(WORKSPACE_TEMPLATE, target).replaceAll("\\", "/");
+  return WORKSPACE_DIRS.some((d) => rel.startsWith(`${d}/`));
+}
 
 function markdownIn(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -17,18 +27,12 @@ function markdownIn(dir: string): string[] {
   });
 }
 
-/** Every Markdown file an agent working on the repo reads: the README, the references, the todo and the CLAUDE.md files. */
+/** Every tracked Markdown file in the repo. */
 function repoDocs(): string[] {
-  const nested = markdownIn(join(ROOT, "packages")).filter(
-    (p) => p.endsWith("CLAUDE.md") && !p.includes(join("cli", "templates")),
-  );
-  return [
-    join(ROOT, "CLAUDE.md"),
-    join(ROOT, "README.md"),
-    ...markdownIn(REFS),
-    ...markdownIn(join(ROOT, "todo")),
-    ...nested,
-  ];
+  return execFileSync("git", ["ls-files", "*.md"], { cwd: ROOT, encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean)
+    .map((p) => join(ROOT, p));
 }
 
 const read = (p: string) => readFileSync(p, "utf8");
@@ -69,6 +73,7 @@ describe("references", () => {
           isFile = statSync(target).isFile();
           if (!isFile && !statSync(target).isDirectory()) throw new Error();
         } catch {
+          if (inWorkspaceDirs(file, target)) continue;
           broken.push(`${where} (no such file)`);
           continue;
         }
