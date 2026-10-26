@@ -21,6 +21,10 @@ of that directory. Create one if it doesn't exist.
 While working on a change, run only the test files it affects, with `npx vitest run <files>` and no build.
 Run the full `npm test` (build, then every test) once, only before committing.
 
+## Build every feature on its own branch
+
+Start each feature (or fix) on a new branch off `main`, never on `main` itself. One feature per branch.
+
 ## Commit after every feature build
 
 When a feature (or fix) is built, its tests pass and `references/` and `todo/` are updated, commit it before
