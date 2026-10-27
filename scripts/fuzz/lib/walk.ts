@@ -730,6 +730,14 @@ export class Contexts {
         (url) => /^https?:/.test(url.href) && !url.href.startsWith(this.origin),
         (route) => route.abort("blockedbyclient"),
       );
+      // A mail or phone link is no request to block: the browser hands it to the system's mail or phone app. Its
+      // click is cancelled once the page's own handlers have had it.
+      await c.addInitScript(() =>
+        addEventListener("click", (e) => {
+          const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+          if (a && /^(mailto|tel):/i.test(a.href)) e.preventDefault();
+        }),
+      );
       return c;
     }
     return new Promise((ok) => this.waiting.push(ok));
