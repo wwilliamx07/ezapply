@@ -22,7 +22,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 | A file ezapply reads or writes | [data-formats.md](data-formats.md), [How to…](development.md#how-to) (migrations) |
 | A skill or `EZAPPLY.md` | [workspace.md](components/workspace.md), [How to…](development.md#how-to) |
 | The side panel and its agent | [agent.md](components/agent.md), [ui.md](components/ui.md), [the side panel](components/extension.md#the-side-panel) |
-| Anything on screen in the panel, the review page or the setup page | Its pages in [ui-map/](ui-map/README.md), then [the UI fuzzer](development.md#the-ui-fuzzer): update the map, run `npm run fuzz` |
+| Anything on screen in the panel, the review page or the setup page | Its pages in [ui-map/](ui-map/README.md), then [the UI fuzzer](development.md#the-ui-fuzzer): update the map; `/ui-fuzz` checks it |
 | Resumes, cover letters, PDFs, the review page | [documents.md](components/documents.md), [profile-and-templates.md](components/profile-and-templates.md), [ui.md](components/ui.md) |
 | Capturing postings | [postings.md](components/postings.md), [capture](components/extension.md#capture) |
 | Pairing, the connection, startup | [flows.md](flows.md#2-pairing-the-extension), [companion.md](components/companion.md), [architecture.md](architecture.md) |

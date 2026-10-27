@@ -12,7 +12,7 @@ ezapply/
   package.json              npm workspaces, scripts
   tsconfig.base.json, tsconfig.tests.json, biome.json, vitest.config.ts, .gitattributes
   .github/workflows/ci.yml
-  .claude/                  Claude Code for this repo: skills/garden/ (see "Conventions")
+  .claude/                  Claude Code for this repo: skills/garden/ (see "Conventions"), skills/ui-fuzz/ (see "The UI fuzzer")
   test/                     checks on the reference itself (references.test.ts)
   scripts/harness/          the adapter harness: clones of real application forms, fill runs → harness.md
   scripts/fuzz/             the UI fuzzer and its goldens → "The UI fuzzer" below
@@ -117,15 +117,18 @@ committed. Then read its visible text and attribute values to check nothing was 
 `alt` text, link slugs, hidden JSON and image paths.
 
 ## The UI fuzzer
-The side panel, the review page and onboarding, tested by the agent itself after a UI change rather than by the
-user clicking through them. `npm run fuzz` (or `-- panel`, `-- review`, `-- onboarding`, or a scenario's name)
+The side panel, the review page and onboarding, tested by the agent in a real browser rather than by the user
+clicking through them. `npm run fuzz` (or `-- panel`, `-- review`, `-- onboarding`, or a scenario's name)
 needs `npm run build` first and a browser (the harness's: Playwright's Chromium, else Edge or Chrome). It prints
 each scenario's screens and presses, then every failure with the map page it's about and the presses that reached
 it, and exits 1 on any. The screenshots are in `.fuzz/shots/`, for the agent to open.
 
-**Run it after every change to `packages/ui`**, with the change's [UI map](ui-map/README.md) pages updated first.
-The whole run takes about four minutes, so while iterating, name the section. A failure is either the change's bug
-or the map out of date: fix whichever is wrong.
+**Run it with `/ui-fuzz`** (`.claude/skills/ui-fuzz/`), on demand rather than after every UI change: it builds,
+fuzzes (`$ARGUMENTS` passed through), and triages each failure as the UI's bug or the [UI map](ui-map/README.md)
+out of date, fixing whichever is wrong. The whole run takes about four minutes, so while iterating, name the
+section. The quick scenarios also run in `npm test` (above), so a break in the fuzzer itself shows there. `/garden`
+keeps the fuzzer's inputs from rotting: scenarios no map page needs, goldens no screen matches, map pages naming
+controls the UI no longer has.
 
 - **The map is the input.** [`references/ui-map/`](ui-map/README.md): a page per screen or state, each with the
   selector that tells it's on screen and a table of its controls, their selectors and conditions, and where each

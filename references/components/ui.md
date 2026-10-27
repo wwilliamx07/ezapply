@@ -35,7 +35,7 @@ extension already builds with it; no dev server or framework build is needed.
 
 What each screen shows and where each of its buttons leads is in the [UI map](../ui-map/README.md), one page per
 screen; the [UI fuzzer](../development.md#the-ui-fuzzer) presses every control in a real browser and checks the
-pages against it, so a change here updates the map and runs `npm run fuzz`.
+pages against it (`/ui-fuzz`), so a change here updates the map.
 
 ## The build (`npm run build -w @ezapply/ui`)
 - **Bundles:** `review` and `onboard` (`src/<page>/main.tsx`) and `base` (`src/styles/base.css`), as ES modules with

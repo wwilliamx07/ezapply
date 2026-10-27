@@ -47,7 +47,7 @@ If you find correctness issues, include them in your final report. Don't fix the
    It prints unused exports, tracked files nothing names, `` `names` `` in comments that appear nowhere in code,
    and comments that read like history.
 
-The audit is large. Split the read-only sweeps (sections 2–5) across subagents, one per package plus one for
+The audit is large. Split the read-only sweeps (sections 2–6) across subagents, one per package plus one for
 `references/` and `todo/`. Give each one the ground rules above and have it return findings with file:line and the
 search that backs each one. Make the edits yourself, so one agent holds the whole diff.
 
@@ -113,7 +113,25 @@ Prefer cutting to adding. A page that comes out shorter and still complete is th
   `references/`, not here.
 - **README.md:** the quick start's commands exist in `package.json` and still work.
 
-## 6. Sensitive information
+## 6. The UI fuzzer's upkeep
+
+The fuzzer (`scripts/fuzz/`, "The UI fuzzer" in `references/development.md`) isn't run after every UI change, so
+its inputs drift between `/ui-fuzz` runs. Check, without running it:
+
+- **The map against the UI:** every control, selector and destination in `references/ui-map/` still exists in
+  `packages/ui/src/` (its label, `aria-label` or role). A page for a screen that is gone gets deleted; a screen
+  or control with no page is reported.
+- **Scenarios** (`scripts/fuzz/lib/scenarios.ts`): each is listed in its map section's README and every listed one
+  exists. One that shows no condition another doesn't is reported, not deleted.
+- **Fakes** (`lib/fakes.ts`): a canned answer for a bridge call the companion no longer has gets deleted.
+- **Goldens** (`scripts/fuzz/goldens/`): a scenario directory with no scenario of that name gets deleted. Stale
+  screens inside a live one are left to `--update`, and reported.
+- `scripts/fuzz/CLAUDE.md`, `.claude/skills/ui-fuzz/SKILL.md` and the development page still name what exists.
+
+End the report with whether a `/ui-fuzz` run is due (the map or UI changed since the goldens last did:
+`git log -1 --format=%cr -- scripts/fuzz/goldens` against `packages/ui references/ui-map`).
+
+## 7. Sensitive information
 
 The root `CLAUDE.md`'s "Never expose sensitive information" applies to every tracked file. Search for real emails
 (anything not `@example.com`), employer tenant or company subdomains (`myworkdayjobs.com`, `oraclecloud.com`,
@@ -122,7 +140,7 @@ phone numbers, local paths containing a username (`C:\Users\`, `/Users/`, `/home
 titles, and any mention of the user's own live runs. Redact with the placeholders the root `CLAUDE.md` names.
 Anything found already exposed goes at the top of the report, since it is still in git history.
 
-## 7. Verify and report
+## 8. Verify and report
 
 1. Run `npm run lint`, `npm run typecheck` and `npm test` again. Everything that passed in the baseline must still
    pass. Golden schemas must be unchanged (`git diff --stat -- '**/golden/**'` is empty).
