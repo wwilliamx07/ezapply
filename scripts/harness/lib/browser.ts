@@ -147,7 +147,16 @@ export class Recorder {
   private readonly tags = new WeakMap<Request, { action: string; pass: RawExchange["pass"] }>();
   private readonly pending = new Set<Promise<void>>();
 
-  attach(context: BrowserContext): void {
+  async attach(context: BrowserContext): Promise<void> {
+    // With the cache on, the held-out path's static files come from the explore pass's copies (no body, or a 304)
+    // and the profile's cache from earlier clones: every request goes to the site instead.
+    const noCache = (page: Page) =>
+      context
+        .newCDPSession(page)
+        .then((s) => s.send("Network.setCacheDisabled", { cacheDisabled: true }))
+        .catch(() => {});
+    context.on("page", (page) => void noCache(page));
+    await Promise.all(context.pages().map(noCache));
     context.on("request", (r) => this.tags.set(r, { action: this.action, pass: this.pass }));
     context.on("requestfinished", (r) => {
       const p = this.take(r).finally(() => this.pending.delete(p));

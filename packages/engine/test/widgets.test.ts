@@ -293,6 +293,18 @@ describe("react-select, driven through its props", () => {
       readBack: "Springfield, Oregon, United States",
     });
   });
+
+  it("searches again on a list that keeps the last search's results as its options", async () => {
+    const { c, loads } = typeaheadSelect(
+      ["Springfield, Illinois, United States", "Shelbyville, Kentucky, United States"],
+      false,
+    );
+    const d = reactSelectDriver();
+    expect(await d.search?.(c, "Springfield")).toEqual([{ label: "Springfield, Illinois, United States" }]);
+    expect(await d.search?.(c, "Shelbyville")).toEqual([{ label: "Shelbyville, Kentucky, United States" }]);
+    expect(await d.fill(c, "Springfield, Illinois, United States")).toMatchObject({ ok: true });
+    expect(loads).toEqual(["Springfield", "Shelbyville", "Springfield, Illinois, United States"]);
+  });
 });
 
 describe("Ant Design's Select, driven through rc-select's context", () => {

@@ -157,8 +157,24 @@ async function fillStep(
     if (value === undefined) continue;
     const [r] = (await call<FillResult[]>("fill", [{ fieldId: field.id, value }])) ?? [];
     if (!r?.ok) failures.push(`${field.id}: ${r?.error ?? "no answer"}`);
-    else if (r.readBack !== undefined && JSON.stringify(r.readBack) !== JSON.stringify(value)) {
+    else if (r.readBack !== undefined && !readsBack(value, r.readBack, !TEXTS.has(field.kind))) {
       failures.push(`${field.id}: wrote ${JSON.stringify(value)}, read back ${JSON.stringify(r.readBack)}`);
     }
   }
+}
+
+/**
+ * Whether a fill read back what was written, in the page's own formatting: the same letters and digits (a phone
+ * shown as "555-0100"), or for a choice, one label the start of the other (Greenhouse's country list shows "United
+ * States" for its option "United States +1"), as the engine matches options.
+ */
+export function readsBack(wrote: unknown, read: unknown, choice: boolean): boolean {
+  if (Array.isArray(wrote) || Array.isArray(read)) {
+    const [w, r] = [[wrote].flat(), [read].flat()];
+    return w.length === r.length && w.every((x, i) => readsBack(x, r[i], choice));
+  }
+  if (typeof wrote !== "string" || typeof read !== "string") return wrote === read;
+  const bare = (v: string) => v.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const [w, r] = [bare(wrote), bare(read)];
+  return w === r || (choice && !!w && !!r && (w.startsWith(r) || r.startsWith(w)));
 }

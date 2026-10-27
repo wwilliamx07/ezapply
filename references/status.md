@@ -177,10 +177,9 @@ What's built but hasn't run live, and what to check first. Each site's page list
   application's host (an embedded form's frame included); the background keeps polling while the tab sits on the
   review page; a report made while `ezapply` was closed arrives on the next start.
 
-- **The adapter harness** ([harness](harness.md)), run on its hand-written site only. Clone a public Greenhouse
-  posting first: it opens offline looking as it did, the explorer reaches every field, list and conditional
-  section, the proposed description (made into `greenhouse/clone.ts`) answers the held-out path, and a fill run
-  reaches the hand-off. What it finds that the explorer or the engine can't handle goes to the todo.
+- **The adapter harness** ([harness](harness.md)), run on its hand-written site and a public Greenhouse posting
+  (usable, a fill run reaching the hand-off). Clone Lever and Ashby postings next, the same way. What it finds that
+  the explorer or the engine can't handle goes to the todo.
 
 - **Employer's own forms** ([sites](components/sites.md#employers-own-forms-generic)), built and tested on
   synthetic pages only. Check on a real careers page with a frameless form: the right form is picked, every

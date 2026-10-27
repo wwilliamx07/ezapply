@@ -25,7 +25,7 @@ export function checkPass(
   const differences: CheckResult["differences"] = [];
   for (const e of recorded) {
     const spec = standIn.endpointOf(e.method, e.url);
-    if (spec?.kind === "beacon") continue;
+    if (spec?.kind === "beacon" || spec?.varies) continue;
     const res = standIn.handle(toRequest(e));
     const base = { id: e.id, method: e.method, url: e.url, ...(spec ? { endpoint: spec.name } : {}) };
     if (!res) {
@@ -42,18 +42,31 @@ export function checkPass(
   return { pass, total: recorded.length, same: recorded.length - differences.length, differences };
 }
 
-/** Byte for byte, or as JSON with the volatile paths removed from both. */
+/**
+ * Byte for byte, or as JSON with the volatile paths removed from both and keys in any order (a server may send the
+ * same object's keys in a different order each time: seen on a Google API's discovery file).
+ */
 function sameBody(a: Buffer, b: Buffer, volatile: string[]): boolean {
   if (a.equals(b)) return true;
-  if (!volatile.length) return false;
   try {
     const strip = (buf: Buffer) => {
       let v = JSON.parse(buf.toString("utf8")) as unknown;
       for (const p of volatile) v = at(v, p) === undefined ? v : setAt(v, p, undefined);
-      return JSON.stringify(v);
+      return JSON.stringify(sorted(v));
     };
     return strip(a) === strip(b);
   } catch {
     return false;
   }
+}
+
+/** A JSON value with every object's keys sorted. */
+function sorted(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sorted);
+  if (v === null || typeof v !== "object") return v;
+  return Object.fromEntries(
+    Object.keys(v)
+      .sort()
+      .map((k) => [k, sorted((v as Record<string, unknown>)[k])]),
+  );
 }

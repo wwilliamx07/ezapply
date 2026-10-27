@@ -48,11 +48,13 @@ export async function cloneSite(url: string, o: CloneOptions): Promise<{ dir: st
     await o.setup?.(context);
     for (const e of desc?.endpoints.filter((x) => x.kind === "submit") ?? []) {
       await context.route(e.url, (route) => {
+        // The posting page can share the submit's URL (Greenhouse): only the submit's method is stopped.
+        if (e.method && route.request().method() !== e.method) return route.fallback();
         submits.push(route.request().url());
         return route.abort("blockedbyclient");
       });
     }
-    recorder.attach(context);
+    await recorder.attach(context);
     const quiet = quietness(context);
     const page = context.pages()[0] ?? (await context.newPage());
     const adapter = new Adapter(page, site);

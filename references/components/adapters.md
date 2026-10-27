@@ -153,7 +153,10 @@ without opening anything; `fill` calls `onChange` with the matching option (an a
 
 **Lists that load as you type** are searched by `search` and by `fill`: an async select (`loadOptions`), and any
 list with no options at all, which is a page fetching on `onInputChange` and passing the results in as `options`
-(Greenhouse's location). The driver opens the menu, types the query through `onInputChange`, and waits for the
+(Greenhouse's location). A list seen to be one stays one for the page's life: Greenhouse's location keeps the last
+search's results as its options, and taking those for the whole list filtered them instead of searching again, so
+a second search or fill got the first one's places (found by the adapter harness, whose explorer searches a list
+many times). The driver opens the menu, types the query through `onInputChange`, and waits for the
 load to end (`isLoading` seen and gone, or else the options changing), so a query nothing matches ends with the
 load instead of waiting out `typeaheadResultsMs`. Afterwards it closes the menu and clears the typed text, which
 would otherwise stay in the input over the choice. **Why open the menu.** react-select-async-paginate (Greenhouse's
@@ -331,13 +334,14 @@ in the repo, that starts headless Edge, opens the page over the DevTools protoco
 into the page's main world as the extension does, and calls the adapter's methods. Rules it kept:
 - **Never submits.** Nothing calls Submit; the guard is in place; `next` was checked to refuse.
 - **Obviously fake values** only ("Test", `test@example.com`), never the user's data.
-- **No file sent to a third party.** An upload was tried only where the page keeps the file until Submit
-  (Greenhouse); Lever and Ashby send it on attaching, so their uploads weren't tried.
+- **No file sent to a third party.** An upload was tried only where the page was taken to keep the file until
+  Submit (Greenhouse); Lever and Ashby send it on attaching, so their uploads weren't tried. Greenhouse in fact
+  sends it too ([its page](sites/greenhouse.md)), so its check sent one placeholder PDF.
 - **No bot-protection workarounds.** A site that blocks headless browsers or shows a challenge (SmartRecruiters'
   DataDome, iCIMS) is built from pages the user saves from a real session instead.
 
 The script hardcodes this machine's paths, so it stays out of the repo. [The adapter harness](../harness.md)
-replaces it, under the same rules; no site has been cloned with it yet.
+replaces it, under the same rules; Greenhouse is the first site cloned with it.
 
 **Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's
 system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the

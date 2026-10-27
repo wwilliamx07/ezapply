@@ -4,6 +4,7 @@
  * been made: the cloner proposes it from what it recorded, and it is listed here. No zod, no DOM: the harness loads
  * it in Node.
  */
+import { greenhouseClone } from "./greenhouse/clone.js";
 import type { FormSiteId } from "./registry.js";
 
 /**
@@ -56,6 +57,11 @@ export interface EndpointSpec {
   required?: RequestPart[];
   /** Parts of the response's JSON (dotted paths) that differ between two identical requests: not compared. */
   volatile?: string[];
+  /**
+   * The whole answer differs on every load (a third party's script with a nonce or feature flags in it): answered
+   * as recorded, never compared.
+   */
+  varies?: boolean;
 }
 
 /** A token the site issues in a response and expects back on later requests (a CSRF token). */
@@ -83,4 +89,6 @@ export interface CloneDescription {
 }
 
 /** Each cloned site's description. */
-export const CLONE_DESCRIPTIONS: Partial<Record<FormSiteId, CloneDescription>> = {};
+export const CLONE_DESCRIPTIONS: Partial<Record<FormSiteId, CloneDescription>> = {
+  greenhouse: greenhouseClone,
+};

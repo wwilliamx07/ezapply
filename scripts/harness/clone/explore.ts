@@ -203,7 +203,10 @@ export async function explore(o: ExploreOptions): Promise<Coverage> {
       level = full.flatMap((p) => [...LETTERS].map((c) => p + c));
     }
     cov.searches.push({ id: field.id, size: seen.size, queries, stable, ...ruleOf(results) });
-    return [...seen];
+    // The answers tried first: each one-letter search's top two results, as an agent picks after typing (a list whose
+    // page confirms a choice with a request of its own, Greenhouse's location, records that request for them).
+    const tops = results.filter(([q]) => q.length === 1).flatMap(([, r]) => r.slice(0, 2));
+    return [...new Set([...tops, ...seen])];
   };
 
   const reachForm = async (): Promise<Schema> => {

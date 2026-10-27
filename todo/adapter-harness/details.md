@@ -5,11 +5,13 @@ recorded in the clone's report.
 
 ## Milestones
 
-1. **Greenhouse, Lever and Ashby clones are usable.** For each: `npm run clone -- <url>` with nothing else from the
-   user; `greenhouse/clone.ts` (and the others) written from `proposed-clone.ts`, listed in `CLONE_DESCRIPTIONS`;
+1. **Lever and Ashby clones are usable** (Greenhouse's is). For each: `npm run clone -- <url>` with nothing else
+   from the user; `<site>/clone.ts` written from `proposed-clone.ts`, listed in `CLONE_DESCRIPTIONS`;
    `npm run clone -- --check <site>` reports it usable (opens offline, 100% of recorded and held-out requests
    answered as the site did). The coverage report shows every field touched, every list's option count equal to
-   the live page's, every search stable, every conditional section reached.
+   the live page's, every search stable, every conditional section reached. Greenhouse's falls short of that in two
+   ways that need a decision rather than a fix: its location geocoder never settles (a world of places, still
+   growing at `--max-queries`), and its files go untouched because attaching sends them.
 2. **Fill runs catch breakage (the same three).** The scripted fill reaches the hand-off with every value read
    back; each of a set of deliberate adapter breaks (a wrong selector, a removed wait, a wrong option match) fails
    it; a run at `--latency 0` takes under two minutes. Add the breaks as a test that skips without the clones.

@@ -79,8 +79,18 @@ function selected(c: HTMLElement): string[] {
   return (Array.isArray(p.value) ? p.value : [p.value]).map((o) => labelOf(p, o)).filter(Boolean);
 }
 
-/** A list filled by searching: an async select, or one with no options until you type. */
-const typeahead = (p: SelectProps) => Boolean(p.loadOptions) || !flat(p.options).length;
+/** The lists seen to fill by searching: a page that fetches on `onInputChange` keeps the last results as options. */
+const searchedLists = new WeakSet<HTMLElement>();
+
+/**
+ * A list filled by searching: an async select, or one with no options until you type. Once seen, it stays one: the
+ * location list keeps a search's results as its options (seen live on Greenhouse), and taking those for the whole
+ * list would filter them instead of searching again.
+ */
+function typeahead(c: HTMLElement, p: SelectProps): boolean {
+  if (p.loadOptions || !flat(p.options).length) searchedLists.add(c);
+  return searchedLists.has(c);
+}
 
 /**
  * Search a list whose options come as you type: open its menu, type the query through `onInputChange`, then wait
@@ -137,7 +147,7 @@ export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
     search: async (c, query): Promise<OptionInfo[]> => {
       const p = selectProps(c);
       if (!p) return [];
-      if (!typeahead(p)) {
+      if (!typeahead(c, p)) {
         const q = norm(query).toLowerCase();
         return flat(p.options)
           .map((o) => ({ label: labelOf(p, o) }))
@@ -154,7 +164,7 @@ export function reactSelectDriver(opts: ReactSelectOptions = {}): WidgetDriver {
       if (!first) return fail("The list isn't ready on the page.");
       const chosen: Option[] = first.isMulti && Array.isArray(first.value) ? [...first.value] : [];
       for (const wanted of asList(value)) {
-        const search = typeahead(selectProps(c) as SelectProps);
+        const search = typeahead(c, selectProps(c) as SelectProps);
         const options = search ? await searched(c, wanted, menu) : flat(selectProps(c)?.options);
         const p = selectProps(c) as SelectProps;
         const labels = options.map((o) => labelOf(p, o));

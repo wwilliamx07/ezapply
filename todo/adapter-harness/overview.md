@@ -8,9 +8,9 @@ and changing an adapter.
 change, and every new site, be tested first, without the user's time or account.
 
 **Plan.**
-- **The public sites first** (Greenhouse, then Lever and Ashby): clone a posting each, write the site's description
-  from the cloner's proposal, and fix what the explorer or the stand-in couldn't handle until each clone is usable
-  and a fill run reaches the hand-off.
+- **The public sites first** (Lever and Ashby; Greenhouse's clone is usable): clone a posting each, write the
+  site's description from the cloner's proposal, and fix what the explorer or the stand-in couldn't handle until
+  each clone is usable and a fill run reaches the hand-off.
 - **What only real sites need:** nested choices walked level by level, saves that come back when the page reloads,
   the explorer's per-site hooks, response times checked against the recorded ones.
 - **Fill runs that catch breakage:** deliberate adapter breaks fail them, and their results agree with each site's

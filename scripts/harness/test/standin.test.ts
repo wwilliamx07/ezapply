@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { checkPass } from "../clone/check.ts";
 import { normalise, type RawExchange } from "../clone/normalise.ts";
 import { propose } from "../clone/propose.ts";
+import { readsBack } from "../fill/run.ts";
 import type { Exchange } from "../lib/store.ts";
 import { StandIn, type StandInRequest, tokenPlaceholder } from "../standin/engine.ts";
 import { TEST_SITE, testDescription, testServer } from "./site/server.ts";
@@ -170,6 +171,55 @@ describe("the stand-in", () => {
     const at = (latency: number) =>
       new StandIn(clone, testDescription, { latency, random: () => 0 }).handle(get("/api/countries"))?.delayMs;
     expect([at(0), at(1), at(2)]).toEqual([0, 120, 240]);
+  });
+});
+
+describe("the equivalence check", () => {
+  /** A clone of hand-made exchanges: each body the site gave on the explore pass, then on the held-out one. */
+  const pair = (url: string, explore: string, heldOut: string) => {
+    const bodies = new Map([
+      [`${url} explore`, Buffer.from(explore)],
+      [`${url} held-out`, Buffer.from(heldOut)],
+    ]);
+    const exchanges = (["explore", "held-out"] as const).map(
+      (pass, id) =>
+        ({
+          id,
+          method: "GET",
+          url,
+          reqHeaders: {},
+          status: 200,
+          resHeaders: {},
+          body: `${url} ${pass}`,
+          pass,
+        }) as never,
+    );
+    return { exchanges, body: (h: string | undefined) => bodies.get(h ?? "") ?? Buffer.alloc(0) };
+  };
+
+  it("takes the same JSON with its keys in another order as the same answer", () => {
+    const clone = pair(`${TEST_SITE}/api/meta`, '{"a":1,"b":{"c":2,"d":3}}', '{"b":{"d":3,"c":2},"a":1}');
+    expect(checkPass(clone, testDescription, "held-out").differences).toEqual([]);
+  });
+
+  it("doesn't compare an answer the description says varies on every load", () => {
+    const url = `${TEST_SITE}/vendor/client.js`;
+    const clone = pair(url, "flags(1)", "flags(2)");
+    expect(checkPass(clone, testDescription, "held-out").differences).toHaveLength(1);
+    const desc = { endpoints: [{ name: "vendor", kind: "static" as const, url: /\/vendor\//, varies: true }] };
+    expect(checkPass(clone, desc, "held-out").differences).toEqual([]);
+  });
+});
+
+describe("a fill run's read-back", () => {
+  it("accepts the page's own formatting, and for a choice its shorter wording, but not another value", () => {
+    expect(readsBack("5550100", "555-0100", false)).toBe(true);
+    expect(readsBack("United States +1", "United States", true)).toBe(true);
+    expect(readsBack(["Python"], ["python"], true)).toBe(true);
+    expect(readsBack(true, true, true)).toBe(true);
+    expect(readsBack("United States +1", "United States", false)).toBe(false);
+    expect(readsBack("Canada +1", "United States", true)).toBe(false);
+    expect(readsBack("5550100", "5550199", false)).toBe(false);
   });
 });
 

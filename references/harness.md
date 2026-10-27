@@ -3,8 +3,8 @@
 Local clones of real application forms, so an adapter change is tested on a copy of the site rather than on the
 user's next real application. A clone keeps the site's own front end and the answers its server gave; a stand-in
 plays the server from them; and a fill run drives the site's built adapter through the clone as the agent would.
-What's still to build (the real sites' clones, agent fill runs) is the todo's "An adapter harness: local clones of
-real application forms".
+Greenhouse has a usable clone; what's still to build (the other sites' clones, agent fill runs) is the todo's "An
+adapter harness: local clones of real application forms".
 
 **Why.** Saved pages don't run the site's own scripts, so they can't show how a fill behaves (jsdom fixtures are
 built from what the adapter expects: [tests](development.md#tests)), and a live check spends the user's time and
@@ -34,7 +34,7 @@ scripts/harness/                 Node 24 runs it as TypeScript (type stripping);
                                  open.ts, store.ts, profile.ts
   test/                          the engine's tests, and the hand-written site (site/) the whole harness runs on
 packages/sites/src/clones.ts     a site description's shape, and CLONE_DESCRIPTIONS
-packages/sites/src/<site>/clone.ts  a cloned site's description (none yet)
+packages/sites/src/<site>/clone.ts  a cloned site's description (Greenhouse's so far)
 .clones/                         git-ignored: .profile/ (the harness's browser profile), <site>/<id>/ (a clone)
 ```
 A clone's directory: `clone.json` (site, URL, capture time, usable, the report), `exchanges.json` and `bodies/`
@@ -44,7 +44,8 @@ page), `offline.png`, `coverage.json`, `proposed-clone.ts`, and `runs/<time>/` f
 ## Cloning
 
 1. **The browser** gets a profile of its own (`.clones/.profile/`), so a sign-in made there lasts across clones of a
-   site, with service workers blocked so every request passes the recorder. It opens the URL; a bot challenge on
+   site, with service workers blocked and the cache off so every request passes the recorder and reaches the site
+   (with the cache on, the held-out path's files came from the explore pass's copies, with no body or a 304). It opens the URL; a bot challenge on
    screen stops the clone and says so (it is never worked around).
 2. **The explorer** (`explore.ts`) drives the page through the site's adapter, as [the extension calls
    it](components/extension.md): the site's built bundle (`packages/extension/dist/<site>-main.js`) injected into
@@ -57,14 +58,17 @@ page), `offline.png`, `coverage.json`, `proposed-clone.ts`, and `runs/<time>/` f
      `--max-queries` runs out, and
      works out the matching rule (prefix, word, contains) from what came back;
    - picks each answer of a choice in turn (up to 12, `explorer.maxAnswers`), and fills the fields an answer opens
-     before the next answer closes them;
+     before the next answer closes them. A search box's answers start with each one-letter search's top two
+     results, as an agent picks after typing, so a page that confirms a choice with a request of its own
+     (Greenhouse's location) has that request recorded for the choices a path makes;
    - attaches a placeholder PDF only where the site's description says the page keeps files until Submit
      (`explorer.uploads`), since other sites send the file on attaching;
    - presses Next with the step empty, and with an email that isn't one, for the site's own refusals; adds and
      removes a row; goes Back and forward.
 
    It stops at the hand-off (a review page, or a last page whose only way on is Submit) and never presses Submit:
-   the adapter refuses to, and a request the description calls a submit is stopped before it leaves.
+   the adapter refuses to, and a request the description calls a submit is stopped before it leaves (by its
+   method too, where it has one: Greenhouse's posting page is a GET of its submit's URL).
 3. **The held-out path:** the URL opened again and filled once through with a second set of values and answers.
    It is recorded apart, to check the stand-in on requests it wasn't built from.
 4. **What's kept** (`normalise.ts`): every http(s) request with its answer, the body byte for byte under its hash,
@@ -93,7 +97,8 @@ exactly; a `submit` is never answered, and seeing one fails the run.
 
 A request seen exactly gets its recorded answers in the order the site gave them, so a list read before and after a
 save comes back as it did. Parts of an answer that differ every time (timestamps, ids) are named in `volatile`, and
-ignored by the checks.
+ignored by the checks; JSON is compared with its keys in any order. An answer that differs whole on every load (a
+third party's script carrying a nonce or feature flags) is marked `varies`: answered as recorded, never compared.
 
 ## The stand-in (`standin/engine.ts`)
 
@@ -121,7 +126,9 @@ The site's adapter, with debug mode's trace on, fills every field of every step 
 first option of a choice, a file only where the site keeps it), the form read again after each so fields an answer
 opens are filled too; adds and removes a row; and goes on with Next until the hand-off. It passes when every fill
 reads back what was written, the hand-off is reached, the stand-in answered every request, and the guard blocked no
-synthetic Submit. A screenshot per step, every call's trace and the report go into the clone's `runs/`.
+synthetic Submit. A value reads back in the page's own formatting: the same letters and digits (a phone shown as
+"555-0100"), or for a choice one label the start of the other (Greenhouse's country shows "United States" for its
+option "United States +1"), as the engine matches options. A screenshot per step, every call's trace and the report go into the clone's `runs/`.
 
 It runs the adapter, not the extension's background or the companion: those don't change with a site, and driving
 them needs a paired companion. A fill run by the panel's agent is still to build (the todo).

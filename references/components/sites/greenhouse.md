@@ -20,7 +20,9 @@ there ([embedded applications](../extension.md#embedded-applications)), with its
   `onKeyUp` with `KeyA` or `Escape` (read from the board's bundle). Without the menu open, School and Discipline
   never load;
 - `.file-upload`: resume and cover letter, file names from `.file-upload__filename`, removed by its
-  "Remove file" button;
+  "Remove file" button. A chosen file goes to Greenhouse's storage at once (to S3, through fields signed for it by
+  `/uncacheable_attributes/presigned_fields`; read from the board's bundle), and the application sends only its
+  URL at Submit;
 - `fieldset`s (not the phone's): radios, a checkbox group, or a lone checkbox.
 
 Prompts are the controls' labels (`promptOf`), help text the `<id>-description` element, errors `aria-invalid` with
@@ -41,8 +43,17 @@ portfolio. The country list's options are "Canada +1": the option match takes "C
 Built from a live application page rendered by headless Edge, then checked on live public forms with fake values,
 never submitting ([how the boards were verified](../sites.md#what-was-verified-and-how)):
 - **Greenhouse** (one company's board): text fields, the phone's country list ("Canada" → "Canada +1"), the
-  sponsorship and EEO lists, a dummy file attached and removed (Greenhouse keeps it in the page until Submit),
-  `go_next` refusing Submit. Two fixes came from it: react-select chosen through `onChange` (synthetic clicks
+  sponsorship and EEO lists, a placeholder file attached and removed (which, as above, reached Greenhouse's
+  storage), `go_next` refusing Submit. Two fixes came from it: react-select chosen through `onChange` (synthetic clicks
   don't open it without page focus) and read from the current fiber.
+
+- **Its clone** ([the adapter harness](../../harness.md)), of a posting on a public board: usable, and a fill run
+  reaches the hand-off with every value read back. Its description, `greenhouse/clone.ts`: the application is a
+  JSON POST to the job's URL on `boards.greenhouse.io` (the page's `submitPath`; the posting page's GET shares the
+  URL), so only that method is a submit; the location's geocoder is a search ranked fuzzily (word match on the
+  place name only approximates it), asked again with a chosen place's label to confirm it, its timestamp and
+  echoed query volatile; the email check echoes its address; the signed upload fields change every load; Google's
+  sign-in and Drive scripts vary every load; analytics, ad pixels and the invisible reCAPTCHA's frames are
+  beacons. Files aren't explored, since attaching sends them.
 
 **Not yet tried:** the confirmation page.
