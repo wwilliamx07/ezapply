@@ -30,7 +30,6 @@ then an Oracle run.
 | 7 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
 | 8 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
 | — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
-| — | [Lint for broken Markdown links and stale comments](repo-lint/overview.md) | Low | S | — |
 
 Why this order:
 - **The adapter harness first:** every later adapter change, and every new site, is tested on a clone instead of
@@ -51,4 +50,3 @@ Why this order:
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
   adds no database. Tracker, Job search, Job alerts.
-- **Upkeep:** Lint for broken Markdown links and stale comments.

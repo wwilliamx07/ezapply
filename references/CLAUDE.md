@@ -12,7 +12,7 @@ tools, data formats, flows, security, development practices and status. Start at
   what the code already says plainly, such as each parameter's type, the cases in each test, file-by-file
   listings or constants; name the file instead. Nothing the code does should be missing from the reference, and
   nothing in the reference should describe code that no longer exists. `test/references.test.ts` checks what it
-  can: links, the index, and that every tool, site and skill is documented.
+  can: links in every tracked Markdown file, the index, and that every tool, site and skill is documented.
 - **One place per fact.** State a fact on the page that owns it and link to it from elsewhere, so a change
   updates one page.
 - **Describe what is built, not what was planned.** Write from the code. Check details against it rather
