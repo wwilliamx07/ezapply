@@ -138,7 +138,9 @@ controls the UI no longer has.
   the fake in place of the extension's background, on React's development build so its warnings count), and canned
   answers to every call: the agent replies to a message at once, a build succeeds or fails as the scenario says, a
   task stays queued. What a press changes (a card answered, a posting deleted) changes the fake's state and reaches
-  the page as the companion's events would. No request leaves the machine.
+  the page as the companion's events would. No request leaves the machine: requests to any other origin are
+  blocked, and a click on a `mailto:` or `tel:` link (the review's PDFs have one) is cancelled, since the browser
+  would hand it to the system's mail or phone app, which no request block reaches.
 - **Scenarios** (`lib/scenarios.ts`): named starting states per section (no applications, agents working with cards
   waiting, a review of a changed resume, onboarding fresh or mostly done), listed in each map section's README.
   *Where the canned answers come from:* written by hand with the protocol's types, so a change to what the companion
