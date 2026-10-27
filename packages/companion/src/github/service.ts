@@ -82,7 +82,6 @@ interface GitHubOptions {
   log: Logger;
   webBase?: string;
   apiBase?: string;
-  fetchImpl?: typeof fetch;
 }
 
 /** Which app github_login should use: create a new one, or connect one the user already has. */
@@ -107,7 +106,6 @@ type Pending = {
 export class GitHubService {
   private readonly webBase: string;
   private readonly apiBase: string;
-  private readonly fetch: typeof fetch;
   private readonly states = new Map<string, Pending>();
   private loginWaiters: (() => void)[] = [];
   /** The refresh in flight: GitHub's refresh tokens are single-use, so concurrent callers share one. */
@@ -116,7 +114,6 @@ export class GitHubService {
   constructor(private readonly opts: GitHubOptions) {
     this.webBase = opts.webBase ?? "https://github.com";
     this.apiBase = opts.apiBase ?? "https://api.github.com";
-    this.fetch = opts.fetchImpl ?? fetch;
   }
 
   async status(): Promise<GitHubStatus> {
@@ -181,7 +178,7 @@ export class GitHubService {
     const secret = await this.opts.secrets.get(SECRET_CLIENT);
     if (token && app && secret) {
       // Best effort revoke; local deletion is what matters.
-      await this.fetch(`${this.apiBase}/applications/${app.clientId}/token`, {
+      await fetch(`${this.apiBase}/applications/${app.clientId}/token`, {
         method: "DELETE",
         headers: {
           ...apiHeaders(),
@@ -394,7 +391,7 @@ export class GitHubService {
     this.consumeState(url.searchParams.get("state"), "manifest");
     const code = url.searchParams.get("code");
     if (!code || !/^[\w-]+$/.test(code)) throw new EzError(ErrorCode.BadRequest, "Missing code from GitHub.");
-    const r = await this.fetch(`${this.apiBase}/app-manifests/${code}/conversions`, {
+    const r = await fetch(`${this.apiBase}/app-manifests/${code}/conversions`, {
       method: "POST",
       headers: apiHeaders(),
     });
@@ -500,7 +497,7 @@ export class GitHubService {
       const e = EzError.from(err);
       throw creds ? new EzError(e.code, `${e.message}. Check that the Client ID and secret are from the same app.`) : e;
     });
-    const me = await this.fetch(`${this.apiBase}/user`, {
+    const me = await fetch(`${this.apiBase}/user`, {
       headers: { ...apiHeaders(), Authorization: `Bearer ${tokens.accessToken}` },
     });
     if (!me.ok) throw new EzError(ErrorCode.Internal, `Could not read the GitHub user (${me.status}).`);
@@ -528,7 +525,7 @@ export class GitHubService {
    * fallback for an app not installed anywhere yet). Returns whether it's installed.
    */
   private async connectReused(creds: AppCredentials, accessToken: string): Promise<boolean> {
-    const r = await this.fetch(`${this.apiBase}/user/installations?per_page=100`, {
+    const r = await fetch(`${this.apiBase}/user/installations?per_page=100`, {
       headers: { ...apiHeaders(), Authorization: `Bearer ${accessToken}` },
     });
     const body = r.ok ? ((await r.json()) as { installations?: { app_id?: number; app_slug?: string }[] }) : {};
@@ -571,7 +568,7 @@ export class GitHubService {
         "GitHub app credentials missing.",
         "Call github_login to set up again.",
       );
-    const r = await this.fetch(`${this.webBase}/login/oauth/access_token`, {
+    const r = await fetch(`${this.webBase}/login/oauth/access_token`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "ezapply" },
       body: JSON.stringify({ client_id: clientId, client_secret: secret, ...params }),
@@ -598,7 +595,7 @@ export class GitHubService {
     const out: T[] = [];
     let next: string | null = `${this.apiBase}${path}`;
     for (let pageNo = 0; next && pageNo < 50; pageNo++) {
-      const r: Response = await this.fetch(next, {
+      const r: Response = await fetch(next, {
         headers: { ...apiHeaders(), Authorization: `Bearer ${await this.token()}` },
       });
       if (r.status === 401) {

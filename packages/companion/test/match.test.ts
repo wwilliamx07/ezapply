@@ -79,7 +79,7 @@ describe("finding a posting's application from its capture", () => {
   });
 
   it("finds nothing on a page that leads to no form site (a school's job board)", () => {
-    const html = `<a href="https://example-csm.symplicity.com/students/app/jobs">Back</a><a href="mailto:x@y.z">Mail</a>`;
+    const html = `<a href="https://example-csm.symplicity.com/students/app/jobs">Back</a><a href="mailto:x@example.com">Mail</a>`;
     expect(
       findApplication({ html, url: "https://example-csm.symplicity.com/students/app/jobs/detail/1", at: AT }),
     ).toBeUndefined();

@@ -1,4 +1,5 @@
 import type { ServerResponse } from "node:http";
+import { readBody } from "./body.js";
 
 /** The UI package's base stylesheet, once the companion knows where it is (`useStylesheet`). */
 let stylesheet: () => string | null = () => null;
@@ -18,7 +19,7 @@ export function htmlPage(
   status: number,
   title: string,
   body: string,
-  opts: { csp?: string; wide?: boolean } = {},
+  opts: { csp?: string } = {},
 ): void {
   res.writeHead(status, {
     "Content-Type": "text/html; charset=utf-8",
@@ -27,15 +28,14 @@ export function htmlPage(
     "X-Frame-Options": "DENY",
   });
   const css = stylesheet();
-  const width = opts.wide ? "980px" : "560px";
   const style = css
     ? `<link rel="stylesheet" href="${escapeHtml(css)}"><link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">`
-    : `<style>:root{color-scheme:light dark;font:15px system-ui,sans-serif}body{max-width:${width};margin:8vh auto;padding:0 16px;line-height:1.5}
+    : `<style>:root{color-scheme:light dark;font:15px system-ui,sans-serif}body{max-width:560px;margin:8vh auto;padding:0 16px;line-height:1.5}
 button{font:inherit;padding:8px 16px;margin-top:12px;cursor:pointer}input{font:inherit;margin:2px 0 10px}
 textarea{font:inherit;width:100%;box-sizing:border-box;margin:4px 0 10px}fieldset{margin:0 0 24px;border:1px solid #8886}.err{color:#c00}</style>`;
   res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>ezapply: ${escapeHtml(title)}</title>${style}</head>
-<body class="ez-plain"><main class="ez-plain-card${opts.wide ? " ez-plain-wide" : ""}"><p class="ez-brand">${css ? '<img class="ez-brand-mark" src="/ui/favicon.svg" alt="">' : ""}ezapply</p>
+<body class="ez-plain"><main class="ez-plain-card"><p class="ez-brand">${css ? '<img class="ez-brand-mark" src="/ui/favicon.svg" alt="">' : ""}ezapply</p>
 <h1>${escapeHtml(title)}</h1>${body}</main></body></html>`);
 }
 
@@ -51,10 +51,6 @@ export async function readForm(
   req: AsyncIterable<Buffer | string>,
   maxBytes = 16 * 1024,
 ): Promise<URLSearchParams | null> {
-  let raw = "";
-  for await (const chunk of req) {
-    raw += chunk;
-    if (raw.length > maxBytes) return null;
-  }
-  return new URLSearchParams(raw);
+  const raw = await readBody(req, maxBytes);
+  return raw === null ? null : new URLSearchParams(raw);
 }

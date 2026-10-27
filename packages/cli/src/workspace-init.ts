@@ -207,7 +207,7 @@ export async function writeLauncher(root: string, report: InitReport, platform =
  */
 export const RETIRED_SKILLS: Record<string, string> = {};
 const EZAPPLY_TOOL =
-  /\b(workspace_check|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check|workspace_changes)\b/;
+  /\b(workspace_check|posting_get|posting_active|posting_update_meta|tex_compile|pdf_merge|get_form|fill_fields|repo_sync|github_list_repos|repos_selection_set|answers_check|claims_check|workspace_changes)\b/;
 
 async function removeRetiredSkills(skillsDir: string, report: InitReport): Promise<void> {
   for (const [name, why] of Object.entries(RETIRED_SKILLS)) await removeIfOurs(join(skillsDir, name), why, report);

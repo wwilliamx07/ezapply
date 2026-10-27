@@ -1,6 +1,6 @@
 # todo/: rules for keeping it
 
-This folder holds only work that isn't built. `todo.md` is the map: every item, the order of execution, and each
+`todo.md` is the map: every item, the order of execution, and each
 one's value and size. Each item has its own directory with `overview.md` and `details.md`. Keep it all as lean as
 possible.
 
@@ -13,4 +13,4 @@ possible.
   questions about the built behaviour go on the reference page for that part, or into `status.md`.
 - **When part of an item is built, cut the item down to what's left,** in both its files and its size in the map.
   No "built on…" notes, struck-through steps, progress history or "Left:" lists of verification.
-- **Refer to items by title, not number,** from `references/` and code, so reordering the map breaks nothing.
+- **Refer to items by title, not number,** from `references/` and code.

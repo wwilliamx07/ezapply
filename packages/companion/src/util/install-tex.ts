@@ -6,7 +6,7 @@ import { run, which } from "./proc.js";
  * page then shows the command to run). Each asks the user through the system, never through ezapply: Windows'
  * installer its own prompt if it needs one, polkit its password dialog, Terminal the password sudo asks for.
  */
-export type TexInstallPlan =
+type TexInstallPlan =
   /** Run here and wait: done when an engine is found afterwards. `after` runs once it is (MiKTeX's settings). */
   | { how: "run"; program: string; args: string[]; after?: { program: string; args: string[] } }
   /** In a Terminal window the user watches: nothing to wait on, the page sees the engine when it's there. */
@@ -35,7 +35,7 @@ export function texInstallPlan(platform: NodeJS.Platform, has: (bin: string) => 
   return null;
 }
 
-export type TexInstallResult = { ok: true } | { terminal: true } | { ok: false; error: string };
+type TexInstallResult = { ok: true } | { terminal: true } | { ok: false; error: string };
 
 const ENGINES = ["xelatex", "lualatex", "pdflatex", "tectonic"];
 

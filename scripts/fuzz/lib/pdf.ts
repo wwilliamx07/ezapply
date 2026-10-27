@@ -3,7 +3,7 @@
  * resume or cover letter, so the review page and onboarding's previews have something real for pdf.js to read, draw
  * and select.
  */
-export interface PdfPage {
+interface PdfPage {
   lines: string[];
   /** A link over a line (0-based): to a web or mail address, or to another page of the document (0-based). */
   links?: ({ line: number; url: string } | { line: number; page: number })[];

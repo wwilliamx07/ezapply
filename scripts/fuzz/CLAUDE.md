@@ -9,7 +9,7 @@ Read "The UI fuzzer" in `references/development.md` first: what each part does a
   only (`Jane Doe`, `jane@example.com`, Acme, `example-tenant`): their screenshots are committed as goldens. A new
   condition in the map needs a scenario that shows it; list it in the map section's README.
 - **The fakes answer like the companion** (`lib/fakes.ts`): a call the fake doesn't have is an error, not a silent
-  `{}`, so a new bridge call shows up here. Nothing leaves the machine: requests to any other origin are blocked.
+  `{}`. Nothing leaves the machine: requests to any other origin are blocked.
 - **Goldens are per platform** (`goldens/<platform>/`). Look at every new or changed one before committing it.
 - **Tests:** `test/map.test.ts` needs no browser; `test/fuzz.test.ts` walks the quick scenarios and skips without a
   browser or a built UI.

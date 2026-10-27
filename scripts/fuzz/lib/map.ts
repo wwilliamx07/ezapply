@@ -6,7 +6,7 @@ import { dirname, join, posix, relative } from "node:path";
  * selector that tells it's on screen (its marker) and a table of its controls, each with where pressing it leads.
  * The page's format is in the map's README.
  */
-export const MAP_DIR = join(import.meta.dirname, "..", "..", "..", "references", "ui-map");
+const MAP_DIR = join(import.meta.dirname, "..", "..", "..", "references", "ui-map");
 
 /** Where a press leads. */
 export type Target =

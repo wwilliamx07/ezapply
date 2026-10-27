@@ -6,7 +6,7 @@ import { hasLinkedInField, LISTS, listOfButton, listSlots, profileCount } from "
  * The hand-off checklist, kept by the companion instead of the model's memory. The ezapply-apply skill asks for a
  * list at the review page (documents attached, every add-button section filled, files left from a previous
  * application removed, answers from the user or judgment flagged), and live runs missed parts of it: the cover
- * letter twice (now `notAttached`), and sections that start empty are easy to miss. The companion has the facts:
+ * letter (now `notAttached`), and sections that start empty are easy to miss. The companion has the facts:
  * the page, the profile, and form-log.jsonl.
  *
  * Two parts: `stepWarnings` on each step (get_form, and logged by go_next as the step is left),

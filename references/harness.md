@@ -131,7 +131,7 @@ synthetic Submit. A value reads back in the page's own formatting: the same lett
 option "United States +1"), as the engine matches options. A screenshot per step, every call's trace and the report go into the clone's `runs/`.
 
 It runs the adapter, not the extension's background or the companion: those don't change with a site, and driving
-them needs a paired companion. A fill run by the panel's agent is still to build (the todo).
+them needs a paired companion. A fill run by the panel's agent is still to build (the todo's "An adapter harness: local clones of real application forms").
 
 ## Tests
 

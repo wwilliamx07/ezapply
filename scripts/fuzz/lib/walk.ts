@@ -58,7 +58,7 @@ const VIEWPORTS: Record<Section, { width: number; height: number }> = {
 };
 
 /** What the random walk types, and the map walk tries on every field. */
-export const ODD_VALUES = [
+const ODD_VALUES = [
   "",
   "x".repeat(5000),
   "Zoë Ñandú 北京 مرحبا 🙂",
@@ -704,7 +704,7 @@ class Session {
  * process, so side by side they ran one at a time and slowly enough to read as the UI being slow; a context each
  * gives each its own. As many as the machine can take at once (`--workers`), across every scenario.
  */
-export class Contexts {
+class Contexts {
   private readonly browser: Browser;
   private readonly origin: string;
   private readonly idle: BrowserContext[] = [];
@@ -742,7 +742,6 @@ export class Contexts {
   }
 }
 
-/** The first match of a selector that's on screen. */
 /** The first match of a selector that's on screen, waiting up to `waitMs` for one (a slow render under load). */
 async function first(page: Page, selector: string, waitMs = 0): Promise<Locator | null> {
   const end = Date.now() + waitMs;

@@ -37,7 +37,6 @@ const AskOption = z.object({
   label: z.string().max(500).optional(),
   description: z.string().max(1000).optional(),
 });
-export type AskOption = z.infer<typeof AskOption>;
 
 export const AskQuestion = z.object({
   id: z.string().min(1).max(100),

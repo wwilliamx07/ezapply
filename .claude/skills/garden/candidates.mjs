@@ -11,7 +11,7 @@ const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8", maxB
 
 const TEXT = /\.(ts|tsx|mjs|js|json|md|html|css|yaml|yml|tex|txt|toml)$/;
 const CODE = /\.(ts|tsx|mjs|js)$/;
-const SKIP = /(^|\/)(node_modules|dist)\/|package-lock\.json$|\/golden\//;
+const SKIP = /(^|\/)(node_modules|dist)\/|package-lock\.json$|\/goldens?\//;
 const texts = tracked.filter((f) => TEXT.test(f) && !SKIP.test(f));
 const code = texts.filter((f) => CODE.test(f));
 const read = (f) => readFileSync(f, "utf8");

@@ -9,7 +9,7 @@ Read `references/harness.md` first: what each part does and why.
   namespaces; `tsconfig.json` checks), and relative imports end in `.ts`.
 - **Clones are never committed.** They hold a third party's pages and the answers its server gave, under
   `.clones/` (git-ignored). Nothing identifying goes into one: placeholder values only (`lib/profile.ts`), never the
-  user's, and no cookies, auth headers or tokens (`normalise.ts`).
+  user's, and no cookies, auth headers or tokens (`clone/normalise.ts`).
 - **Never submits, never works around a bot challenge,** as in "Checking a site live" (`references/components/adapters.md`).
 - **Tests:** the engine and anything else that needs no browser in `test/standin.test.ts`; what needs one in
   `test/harness.test.ts`, on the hand-written site, skipped without a browser or a built extension.

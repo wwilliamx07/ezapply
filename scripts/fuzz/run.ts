@@ -2,15 +2,15 @@ import { existsSync, readdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { launchBrowser } from "../harness/lib/browser.ts";
 import { readMap } from "./lib/map.ts";
-import { SCENARIOS, type Scenario, type Section } from "./lib/scenarios.ts";
+import { SCENARIOS, type Scenario } from "./lib/scenarios.ts";
 import { FuzzServer } from "./lib/server.ts";
 import { type Failure, pool, type ScenarioReport, Walker, type WalkOptions } from "./lib/walk.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 export const SHOTS = join(ROOT, ".fuzz", "shots");
-export const GOLDENS = join(import.meta.dirname, "goldens", process.platform);
+const GOLDENS = join(import.meta.dirname, "goldens", process.platform);
 
-export interface FuzzResult {
+interface FuzzResult {
   reports: ScenarioReport[];
   /** Every failure: the scenarios', the map's own, and conditional controls no scenario showed. */
   failures: Failure[];
@@ -124,5 +124,3 @@ export function pick(names: string[]): Scenario[] {
     );
   return out;
 }
-
-export type { Section };

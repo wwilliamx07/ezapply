@@ -35,7 +35,7 @@ export function listOfButton(b: FormSchema["addButtons"][number]): ListKey | und
  * A repeatable row: Workday's sections `work-experience-2`, `education-1`, `languages-3`, `websites-1`, titled
  * like "Work Experience 2". Oracle's saved items (`languages.item-1`) aren't rows: see `savedItemOf`.
  */
-export function rowOf(s: Section): ListKey | undefined {
+function rowOf(s: Section): ListKey | undefined {
   if (!/^[^.]+-\d+$/.test(s.id)) return undefined;
   return listOf(s.title.replace(/\s+\d+$/, ""));
 }

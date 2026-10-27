@@ -1525,7 +1525,7 @@ describe("form tools over MCP", () => {
     await ext.outcome;
     const cap = await capture(ext, "https://acme.wd5.myworkdayjobs.com/job/1");
     const client = await postingClient(cap.postingId);
-    const r = await callJson(client, "posting_update_meta", { reqId: "Evergreen - Software Engineer, Intern, 2027" });
+    const r = await callJson(client, "posting_update_meta", { reqId: "Example - Software Engineer, Intern, 2027" });
     expect(r.data.error).toMatchObject({ code: "bad_request", hint: expect.stringMatching(/role/) });
     expect((await callJson(client, "posting_update_meta", { reqId: " R-123 " })).data.reqId).toBe("R-123");
     await client.close();

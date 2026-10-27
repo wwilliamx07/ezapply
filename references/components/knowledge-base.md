@@ -51,9 +51,8 @@ can't answer something ([workspace](workspace.md#the-agent-file-ezapplymd)).
   folder) exists in the cached repo and stays inside it. A claim marked `user_edited` in `claims.yaml` as it was at
   the last `repo_sync` (`.claims-at-sync.yaml`) must still be there unchanged, marked: an index run may not
   reword or drop the user's own claim. Returns `{ valid, claims, errors[] }`.
-- **`knowledge_mark_indexed`** refuses unless `claims_check` passes, rewrites old-form claims as `files`, then
-  writes `meta.json` with the cached HEAD commit, file count and depth policy. Later `repo_sync` calls report
-  only what changed since.
+- **`knowledge_mark_indexed`** refuses unless `claims_check` passes, then writes `meta.json` with the cached
+  HEAD commit, file count and depth policy. Later `repo_sync` calls report only what changed since.
 - The skill's **check**: Claude re-reads each claim it wrote or changed against the code it read, and drops
   or downgrades anything the code doesn't directly support.
 

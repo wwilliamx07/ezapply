@@ -43,10 +43,11 @@ Why this order:
 ## Groups
 
 - **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
-  touch, A writing spec for claims, Compatibility with opencode.
-- **Adapter building:** The adapter harness, Agents that try to break a new adapter, Employer's own forms beyond
+  touch, A writing spec for claims and repo documentation, Compatibility with opencode.
+- **Adapter building:** An adapter harness: local clones of real application forms, Agents that try to break a new adapter, Employer's own forms beyond
   plain HTML.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
-  adds no database. Tracker, Job search, Job alerts.
+  adds no database. Application tracker: progress and outcomes, Job search across the boards ezapply knows, Job
+  alerts.
