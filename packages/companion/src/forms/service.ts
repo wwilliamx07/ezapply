@@ -62,7 +62,7 @@ const STATUS_ORDER: PostingStatus[] = ["captured", "drafting", "attached", "fill
 export type FillSource = "profile" | "answer-bank" | "computed" | "user" | "judgment";
 
 /** The application tab isn't the call's posting's (see forms/match.ts): nothing changes, nothing is logged. */
-export interface PostingMismatch {
+interface PostingMismatch {
   posting: { id: string; company?: string; role?: string; tenant?: string; job?: string };
   formTenant?: string;
   /** The job the tab is for, when its URL names one (a Workday requisition, an Oracle job id). */

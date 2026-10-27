@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readBody } from "../util/body.js";
 
 /**
  * How a page of the UI package proves it's the one the companion opened. The link carries a random token
@@ -45,11 +46,8 @@ export function sameOrigin(req: IncomingMessage): boolean {
 
 /** A JSON request body (at most `maxBytes`), or null when it's too large or not JSON. */
 export async function readJsonBody(req: AsyncIterable<Buffer | string>, maxBytes = 256 * 1024): Promise<unknown> {
-  let raw = "";
-  for await (const chunk of req) {
-    raw += chunk;
-    if (raw.length > maxBytes) return null;
-  }
+  const raw = await readBody(req, maxBytes);
+  if (raw === null) return null;
   try {
     return JSON.parse(raw);
   } catch {

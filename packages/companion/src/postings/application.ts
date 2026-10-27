@@ -92,8 +92,8 @@ function app(
 }
 
 /**
- * A requisition as given, trimmed, or why it isn't one. A job title in `reqId` (seen: "Evergreen - Software
- * Engineer, Intern, 2027, CAN") would be compared with application URLs' job ids and never match them.
+ * A requisition as given, trimmed, or why it isn't one. A job title in `reqId` (seen: "Example Team -
+ * Software Engineer, Intern, 2027") would be compared with application URLs' job ids and never match them.
  */
 export function checkReqId(reqId: string): { ok: true; value: string } | { ok: false; reason: string } {
   const value = reqId.trim();

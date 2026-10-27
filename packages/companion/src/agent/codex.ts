@@ -32,7 +32,7 @@ export function codexBackend(command: AgentCommand): AgentBackend {
  * cost tokens on every call, and a document plugin competes with ezapply's skills; without `notify`, the user's
  * program run at each turn's end.
  */
-export const CODEX_ARGS = ["app-server", "--disable", "plugins", "--disable", "apps", "-c", "notify=[]"];
+const CODEX_ARGS = ["app-server", "--disable", "plugins", "--disable", "apps", "-c", "notify=[]"];
 
 /**
  * How each panel mode runs in Codex: its approval policy, who reviews an approval, and the sandbox.
@@ -114,7 +114,7 @@ export function codexInstructions(cwd: string, part?: ConversationPart): string 
 }
 
 /** ezapply's server as `.mcp.json` names it (`ezapply init` writes it), or null when it isn't there. */
-export function workspaceServer(cwd: string): { command: string; args: string[] } | null {
+function workspaceServer(cwd: string): { command: string; args: string[] } | null {
   try {
     const raw = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8")) as {
       mcpServers?: Record<string, { command?: unknown; args?: unknown }>;

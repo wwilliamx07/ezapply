@@ -26,8 +26,6 @@ If you find correctness issues, include them in your final report. Don't fix the
   reported. Golden schemas must come out unchanged.
 - **`packages/cli/templates/` ships to users** on their next `ezapply init`. Trimming there is allowed, but name
   every change in the report.
-- **Upgrade shims stay.** "Remove the upgrade shims" in `todo/` owns them, so their comments are current until it is
-  done.
 - **Leave untracked and ignored files alone** (`tmp/`, `dist/`, `node_modules/`, local captures). They're the
   user's and may hold personal data. Don't open them, and don't list their contents in the report.
 - **Not sure? Report it.** A deletion you can't back with a search that shows nothing uses the thing goes in the
@@ -123,7 +121,7 @@ its inputs drift between `/ui-fuzz` runs. Check, without running it:
   or control with no page is reported.
 - **Scenarios** (`scripts/fuzz/lib/scenarios.ts`): each is listed in its map section's README and every listed one
   exists. One that shows no condition another doesn't is reported, not deleted.
-- **Fakes** (`lib/fakes.ts`): a canned answer for a bridge call the companion no longer has gets deleted.
+- **Fakes** (`scripts/fuzz/lib/fakes.ts`): a canned answer for a bridge call the companion no longer has gets deleted.
 - **Goldens** (`scripts/fuzz/goldens/`): a scenario directory with no scenario of that name gets deleted. Stale
   screens inside a live one are left to `--update`, and reported.
 - `scripts/fuzz/CLAUDE.md`, `.claude/skills/ui-fuzz/SKILL.md` and the development page still name what exists.

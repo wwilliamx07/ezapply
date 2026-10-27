@@ -178,8 +178,7 @@ What's built but hasn't run live, and what to check first. Each site's page list
   review page; a report made while `ezapply` was closed arrives on the next start.
 
 - **The adapter harness** ([harness](harness.md)), run on its hand-written site and a public Greenhouse posting
-  (usable, a fill run reaching the hand-off). Clone Lever and Ashby postings next, the same way. What it finds that
-  the explorer or the engine can't handle goes to the todo.
+  (usable, a fill run reaching the hand-off).
 
 - **Employer's own forms** ([sites](components/sites.md#employers-own-forms-generic)), built and tested on
   synthetic pages only. Check on a real careers page with a frameless form: the right form is picked, every
@@ -332,8 +331,6 @@ What's built but hasn't run live, and what to check first. Each site's page list
   call, a screenshot of a minimized tab, and whether a step that loads a new document keeps it
   ([extension](components/extension.md#focus-emulation-emulationts),
   [dates](components/sites/workday.md#dates-typed-into-workdays-split-widget)).
-- **Fills slower in debug mode's first live run** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the
-  adapter trace will show which waits ran to their maximum; one guess is `afterFieldMaxMs`.
 - **Greenhouse, Lever, Ashby:** fixes after one real Greenhouse and one Ashby application (multi-select ids, lists
   that load as you type, radio and checkbox groups); not tried: Lever uploads, the confirmation pages
   ([sites](components/sites.md#what-was-verified-and-how)).
@@ -363,8 +360,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
 
 ## Known issues
 - **"Could not open the dropdown"** on Workday after its own list was read without a choice; the adapter retries
-  once, and nothing records whether the retry ran ([details](components/sites/workday.md#workdays-dropdown-finding-its-listbox)).
+  once, shown as `dropdown re-open` in the trace ([details](components/sites/workday.md#workdays-dropdown-finding-its-listbox)).
 - **A `go_next` after the user advanced the step themselves** presses the next step's button.
+- **Fills slower in debug mode** (dropdowns about 3.5–4 s against 1.8 s), cause unknown: the adapter trace shows
+  which waits ran to their maximum; one guess is `afterFieldMaxMs`.
 - **The default cover letter test** failed once with MiKTeX and didn't reproduce; capture its `hint` if it recurs.
 
 ## Open questions

@@ -103,8 +103,7 @@ export interface BundleInput {
  * bookmark per section, the page sizes of its first page, the title "<Name>: Application for <Role>", the user's name
  * as author, and the name `<Last>_<First>_<Company>_Application.pdf`. It is checked for one page size and a
  * one-page resume, compressed to `maxBytes` (else `pdf.defaultMaxBytes`) when larger, and the posting gets
- * `bundleRequired`. What was a skill of fixed steps is one call; deciding that a bundle is needed, the posting's own
- * order, and which extras stay the agent's.
+ * `bundleRequired`. Deciding that a bundle is needed, the posting's own order, and which extras stay the agent's.
  */
 export async function buildBundle(
   s: Services,

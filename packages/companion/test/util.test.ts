@@ -6,6 +6,7 @@ import type { BrowserInfo } from "@ezapply/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { updateAppConfig } from "../src/config/app.js";
 import { rotateLog } from "../src/logger.js";
+import { readBody } from "../src/util/body.js";
 import { type FindBrowserDeps, findBrowser, parseRegistryDefault } from "../src/util/browser.js";
 import { KeyedQueue } from "../src/util/keyed-queue.js";
 import { assertLocalUrl, browserLabel, createDesktopOpener } from "../src/util/open.js";
@@ -18,6 +19,19 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
+});
+
+describe("readBody", () => {
+  it("keeps a character split across chunks whole, and limits by bytes", async () => {
+    const bytes = Buffer.from(JSON.stringify({ name: "Zoë Müller" }));
+    const at = bytes.indexOf(0xc3) + 1;
+    async function* chunks() {
+      yield bytes.subarray(0, at);
+      yield bytes.subarray(at);
+    }
+    expect(JSON.parse((await readBody(chunks(), 1024)) ?? "")).toEqual({ name: "Zoë Müller" });
+    expect(await readBody(chunks(), bytes.length - 1)).toBeNull();
+  });
 });
 
 describe("KeyedQueue", () => {

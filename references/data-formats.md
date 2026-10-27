@@ -339,8 +339,7 @@ and marking that done removes `importedFrom` and `sourceHash`.
 
 `sourceHash`: 12 hex characters of SHA-256 over the files in `importedFrom` that an import copies (paths and
 contents, line endings normalised; build output skipped; for a single file, that file), as of the last time
-the template was current with it. Written by `template_import`, and when the user keeps the current copy on the Workspace changes card. A template imported before the field existed gets it on the first check that finds the
-source unchanged.
+the template was current with it. Written by `template_import`, and when the user keeps the current copy on the Workspace changes card.
 
 ### `templates/.synced/resume/`
 The resume template's main file and content files as they were when the profile was last brought in line with
@@ -361,10 +360,6 @@ salutation, sign-off, subject line, length). No quoted text.
 
 `.claims-at-sync.yaml` beside it is `claims.yaml` as it was at the last `repo_sync`, which `claims_check` compares
 `user_edited` claims with; written over at every sync.
-
-The old form, `evidence[] { path, lines?, sha?, hash? }` in place of `files`, is still read (each entry as its
-`path`) and is rewritten as `files` by the next `knowledge_mark_indexed`; `schemaVersion` stayed 1
-([why files](components/knowledge-base.md#claims-claimsyaml)).
 
 ## Extension storage
 `storage.local`: `port`, `pairingToken`, `connState`, `pendingCapture` (a `CapturePayload`),

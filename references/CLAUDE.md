@@ -4,9 +4,6 @@ This folder holds the complete reference for this project: its philosophy, archi
 tools, data formats, flows, security, development practices and status. Start at the "By task" table in
 `README.md`, which says what to read for each kind of change, and keep it and the index current.
 
-- **Every change updates the reference in the same change.** Anything that alters behaviour, a component,
-  an interface, a tool, a command, a file format, a flow, a security property, the build or tests, or the
-  project's status must be reflected in the affected pages before the work counts as done.
 - **Complete about behaviour and the why, not a copy of the code.** Every component, tool, command, file,
   setting and flow is documented: what it does, how it fits with the rest, and why it is that way. Don't restate
   what the code already says plainly, such as each parameter's type, the cases in each test, file-by-file

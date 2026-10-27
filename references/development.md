@@ -138,9 +138,11 @@ controls the UI no longer has.
   the fake in place of the extension's background, on React's development build so its warnings count), and canned
   answers to every call: the agent replies to a message at once, a build succeeds or fails as the scenario says, a
   task stays queued. What a press changes (a card answered, a posting deleted) changes the fake's state and reaches
-  the page as the companion's events would. No request leaves the machine: requests to any other origin are
-  blocked, and a click on a `mailto:` or `tel:` link (the review's PDFs have one) is cancelled, since the browser
-  would hand it to the system's mail or phone app, which no request block reaches.
+  the page as the companion's events would. A call the fake doesn't have is an error rather than an empty answer,
+  so a bridge call added to the companion shows up in the fuzzer instead of leaving a screen untested. No request
+  leaves the machine: requests to any other origin are blocked, and a click on a `mailto:` or `tel:` link (the
+  review's PDFs have one) is cancelled, since the browser would hand it to the system's mail or phone app, which no
+  request block reaches.
 - **Scenarios** (`lib/scenarios.ts`): named starting states per section (no applications, agents working with cards
   waiting, a review of a changed resume, onboarding fresh or mostly done), listed in each map section's README.
   *Where the canned answers come from:* written by hand with the protocol's types, so a change to what the companion
@@ -186,6 +188,8 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
   straight there without reading here first, and the root file stays short in every session. Keep them short; a
   rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
   is different: it's the user's workspace file, shipped by `ezapply init`.)
+- **Todo items are named by title,** never by number, from code and `references/`: the map's order changes as
+  work is done, and a title stays put.
 - **Garden now and then.** `/garden` (`.claude/skills/garden/`) audits the whole repo against these rules and the
   `CLAUDE.md` files. It deletes stale comments, dead code and tracked files nothing uses, trims `references/` and
   `todo/` back to what they're meant to hold, checks every page against the code, and sweeps for sensitive data.

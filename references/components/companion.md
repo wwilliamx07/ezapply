@@ -42,6 +42,7 @@ posting readers) it imports from [the sites package](sites.md#the-package): `@ez
 | `config/app.ts`, `config/workspace.ts` | `~/.ezapply/config.json` (load with readable errors, `updateAppConfig`) and `ezapply.config.json` schemas, token generators, `appDir()` |
 | `logger.ts` | pino logger to the log file only, with redaction and size-based rotation (`rotateLog`) |
 | `util/fs.ts` | `exists`, `readJson`, `writeFileAtomic` (text or bytes; a locked target is retried, then reported → [atomic writes](../architecture.md#cross-cutting-concerns)), `writeJsonAtomic` |
+| `util/body.ts` | `readBody`: a request body as text, limited in bytes and decoded once whole, so a character split across chunks survives (`readJsonBody`, `readForm`) |
 | `util/keyed-queue.ts` | `KeyedQueue`: one task at a time per key |
 | `util/hash.ts` | `hashFiles` (12 hex of SHA-256 over files' paths and contents, line endings normalised) and `hashValue` (over a value's JSON) |
 | `util/line-diff.ts` | `unifiedDiff`: a line diff with context, for the resume template's changes |

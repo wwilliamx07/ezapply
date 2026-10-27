@@ -127,7 +127,6 @@ const PATHS: Record<string, ReactNode> = {
       <rect x="4" y="2.5" width="16" height="19" rx="2" />
     </>
   ),
-  x: <path d="M6 6l12 12M18 6L6 18" />,
   alert: (
     <>
       <path d="M12 3l9.5 17h-19z" />

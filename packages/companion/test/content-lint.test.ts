@@ -106,7 +106,8 @@ describe("the content lint", () => {
       await expect(checkSources(s, ["postings/p1/resume.pdf"])).rejects.toMatchObject({
         message: expect.stringMatching(/unknown src hybrid-search.*claims\.yaml of jane\/search doesn't load/),
       });
-      const r = await withContentLint(s, "postings/p1/resume.tex", { ok: true });
+      const build: { ok: boolean; hint?: string } = { ok: true };
+      const r = await withContentLint(s, "postings/p1/resume.tex", build);
       expect(r.hint).toMatch(/jane\/search doesn't load.*claims_check/);
     } finally {
       broken = [];

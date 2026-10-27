@@ -1347,7 +1347,7 @@ function AgentSettingsBar({
 }
 
 /** Tokens in a few characters: "850 tokens", "12.3k tokens", "1.2M tokens". */
-export function tokens(n: number): string {
+function tokens(n: number): string {
   if (n < 1000) return `${n} tokens`;
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k tokens`;
   return `${(n / 1_000_000).toFixed(1)}M tokens`;

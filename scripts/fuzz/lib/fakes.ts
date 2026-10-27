@@ -23,7 +23,7 @@ import {
  * deleted) changes the state, and the page hears of it as it would from the companion.
  */
 
-export interface FakeRequest {
+interface FakeRequest {
   method: string;
   /** Under the page's base: "state", "file/0", "panel/call". */
   path: string;
@@ -33,7 +33,7 @@ export interface FakeRequest {
   origin: string;
 }
 
-export interface Reply {
+interface Reply {
   status: number;
   json?: unknown;
   body?: Buffer;
@@ -67,14 +67,14 @@ const AT = "2026-01-05T10:00:00.000Z";
 
 // ---- the side panel ----------------------------------------------------------------------------------------------
 
-export type Connection =
+type Connection =
   | { state: "connected" }
   | { state: "connecting" }
   | { state: "unconfigured" }
   | { state: "disconnected"; reason?: string }
   | { state: "error"; message: string; hint?: string };
 
-export interface PanelSetup {
+interface PanelSetup {
   state: PanelState;
   /** Conversations by key; one not listed is a posting's empty one (or the general one's). */
   conversations?: Record<string, PanelConversation>;
@@ -274,7 +274,7 @@ function actOnChanges(changes: WorkspaceChanges, req: WorkspaceChangeRequest): W
 
 // ---- the review page ---------------------------------------------------------------------------------------------
 
-export interface ReviewSetup {
+interface ReviewSetup {
   state: ReviewPageState;
   /** Each file's bytes, by index. */
   files: Buffer[];
@@ -329,7 +329,7 @@ export class ReviewFake extends Fake {
 
 // ---- the onboarding page -----------------------------------------------------------------------------------------
 
-export interface OnboardSetup {
+interface OnboardSetup {
   state: OnboardState;
   repos?: OnboardRepo[];
   /** A template's PDF, served for any path the state names. */
