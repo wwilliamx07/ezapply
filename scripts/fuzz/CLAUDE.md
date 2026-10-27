@@ -10,7 +10,7 @@ Read "The UI fuzzer" in `references/development.md` first: what each part does a
   condition in the map needs a scenario that shows it; list it in the map section's README.
 - **The fakes answer like the companion** (`lib/fakes.ts`): a call the fake doesn't have is an error, not a silent
   `{}`. Nothing leaves the machine: requests to any other origin are blocked, and a click on a `mailto:` or `tel:`
-  link is cancelled, since the browser would hand it to the system's own app.
+  link is cancelled, since the browser would hand it to the system's own app, and counted as the tab it opens.
 - **Goldens are per platform** (`goldens/<platform>/`). Look at every new or changed one before committing it.
 - **Tests:** `test/map.test.ts` needs no browser; `test/fuzz.test.ts` walks the quick scenarios and skips without a
   browser or a built UI.
