@@ -148,6 +148,10 @@ describe("RepoService", () => {
         "## acme/broken\n(claims.yaml has problems: run claims_check acme/broken)\n\n" +
         "## jane/proj\n- rate-limiter: Implemented a sliding-window rate limiter",
     );
+    // The documents' checks get the same claims, and the repo whose file doesn't load by name.
+    const records = await repos.claimRecords();
+    expect(records.claims.map((c) => c.id).sort()).toEqual(["payments", "rate-limiter"]);
+    expect(records.broken).toEqual(["acme/broken"]);
     await rm(other, { recursive: true });
     await rm(broken, { recursive: true });
     await rm(repos.knowledgePath("acme/docs-only"), { recursive: true });

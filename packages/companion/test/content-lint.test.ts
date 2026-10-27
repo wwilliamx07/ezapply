@@ -8,6 +8,7 @@ import { Workspace } from "../src/workspace/workspace.js";
 
 let root: string;
 let s: Services;
+let broken: string[] = [];
 const folder = () => join(root, "postings", "p1");
 
 const TEMPLATE = [
@@ -33,14 +34,17 @@ beforeAll(async () => {
       templateMeta: async (kind: string) => (kind === "resume" ? { main: "main.tex" } : null),
     },
     repos: {
-      claimRecords: async () => [
-        {
-          id: "rate-limiter",
-          claim: "Built a rate limiter serving 1,200 requests a second",
-          skills: ["Redis"],
-          impact: null,
-        },
-      ],
+      claimRecords: async () => ({
+        claims: [
+          {
+            id: "rate-limiter",
+            claim: "Built a rate limiter serving 1,200 requests a second",
+            skills: ["Redis"],
+            impact: null,
+          },
+        ],
+        broken,
+      }),
     },
     profile: {
       rawProfile: async () => ({ work: [{ company: "Example Co", highlights: ["Cut deploys to 15 minutes"] }] }),
@@ -90,6 +94,23 @@ describe("the content lint", () => {
       code: "bad_request",
       message: expect.stringMatching(/resume\.tex:6 no % src/),
     });
+  });
+
+  it("names the repos whose claims.yaml doesn't load when an id is unknown", async () => {
+    await resume(["\\resumeItem{Built a search index} % src: hybrid-search"]);
+    await expect(checkSources(s, ["postings/p1/resume.pdf"])).rejects.toMatchObject({
+      message: expect.not.stringMatching(/doesn't load/),
+    });
+    broken = ["jane/search"];
+    try {
+      await expect(checkSources(s, ["postings/p1/resume.pdf"])).rejects.toMatchObject({
+        message: expect.stringMatching(/unknown src hybrid-search.*claims\.yaml of jane\/search doesn't load/),
+      });
+      const r = await withContentLint(s, "postings/p1/resume.tex", { ok: true });
+      expect(r.hint).toMatch(/jane\/search doesn't load.*claims_check/);
+    } finally {
+      broken = [];
+    }
   });
 
   it("adds its findings to a build's lint and hint", async () => {

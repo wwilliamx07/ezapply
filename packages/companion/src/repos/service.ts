@@ -475,16 +475,25 @@ export class RepoService {
     return `${count} claims from knowledge/*/claims.yaml\n\n${blocks.join("\n\n")}`;
   }
 
-  /** Every indexed repo's claims, parsed, for the documents' checks; a claims.yaml that doesn't parse is skipped. */
-  async claimRecords(): Promise<{ id: string; claim: string; skills: string[]; impact: string | null }[]> {
+  /**
+   * Every indexed repo's claims, parsed, for the documents' checks. A claims.yaml that doesn't parse adds no
+   * claims; its repo is named in `broken`, so a check can say why that repo's ids are unknown.
+   */
+  async claimRecords(): Promise<{
+    claims: { id: string; claim: string; skills: string[]; impact: string | null }[];
+    broken: string[];
+  }> {
     const keys = (await readdir(this.ws.path("knowledge")).catch(() => [] as string[])).filter((k) => k.includes("__"));
-    const out: { id: string; claim: string; skills: string[]; impact: string | null }[] = [];
+    const claims: { id: string; claim: string; skills: string[]; impact: string | null }[] = [];
+    const broken: string[] = [];
     for (const key of keys) {
-      const loaded = await this.loadClaims(key.replace("__", "/"));
+      const repo = key.replace("__", "/");
+      const loaded = await this.loadClaims(repo);
       if ("claims" in loaded)
-        for (const { id, claim, skills, impact } of loaded.claims) out.push({ id, claim, skills, impact });
+        for (const { id, claim, skills, impact } of loaded.claims) claims.push({ id, claim, skills, impact });
+      else if (!(loaded.errors.length === 1 && loaded.errors[0]?.message === "missing")) broken.push(repo);
     }
-    return out;
+    return { claims, broken };
   }
 
   /** Every repo with a knowledge folder, whether or not it's still selected (`claims_list` reads them all). */
