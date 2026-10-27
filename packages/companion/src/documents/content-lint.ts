@@ -78,11 +78,26 @@ export async function checkSources(s: Services, files: string[]): Promise<void> 
     }
   }
   if (problems.length === 0) return;
+  const broken = problems.some((p) => p.includes(" unknown src ")) ? await brokenClaimsNote(s) : "";
   throw new EzError(
     ErrorCode.BadRequest,
-    `Sources missing or unknown: ${problems.slice(0, 8).join("; ")}${problems.length > 8 ? ` (+${problems.length - 8})` : ""}.`,
+    `Sources missing or unknown: ${problems.slice(0, 8).join("; ")}${problems.length > 8 ? ` (+${problems.length - 8})` : ""}.` +
+      (broken ? ` ${broken}` : ""),
     "Give each changed bullet a % src: comment with the claim ids (claims_list) or profile paths (e.g. " +
       "work.0.highlights.1) it draws on, then compile and review again.",
+  );
+}
+
+/**
+ * Why a real claim id can still be unknown: its repo's claims.yaml doesn't load, so none of its ids count. Names
+ * those repos and the fix, or "" when every claims.yaml loads.
+ */
+async function brokenClaimsNote(s: Services): Promise<string> {
+  const { broken } = await s.repos.claimRecords().catch(() => ({ broken: [] as string[] }));
+  if (broken.length === 0) return "";
+  return (
+    `The claims.yaml of ${broken.join(", ")} doesn't load, so none of ${broken.length === 1 ? "its" : "their"} ` +
+    "ids count: run claims_check on each to see why, and fix the file or re-index the repo."
   );
 }
 
@@ -106,7 +121,7 @@ function postingDocument(
 }
 
 async function gather(s: Services, postingId: string, templates: string[]): Promise<Evidence> {
-  const claims = await s.repos.claimRecords().catch(() => []);
+  const { claims } = await s.repos.claimRecords().catch(() => ({ claims: [] }));
   const profile = await s.profile.rawProfile().catch(() => undefined);
   const posting = await readFile(join(s.postings.folder(postingId), "posting.md"), "utf8").catch(() => "");
   const templateText = (await Promise.all(templates.map((t) => readFile(t, "utf8").catch(() => "")))).join("\n");
@@ -242,9 +257,10 @@ export async function withContentLint<T extends { ok: boolean; lint?: unknown[];
   const issues = await contentLint(s, s.workspace.resolveAllowed(path, ["postings", "templates"])).catch(() => []);
   if (issues.length === 0) return result;
   const kinds = [...new Set(issues.map((i) => i.kind))].join(", ");
+  const broken = issues.some((i) => i.kind === "unknown-src") ? await brokenClaimsNote(s) : "";
   const note =
     `${issues.length} content finding${issues.length === 1 ? "" : "s"} in lint (${kinds}): use only what the ` +
     "evidence holds, give each changed bullet a % src: of claim ids or profile paths, and leave out what " +
-    "preferences.md says never to mention.";
+    `preferences.md says never to mention.${broken ? ` ${broken}` : ""}`;
   return { ...result, lint: [...(result.lint ?? []), ...issues], hint: result.hint ? `${result.hint} ${note}` : note };
 }

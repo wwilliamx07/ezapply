@@ -114,7 +114,10 @@ Anything else fails with `path_not_allowed`.
   - `missing-src`: a resume bullet (a line starting with an `…item` command) with no `% src:` on it or on the
     comment line just above or below. A cover letter's paragraphs aren't required to carry one;
   - `unknown-src`: a `% src:` id that is neither a claim id nor a path the profile holds (`work.0.highlights.1`,
-    `work[0]`, with or without `profile.`);
+    `work[0]`, with or without `profile.`). A repo whose `claims.yaml` doesn't load (`claims_check` fails on it)
+    adds no ids, so when there is an unknown id the hint and `review_documents`' refusal name those repos and
+    point at `claims_check` or a re-index. *Why:* skipped silently, every real id in such a file reads as made
+    up, and nothing says the file is what needs fixing;
   - `never-mention`: a term from `preferences.md`'s "Never mention" (one per line or comma-separated, five words
     at most), matched as a word;
   - `unbacked-skill`: on the resume, an entry of a labelled list of three or more short items (`Languages:

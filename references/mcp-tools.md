@@ -98,7 +98,7 @@ Details: [github-and-repos.md](components/github-and-repos.md), [knowledge-base.
 | `repo_contributions` | `repo` | The user's share of commits, dates, areas touched, top authors |
 | `claims_list` | — | Every claim of every indexed repo as compact text: `## owner/name`, then `- id: claim (impact: …)`, the impact only when set; evidence, skills and confidence left out. A repo whose `claims.yaml` doesn't parse gets one line pointing at `claims_check`. `EZAPPLY.md` has Claude call it once, at the first request about a posting ([why](components/workspace.md#the-agent-file-ezapplymd)) |
 | `claims_check` | `repo` | Validate `claims.yaml`: schema, unique ids, every path in a claim's `files` present in the cache, and every claim marked `user_edited` at the last `repo_sync` still there as it was (claim, skills, impact, the mark). `{ valid, claims, errors[] }` |
-| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; rewrites old-form `evidence` as `files`, records the indexed commit. Returns the meta with the knowledge `folder` and `key` |
+| `knowledge_mark_indexed` | `repo` | Requires a clean `claims_check`; records the indexed commit. Returns the meta with the knowledge `folder` and `key` |
 
 ## Forms
 Every site in the registry: Workday, Oracle Recruiting Cloud, Greenhouse, Lever, Ashby, Phenom, Dayforce and SAP
