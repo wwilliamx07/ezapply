@@ -142,7 +142,7 @@ controls the UI no longer has.
   so a bridge call added to the companion shows up in the fuzzer instead of leaving a screen untested. No request
   leaves the machine: requests to any other origin are blocked, and a click on a `mailto:` or `tel:` link (the
   review's PDFs have one) is cancelled, since the browser would hand it to the system's mail or phone app, which no
-  request block reaches.
+  request block reaches; the cancelled click counts as the new tab the link opens.
 - **Scenarios** (`lib/scenarios.ts`): named starting states per section (no applications, agents working with cards
   waiting, a review of a changed resume, onboarding fresh or mostly done), listed in each map section's README.
   *Where the canned answers come from:* written by hand with the protocol's types, so a change to what the companion

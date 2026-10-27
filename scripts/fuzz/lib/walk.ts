@@ -570,6 +570,10 @@ class Session {
       const done = () => s.inflight--;
       void r.response().then((res) => (res ? res.finished().then(done, done) : done()), done);
     });
+    // A mail or phone link's cancelled click (see `Contexts`) stands for the tab the browser would have opened.
+    await page.exposeBinding("__fuzzHandoff", () => {
+      s.counts.popups++;
+    });
     page.on("popup", (p) => {
       s.counts.popups++;
       void p.close().catch(() => {});
@@ -731,11 +735,13 @@ class Contexts {
         (route) => route.abort("blockedbyclient"),
       );
       // A mail or phone link is no request to block: the browser hands it to the system's mail or phone app. Its
-      // click is cancelled once the page's own handlers have had it.
+      // click is cancelled once the page's own handlers have had it, and reported to the session as the tab it opens.
       await c.addInitScript(() =>
         addEventListener("click", (e) => {
           const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-          if (a && /^(mailto|tel):/i.test(a.href)) e.preventDefault();
+          if (!a || !/^(mailto|tel):/i.test(a.href)) return;
+          e.preventDefault();
+          void (window as unknown as { __fuzzHandoff?: () => Promise<void> }).__fuzzHandoff?.();
         }),
       );
       return c;
