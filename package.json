@@ -17,13 +17,14 @@
   "scripts": {
     "setup": "npm install && npm run build && node packages/cli/dist/main.js init",
     "build": "tsc -b packages/protocol packages/sites packages/companion packages/cli && npm run build -w @ezapply/extension && npm run build -w @ezapply/ui",
-    "typecheck": "tsc -b packages/protocol packages/sites packages/companion packages/cli && tsc -p tsconfig.tests.json && tsc -p scripts/harness && npm run typecheck -w @ezapply/engine && npm run typecheck -w @ezapply/sites && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
+    "typecheck": "tsc -b packages/protocol packages/sites packages/companion packages/cli && tsc -p tsconfig.tests.json && tsc -p scripts/harness && tsc -p scripts/fuzz && npm run typecheck -w @ezapply/engine && npm run typecheck -w @ezapply/sites && npm run typecheck -w @ezapply/extension && npm run typecheck -w @ezapply/ui",
     "test": "npm run build && vitest run",
     "lint": "biome check .",
     "format": "biome format --write .",
     "ezapply": "node packages/cli/dist/main.js",
     "clone": "node scripts/harness/clone.ts",
-    "fill": "node scripts/harness/fill.ts"
+    "fill": "node scripts/harness/fill.ts",
+    "fuzz": "node scripts/fuzz/fuzz.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

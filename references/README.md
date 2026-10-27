@@ -13,7 +13,8 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 |---|---|
 | A site's adapter, or why a fill failed | That site's page under [components/sites/](components/sites.md) (its directory is `packages/sites/src/<site>/`), [adapters.md](components/adapters.md), what its next live run checks in [status.md](status.md#not-yet-verified-for-real) |
 | A new job site | [building-adapters.md](building-adapters.md), then the above |
-| Cloning a site, or testing an adapter change on its clone | [harness.md](harness.md) |
+| Cloning a site, or testing an adapter change on its clone | [ui-map/](ui-map/README.md) | The UI map: each screen of the panel, the review page and the setup page, its controls and where each leads (the UI fuzzer's input) |
+| [harness.md](harness.md) |
 | A live run's results (debug mode) | [Debugging a live run](development.md#debugging-a-live-run-debug-mode) |
 | An MCP tool | Its group in [mcp-tools.md](mcp-tools.md), the service's component page, [How to…](development.md#how-to) |
 | The form tools' logic (tab choice, which posting, the checklist) | [Forms](mcp-tools.md#forms), [companion.md](components/companion.md) |
@@ -21,6 +22,7 @@ companion, the CLI) has the rules that apply there; Claude Code loads it when yo
 | A file ezapply reads or writes | [data-formats.md](data-formats.md), [How to…](development.md#how-to) (migrations) |
 | A skill or `EZAPPLY.md` | [workspace.md](components/workspace.md), [How to…](development.md#how-to) |
 | The side panel and its agent | [agent.md](components/agent.md), [ui.md](components/ui.md), [the side panel](components/extension.md#the-side-panel) |
+| Anything on screen in the panel, the review page or the setup page | Its pages in [ui-map/](ui-map/README.md), then [the UI fuzzer](development.md#the-ui-fuzzer): update the map, run `npm run fuzz` |
 | Resumes, cover letters, PDFs, the review page | [documents.md](components/documents.md), [profile-and-templates.md](components/profile-and-templates.md), [ui.md](components/ui.md) |
 | Capturing postings | [postings.md](components/postings.md), [capture](components/extension.md#capture) |
 | Pairing, the connection, startup | [flows.md](flows.md#2-pairing-the-extension), [companion.md](components/companion.md), [architecture.md](architecture.md) |

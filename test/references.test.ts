@@ -1,7 +1,7 @@
 // The parts of references/CLAUDE.md's rules a test can check: links and anchors resolve,
 // the index lists every page, and every MCP tool, site and skill has its place in the reference.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SITES } from "../packages/sites/src/registry.js";
@@ -85,7 +85,15 @@ describe("references", () => {
     const pages = markdownIn(REFS)
       .map((p) => relative(REFS, p).replaceAll("\\", "/"))
       .filter((p) => p !== "README.md" && p !== "CLAUDE.md");
-    expect(pages.filter((p) => !index.includes(`](${p})`))).toEqual([]);
+    // A folder with a README of its own (the UI map's sections) indexes its pages there, once it is indexed itself.
+    const indexed = (p: string): boolean => {
+      if (index.includes(`](${p})`)) return true;
+      const dir = posix.dirname(p);
+      const own = posix.join(p.endsWith("/README.md") ? posix.dirname(dir) : dir, "README.md");
+      if (own === p || own === "README.md" || !pages.includes(own)) return false;
+      return indexed(own) && read(join(REFS, own)).includes(`](${posix.relative(posix.dirname(own), p)})`);
+    };
+    expect(pages.filter((p) => !indexed(p))).toEqual([]);
   });
 
   it("documents every MCP tool, and no tool that isn't registered", () => {

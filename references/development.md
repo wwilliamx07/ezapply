@@ -15,7 +15,9 @@ ezapply/
   .claude/                  Claude Code for this repo: skills/garden/ (see "Conventions")
   test/                     checks on the reference itself (references.test.ts)
   scripts/harness/          the adapter harness: clones of real application forms, fill runs → harness.md
+  scripts/fuzz/             the UI fuzzer and its goldens → "The UI fuzzer" below
   .clones/                  the harness's clones and browser profile (git-ignored)
+  .fuzz/                    the fuzzer's screenshots and the panel page it builds (git-ignored)
   packages/
     protocol/               shared schemas            → components/protocol.md
     engine/                 the adapter engine and shared widget drivers (sources only) → components/adapters.md
@@ -57,10 +59,11 @@ each site's bundle). The sites package also keeps each site's tests beside it, i
 | `npm run setup` | `npm install`, build, `ezapply init` |
 | `npm run build` | tsc build of protocol, sites, companion, cli; then the extension bundles and the UI package's pages |
 | `npm test` | build, then vitest |
-| `npm run typecheck` | all packages (the engine, the sites' definitions, the extension and UI with their own `tsconfig.json`) `tsconfig.tests.json` (tests) and `scripts/harness` |
+| `npm run typecheck` | all packages (the engine, the sites' definitions, the extension and UI with their own `tsconfig.json`) `tsconfig.tests.json` (tests), `scripts/harness` and `scripts/fuzz` |
 | `npm run lint` / `npm run format` | Biome check / write |
 | `npm run ezapply -- <cmd>` | run the CLI |
 | `npm run clone -- <posting-url>` / `npm run fill -- <site>` | clone a site's application / fill its clone ([harness](harness.md#commands)) |
+| `npm run fuzz -- [section or scenario …]` | the UI fuzzer ([below](#the-ui-fuzzer)) |
 
 ## Tests
 Each package's tests are in its `test/` (and each site's in `packages/sites/src/<site>/test/`), a file per area, named after it (`forms.test.ts`, `checklist.test.ts`).
@@ -78,6 +81,7 @@ repeat them and fall behind.
 | Site knowledge | `sites/test/knowledge.test.ts` | No other package's source names a site (comments aside): what a site does differently stays in its directory |
 | URL rules | `sites/src/<site>/test/url.test.ts` | The site's postings and applications by URL, tenant and job, and pages that look close but aren't |
 | UI | `ui/test/` | Components and pages under jsdom, with Testing Library |
+| The UI fuzzer | `scripts/fuzz/test/` | The [UI map](ui-map/README.md) reads without problems and every scenario starts on one of its pages; then the quick scenarios walked in a real browser, skipped without one or a built UI. The whole fuzz is `npm run fuzz` ([below](#the-ui-fuzzer)) |
 | The adapter harness | `scripts/harness/test/` | The stand-in, what a clone keeps and the proposed description, without a browser; then the whole harness on a hand-written site, which skips without a browser or a built extension ([harness](harness.md#tests)) |
 | The reference | `test/references.test.ts` | Links and anchors in `references/`, `todo/` and the `CLAUDE.md` files resolve; the [index](README.md) lists every page; every registered MCP tool has its row in [mcp-tools.md](mcp-tools.md), and no row names a tool that isn't registered; every registry site has its page under [components/sites/](components/sites.md), titled with its directory; every shipped skill is named in [workspace.md](components/workspace.md) |
 
@@ -112,6 +116,55 @@ lists stay as captured, since that's what the adapters read. A new snapshot gets
 committed. Then read its visible text and attribute values to check nothing was missed, since names also turn up in
 `alt` text, link slugs, hidden JSON and image paths.
 
+## The UI fuzzer
+The side panel, the review page and onboarding, tested by the agent itself after a UI change rather than by the
+user clicking through them. `npm run fuzz` (or `-- panel`, `-- review`, `-- onboarding`, or a scenario's name)
+needs `npm run build` first and a browser (the harness's: Playwright's Chromium, else Edge or Chrome). It prints
+each scenario's screens and presses, then every failure with the map page it's about and the presses that reached
+it, and exits 1 on any. The screenshots are in `.fuzz/shots/`, for the agent to open.
+
+**Run it after every change to `packages/ui`**, with the change's [UI map](ui-map/README.md) pages updated first.
+The whole run takes about four minutes, so while iterating, name the section. A failure is either the change's bug
+or the map out of date: fix whichever is wrong.
+
+- **The map is the input.** [`references/ui-map/`](ui-map/README.md): a page per screen or state, each with the
+  selector that tells it's on screen and a table of its controls, their selectors and conditions, and where each
+  leads (`scripts/fuzz/lib/map.ts` reads them). The fuzzer checks the UI against it, so the map can't drift.
+- **A fake companion** (`lib/server.ts`, `lib/fakes.ts`): the UI package's built pages served as the companion
+  serves them (its CSP too), the panel bundled from `scripts/fuzz/panel/main.tsx` (`PanelApp` with a transport to
+  the fake in place of the extension's background, on React's development build so its warnings count), and canned
+  answers to every call: the agent replies to a message at once, a build succeeds or fails as the scenario says, a
+  task stays queued. What a press changes (a card answered, a posting deleted) changes the fake's state and reaches
+  the page as the companion's events would. No request leaves the machine.
+- **Scenarios** (`lib/scenarios.ts`): named starting states per section (no applications, agents working with cards
+  waiting, a review of a changed resume, onboarding fresh or mostly done), listed in each map section's README.
+  *Where the canned answers come from:* written by hand with the protocol's types, so a change to what the companion
+  sends fails the typecheck here instead of leaving the fuzzer on a shape the companion no longer has. Rejected:
+  answers recorded from a real run and scrubbed (they hold the user's data until scrubbed, and go stale as quietly,
+  without the typecheck). Placeholder people and employers only.
+- **The walk** (`lib/walk.ts`): from each scenario's first screen, every control on each screen is pressed in a
+  fresh page load, the presses that led there replayed first, and the screen it leads to checked against the map. A
+  screen is walked again when it shows a control no earlier visit did, or in a new state while it has had few (so
+  Approve, which leads on to the rest without showing anything new itself, is followed). Fields take odd values
+  (empty, 5,000 characters, non-ASCII, LaTeX, markup); a button disabled until there's text gets its screen's empty
+  fields filled first. A `confirm` is accepted, a file chooser gets a placeholder PDF, new tabs and downloads are
+  counted and closed. Then a seeded random walk presses anything on screen (`--steps`, `--seed`).
+- **It fails on** a console error or an uncaught exception; a press that changed nothing and called nothing (a
+  dead control); a control on screen that no map page lists; a listed control missing from its screen; a press
+  leading somewhere other than the map says; a page, or a conditional control, that no scenario of its section
+  showed; and a screenshot that differs from its golden.
+- **Goldens** (`scripts/fuzz/goldens/<platform>/<scenario>/`, named by the presses that reached the screen): a
+  screenshot of every screen walked, compared pixel by pixel in the browser. A difference saves the new one beside
+  the old as `.new.png` (git-ignored) and fails; `--update` writes them all and removes the ones no screen matches
+  now. A missing golden is written and reported, not failed: a new screen, or a platform with none yet (fonts
+  differ between systems, so each keeps its own). Look at new goldens before committing them. The walk queues what
+  it finds in the order of the presses, not the order they finish in, so the same screen gets the same name.
+- **Timing.** Each page opens in a browser context of its own (`--workers`, six at once by default, across
+  `--parallel` scenarios): pages of one site in one context share a renderer process, and side by side they ran one
+  at a time, slow enough to read as the UI being slow. A press is done when the page's own requests (counted in the
+  page, since Playwright's request events arrive late under load) are answered and its DOM has been still for a
+  moment.
+
 ## CI
 GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node 24:
 
@@ -124,7 +177,7 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 - **Keep `references/` current** in the same change (see [CLAUDE.md](CLAUDE.md)).
 - **Rules beside what they govern.** The root `CLAUDE.md` holds only the rules for the whole repo; a directory's own
   conventions are in its `CLAUDE.md`: `references/`, `todo/`, `packages/sites/`, `packages/companion/`,
-  `packages/cli/` and `scripts/harness/`. Claude Code loads one when it works in that folder, so the rules reach an agent that went
+  `packages/cli/`, `packages/ui/`, `scripts/harness/` and `scripts/fuzz/`. Claude Code loads one when it works in that folder, so the rules reach an agent that went
   straight there without reading here first, and the root file stays short in every session. Keep them short; a
   rule's reasons stay on its page here. (`packages/cli/templates/workspace/CLAUDE.md`
   is different: it's the user's workspace file, shipped by `ezapply init`.)

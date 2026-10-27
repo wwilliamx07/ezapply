@@ -33,6 +33,10 @@ extension already builds with it; no dev server or framework build is needed.
 | `src/panel/` | The side panel: `App.tsx`, `cards.tsx` (question and approval cards), `markdown.tsx`, `transport.ts`, `panel.css`. `@ezapply/ui/panel` exports `PanelApp` and the transport's types (with `@ezapply/ui/base.css` and `@ezapply/ui/panel.css`) for the extension to bundle |
 | `test/review.test.tsx`, `test/panel.test.tsx`, `test/onboard.test.tsx`, `test/brand.test.ts` | Unit and component tests ([development](../development.md#tests)) |
 
+What each screen shows and where each of its buttons leads is in the [UI map](../ui-map/README.md), one page per
+screen; the [UI fuzzer](../development.md#the-ui-fuzzer) presses every control in a real browser and checks the
+pages against it, so a change here updates the map and runs `npm run fuzz`.
+
 ## The build (`npm run build -w @ezapply/ui`)
 - **Bundles:** `review` and `onboard` (`src/<page>/main.tsx`) and `base` (`src/styles/base.css`), as ES modules with
   code splitting (React and pdf.js land in one shared chunk), minified, with source maps, names carrying a hash

@@ -30,7 +30,8 @@ scripts/harness/                 Node 24 runs it as TypeScript (type stripping);
   clone/                         run.ts (cloning and the checks), explore.ts, normalise.ts, propose.ts, check.ts
   standin/engine.ts              the stand-in: one engine for every site
   fill/run.ts                    scripted fill runs
-  lib/                           browser.ts (launching, the adapter, the recorder, serving), open.ts, store.ts, profile.ts
+  lib/                           browser.ts (launching, also for the UI fuzzer; the adapter, the recorder, serving),
+                                 open.ts, store.ts, profile.ts
   test/                          the engine's tests, and the hand-written site (site/) the whole harness runs on
 packages/sites/src/clones.ts     a site description's shape, and CLONE_DESCRIPTIONS
 packages/sites/src/<site>/clone.ts  a cloned site's description (none yet)

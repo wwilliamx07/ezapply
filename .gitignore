@@ -7,3 +7,5 @@ references/.obsidian
 tmp
 .claude/launch.json
 .clones/
+.fuzz/
+scripts/fuzz/goldens/**/*.new.png

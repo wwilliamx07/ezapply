@@ -160,6 +160,10 @@ Each gives the choice and the reason in a line or two; the linked page has the d
   few hard rules sit in a `CLAUDE.md` beside the code they govern, it doesn't restate the code (no per-test
   lists), and a test checks its links and coverage: the agent reads less and still finds the page that matters
   ([conventions](development.md#conventions)).
+- **The UI is checked by a fuzzer walking a map of it,** not by the user clicking through: the map
+  ([ui-map](ui-map/README.md)) is the fuzzer's input, so it can't drift from the UI; the companion is faked with
+  hand-written answers typed with the protocol, not answers recorded and scrubbed; selectors are the controls' roles
+  and names, the user's view, rather than test ids added to the code ([the UI fuzzer](development.md#the-ui-fuzzer)).
 - **Defaults assumed:** resume page size Letter (bundle normalization;
   [`resume.pageSize`](data-formats.md#ezapplyconfigjson-companionsrcconfigworkspacets)); contributions to other
   people's public repos are added by URL, with claims limited to the user's own commits

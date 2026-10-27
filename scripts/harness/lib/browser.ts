@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GENERIC, siteOfUrl } from "@ezapply/sites";
-import { type BrowserContext, chromium, type Frame, type Page, type Request } from "playwright";
+import { type Browser, type BrowserContext, chromium, type Frame, type Page, type Request } from "playwright";
 import type { RawExchange } from "../clone/normalise.ts";
 import type { StandIn } from "../standin/engine.ts";
 
@@ -56,6 +56,19 @@ export async function launch(profile: string, headed: boolean): Promise<BrowserC
         locale: "en-US",
         timezoneId: "UTC",
       });
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last;
+}
+
+/** A browser with no profile, the same ones tried: the UI fuzzer opens a context of its own for each page it runs. */
+export async function launchBrowser(headed: boolean): Promise<Browser> {
+  let last: unknown;
+  for (const channel of CHANNELS) {
+    try {
+      return await chromium.launch({ channel, headless: !headed });
     } catch (err) {
       last = err;
     }
