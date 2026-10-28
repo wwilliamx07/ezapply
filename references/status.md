@@ -177,6 +177,10 @@ What's built but hasn't run live, and what to check first. Each site's page list
   application's host (an embedded form's frame included); the background keeps polling while the tab sits on the
   review page; a report made while `ezapply` was closed arrives on the next start.
 
+- **A last step's own warnings on the hand-off card** ([mcp-tools](mcp-tools.md)), tested with the checklist
+  alone. Check on a single-page form (Greenhouse, Lever, Ashby) with a row count that differs from the profile:
+  the card shows it under "This page", and it goes once the rows match.
+
 - **The adapter harness** ([harness](harness.md)), run on its hand-written site and a public Greenhouse posting
   (usable, a fill run reaching the hand-off).
 

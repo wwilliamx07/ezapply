@@ -1,6 +1,6 @@
 import type { Field, FormSchema } from "@ezapply/protocol";
 import { describe, expect, it } from "vitest";
-import { handoff, stepWarnings } from "../src/forms/checklist.js";
+import { handoff, type LogEvent, stepWarnings } from "../src/forms/checklist.js";
 import { Profile } from "../src/profile/schema.js";
 
 const profile = Profile.parse({
@@ -149,5 +149,20 @@ describe("handoff", () => {
       ],
       removed: [{ what: 'q.cover: ["cover.pdf"]', reason: "old" }],
     });
+  });
+
+  it("counts the last page's own warnings, since go_next never leaves it", () => {
+    // A single-page form: no step, and no step-check in the log.
+    expect(handoff([], { warnings: ["Certifications: the page has 0 rows"] }).steps).toEqual([
+      { step: "This page", warnings: ["Certifications: the page has 0 rows"] },
+    ]);
+    // A multi-page form's last step: its read replaces what an earlier visit logged for it.
+    const log: LogEvent[] = [
+      { event: "step-check", step: "Experience", stepIndex: 2, warnings: ["Languages: the page has 0 rows"] },
+      { event: "step-check", step: "Questions", stepIndex: 3, warnings: ["Resume/CV holds old.pdf"] },
+    ];
+    expect(handoff(log, { step: "Questions", stepIndex: 3, warnings: [] }).steps).toEqual([
+      { step: "2", warnings: ["Languages: the page has 0 rows"] },
+    ]);
   });
 });

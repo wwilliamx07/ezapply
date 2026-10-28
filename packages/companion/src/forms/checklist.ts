@@ -91,13 +91,30 @@ export interface Handoff {
 /** The hand-off as the panel shows it: with the approved documents never attached, on the review page. */
 export type HandoffCard = Handoff & { notAttached?: string[] };
 
-/** The hand-off summary from this posting's log: what the skill's hand-off message lists. */
-export function handoff(events: LogEvent[]): Handoff {
+/**
+ * The hand-off summary from this posting's log: what the skill's hand-off message lists. `lastStep` is the page
+ * being read when it is a step whose only way on is Submit: go_next never leaves it, so it has no step-check of
+ * its own, and without this a single-page form's hand-off would never carry a warning.
+ */
+export function handoff(
+  events: LogEvent[],
+  lastStep?: { step?: string; stepIndex?: number; warnings: string[] },
+): Handoff {
   const lastFill = new Map<string, LogEvent>();
   const steps = new Map<string, string[]>();
   const removed: Handoff["removed"] = [];
   const attached = new Set<string>();
-  for (const e of events) {
+  const page: LogEvent[] = lastStep
+    ? [
+        {
+          event: "step-check",
+          step: lastStep.step ?? "This page",
+          ...(lastStep.stepIndex ? { stepIndex: lastStep.stepIndex } : {}),
+          warnings: lastStep.warnings,
+        },
+      ]
+    : [];
+  for (const e of [...events, ...page]) {
     if (e.event === "upload" && e.ok && e.file) attached.add(e.file.split(/[\\/]/).pop() as string);
     if (e.event === "fill" && e.ok && e.fieldId) lastFill.set(e.fieldId, e);
     if (e.event === "step-check") steps.set(String(e.stepIndex ?? e.step ?? "?"), e.warnings ?? []);
