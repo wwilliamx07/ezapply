@@ -20,16 +20,13 @@ then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
-| — | [Cut the tokens a panel conversation spends](token-use/overview.md) | — | ~S | The token cuts' and the skills refactor's live runs in `references/status.md` |
 | 1 | [An adapter harness: local clones of real application forms](adapter-harness/overview.md) | — | L | — |
 | 2 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
 | 3 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M | The adapter harness |
 | 4 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
 | 5 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
-| 6 | [Application tracker: progress and outcomes](application-tracker/overview.md) | Medium | M | — |
-| 7 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 8 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
-| — | [Keep the agent's edits to the files its task may touch](agent-edit-scope/overview.md) | Medium | ~M | — |
+| 6 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
+| 7 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
 
 Why this order:
 - **The adapter harness first:** every later adapter change, and every new site, is tested on a clone instead of
@@ -38,16 +35,14 @@ Why this order:
   later tailoring.
 - **Employer's own forms beyond plain HTML** waits for a saved careers page whose application is its own form,
   with no frame: its widgets decide what's worth reading.
-- **The application manager** (tracker, job search, alerts) is built in that order, each on the one before.
+- **The application manager** (job search, then alerts) is built in that order, the alerts on the search.
 
 ## Groups
 
-- **The agent:** Cut the tokens a panel conversation spends, Keep the agent's edits to the files its task may
-  touch, A writing spec for claims and repo documentation, Compatibility with opencode.
+- **The agent:** A writing spec for claims and repo documentation, Compatibility with opencode.
 - **Adapter building:** An adapter harness: local clones of real application forms, Agents that try to break a new adapter, Employer's own forms beyond
   plain HTML.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
-  adds no database. Application tracker: progress and outcomes, Job search across the boards ezapply knows, Job
-  alerts.
+  adds no database. Job search across the boards ezapply knows, Job alerts.
