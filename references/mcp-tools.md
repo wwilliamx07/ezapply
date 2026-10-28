@@ -200,7 +200,9 @@ context was compacted may have lost them: the notes are short, and the generic s
   - Warnings are things to check, never errors: a row count can be right on purpose.
   - `handoff` is built from `form-log.jsonl`:
     - `attached`: the files successful uploads attached, by name;
-    - `steps`: the warnings from the last `step-check` of each step that still had any;
+    - `steps`: the warnings from the last `step-check` of each step that still had any. When the page read is
+      a last step (`lastPage`), its own warnings count as its step-check, under its title or "This page":
+      `go_next` never leaves it, so a single-page form would otherwise never show a warning;
     - `answersToFlag`: the last fill of each field whose source is `user` or `judgment`, with the field's `label`
       (`fill` events log it, from the tab's last read);
     - `removed`: removals and deleted rows, with their reasons.

@@ -952,9 +952,11 @@ export class FormsService {
       const profile = await this.profile.profile();
       const warnings = stepWarnings(form, profile.exists && profile.valid ? profile.value : null, uploaded);
       const end = form.pageKind === "review" || form.lastPage === true;
+      const lastStep =
+        form.pageKind === "step" ? { step: form.step?.title, stepIndex: form.step?.index, warnings } : undefined;
       return {
         ...(form.pageKind === "step" && warnings.length ? { checklist: warnings } : {}),
-        ...(end ? { handoff: handoff(events) } : {}),
+        ...(end ? { handoff: handoff(events, lastStep) } : {}),
       };
     } catch (err) {
       this.log.warn({ err: (err as Error).message }, "checklist skipped");
