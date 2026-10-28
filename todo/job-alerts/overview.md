@@ -1,7 +1,7 @@
 # Job alerts
 
 **What.** Tell the user when a new posting matching their search appears, without a chat open, with deadline
-reminders from the tracker.
+reminders.
 
 **Why.** The companion runs only while ezapply does, and Claude Code's scheduled tasks only while a session is open.
 

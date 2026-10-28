@@ -1,7 +1,7 @@
 # Job alerts: details
 
 **What.** Tell the user when a new posting matching their search appears, without a chat open. Deadline reminders
-from the tracker ride along.
+ride along.
 
 **How.** The companion runs only inside `ezapply`, and Claude Code's scheduled tasks only while a session is
 open, so alerts need the OS scheduler. `ezapply alerts on` registers a job (Task Scheduler, launchd, a systemd timer
