@@ -20,7 +20,7 @@ then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
-| 1 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
+| 1 | [A writing spec for claims](claims-writing-spec/overview.md) | — | S | — |
 | 2 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
 | 3 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
 | 4 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
@@ -35,7 +35,7 @@ Why this order:
 
 ## Groups
 
-- **The agent:** A writing spec for claims and repo documentation, Compatibility with opencode.
+- **The agent:** A writing spec for claims, Compatibility with opencode.
 - **Adapter building:** Employer's own forms beyond plain HTML.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
