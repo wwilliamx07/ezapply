@@ -3,8 +3,7 @@
 Local clones of real application forms, so an adapter change is tested on a copy of the site rather than on the
 user's next real application. A clone keeps the site's own front end and the answers its server gave; a stand-in
 plays the server from them; and a fill run drives the site's built adapter through the clone as the agent would.
-Greenhouse has a usable clone; what's still to build (the other sites' clones, agent fill runs) is the todo's "An
-adapter harness: local clones of real application forms".
+Greenhouse has a usable clone.
 
 **Why.** Saved pages don't run the site's own scripts, so they can't show how a fill behaves (jsdom fixtures are
 built from what the adapter expects: [tests](development.md#tests)), and a live check spends the user's time and
@@ -131,7 +130,7 @@ synthetic Submit. A value reads back in the page's own formatting: the same lett
 option "United States +1"), as the engine matches options. A screenshot per step, every call's trace and the report go into the clone's `runs/`.
 
 It runs the adapter, not the extension's background or the companion: those don't change with a site, and driving
-them needs a paired companion. A fill run by the panel's agent is still to build (the todo's "An adapter harness: local clones of real application forms").
+them needs a paired companion.
 
 ## Tests
 

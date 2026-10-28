@@ -20,18 +20,14 @@ then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
-| 1 | [An adapter harness: local clones of real application forms](adapter-harness/overview.md) | — | L | — |
-| 2 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
-| 3 | [Agents that try to break a new adapter](adapter-breakers/overview.md) | Medium | M | The adapter harness |
-| 4 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
-| 5 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
-| 6 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 7 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
+| 1 | [A writing spec for claims and repo documentation](claims-writing-spec/overview.md) | — | ~S–M | — |
+| 2 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
+| 3 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
+| 4 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
+| 5 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
 
 Why this order:
-- **The adapter harness first:** every later adapter change, and every new site, is tested on a clone instead of
-  waiting for the user's next real application.
-- **The agent's footing next.** The claims are what documents are written from, so their spec pays off on every
+- **The agent's footing first.** The claims are what documents are written from, so their spec pays off on every
   later tailoring.
 - **Employer's own forms beyond plain HTML** waits for a saved careers page whose application is its own form,
   with no frame: its widgets decide what's worth reading.
@@ -40,8 +36,7 @@ Why this order:
 ## Groups
 
 - **The agent:** A writing spec for claims and repo documentation, Compatibility with opencode.
-- **Adapter building:** An adapter harness: local clones of real application forms, Agents that try to break a new adapter, Employer's own forms beyond
-  plain HTML.
+- **Adapter building:** Employer's own forms beyond plain HTML.
 - **Application manager:** one place for the user's job search: the postings they might apply to, where each
   application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
   `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
