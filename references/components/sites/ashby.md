@@ -35,5 +35,19 @@ never submitting ([how the boards were verified](../sites.md#what-was-verified-a
   places, then a search found it), the Yes/No buttons, the resume upload, and, with the path rule (above), radio and
   checkbox groups (fake values, never submitted), each read back. A graduation date picker is read as text: a typed
   month and year shows as the first of that month.
+- **Its clone** ([the adapter harness](../../harness.md)), of a posting on a public board with a diversity survey:
+  usable, and a fill run reaches the hand-off with every value read back. Its description, `ashby/clone.ts`: every
+  call is a JSON POST to `/api/non-user-graphql?op=<operation>`, and any `ApiSubmit…` operation is a submit (the
+  application, and the texting consent's own); the posting (`ApiJobPosting`) brings the application and survey
+  forms with ids issued afresh on each load, volatile; each answer is saved as it's given (`ApiSetFormValue`, keyed
+  by the form's definition, since the survey is a form of its own), answered with the whole form, its values
+  volatile (the page keeps its own, so a recorded answer with other values doesn't undo a fill); the location is a
+  geocoder (`ApiAutocompleteGeoLocation`) searched by `variables.text`, ranked fuzzily (word match approximates
+  it), and searched again with a chosen place's name; the posting page varies by its CSP nonce, the invisible
+  reCAPTCHA's scripts by release and its frames are beacons, as is the browser's request for the board's icon.
+  Ashby rate-limits saves (429 after about 75 in a few minutes), so the explorer tries 4 answers per choice
+  (`explorer.maxAnswers`), and the location search was capped with `--max-queries 30`; the resume isn't explored,
+  since attaching sends it (`ApiCreateFileUploadHandle`, then a POST to the handle's URL, read from the board's
+  bundle).
 
 **Not yet tried:** the confirmation page.

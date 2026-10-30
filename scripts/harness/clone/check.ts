@@ -51,13 +51,24 @@ function sameBody(a: Buffer, b: Buffer, volatile: string[]): boolean {
   try {
     const strip = (buf: Buffer) => {
       let v = JSON.parse(buf.toString("utf8")) as unknown;
-      for (const p of volatile) v = at(v, p) === undefined ? v : setAt(v, p, undefined);
+      for (const p of volatile) for (const q of expand(v, p)) v = at(v, q) === undefined ? v : setAt(v, q, undefined);
       return JSON.stringify(sorted(v));
     };
     return strip(a) === strip(b);
   } catch {
     return false;
   }
+}
+
+/** A dotted path's `*`s replaced by each key there is at that point in `v`: every concrete path it names. */
+function expand(v: unknown, path: string): string[] {
+  const star = path.split(".").indexOf("*");
+  if (star < 0) return [path];
+  const keys = path.split(".");
+  const head = keys.slice(0, star).join(".");
+  const under = at(v, head);
+  if (under === null || typeof under !== "object") return [];
+  return Object.keys(under).flatMap((k) => expand(v, [...keys.slice(0, star), k, ...keys.slice(star + 1)].join(".")));
 }
 
 /** A JSON value with every object's keys sorted. */

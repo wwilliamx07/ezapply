@@ -181,8 +181,8 @@ What's built but hasn't run live, and what to check first. Each site's page list
   alone. Check on a single-page form (Greenhouse, Lever, Ashby) with a row count that differs from the profile:
   the card shows it under "This page", and it goes once the rows match.
 
-- **The adapter harness** ([harness](harness.md)), run on its hand-written site and a public Greenhouse posting
-  (usable, a fill run reaching the hand-off).
+- **The adapter harness** ([harness](harness.md)), run on its hand-written site and on public Greenhouse and
+  Ashby postings (both usable, a fill run reaching the hand-off). Lever is still to clone.
 
 - **Employer's own forms** ([sites](components/sites.md#employers-own-forms-generic)), built and tested on
   synthetic pages only. Check on a real careers page with a frameless form: the right form is picked, every

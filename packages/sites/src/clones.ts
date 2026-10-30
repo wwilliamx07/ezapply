@@ -4,6 +4,7 @@
  * been made: the cloner proposes it from what it recorded, and it is listed here. No zod, no DOM: the harness loads
  * it in Node.
  */
+import { ashbyClone } from "./ashby/clone.js";
 import { greenhouseClone } from "./greenhouse/clone.js";
 import type { FormSiteId } from "./registry.js";
 
@@ -55,7 +56,10 @@ export interface EndpointSpec {
   label?: string;
   /** `step`: the parts that must be present and non-empty for the step to go on. */
   required?: RequestPart[];
-  /** Parts of the response's JSON (dotted paths) that differ between two identical requests: not compared. */
+  /**
+   * Parts of the response's JSON (dotted paths, `*` for every item of an array or key of an object) that differ
+   * between two identical requests: not compared.
+   */
   volatile?: string[];
   /**
    * The whole answer differs on every load (a third party's script with a nonce or feature flags in it): answered
@@ -90,5 +94,6 @@ export interface CloneDescription {
 
 /** Each cloned site's description. */
 export const CLONE_DESCRIPTIONS: Partial<Record<FormSiteId, CloneDescription>> = {
+  ashby: ashbyClone,
   greenhouse: greenhouseClone,
 };

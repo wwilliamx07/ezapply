@@ -92,9 +92,16 @@ export async function cloneSite(url: string, o: CloneOptions): Promise<{ dir: st
   }
 
   const { exchanges, bodies } = normalise(recorder.raw, desc);
+  // A site that limits how many requests it takes answers the rest with 429: those answers aren't its behaviour.
+  const rateLimited = exchanges.filter((e) => e.status === 429).map((e) => `${e.pass}: ${e.method} ${e.url}`);
+  if (rateLimited.length)
+    o.log(
+      `the site rate-limited ${rateLimited.length} requests: clone again later, with a lower --max-queries or explorer.maxAnswers`,
+    );
   const report: Record<string, unknown> = {
     ...(stopped ? { stopped } : {}),
     submitsStopped: submits,
+    rateLimited,
     coverage: coverage && summarise(coverage),
     heldOut: heldOut && { steps: heldOut.steps, notes: heldOut.notes },
     draftLeft:
@@ -108,7 +115,12 @@ export async function cloneSite(url: string, o: CloneOptions): Promise<{ dir: st
   const clone = await loadClone(dir);
   await writeFile(join(dir, "proposed-clone.ts"), proposalSource(site.id, propose(clone)));
   if (coverage) await writeFile(join(dir, "coverage.json"), `${JSON.stringify(coverage, null, 2)}\n`);
-  const usable = await checkClone(clone, desc ?? { endpoints: [] }, o.log, !stopped && !submits.length);
+  const usable = await checkClone(
+    clone,
+    desc ?? { endpoints: [] },
+    o.log,
+    !stopped && !submits.length && !rateLimited.length,
+  );
   return { dir, usable };
 }
 
