@@ -218,14 +218,6 @@ GitHub Actions (`.github/workflows/ci.yml`) on every push and pull request, Node
 - **Adapter bundles stay free of zod:** in-page code imports the protocol only through its import-free
   subpaths (`@ezapply/protocol/sites`, `/timing`) or as types.
 - **No personal assumptions in code**: everything user-specific lives in the profile and config.
-- **One adapter change per live run.** The fixtures can't catch a slower or broken fill on a real site, since
-  they're built from what the adapter expects. So land adapter changes one per live run, so a slowdown or failure
-  points at one change, and don't bundle them. Why: one commit that changed about ten things in the Workday
-  adapter at once made live filling several times slower (a step's `fill_fields` past the companion's 120 s
-  timeout), and which change did it was never found. A change that only moves code (equal golden schemas and
-  behaviour tests) may go in with others; say so in the commit. Which changes the next live run of each site has
-  to check, and what to suspect if it's slower, is in [status](status.md#not-yet-verified-for-real).
-  `autofill-timing.yaml` can shorten a wait without a rebuild.
 
 ## Debugging a live run (debug mode)
 `ezapply debug on` before the run (in the user's workspace), `ezapply debug report` after it, then open the
@@ -250,7 +242,7 @@ saves the page before each call and at every failed field, with a screenshot whe
    then add an extraction test to its `test/live.test.ts`.
 3. Correct the behavioural fixture to the real markup and the events the trace shows, and write the filler
    test there: jsdom doesn't run the site's scripts, so a saved page can't test a fill.
-4. Fix, run live again (one adapter change per run), and compare the reports.
+4. Fix, run live again, and compare the reports.
 
 Compare a debugged run's timings with other debugged runs only. Turn it off (`ezapply debug off`) and
 `ezapply debug clean` when done: the records hold the user's data.

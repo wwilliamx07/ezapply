@@ -202,5 +202,5 @@ whose application is also behind a candidate account, was built from such a page
 Each board's definition was built from a live application page rendered by headless Edge (saved, without scripts and
 styles, as the board's `fixtures/`: `greenhouse-apply.html`, `lever-apply.html`, `ashby-apply.html` and
 `ashby-groups.html`, employer details replaced; each board's `test/live.test.ts` reads them), then checked on live
-public forms with fake values, never submitting ([how](adapters.md#checking-a-site-live)). What each run showed, and
-what's still untried, is on the board's page; the other sites' are on theirs.
+public forms with fake values, never submitting ([how](adapters.md#checking-a-site-live)). What each run showed is on
+the board's page; the other sites' are on theirs.

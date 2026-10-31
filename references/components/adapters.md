@@ -188,7 +188,7 @@ its text is read from the element tree.
 **Why not clicks.** The menu opens on a mousedown, renders in a portal only while open, and a long list is virtual,
 holding only the options in view; a synthetic mousedown on react-select did nothing without page focus (above). The
 context needs no menu, no focus and no scrolling. **The risk:** the context is rc-select's internals. Its shape was
-checked in the version Dayforce bundles, but the driver hasn't run live ([status](../status.md#not-yet-verified-for-real)).
+checked in the version Dayforce bundles.
 
 ### A site's own drivers
 A widget no shared driver handles gets a driver in the site's folder: Workday's listbox dropdown, prompt

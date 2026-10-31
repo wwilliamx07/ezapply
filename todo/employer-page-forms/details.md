@@ -2,7 +2,7 @@
 
 The generic definition (`packages/sites/src/generic/`, `references/components/sites.md`, "Employer's own forms")
 reads native controls in a `<form>`, counts what it leaves out in `messages`, and runs only on a tab a call names.
-What's left needs real pages: none has been saved yet (`references/status.md` names the live run).
+What's left needs real pages: none has been saved yet.
 
 **1. ARIA comboboxes.** `role=combobox` with its listbox (`aria-controls`), through `comboboxDriver`, prompted by
 `promptOf`. Today they're counted as left out (`CUSTOM` in `generic/definition/site.ts`); take them out of that

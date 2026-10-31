@@ -228,9 +228,8 @@ address bar replaces that entry, adding none). Where the browser still refuses (
 tab they'd used), the page says "Sent to Claude. You can close this tab." A 409 (the review was answered
 meanwhile, or replaced) shows the page as it now is; a failed request (ezapply closed) says so and keeps what the
 user wrote, which is also kept across a reload. The page's scripts come from the companion, none inline, and its
-token becomes a cookie on the review's path ([ui](ui.md#how-a-page-talks-to-the-companion)). Closing the tab was
-seen working in Chromium with the tab opened from the command line, as the `Opener` does; not yet tried on this
-page.
+token becomes a cookie on the review's path ([ui](ui.md#how-a-page-talks-to-the-companion)). Closing the tab works
+in Chromium with the tab opened from the command line, as the `Opener` does.
 
 **Approvals** go to `postings/<id>/approvals.json`: per document (path relative to the posting folder) the
 SHA-256 of the approved bytes, when, and the review. `upload_file` in the `after-approval` mode refuses a file

@@ -2,12 +2,8 @@
 
 Read first: `references/building-adapters.md` for a new site, `references/components/sites.md` for this package and
 the registry, `references/components/adapters.md` for the engine (`packages/engine`) and the shared drivers, and the
-site's own page, `references/components/sites/<site>.md`. What the next live run of each site has to check is in
-`references/status.md`.
+site's own page, `references/components/sites/<site>.md`.
 
-- **One adapter change per live run** (why: `references/development.md`, "Conventions"). Don't bundle adapter
-  changes; a change that only moves code (equal golden schemas and behaviour tests) is the exception, and the
-  commit says so.
 - **Everything about a site lives in its directory** (`src/<site>/`: `registry.ts`, `definition/`, `notes.ts`,
   `reader.ts` and `clone.ts` if it has them, `test/`, `fixtures/`), listed in `src/registry.ts`, `definitions.ts`,
   `notes.ts`, `readers.ts` and `clones.ts`. Nothing else names a site: not the engine, the companion, the extension,

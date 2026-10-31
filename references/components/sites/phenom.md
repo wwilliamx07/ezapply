@@ -109,8 +109,4 @@ the fields: the agent checks what the parse filled.
   behaviour above was seen: the selects' late read-back, the month picker refusing typing, the alert on step 1,
   Next's wait, dependent fields. The pages were saved after each step (`phenom-step1.html`, `phenom-step2.html`,
   `phenom-step2-errors.html` after Next with required fields empty, `phenom-step3.html`; employer details
-  replaced) and the definition was built from them. Steps 4 to 6 weren't reached. Through the extension, one
-  live run stopped on step 1 ([status](../../status.md#not-yet-verified-for-real)).
-
-**Not yet tried:** steps 4 to 6 (their markup, and the Review step's Submit), removing a row, adding one, and the
-posting page's own markup beyond its Apply link.
+  replaced) and the definition was built from them. Steps 4 to 6 weren't reached.

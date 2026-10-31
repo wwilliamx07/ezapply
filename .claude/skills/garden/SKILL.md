@@ -21,8 +21,8 @@ If you find correctness issues, include them in your final report. Don't fix the
 
 - **No behaviour changes.** Gardening deletes, trims and corrects. If a fix would change what the code does, even
   a fix for a real bug, report it instead of making it.
-- **Adapters:** `packages/sites/src/<site>/definition/` and `packages/engine/` follow "One adapter change per live
-  run". Here you may edit comments and delete code nothing calls. A change that alters what runs in the page is
+- **Adapters:** in `packages/sites/src/<site>/definition/` and `packages/engine/` you may edit comments and delete
+  code nothing calls. A change that alters what runs in the page is
   reported. Golden schemas must come out unchanged.
 - **`packages/cli/templates/` ships to users** on their next `ezapply init`. Trimming there is allowed, but name
   every change in the report.
@@ -93,8 +93,7 @@ Hold every page to `references/CLAUDE.md`, and check it against the code, not ag
 - **Built, not planned:** planned work moves to `todo/`, or goes away if `todo/` already has it.
 - **Why stays:** don't trim the reasons behind non-obvious choices. That is the part the code can't hold. Every
   decision in `status.md`'s Decisions links to the page that explains it, and every such page has its line there.
-- **`status.md`:** "Not yet verified for real" names only changes that are built and still unverified. Known issues
-  that are fixed come out.
+- **`status.md`:** known issues that are fixed come out.
 - **Index:** `README.md`'s "By task" and "Contents" tables match the pages and what they cover.
 
 Prefer cutting to adding. A page that comes out shorter and still complete is the goal.
@@ -102,7 +101,7 @@ Prefer cutting to adding. A page that comes out shorter and still complete is th
 ## 5. todo/ and the CLAUDE.md files
 
 - **todo/**, held to `todo/CLAUDE.md`: an item that is built in whole gets its directory and its row in `todo.md`
-  deleted. Check that `references/` covers it first, and move anything still needing a live run into `status.md`.
+  deleted. Check that `references/` covers it first.
   An item built in part is cut down to what's left, its size included. `overview.md` has no file names, functions
   or numbered steps. Every directory has its row in `todo.md` and every row has its directory. Items are referred
   to by title, from code and from `references/`. Files that aren't items (a scratchpad) are flagged for the user.

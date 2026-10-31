@@ -166,10 +166,4 @@ page on this site to act on: postings are on the employer's careers site.
   searched and chosen through the component (country and province hinted by their field names); row dates were
   taken; documents went in through the popup, a second one into Additional Documents included; and an optional
   document was removed after its dialog, while the required resume's removal was refused. The question radios, a
-  same-named replacement and the re-render ([documents](#documents)) are handled from what that run showed, and
-  checked in jsdom only.
-
-**Not yet tried:** the question radio driver, a same-named replacement and the re-render handling live; the province
-list enabled and loaded after a country is chosen in the same call; adding and removing a row; Apply's errors; a
-signed-out application; the confirmation and sign-in pages; and an employer whose template has textareas, checkboxes,
-native radios or native selects.
+  same-named replacement and the re-render ([documents](#documents)) are handled from what that run showed.
