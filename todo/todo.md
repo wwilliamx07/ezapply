@@ -7,37 +7,21 @@ Only work that isn't built, one directory per item; how items are written and ke
 - **Size:** S (a day or less), M (a few days), L (one to two weeks), XL (more). Sizes marked `~` are first guesses
   for items not yet worked out.
 
-Anything that changes an adapter follows "One adapter change per live run" in `references/development.md`.
-
 ## Order of execution
-
-First, the live runs in `references/status.md` ("Not yet verified for real"): a tailoring and a Workday run with
-debug mode off, measured as the skills refactor's and the token cuts' entries ask, whose timings match the earlier
-runs' (the adapter trace's no-op path), which also presses a row's Delete and binds a job-board posting's tab; the
-same on Antigravity; then runs with debug on, the two comparing the browser behind and in front among them; a
-Greenhouse application embedded in a careers page; an employer's own frameless form, saved for the generic reader;
-then an Oracle run.
 
 | # | Item | Value | Size | Needs first |
 |---|------|-------|------|-------------|
 | 1 | [A writing spec for claims](claims-writing-spec/overview.md) | — | S | — |
 | 2 | [Employer's own forms beyond plain HTML](employer-page-forms/overview.md) | Medium | M | A page saved from a real one |
 | 3 | [Compatibility with opencode](agent-compatibility/overview.md) | Medium | M | — |
-| 4 | [Job search across the boards ezapply knows](job-search/overview.md) | Medium | L | — |
-| 5 | [Job alerts](job-alerts/overview.md) | Medium | M | Job search |
 
 Why this order:
 - **The agent's footing first.** The claims are what documents are written from, so their spec pays off on every
   later tailoring.
 - **Employer's own forms beyond plain HTML** waits for a saved careers page whose application is its own form,
   with no frame: its widgets decide what's worth reading.
-- **The application manager** (job search, then alerts) is built in that order, the alerts on the search.
 
 ## Groups
 
 - **The agent:** A writing spec for claims, Compatibility with opencode.
 - **Adapter building:** Employer's own forms beyond plain HTML.
-- **Application manager:** one place for the user's job search: the postings they might apply to, where each
-  application stands, and what to do next. ezapply already keeps each application's record (the posting folder:
-  `meta.json`, `form-log.jsonl`) and the panel lists every application, so the manager reads and extends those; it
-  adds no database. Job search across the boards ezapply knows, Job alerts.

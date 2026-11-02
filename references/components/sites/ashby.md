@@ -35,5 +35,3 @@ never submitting ([how the boards were verified](../sites.md#what-was-verified-a
   places, then a search found it), the Yes/No buttons, the resume upload, and, with the path rule (above), radio and
   checkbox groups (fake values, never submitted), each read back. A graduation date picker is read as text: a typed
   month and year shows as the first of that month.
-
-**Not yet tried:** the confirmation page.

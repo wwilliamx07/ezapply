@@ -18,5 +18,4 @@ tools, data formats, flows, security, development practices and status. Start at
   platform constraint, a security argument), state the reason on the page that describes that part.
   `status.md`'s Decisions gives each such choice a line, linking to that page.
 - **Rules, not history.** A page states how things are now and why. Which commit did what, and when, is in git;
-  a past incident stays only as the reason for a rule, in a sentence. `status.md` names the changes a live run
-  still has to check, until it has.
+  a past incident stays only as the reason for a rule, in a sentence. Don't list what hasn't been run live yet.

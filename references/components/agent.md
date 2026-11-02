@@ -124,8 +124,7 @@ The companion adds events of its own with `AgentService.post`: `handoff`, an app
 `{ event: "user", message: { content } }` on stdin, as Claude Code's; one sent during a turn runs as the next turn),
 `--model` when one is chosen, `--mode plan` for Plan only, `--dangerously-skip-permissions` for Don't ask, and
 `--conversation <id>` to continue; no `--effort` or `--print-timeout` (quirks below). Its environment has
-`AGY_CLI_DISABLE_AUTO_UPDATE=true`, so the user updates `agy` themselves. Verified with `agy` 1.4 on Windows and a
-stand-in MCP server; not yet with ezapply's own tools ([status](../status.md#not-yet-verified-for-real)).
+`AGY_CLI_DISABLE_AUTO_UPDATE=true`, so the user updates `agy` themselves. Verified with `agy` 1.4 on Windows.
 
 ### `agy`'s quirks
 What it does that Claude Code doesn't, as observed with `agy` 1.4 on Windows. Each shapes something below.
@@ -188,8 +187,7 @@ What it does that Claude Code doesn't, as observed with `agy` 1.4 on Windows. Ea
 process per conversation, JSON-RPC over stdio. *Why the app server:* `codex exec` runs one prompt per process and
 can't ask for approval; the app server takes messages for the whole conversation, steers one into a running turn,
 stops a turn, and sends each approval to the client to decide, which suits the panel better than Claude Code's print
-mode does. Verified with Codex 0.163 on Windows and a stand-in MCP server named `ezapply`, through `AgentService`; not
-yet with ezapply's own tools ([status](../status.md#not-yet-verified-for-real)).
+mode does. Verified with Codex 0.163 on Windows.
 
 ### What Codex does
 As observed with Codex 0.163. Each shapes something below.

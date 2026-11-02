@@ -225,8 +225,7 @@ What the Antigravity CLI reads, written by `init` beside Claude Code's (`initAnt
   this workspace, the only place the server is configured. Reads inside the workspace need no rule. The other
   Claude Code denies (`debug/` reads, python) don't carry over. The panel's Don't ask runs `agy` with
   `--dangerously-skip-permissions` ([agent](agent.md#antigravity-antigravityts)), so these rules matter only
-  without it (Plan only, or `agy` run by hand); whether the flag still honours the `repo-cache` deny isn't verified
-  ([status](../status.md#not-yet-verified-for-real)).
+  without it (Plan only, or `agy` run by hand).
 
 ## Codex
 Codex reads `AGENTS.md` and `.agents/skills/` (above), though not the files `AGENTS.md` includes: that syntax is

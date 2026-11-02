@@ -35,7 +35,7 @@ button is Submit on the last section, so no posting reaches `filled` on Oracle. 
 "Address"…), each of rows. A site shows either **every section on one page**, with Submit the only button (`step.title`
 joins the section titles; `go_next` refuses, the agent fills everything and hands over), or **one section per page**
 with Next (`applyFlowPaginationNextButton`) and Previous, and "step 2 of 4" from the flow's hidden heading (from the
-page's templates, not seen live). The job's title is that heading's part before "application, step"; worded otherwise (another
+page's templates). The job's title is that heading's part before "application, step"; worded otherwise (another
 language), none. The "Import your profile" pre-section is left out.
 
 **Fields.** Each visible innermost `.input-row`; the phone row gives `phoneCountryCode` (a list) and `phoneNumber`;

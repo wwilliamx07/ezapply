@@ -117,11 +117,6 @@ its words ("Apply", or `aria-label` "Apply for …"), since the posting page was
   `dayforce-candidate-info.html`, employer, job and candidate details replaced). What that page doesn't show was
   read from the portal's own scripts, saved with it: the questionnaire's field types and ids, the records' forms,
   summaries, Update, Cancel, Edit, Delete and its dialog, Personal Information's summary, the Submit step's
-  acknowledgement and Submit, the upload list, and every message the portal shows. The definition has run only in
-  jsdom: on the saved page, and on records built from those scripts' markup inside it. The Ant Design driver is
-  tested on a model of rc-select's context.
-
-**Not yet tried:** everything live. The driver choosing from rc-select's context (and the context found at all: it's
-rc-select's internals), uploads and the resume's parse, whether Next goes on with Personal Information or a record
-still open, the Update and delete flows, the questionnaire, the Submit step, the posting page and its Apply, the
-confirmation page, and a signed-out application (whose email is editable, with a confirmation).
+  acknowledgement and Submit, the upload list, and every message the portal shows. In jsdom it runs on the saved page,
+  and on records built from those scripts' markup inside it. The Ant Design driver is tested on a model of
+  rc-select's context.

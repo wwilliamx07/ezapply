@@ -253,8 +253,7 @@ tools then act on that frame ([which tab](../mcp-tools.md#forms)).
 5. `tab.screenshot`: while focus emulation holds the tab, `Page.captureScreenshot` through the debugger, which
    works with the tab in the background or its window minimized (the tab keeps rendering). Otherwise
    `tabs.captureVisibleTab`, which only works on the visible tab (otherwise a hint to switch to it). That needs
-   `<all_urls>` or `activeTab`; the extension holds `<all_urls>` (not yet run live with it:
-   [status](../status.md#not-yet-verified-for-real)).
+   `<all_urls>` or `activeTab`; the extension holds `<all_urls>`.
 6. `tab.show` (sent by the companion before every form call):
    [focus emulation](#focus-emulation-emulationts) (`emulateFocus`), which switches and raises nothing. Then it
    reads `document.visibilityState` and `document.hasFocus()` with one `executeScript` in the isolated world. The

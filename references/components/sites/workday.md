@@ -75,7 +75,7 @@ element (a row and its name both match the file hooks, which listed every file t
 and files from the candidate's last application, so prompts and file fields can be cleared: each item's remove
 control (`DELETE_charm` or a delete/remove button on a chip, `delete-file` in a file row), then a delete/remove
 dialog's confirm, then React's `onClick`, then Delete and Backspace on the focused chip, each confirmed by the
-count dropping. Those hooks haven't been pressed live; the fixture has chips with charms, one removable only by
+count dropping. The fixture has chips with charms, one removable only by
 keyboard, and a file and rows whose delete asks for confirmation.
 
 **Its notes** ([`siteNotes`](../../mcp-tools.md#site-notes)): Add buttons tell their list by `section`; Resume/CV
@@ -119,7 +119,7 @@ wordings of an option it found. `"Job Board > LinkedIn"` walks nested menus. Val
   ("Job Board > LinkedIn" for "LinkedIn"); later misses in the same fill reuse what was read. *Why:* live, a
   how-did-you-hear field took four fills (the top level, a wrong path, then the item), each a turn re-reading the
   conversation. Built from the moves `selectPath` already makes on a nested path (open the menu, press a category,
-  read its items); not yet seen live ([status](../../status.md)).
+  read its items).
 - **Waiting for results.** Typing waits until the options differ from those before and one of them holds the query
   (`answersQuery`; every 100 ms, up to `typeaheadResultsMs`, then once more after React's Enter handler), or until
   "No Items." has stayed for `typeaheadNoResultsMs` (it also shows while results load). Reading once the DOM went

@@ -69,10 +69,7 @@ widely used libraries, so the drivers grow with the libraries sites use, not wit
 refuses on the review page, and `nextBlocked` refuses where pressing Next would raise a native dialog. The guard
 blocks every synthetic press of Submit.
 
-**6. Build from what was seen, and say what wasn't.** Every selector comes from a saved page or the site's own
-scripts. What the definition handles but nobody has seen render (a step never reached, a dialog never opened) is
-listed in its reference section and in [status](status.md#not-yet-verified-for-real), with what to check on the first
-real run.
+**6. Build from what was seen.** Every selector comes from a saved page or the site's own scripts.
 
 ## The process
 
@@ -167,14 +164,13 @@ the site's posting page comes out wrong (no JSON-LD, a title that is only the ro
   ([how](components/adapters.md#checking-a-site-live)).
 - Then one real application with [debug mode](development.md#debugging-a-live-run-debug-mode) on. Its
   records (`ezapply debug export`) give the steps that couldn't be saved before: save them as fixtures and test
-  them. One adapter change per live run, so a failure points at one change.
+  them.
 
 ### 8. The reference
 A page of its own, `references/components/sites/<site>.md`, titled with its directory (the references test checks),
 and its row in the index: its pages, registry entry,
-fields, buttons and rows, what it refuses, and what was verified and how. Its line in [status](status.md), with what
-the first real run must check. Its name in the lists of sites in the references (not in the skills or tool
-descriptions).
+fields, buttons and rows, what it refuses, and what was verified and how. Its name in the lists of sites in the
+references (not in the skills or tool descriptions).
 
 ## Checklist
 - [ ] Pages saved and scrubbed; what couldn't be saved read from the site's scripts, and said so

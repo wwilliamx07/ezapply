@@ -25,5 +25,3 @@ Built from a live application page rendered by headless Edge, then checked on li
 never submitting ([how the boards were verified](../sites.md#what-was-verified-and-how)):
 - **Lever** (one company's posting): every kind on the page, after the location field's key fix; the consent checkbox's
   prompt and the survey questions' ids came from this run.
-
-**Not yet tried:** uploads, the confirmation page, and a real application.

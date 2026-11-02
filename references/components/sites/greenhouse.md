@@ -55,5 +55,3 @@ never submitting ([how the boards were verified](../sites.md#what-was-verified-a
   echoed query volatile; the email check echoes its address; the signed upload fields change every load; Google's
   sign-in and Drive scripts vary every load; analytics, ad pixels and the invisible reCAPTCHA's frames are
   beacons. Files aren't explored, since attaching sends them.
-
-**Not yet tried:** the confirmation page.
