@@ -341,7 +341,7 @@ into the page's main world as the extension does, and calls the adapter's method
   DataDome, iCIMS) is built from pages the user saves from a real session instead.
 
 The script hardcodes this machine's paths, so it stays out of the repo. [The adapter harness](../harness.md)
-replaces it, under the same rules; Greenhouse is the first site cloned with it.
+replaces it, under the same rules; Greenhouse and Ashby have been cloned with it.
 
 **Phenom** was looked at differently: its steps open only through Next, which saves each step to the employer's
 system, and step 1 requires a resume, which goes there on attaching. With the user's agreement, a script drove the

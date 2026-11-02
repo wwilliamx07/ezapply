@@ -39,6 +39,8 @@ interface ExploreOptions {
 }
 
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+/** What each path types into a search box before picking from its results. */
+const PATH_QUERIES = { first: "a", second: "e" } as const;
 const MAX_STEPS = 25;
 const TEXTS = new Set(["text", "textarea", "number", "date"]);
 const CHOICES = new Set(["dropdown", "typeahead", "radio", "checkbox-group"]);
@@ -142,7 +144,7 @@ export async function explore(o: ExploreOptions): Promise<Coverage> {
     if (o.mode === "path") {
       const listed = (await act<OptionInfo[]>(`list ${field.id}`, "listOptions", field.id)) ?? [];
       if (listed.length) return listed.map((x) => x.label);
-      const q = o.set === "first" ? "a" : "e";
+      const q = PATH_QUERIES[o.set];
       return ((await act<OptionInfo[]>(`search ${field.id} ${q}`, "searchOptions", field.id, q)) ?? []).map(
         (x) => x.label,
       );
@@ -204,8 +206,13 @@ export async function explore(o: ExploreOptions): Promise<Coverage> {
     }
     cov.searches.push({ id: field.id, size: seen.size, queries, stable, ...ruleOf(results) });
     // The answers tried first: each one-letter search's top two results, as an agent picks after typing (a list whose
-    // page confirms a choice with a request of its own, Greenhouse's location, records that request for them).
-    const tops = results.filter(([q]) => q.length === 1).flatMap(([, r]) => r.slice(0, 2));
+    // page confirms a choice with a request of its own, Greenhouse's location, records that request for them), the
+    // two paths' searches first, so their picks are tried however few answers the site allows.
+    const first = new Set<string>(Object.values(PATH_QUERIES));
+    const tops = results
+      .filter(([q]) => q.length === 1)
+      .sort(([a], [b]) => Number(first.has(b)) - Number(first.has(a)))
+      .flatMap(([, r]) => r.slice(0, 2));
     return [...new Set([...tops, ...seen])];
   };
 

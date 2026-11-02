@@ -202,6 +202,22 @@ describe("the equivalence check", () => {
     expect(checkPass(clone, testDescription, "held-out").differences).toEqual([]);
   });
 
+  it("leaves out a volatile path's every match, `*` standing for each item of an array", () => {
+    const url = `${TEST_SITE}/api/form`;
+    const clone = pair(
+      url,
+      '{"form":{"rows":[{"id":"a1","v":1},{"id":"a2","v":2}]}}',
+      '{"form":{"rows":[{"id":"b1","v":1},{"id":"b2","v":2}]}}',
+    );
+    expect(checkPass(clone, testDescription, "held-out").differences).toHaveLength(1);
+    const desc = {
+      endpoints: [{ name: "form", kind: "static" as const, url: /\/api\/form/, volatile: ["form.rows.*.id"] }],
+    };
+    expect(checkPass(clone, desc, "held-out").differences).toEqual([]);
+    const other = pair(url, '{"form":{"rows":[{"id":"a1","v":1}]}}', '{"form":{"rows":[{"id":"b1","v":9}]}}');
+    expect(checkPass(other, desc, "held-out").differences).toHaveLength(1);
+  });
+
   it("doesn't compare an answer the description says varies on every load", () => {
     const url = `${TEST_SITE}/vendor/client.js`;
     const clone = pair(url, "flags(1)", "flags(2)");

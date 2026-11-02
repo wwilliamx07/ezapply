@@ -3,7 +3,7 @@
 Local clones of real application forms, so an adapter change is tested on a copy of the site rather than on the
 user's next real application. A clone keeps the site's own front end and the answers its server gave; a stand-in
 plays the server from them; and a fill run drives the site's built adapter through the clone as the agent would.
-Greenhouse has a usable clone.
+Greenhouse and Ashby have usable clones.
 
 **Why.** Saved pages don't run the site's own scripts, so they can't show how a fill behaves (jsdom fixtures are
 built from what the adapter expects: [tests](development.md#tests)), and a live check spends the user's time and
@@ -33,7 +33,7 @@ scripts/harness/                 Node 24 runs it as TypeScript (type stripping);
                                  open.ts, store.ts, profile.ts
   test/                          the engine's tests, and the hand-written site (site/) the whole harness runs on
 packages/sites/src/clones.ts     a site description's shape, and CLONE_DESCRIPTIONS
-packages/sites/src/<site>/clone.ts  a cloned site's description (Greenhouse's so far)
+packages/sites/src/<site>/clone.ts  a cloned site's description (Greenhouse's and Ashby's so far)
 .clones/                         git-ignored: .profile/ (the harness's browser profile), <site>/<id>/ (a clone)
 ```
 A clone's directory: `clone.json` (site, URL, capture time, usable, the report), `exchanges.json` and `bodies/`
@@ -56,10 +56,12 @@ page), `offline.png`, `coverage.json`, `proposed-clone.ts`, and `runs/<time>/` f
      then a letter more after each prefix whose results filled a page, until nothing new comes back or
      `--max-queries` runs out, and
      works out the matching rule (prefix, word, contains) from what came back;
-   - picks each answer of a choice in turn (up to 12, `explorer.maxAnswers`), and fills the fields an answer opens
-     before the next answer closes them. A search box's answers start with each one-letter search's top two
-     results, as an agent picks after typing, so a page that confirms a choice with a request of its own
-     (Greenhouse's location) has that request recorded for the choices a path makes;
+   - picks each answer of a choice in turn (up to 12, `explorer.maxAnswers`, lower for a site that rate-limits the
+     requests a choice sends), and fills the fields an answer opens before the next answer closes them. A search
+     box's answers start with each one-letter search's top two results, as an agent picks after typing, those of
+     the two paths' own searches ("a", "e") first, so a page that confirms a choice with a request of its own
+     (Greenhouse's location; Ashby's, which searches the chosen place's name) has that request recorded for the
+     choice each path makes, however few answers are tried;
    - attaches a placeholder PDF only where the site's description says the page keeps files until Submit
      (`explorer.uploads`), since other sites send the file on attaching;
    - presses Next with the step empty, and with an email that isn't one, for the site's own refusals; adds and
@@ -83,7 +85,9 @@ page), `offline.png`, `coverage.json`, `proposed-clone.ts`, and `runs/<time>/` f
 6. **The checks** below, and the report.
 
 A site that saves each step (Workday, Oracle) may be left with a draft holding the placeholder values; the report
-says so.
+says so. A site that limits how many requests it takes answers the rest with 429 (Ashby, after about 75 saves or a few
+hundred searches in a few minutes): those answers aren't the site's behaviour, so the report lists them (`rateLimited`) and
+the clone isn't usable. Clone again later, with a lower `--max-queries` or `explorer.maxAnswers`.
 
 ## A site's description (`<site>/clone.ts`)
 
@@ -96,7 +100,8 @@ exactly; a `submit` is never answered, and seeing one fails the run.
 
 A request seen exactly gets its recorded answers in the order the site gave them, so a list read before and after a
 save comes back as it did. Parts of an answer that differ every time (timestamps, ids) are named in `volatile`, and
-ignored by the checks; JSON is compared with its keys in any order. An answer that differs whole on every load (a
+ignored by the checks (`*` in a path stands for every item of an array: Ashby's form entries each carry the load's
+form id); JSON is compared with its keys in any order. An answer that differs whole on every load (a
 third party's script carrying a nonce or feature flags) is marked `varies`: answered as recorded, never compared.
 
 ## The stand-in (`standin/engine.ts`)
@@ -114,7 +119,7 @@ All of these, recorded in `clone.json`'s report:
   one in at most 1% of its pixels; and `get_form` reads the same as it did live.
 - **The stand-in matches:** it answers every recorded request, and every request of the held-out path, as the site
   did.
-- Exploring finished without stopping, and no submit was stopped.
+- Exploring finished without stopping, no submit was stopped, and the site rate-limited nothing.
 
 A site without a description can still be cloned, to propose one; until its description is written, the held-out
 path mostly fails, so the clone isn't usable.
